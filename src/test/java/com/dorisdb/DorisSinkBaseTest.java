@@ -120,7 +120,6 @@ public abstract class DorisSinkBaseTest {
 				
 			}
 		}).start();
-		
 	}
 
 	@Test

@@ -24,7 +24,7 @@ import java.util.Map;
  
 public class DorisStreamLoadVisitor implements Serializable {
 
-    private static final long serialVersionUID = 1L;
+	private static final long serialVersionUID = 1L;
 
     private static final Logger LOG = LoggerFactory.getLogger(DorisStreamLoadVisitor.class);
 
