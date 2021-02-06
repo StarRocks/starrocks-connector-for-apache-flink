@@ -1,6 +1,7 @@
 package com.dorisdb;
 
 import com.dorisdb.manager.DorisQueryVisitor;
+import com.dorisdb.table.DorisSinkOptions;
 
 import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -49,7 +50,14 @@ public class DorisGenericSinkITTest extends DorisSinkBaseTest {
 					.field("score", DataTypes.INT())
 					.field("name", DataTypes.VARCHAR(20))
 					.build(),
-				OPTIONS,
+				DorisSinkOptions.builder()
+					.withProperty("jdbc-url", "jdbc:mysql://ip:port,ip:port?xxxxx")
+					.withProperty("load-url", "ip:port;ip:port")
+					.withProperty("username", "xxx")
+					.withProperty("password", "xxx")
+					.withProperty("table-name", "xxx")
+					.withProperty("database-name", "xxx")
+					.build(),
 				(slots, te) -> {
 					slots[0] = te.score;
 					slots[1] = te.name;
