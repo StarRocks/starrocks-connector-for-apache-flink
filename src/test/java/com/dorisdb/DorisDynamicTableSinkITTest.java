@@ -59,7 +59,7 @@ public class DorisDynamicTableSinkITTest extends DorisSinkBaseTest {
             "name VARCHAR," +
             "score BIGINT" +
             ") WITH ( " +
-            "'connector' = 'dorisdb'," +
+            "'connector' = 'doris'," +
             "'jdbc-url'='" + OPTIONS.getJdbcUrl() + "'," +
             "'load-url'='" + String.join(";", OPTIONS.getLoadUrlList()) + "'," +
             "'database-name' = '" + OPTIONS.getDatabaseName() + "'," +

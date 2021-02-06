@@ -40,7 +40,7 @@ public class DorisDynamicTableSinkFactory implements DynamicTableSinkFactory {
 
     @Override
     public String factoryIdentifier() {
-        return "dorisdb";
+        return "doris";
     }
 
     @Override

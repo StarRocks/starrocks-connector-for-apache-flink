@@ -57,6 +57,6 @@ public class DorisDynamicTableSink implements DynamicTableSink {
  
     @Override
     public String asSummaryString() {
-        return "dorisdb_sink";
+        return "doris_sink";
     }
 }

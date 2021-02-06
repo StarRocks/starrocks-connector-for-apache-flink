@@ -127,7 +127,7 @@ public class DorisSinkManager implements Serializable {
                 flush();
             }
         } catch (Exception e) {
-            throw new IOException("Writing records to DorisDB failed.", e);
+            throw new IOException("Writing records to Doris failed.", e);
         }
     }
 
@@ -169,7 +169,7 @@ public class DorisSinkManager implements Serializable {
                 try {
                     flush();
                 } catch (Exception e) {
-                    throw new RuntimeException("Writing records to DorisDB failed.", e);
+                    throw new RuntimeException("Writing records to Doris failed.", e);
                 }
             }
         }
@@ -177,13 +177,13 @@ public class DorisSinkManager implements Serializable {
     }
 
     private void tryToFlush(String label) throws IOException {
-        // flush to DorisDB with stream load
+        // flush to Doris with stream load
         dorisStreamLoadVisitor.doStreamLoad(new Tuple2<>(label, buffer));
     }
 
     private void checkFlushException() {
         if (flushException != null) {
-            throw new RuntimeException("Writing records to DorisDB failed.", flushException);
+            throw new RuntimeException("Writing records to Doris failed.", flushException);
         }
     }
     

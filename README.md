@@ -12,29 +12,29 @@ Append this line `com.dorisdb.table.DorisDynamicTableSinkFactory` to the file lo
 ```java
 
 fromElements(TEST_DATA)
-  .addSink(
-    DorisSink.sink(
-      // the table structure
-      TableSchema.builder()
-        .field("score", DataTypes.INT())
-        .field("name", DataTypes.VARCHAR(20))
-        .build(),
-      // the sink options
-      DorisSinkOptions.builder()
-        .withProperty("jdbc-url", "jdbc:mysql://ip:port,ip:port?xxxxx")
-        .withProperty("load-url", "ip:port;ip:port")
-        .withProperty("username", "xxx")
-        .withProperty("password", "xxx")
-        .withProperty("table-name", "xxx")
-        .withProperty("database-name", "xxx")
-        .build(),
-      // set the slots with streamRowData
-      (slots, streamRowData) -> {
-        slots[0] = streamRowData.score;
-        slots[1] = streamRowData.name;
-      }
-    )
-  );
+    .addSink(
+        DorisSink.sink(
+            // the table structure
+            TableSchema.builder()
+                .field("score", DataTypes.INT())
+                .field("name", DataTypes.VARCHAR(20))
+                .build(),
+            // the sink options
+            DorisSinkOptions.builder()
+                .withProperty("jdbc-url", "jdbc:mysql://ip:port,ip:port?xxxxx")
+                .withProperty("load-url", "ip:port;ip:port")
+                .withProperty("username", "xxx")
+                .withProperty("password", "xxx")
+                .withProperty("table-name", "xxx")
+                .withProperty("database-name", "xxx")
+                .build(),
+            // set the slots with streamRowData
+            (slots, streamRowData) -> {
+                slots[0] = streamRowData.score;
+                slots[1] = streamRowData.name;
+            }
+        )
+    );
 
 ```
 
@@ -43,12 +43,12 @@ fromElements(TEST_DATA)
 ```java
 
     // create a table with `structure` and `properties`
-        tEnv.executeSql(
-      "CREATE TABLE USER_RESULT(" +
+    tEnv.executeSql(
+        "CREATE TABLE USER_RESULT(" +
             "name VARCHAR," +
             "score BIGINT" +
             ") WITH ( " +
-            "'connector' = 'dorisdb'," +
+            "'connector' = 'doris'," +
             "'jdbc-url'='jdbc:mysql://ip:port,ip:port?xxxxx'," +
             "'load-url'='ip:port;ip:port'," +
             "'database-name' = 'xxx'," +
@@ -65,8 +65,8 @@ fromElements(TEST_DATA)
 
     // insert values into the table created above
     tEnv.executeSql(
-      "INSERT INTO USER_RESULT\n" +
-      "VALUES ('lebron', 99), ('stephen', 99)"
+        "INSERT INTO USER_RESULT\n" +
+        "VALUES ('lebron', 99), ('stephen', 99)"
     ).await();
 
 ```
@@ -75,7 +75,7 @@ fromElements(TEST_DATA)
 
 | Option | Required | Default | Type | Description |
 |  ----  | ----  | ----  | ----  | ----  |
-| connector | YES | NONE | String |`dorisdb`|
+| connector | YES | NONE | String |`doris`|
 | jdbc-url | YES | NONE | String | jdbc url used to execute queries with doris. |
 | load-url | YES | NONE | String | http urls like `fe_ip:http_port;fe_ip:http_port` separated with `;`, used to batch sinking. |
 | database-name | YES | NONE | String | doris database name |

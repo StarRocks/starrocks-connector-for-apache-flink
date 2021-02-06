@@ -47,9 +47,9 @@ public class DorisSinkOptions implements Serializable {
     public static final ConfigOption<String> TABLE_NAME = ConfigOptions.key("table-name")
         .stringType().noDefaultValue().withDescription("Table name of the stream load.");
     public static final ConfigOption<String> USERNAME = ConfigOptions.key("username")
-        .stringType().noDefaultValue().withDescription("DorisDB user name.");
+        .stringType().noDefaultValue().withDescription("Doris user name.");
     public static final ConfigOption<String> PASSWORD = ConfigOptions.key("password")
-        .stringType().noDefaultValue().withDescription("DorisDB user password.");
+        .stringType().noDefaultValue().withDescription("Doris user password.");
 
     // optional sink configurations
     public static final ConfigOption<String> SINK_SEMANTIC = ConfigOptions.key("sink.semantic")
