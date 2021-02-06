@@ -26,11 +26,11 @@ public class DorisQueryVisitor implements Serializable {
     private final String database;
     private final String table;
 
-	public DorisQueryVisitor(DorisJdbcConnectionProvider jdbcConnProvider, String database, String table) {
+    public DorisQueryVisitor(DorisJdbcConnectionProvider jdbcConnProvider, String database, String table) {
         this.jdbcConnProvider = jdbcConnProvider;
         this.database = database;
         this.table = table;
-	}
+    }
 
     public List<Map<String, Object>> getTableColumnsMetaData() {
         final String query = "select `COLUMN_NAME`, `DATA_TYPE`, `COLUMN_SIZE`, `DECIMAL_DIGITS` from `information_schema`.`COLUMNS` where `TABLE_SCHEMA`=? and `TABLE_SCHEMA`=?;";
@@ -40,10 +40,10 @@ public class DorisQueryVisitor implements Serializable {
                 LOG.debug(String.format("Executing query '%s'", query));
             }
             rows = executQuery(query, this.database, this.table);
-		} catch (ClassNotFoundException se) {
-			throw new IllegalArgumentException("Failed to find jdbc driver." + se.getMessage(), se);
+        } catch (ClassNotFoundException se) {
+            throw new IllegalArgumentException("Failed to find jdbc driver." + se.getMessage(), se);
         } catch (SQLException se) {
-			throw new IllegalArgumentException("Failed to get table schema info from doris." + se.getMessage(), se);
+            throw new IllegalArgumentException("Failed to get table schema info from doris." + se.getMessage(), se);
         }
         return rows;
     }

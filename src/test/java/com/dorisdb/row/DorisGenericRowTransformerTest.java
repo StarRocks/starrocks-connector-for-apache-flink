@@ -52,7 +52,7 @@ public class DorisGenericRowTransformerTest extends DorisSinkBaseTest {
         }
     }
 
-	private UserInfoForTest createRowData() {
+    private UserInfoForTest createRowData() {
         UserInfoForTest u = new UserInfoForTest();
         u.age = 88;
         u.resume = "Imposible is Nothing.";
@@ -61,6 +61,6 @@ public class DorisGenericRowTransformerTest extends DorisSinkBaseTest {
         u.savings = BigDecimal.valueOf(1000000.25);
         u.todaySteps = 1024;
         u.name = "Stephen";
-		return u;
-	}
+        return u;
+    }
 }

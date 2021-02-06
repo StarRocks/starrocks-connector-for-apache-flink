@@ -8,6 +8,7 @@ import java.sql.Connection;
  */
 @Internal
 public interface DorisJdbcConnectionIProvider {
-	Connection getConnection() throws Exception;
-	Connection reestablishConnection() throws Exception;
+    Connection getConnection() throws Exception;
+
+    Connection reestablishConnection() throws Exception;
 }

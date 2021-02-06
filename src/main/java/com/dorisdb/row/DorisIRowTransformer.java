@@ -5,10 +5,10 @@ import org.apache.flink.table.api.TableSchema;
 
 public interface DorisIRowTransformer<T> {
 
-	void setTableSchema(TableSchema tableSchema);
+    void setTableSchema(TableSchema tableSchema);
 
-	void setRuntimeContext(RuntimeContext ctx);
+    void setRuntimeContext(RuntimeContext ctx);
 
-	String transform(T record);
-	
+    String transform(T record);
+    
 }

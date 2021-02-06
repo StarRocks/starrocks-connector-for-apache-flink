@@ -20,35 +20,35 @@ public class DorisDynamicSinkFunction<T> extends RichSinkFunction<T> implements 
     private DorisIRowTransformer<T> rowTransformer;
  
     public DorisDynamicSinkFunction(DorisSinkOptions sinkOptions, TableSchema schema, DorisIRowTransformer<T> rowTransformer) {
-		rowTransformer.setTableSchema(schema);
+        rowTransformer.setTableSchema(schema);
         this.rowTransformer = rowTransformer;
-		this.sinkManager = new DorisSinkManager(sinkOptions, schema);
+        this.sinkManager = new DorisSinkManager(sinkOptions, schema);
     }
  
     @Override
-	public void open(Configuration parameters) throws Exception {
-		super.open(parameters);
+    public void open(Configuration parameters) throws Exception {
+        super.open(parameters);
         rowTransformer.setRuntimeContext(getRuntimeContext());
-		sinkManager.startScheduler();
-	}
+        sinkManager.startScheduler();
+    }
 
-	@Override
-	public void invoke(T value, Context context) throws IOException {
+    @Override
+    public void invoke(T value, Context context) throws IOException {
         sinkManager.writeRecord(rowTransformer.transform(value));
-	}
+    }
 
-	@Override
-	public void initializeState(FunctionInitializationContext context) {
-	}
+    @Override
+    public void initializeState(FunctionInitializationContext context) {
+    }
 
-	@Override
-	public void snapshotState(FunctionSnapshotContext context) throws Exception {
-		sinkManager.flush();
-	}
+    @Override
+    public void snapshotState(FunctionSnapshotContext context) throws Exception {
+        sinkManager.flush();
+    }
 
-	@Override
-	public void close() throws Exception {
+    @Override
+    public void close() throws Exception {
         sinkManager.close();
-		super.close();
+        super.close();
     }
 }

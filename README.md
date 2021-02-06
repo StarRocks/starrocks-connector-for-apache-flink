@@ -43,24 +43,24 @@ fromElements(TEST_DATA)
 ```java
 
     // create a table with `structure` and `properties`
-		tEnv.executeSql(
+        tEnv.executeSql(
       "CREATE TABLE USER_RESULT(" +
-			"name VARCHAR," +
-			"score BIGINT" +
-			") WITH ( " +
-			"'connector' = 'dorisdb'," +
-			"'jdbc-url'='jdbc:mysql://ip:port,ip:port?xxxxx'," +
-			"'load-url'='ip:port;ip:port'," +
-			"'database-name' = 'xxx'," +
-			"'table-name' = 'xxx'," +
-			"'username' = 'xxx'," +
-			"'password' = 'xxx'," +
-			"'sink.buffer-flush.max-rows' = '1000000'," +
-			"'sink.buffer-flush.max-bytes' = '300000000'," +
-			"'sink.buffer-flush.interval-ms' = '300000'," +
-			"'sink.buffer-flush.max-retries' = '3'" +
-			"'sink.properties.*' = '3'" + // stream load properties like `'sink.properties.columns' = 'k1=name, v1=score'`
-			")"
+            "name VARCHAR," +
+            "score BIGINT" +
+            ") WITH ( " +
+            "'connector' = 'dorisdb'," +
+            "'jdbc-url'='jdbc:mysql://ip:port,ip:port?xxxxx'," +
+            "'load-url'='ip:port;ip:port'," +
+            "'database-name' = 'xxx'," +
+            "'table-name' = 'xxx'," +
+            "'username' = 'xxx'," +
+            "'password' = 'xxx'," +
+            "'sink.buffer-flush.max-rows' = '1000000'," +
+            "'sink.buffer-flush.max-bytes' = '300000000'," +
+            "'sink.buffer-flush.interval-ms' = '300000'," +
+            "'sink.buffer-flush.max-retries' = '3'" +
+            "'sink.properties.*' = '3'" + // stream load properties like `'sink.properties.columns' = 'k1=name, v1=score'`
+            ")"
     );
 
     // insert values into the table created above

@@ -17,58 +17,51 @@ import java.io.Serializable;
 
 public class DorisGenericSinkITTest extends DorisSinkBaseTest {
 
-	@Mocked
-	private transient DorisQueryVisitor v;
+    @Mocked
+    private transient DorisQueryVisitor v;
 
-	class TestEntry implements Serializable {
+    class TestEntry implements Serializable {
 
-		private static final long serialVersionUID = 1L;
+        private static final long serialVersionUID = 1L;
 
-		public final Integer score;
-		public final String name;
+        public final Integer score;
+        public final String name;
 
-		public TestEntry(Integer score, String name) {
-			this.score = score;
-			this.name = name;
-		}
-	}
+        public TestEntry(Integer score, String name) {
+            this.score = score;
+            this.name = name;
+        }
+    }
 
-	private final TestEntry[] TEST_DATA = {
-		new TestEntry(99, "lebron"),
-		new TestEntry(99, "stephen")
-	};
+    private final TestEntry[] TEST_DATA = {
+        new TestEntry(99, "lebron"),
+        new TestEntry(99, "stephen")
+    };
 
-	@Test
-	public void testBatchSink() {
-		mockSuccessResponse();
-		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-		env.setRestartStrategy(new RestartStrategies.NoRestartStrategyConfiguration());
-		env.setParallelism(1);
-		env.fromElements(TEST_DATA)
-			.addSink(DorisSink.sink(
-				TableSchema.builder()
-					.field("score", DataTypes.INT())
-					.field("name", DataTypes.VARCHAR(20))
-					.build(),
-				DorisSinkOptions.builder()
-					.withProperty("jdbc-url", "jdbc:mysql://ip:port,ip:port?xxxxx")
-					.withProperty("load-url", "ip:port;ip:port")
-					.withProperty("username", "xxx")
-					.withProperty("password", "xxx")
-					.withProperty("table-name", "xxx")
-					.withProperty("database-name", "xxx")
-					.build(),
-				(slots, te) -> {
-					slots[0] = te.score;
-					slots[1] = te.name;
-				}));
+    @Test
+    public void testBatchSink() {
+        mockSuccessResponse();
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setRestartStrategy(new RestartStrategies.NoRestartStrategyConfiguration());
+        env.setParallelism(1);
+        env.fromElements(TEST_DATA)
+            .addSink(DorisSink.sink(
+                TableSchema.builder()
+                    .field("score", DataTypes.INT())
+                    .field("name", DataTypes.VARCHAR(20))
+                    .build(),
+                OPTIONS,
+                (slots, te) -> {
+                    slots[0] = te.score;
+                    slots[1] = te.name;
+                }));
 
-		String exMsg = "";
-		try {
-			env.execute();
-		} catch (Exception e) {
-			exMsg = e.getMessage();
-		}
-		assertFalse(exMsg, exMsg.length() > 0);
-	}
+        String exMsg = "";
+        try {
+            env.execute();
+        } catch (Exception e) {
+            exMsg = e.getMessage();
+        }
+        assertFalse(exMsg, exMsg.length() > 0);
+    }
 }

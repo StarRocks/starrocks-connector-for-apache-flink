@@ -21,78 +21,78 @@ import org.apache.flink.table.types.logical.TimestampType;
 
 public class DorisTableRowTransformer implements DorisIRowTransformer<RowData>, Serializable {
 
-	private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 1L;
 
-	private TypeInformation<RowData> rowDataTypeInfo;
-	private Function<RowData, RowData> valueTransform;
-	private DataType[] dataTypes;
-	private String[] fieldNames;
+    private TypeInformation<RowData> rowDataTypeInfo;
+    private Function<RowData, RowData> valueTransform;
+    private DataType[] dataTypes;
+    private String[] fieldNames;
     private final SimpleDateFormat dateFormatter = new SimpleDateFormat("yyyy-MM-dd");
     private final SimpleDateFormat dateTimeFormatter = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss");
 
-	public DorisTableRowTransformer(TypeInformation<RowData> rowDataTypeInfo) {
-		this.rowDataTypeInfo = rowDataTypeInfo;
-	}
+    public DorisTableRowTransformer(TypeInformation<RowData> rowDataTypeInfo) {
+        this.rowDataTypeInfo = rowDataTypeInfo;
+    }
 
-	@Override
-	public void setTableSchema(TableSchema ts) {
-		dataTypes = ts.getFieldDataTypes();
-		fieldNames = ts.getFieldNames();
-	}
+    @Override
+    public void setTableSchema(TableSchema ts) {
+        dataTypes = ts.getFieldDataTypes();
+        fieldNames = ts.getFieldNames();
+    }
 
-	@Override
-	public void setRuntimeContext(RuntimeContext runtimeCtx) {
-		final TypeSerializer<RowData> typeSerializer = rowDataTypeInfo.createSerializer(runtimeCtx.getExecutionConfig());
-		valueTransform = runtimeCtx.getExecutionConfig().isObjectReuseEnabled() ? typeSerializer::copy : Function.identity();
-	}
+    @Override
+    public void setRuntimeContext(RuntimeContext runtimeCtx) {
+        final TypeSerializer<RowData> typeSerializer = rowDataTypeInfo.createSerializer(runtimeCtx.getExecutionConfig());
+        valueTransform = runtimeCtx.getExecutionConfig().isObjectReuseEnabled() ? typeSerializer::copy : Function.identity();
+    }
 
-	@Override
-	public String transform(RowData record) {
-		return toJsonString(valueTransform.apply(record));
-	}
+    @Override
+    public String transform(RowData record) {
+        return toJsonString(valueTransform.apply(record));
+    }
 
-	private String toJsonString(RowData record) {
-		Map<String, Object> rowMap = new HashMap<>();
-		int idx = 0;
-		for (String fieldName : fieldNames) {
-			DataType dataType = dataTypes[idx];
-			Object value = typeConvertion(dataType.getLogicalType(), record, idx);
-			rowMap.put(fieldName, value);
-			idx++;
-		}
-		return JSON.toJSONString(rowMap);
-	}
+    private String toJsonString(RowData record) {
+        Map<String, Object> rowMap = new HashMap<>();
+        int idx = 0;
+        for (String fieldName : fieldNames) {
+            DataType dataType = dataTypes[idx];
+            Object value = typeConvertion(dataType.getLogicalType(), record, idx);
+            rowMap.put(fieldName, value);
+            idx++;
+        }
+        return JSON.toJSONString(rowMap);
+    }
 
     private Object typeConvertion(LogicalType type, RowData record, int pos) {
         switch (type.getTypeRoot()) {
-			case BOOLEAN: 
-				return record.getBoolean(pos);
-			case TINYINT:
-				return record.getByte(pos);
-			case SMALLINT:
-				return record.getShort(pos);
-			case INTEGER:
-				return record.getInt(pos);
-			case BIGINT:
-				return record.getLong(pos);
-			case FLOAT:
-				return record.getFloat(pos);
-			case DOUBLE:
-				return record.getDouble(pos);
-			case CHAR:
-			case VARCHAR:
-				return record.getString(pos).toString();
+            case BOOLEAN: 
+                return record.getBoolean(pos);
+            case TINYINT:
+                return record.getByte(pos);
+            case SMALLINT:
+                return record.getShort(pos);
+            case INTEGER:
+                return record.getInt(pos);
+            case BIGINT:
+                return record.getLong(pos);
+            case FLOAT:
+                return record.getFloat(pos);
+            case DOUBLE:
+                return record.getDouble(pos);
+            case CHAR:
+            case VARCHAR:
+                return record.getString(pos).toString();
             case DATE:
-				return dateFormatter.format(Date.valueOf(LocalDate.ofEpochDay(record.getInt(pos))));
-			case TIMESTAMP_WITHOUT_TIME_ZONE:
-				final int timestampPrecision =((TimestampType) type).getPrecision();
-				return dateTimeFormatter.format(new Date(record.getTimestamp(pos, timestampPrecision).toTimestamp().getTime()));
-			case DECIMAL: // for both largeint and decimal
-				final int decimalPrecision = ((DecimalType) type).getPrecision();
-				final int decimalScale = ((DecimalType) type).getScale();
-				return record.getDecimal(pos, decimalPrecision, decimalScale).toBigDecimal();
-			default:
-				throw new UnsupportedOperationException("Unsupported type:" + type);
-		}
+                return dateFormatter.format(Date.valueOf(LocalDate.ofEpochDay(record.getInt(pos))));
+            case TIMESTAMP_WITHOUT_TIME_ZONE:
+                final int timestampPrecision =((TimestampType) type).getPrecision();
+                return dateTimeFormatter.format(new Date(record.getTimestamp(pos, timestampPrecision).toTimestamp().getTime()));
+            case DECIMAL: // for both largeint and decimal
+                final int decimalPrecision = ((DecimalType) type).getPrecision();
+                final int decimalScale = ((DecimalType) type).getScale();
+                return record.getDecimal(pos, decimalPrecision, decimalScale).toBigDecimal();
+            default:
+                throw new UnsupportedOperationException("Unsupported type:" + type);
+        }
     }
 }

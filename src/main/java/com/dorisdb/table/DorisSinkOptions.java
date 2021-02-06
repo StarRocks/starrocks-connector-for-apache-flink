@@ -59,7 +59,7 @@ public class DorisSinkOptions implements Serializable {
     private final Map<String, String> tableOptionsMap;
     private DorisSinkSemantic sinkSemantic;
 
-	public DorisSinkOptions(ReadableConfig options, Map<String, String> optionsMap) {
+    public DorisSinkOptions(ReadableConfig options, Map<String, String> optionsMap) {
         this.tableOptions = options;
         this.tableOptionsMap = optionsMap;
         parseSinkStreamLoadProperties();
@@ -71,31 +71,31 @@ public class DorisSinkOptions implements Serializable {
         validateSinkSemantic();
     }
     
-	public String getJdbcUrl() {
+    public String getJdbcUrl() {
         return tableOptions.get(JDBC_URL);
     }
 
-	public String getDatabaseName() {
+    public String getDatabaseName() {
         return tableOptions.get(DATABASE_NAME);
     }
 
-	public String getTableName() {
+    public String getTableName() {
         return tableOptions.get(TABLE_NAME);
     }
 
-	public String getUsername() {
+    public String getUsername() {
         return tableOptions.get(USERNAME);
     }
 
-	public String getPassword() {
+    public String getPassword() {
         return tableOptions.get(PASSWORD);
     }
 
-	public List<String> getLoadUrlList() {
+    public List<String> getLoadUrlList() {
         return tableOptions.getOptional(LOAD_URL).orElse(null);
     }
 
-	public int getSinkMaxRetries() {
+    public int getSinkMaxRetries() {
         int maxRetries = tableOptions.get(SINK_BATCH_MAX_RETRIES).intValue();
         if (maxRetries < 0) {
             return 0;
@@ -103,10 +103,10 @@ public class DorisSinkOptions implements Serializable {
         if (maxRetries > 10) {
             return 10;
         }
-		return maxRetries;
-	}
+        return maxRetries;
+    }
 
-	public long getSinkMaxFlushInterval() {
+    public long getSinkMaxFlushInterval() {
         long maxFlushInterval = tableOptions.get(SINK_BATCH_FLUSH_INTERVAL).longValue();
         if (maxFlushInterval < 1000l) {
             return 1000l;
@@ -114,10 +114,10 @@ public class DorisSinkOptions implements Serializable {
         if (maxFlushInterval > 3600000l) {
             return 3600000l;
         }
-		return maxFlushInterval;
-	}
+        return maxFlushInterval;
+    }
 
-	public long getSinkMaxRows() {
+    public long getSinkMaxRows() {
         long maxRows = tableOptions.get(SINK_BATCH_MAX_ROWS).longValue();
         if (maxRows < 64000) {
             return 64000l;
@@ -125,10 +125,10 @@ public class DorisSinkOptions implements Serializable {
         if (maxRows > 5000000) {
             return 5000000l;
         }
-		return maxRows;
-	}
+        return maxRows;
+    }
 
-	public long getSinkMaxBytes() {
+    public long getSinkMaxBytes() {
         long maxBytes = tableOptions.get(SINK_BATCH_MAX_SIZE).longValue();
         if (maxBytes < 64 * MEGA_BYTES_SCALE) {
             return 64 * MEGA_BYTES_SCALE;
@@ -136,12 +136,12 @@ public class DorisSinkOptions implements Serializable {
         if (maxBytes > 10 * GIGA_BYTES_SCALE) {
             return 10 * GIGA_BYTES_SCALE;
         }
-		return maxBytes;
+        return maxBytes;
     }
 
     public static Builder builder() {
-		return new Builder();
-	}
+        return new Builder();
+    }
     
     public DorisSinkSemantic getSemantic() {
         return this.sinkSemantic;
@@ -155,8 +155,8 @@ public class DorisSinkOptions implements Serializable {
         return streamLoadProps.containsKey("columns");
     }
 
-	private void validateStreamLoadUrl() {
-		tableOptions.getOptional(LOAD_URL).ifPresent(urlList -> {
+    private void validateStreamLoadUrl() {
+        tableOptions.getOptional(LOAD_URL).ifPresent(urlList -> {
             for (String host : urlList) {
                 HttpHost httpHost;
                 try {
@@ -174,49 +174,49 @@ public class DorisSinkOptions implements Serializable {
                         LOAD_URL.key()));
                 }
             }
-		});
+        });
     }
 
-	private void validateSinkSemantic() {
-		tableOptions.getOptional(SINK_SEMANTIC).ifPresent(semantic -> {
-			if (!SINK_SEMANTIC_ENUMS.contains(semantic)){
-				throw new ValidationException(
-					String.format("Unsupported value '%s' for '%s'. Supported values are ['at-least-once', 'exactly-once'].",
-						semantic, SINK_SEMANTIC.key()));
-			}
+    private void validateSinkSemantic() {
+        tableOptions.getOptional(SINK_SEMANTIC).ifPresent(semantic -> {
+            if (!SINK_SEMANTIC_ENUMS.contains(semantic)){
+                throw new ValidationException(
+                    String.format("Unsupported value '%s' for '%s'. Supported values are ['at-least-once', 'exactly-once'].",
+                        semantic, SINK_SEMANTIC.key()));
+            }
         });
         this.sinkSemantic = DorisSinkSemantic.fromName(tableOptions.get(SINK_SEMANTIC));
     }
 
-	private void validateRequired() {
+    private void validateRequired() {
         ConfigOption<?>[] configOptions = new ConfigOption[]{
-			USERNAME,
+            USERNAME,
             PASSWORD,
             TABLE_NAME,
             DATABASE_NAME,
             JDBC_URL,
             LOAD_URL
         };
-		int presentCount = 0;
-		for (ConfigOption<?> configOption : configOptions) {
-			if (tableOptions.getOptional(configOption).isPresent()) {
-				presentCount++;
-			}
-		}
-		String[] propertyNames = Arrays.stream(configOptions).map(ConfigOption::key).toArray(String[]::new);
-		Preconditions.checkArgument(configOptions.length == presentCount || presentCount == 0,
-			"Either all or none of the following options should be provided:\n" + String.join("\n", propertyNames));
-	}
+        int presentCount = 0;
+        for (ConfigOption<?> configOption : configOptions) {
+            if (tableOptions.getOptional(configOption).isPresent()) {
+                presentCount++;
+            }
+        }
+        String[] propertyNames = Arrays.stream(configOptions).map(ConfigOption::key).toArray(String[]::new);
+        Preconditions.checkArgument(configOptions.length == presentCount || presentCount == 0,
+            "Either all or none of the following options should be provided:\n" + String.join("\n", propertyNames));
+    }
 
-	private void parseSinkStreamLoadProperties() {
-		tableOptionsMap.keySet().stream()
+    private void parseSinkStreamLoadProperties() {
+        tableOptionsMap.keySet().stream()
             .filter(key -> key.startsWith(SINK_PROPERTIES_PREFIX))
             .forEach(key -> {
                 final String value = tableOptionsMap.get(key);
                 final String subKey = key.substring((SINK_PROPERTIES_PREFIX).length()).toLowerCase();
                 streamLoadProps.put(subKey, value);
             });
-	}
+    }
 
     /**
     * Builder for {@link DorisSinkOptions}.
