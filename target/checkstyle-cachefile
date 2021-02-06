@@ -1,0 +1,17 @@
+#Sat Feb 06 19:33:06 CST 2021
+/home/disk1/hf/dev/flink-connector/flink-connector-dorisdb/src/main/java/com/dorisdb/connection/DorisJdbcConnectionIProvider.java=1612353495000
+/home/disk1/hf/dev/flink-connector/flink-connector-dorisdb/src/main/java/com/dorisdb/table/DorisSinkSemantic.java=1612423140000
+/home/disk1/hf/dev/flink-connector/flink-connector-dorisdb/src/main/java/com/dorisdb/connection/DorisJdbcConnectionProvider.java=1612507079000
+/home/disk1/hf/dev/flink-connector/flink-connector-dorisdb/src/main/java/com/dorisdb/row/DorisIRowTransformer.java=1612604425000
+/home/disk1/hf/dev/flink-connector/flink-connector-dorisdb/src/main/java/com/dorisdb/table/DorisSinkOptions.java=1612597878000
+/home/disk1/hf/dev/flink-connector/flink-connector-dorisdb/src/main/java/com/dorisdb/row/DorisGenericRowTransformer.java=1612610447000
+/home/disk1/hf/dev/flink-connector/flink-connector-dorisdb/src/main/java/com/dorisdb/connection/DorisJdbcConnectionOptions.java=1612334500000
+/home/disk1/hf/dev/flink-connector/flink-connector-dorisdb/src/main/java/com/dorisdb/table/DorisDynamicSinkFunction.java=1612610399000
+/home/disk1/hf/dev/flink-connector/flink-connector-dorisdb/src/main/java/com/dorisdb/manager/DorisQueryVisitor.java=1612608936000
+/home/disk1/hf/dev/flink-connector/flink-connector-dorisdb/src/main/java/com/dorisdb/table/DorisDynamicTableSinkFactory.java=1612353808000
+/home/disk1/hf/dev/flink-connector/flink-connector-dorisdb/src/main/java/com/dorisdb/DorisSink.java=1612610591000
+/home/disk1/hf/dev/flink-connector/flink-connector-dorisdb/src/main/java/com/dorisdb/manager/DorisSinkManager.java=1612610939000
+/home/disk1/hf/dev/flink-connector/flink-connector-dorisdb/src/main/java/com/dorisdb/table/DorisDynamicTableSink.java=1612604571000
+/home/disk1/hf/dev/flink-connector/flink-connector-dorisdb/src/main/java/com/dorisdb/row/DorisTableRowTransformer.java=1612608939000
+/home/disk1/hf/dev/flink-connector/flink-connector-dorisdb/src/main/java/com/dorisdb/manager/DorisStreamLoadVisitor.java=1612604302000
+configuration*?=E88F99F03C9FC04245AED24DF41563ABD8BB5D8E

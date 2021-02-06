@@ -1,0 +1,240 @@
+package com.dorisdb.table;
+
+import org.apache.flink.calcite.shaded.com.google.common.base.Preconditions;
+import org.apache.flink.configuration.ConfigOption;
+import org.apache.flink.configuration.ConfigOptions;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.ReadableConfig;
+import org.apache.flink.table.api.ValidationException;
+import org.apache.http.HttpHost;
+
+import java.io.Serializable;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.List;
+
+public class DorisSinkOptions implements Serializable {
+
+    private static final long serialVersionUID = 1l;
+    private static final long KILO_BYTES_SCALE = 1024l;
+    private static final long MEGA_BYTES_SCALE = KILO_BYTES_SCALE * KILO_BYTES_SCALE;
+    private static final long GIGA_BYTES_SCALE = MEGA_BYTES_SCALE * KILO_BYTES_SCALE;
+    
+    // required sink configurations
+    public static final ConfigOption<String> JDBC_URL = ConfigOptions.key("jdbc-url")
+        .stringType().noDefaultValue().withDescription("Host of the stream load like: `jdbc:mysql://fe_ip1:query_port,fe_ip2:query_port...`.");
+    public static final ConfigOption<List<String>> LOAD_URL = ConfigOptions.key("load-url")
+        .stringType().asList().noDefaultValue().withDescription("Host of the stream load like: `fe_ip1:http_port;fe_ip2:http_port;fe_ip3:http_port`.");
+    public static final ConfigOption<String> DATABASE_NAME = ConfigOptions.key("database-name")
+        .stringType().noDefaultValue().withDescription("Database name of the stream load.");
+    public static final ConfigOption<String> TABLE_NAME = ConfigOptions.key("table-name")
+        .stringType().noDefaultValue().withDescription("Table name of the stream load.");
+    public static final ConfigOption<String> USERNAME = ConfigOptions.key("username")
+        .stringType().noDefaultValue().withDescription("DorisDB user name.");
+    public static final ConfigOption<String> PASSWORD = ConfigOptions.key("password")
+        .stringType().noDefaultValue().withDescription("DorisDB user password.");
+
+    // optional sink configurations
+    public static final ConfigOption<String> SINK_SEMANTIC = ConfigOptions.key("sink.semantic")
+        .stringType().defaultValue(DorisSinkSemantic.AT_LEAST_ONCE.getName()).withDescription("Fault tolerance guarantee. `at-least-once` or `exactly-once`");
+    public static final ConfigOption<Long> SINK_BATCH_MAX_SIZE = ConfigOptions.key("sink.buffer-flush.max-bytes")
+        .longType().defaultValue(64L * MEGA_BYTES_SCALE).withDescription("Max data bytes of the flush.");
+    public static final ConfigOption<Long> SINK_BATCH_MAX_ROWS = ConfigOptions.key("sink.buffer-flush.max-rows")
+        .longType().defaultValue(64000L).withDescription("Max row count of the flush.");
+    public static final ConfigOption<Long> SINK_BATCH_FLUSH_INTERVAL = ConfigOptions.key("sink.buffer-flush.interval-ms")
+        .longType().defaultValue(300000L).withDescription("Flush interval of the row batch in millisecond.");
+    public static final ConfigOption<Integer> SINK_BATCH_MAX_RETRIES = ConfigOptions.key("sink.buffer-flush.max-retries")
+        .intType().defaultValue(1).withDescription("Max flushing retry times of the row batch.");
+    
+    // Sink semantic
+    private static final Set<String> SINK_SEMANTIC_ENUMS = Arrays.stream(DorisSinkSemantic.values()).map(s -> s.getName()).collect(Collectors.toSet());
+    // wild stream load properties' prefix
+    public static final String SINK_PROPERTIES_PREFIX = "sink.properties.";
+
+    private final ReadableConfig tableOptions;
+    private final Map<String, String> streamLoadProps = new HashMap<>();
+    private final Map<String, String> tableOptionsMap;
+    private DorisSinkSemantic sinkSemantic;
+
+	public DorisSinkOptions(ReadableConfig options, Map<String, String> optionsMap) {
+        this.tableOptions = options;
+        this.tableOptionsMap = optionsMap;
+        parseSinkStreamLoadProperties();
+    }
+
+    public void validate() {
+        validateRequired();
+        validateStreamLoadUrl();
+        validateSinkSemantic();
+    }
+    
+	public String getJdbcUrl() {
+        return tableOptions.get(JDBC_URL);
+    }
+
+	public String getDatabaseName() {
+        return tableOptions.get(DATABASE_NAME);
+    }
+
+	public String getTableName() {
+        return tableOptions.get(TABLE_NAME);
+    }
+
+	public String getUsername() {
+        return tableOptions.get(USERNAME);
+    }
+
+	public String getPassword() {
+        return tableOptions.get(PASSWORD);
+    }
+
+	public List<String> getLoadUrlList() {
+        return tableOptions.getOptional(LOAD_URL).orElse(null);
+    }
+
+	public int getSinkMaxRetries() {
+        int maxRetries = tableOptions.get(SINK_BATCH_MAX_RETRIES).intValue();
+        if (maxRetries < 0) {
+            return 0;
+        }
+        if (maxRetries > 10) {
+            return 10;
+        }
+		return maxRetries;
+	}
+
+	public long getSinkMaxFlushInterval() {
+        long maxFlushInterval = tableOptions.get(SINK_BATCH_FLUSH_INTERVAL).longValue();
+        if (maxFlushInterval < 1000l) {
+            return 1000l;
+        }
+        if (maxFlushInterval > 3600000l) {
+            return 3600000l;
+        }
+		return maxFlushInterval;
+	}
+
+	public long getSinkMaxRows() {
+        long maxRows = tableOptions.get(SINK_BATCH_MAX_ROWS).longValue();
+        if (maxRows < 64000) {
+            return 64000l;
+        }
+        if (maxRows > 5000000) {
+            return 5000000l;
+        }
+		return maxRows;
+	}
+
+	public long getSinkMaxBytes() {
+        long maxBytes = tableOptions.get(SINK_BATCH_MAX_SIZE).longValue();
+        if (maxBytes < 64 * MEGA_BYTES_SCALE) {
+            return 64 * MEGA_BYTES_SCALE;
+        }
+        if (maxBytes > 10 * GIGA_BYTES_SCALE) {
+            return 10 * GIGA_BYTES_SCALE;
+        }
+		return maxBytes;
+    }
+
+    public static Builder builder() {
+		return new Builder();
+	}
+    
+    public DorisSinkSemantic getSemantic() {
+        return this.sinkSemantic;
+    }
+
+    public Map<String, String> getSinkStreamLoadProperties() {
+        return streamLoadProps;
+    }
+
+    public boolean hasColumnMappingProperty() {
+        return streamLoadProps.containsKey("columns");
+    }
+
+	private void validateStreamLoadUrl() {
+		tableOptions.getOptional(LOAD_URL).ifPresent(urlList -> {
+            for (String host : urlList) {
+                HttpHost httpHost;
+                try {
+                    httpHost = HttpHost.create(host);
+                } catch (Exception e) {
+                    throw new ValidationException(String.format(
+                        "Could not parse host '%s' in option '%s'. It should follow the format 'host_name:port'.",
+                        host,
+                        LOAD_URL.key()));
+                }
+                if (null != httpHost && httpHost.getPort() < 0) {
+                    throw new ValidationException(String.format(
+                        "Could not parse host '%s' in option '%s'. It should follow the format 'host_name:port'. Missing port.",
+                        host,
+                        LOAD_URL.key()));
+                }
+            }
+		});
+    }
+
+	private void validateSinkSemantic() {
+		tableOptions.getOptional(SINK_SEMANTIC).ifPresent(semantic -> {
+			if (!SINK_SEMANTIC_ENUMS.contains(semantic)){
+				throw new ValidationException(
+					String.format("Unsupported value '%s' for '%s'. Supported values are ['at-least-once', 'exactly-once'].",
+						semantic, SINK_SEMANTIC.key()));
+			}
+        });
+        this.sinkSemantic = DorisSinkSemantic.fromName(tableOptions.get(SINK_SEMANTIC));
+    }
+
+	private void validateRequired() {
+        ConfigOption<?>[] configOptions = new ConfigOption[]{
+			USERNAME,
+            PASSWORD,
+            TABLE_NAME,
+            DATABASE_NAME,
+            JDBC_URL,
+            LOAD_URL
+        };
+		int presentCount = 0;
+		for (ConfigOption<?> configOption : configOptions) {
+			if (tableOptions.getOptional(configOption).isPresent()) {
+				presentCount++;
+			}
+		}
+		String[] propertyNames = Arrays.stream(configOptions).map(ConfigOption::key).toArray(String[]::new);
+		Preconditions.checkArgument(configOptions.length == presentCount || presentCount == 0,
+			"Either all or none of the following options should be provided:\n" + String.join("\n", propertyNames));
+	}
+
+	private void parseSinkStreamLoadProperties() {
+		tableOptionsMap.keySet().stream()
+            .filter(key -> key.startsWith(SINK_PROPERTIES_PREFIX))
+            .forEach(key -> {
+                final String value = tableOptionsMap.get(key);
+                final String subKey = key.substring((SINK_PROPERTIES_PREFIX).length()).toLowerCase();
+                streamLoadProps.put(subKey, value);
+            });
+	}
+
+    /**
+    * Builder for {@link DorisSinkOptions}.
+    */
+    public static final class Builder {
+        private final Map<String, String> tableOptionsMap;
+        public Builder() {
+            this.tableOptionsMap = new HashMap<>();
+        }
+
+        public Builder withProperty(String key, String value) {
+            tableOptionsMap.put(key, value);
+            return this;
+        }
+
+        public DorisSinkOptions build() {
+            return new DorisSinkOptions(Configuration.fromMap(tableOptionsMap), tableOptionsMap);
+        }
+    }
+
+}
