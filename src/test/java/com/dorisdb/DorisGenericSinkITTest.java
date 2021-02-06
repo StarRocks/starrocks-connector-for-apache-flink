@@ -1,7 +1,6 @@
 package com.dorisdb;
 
 import com.dorisdb.manager.DorisQueryVisitor;
-import com.dorisdb.table.DorisSinkOptions;
 
 import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;

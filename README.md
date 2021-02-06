@@ -82,7 +82,7 @@ fromElements(TEST_DATA)
 | table-name | YES | NONE | String | doris table name |
 | username | YES | NONE | String | doris connecting username |
 | password | YES | NONE | String | doris connecting password |
-| sink.semantic | NO | `at-least-once` | String | `at-least-once` or `exactly-once`(which only takes effect on `checkpoint-interval = sink.buffer-flush.interval-ms`). |
+| sink.semantic | NO | `at-least-once` | String | `at-least-once` or `exactly-once`(which will `only flush on checkpoint`). |
 | sink.buffer-flush.max-bytes | NO | 67108864 | String | the max batching size of serialized data, range in `[64MB, 10GB]`. |
 | sink.buffer-flush.max-rows | NO | 64000 | String | the max batching rows, range in `[64,000, 5000,000]`. |
 | sink.buffer-flush.max-retries | NO | 1 | String | max retry times of the stream load request, range in `[0, 10]`. |
