@@ -176,7 +176,7 @@ public class DorisSinkManagerTest extends DorisSinkBaseTest {
         try {
             DorisSinkManager mgr = new DorisSinkManager(OPTIONS, TABLE_SCHEMA);
             mgr.writeRecord("");
-            mgr.flush();
+            mgr.flush(mgr.createBatchLabel());
         } catch (Exception e) {
             exMsg = e.getMessage();
             throw e;
@@ -185,7 +185,7 @@ public class DorisSinkManagerTest extends DorisSinkBaseTest {
         try {
             DorisSinkManager mgr = new DorisSinkManager(OPTIONS, TABLE_SCHEMA);
             mgr.writeRecord("");
-            mgr.flush();
+            mgr.flush(mgr.createBatchLabel());
         } catch (Exception e) {
             exMsg = e.getMessage();
             throw e;
@@ -195,7 +195,7 @@ public class DorisSinkManagerTest extends DorisSinkBaseTest {
         try {
             DorisSinkManager mgr = new DorisSinkManager(OPTIONS, TABLE_SCHEMA);
             mgr.writeRecord("");
-            mgr.flush();
+            mgr.flush(mgr.createBatchLabel());
         } catch (Exception e) {
             exMsg = e.getMessage();
         }

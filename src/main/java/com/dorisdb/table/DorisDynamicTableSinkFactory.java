@@ -61,7 +61,7 @@ public class DorisDynamicTableSinkFactory implements DynamicTableSinkFactory {
         optionalOptions.add(DorisSinkOptions.SINK_BATCH_MAX_SIZE);
         optionalOptions.add(DorisSinkOptions.SINK_BATCH_MAX_ROWS);
         optionalOptions.add(DorisSinkOptions.SINK_BATCH_FLUSH_INTERVAL);
-        optionalOptions.add(DorisSinkOptions.SINK_BATCH_MAX_RETRIES);
+        optionalOptions.add(DorisSinkOptions.SINK_MAX_RETRIES);
         optionalOptions.add(DorisSinkOptions.SINK_SEMANTIC);
         return optionalOptions;
     }

@@ -42,39 +42,39 @@ fromElements(TEST_DATA)
 
 ```java
 
-    // create a table with `structure` and `properties`
-    tEnv.executeSql(
-        "CREATE TABLE USER_RESULT(" +
-            "name VARCHAR," +
-            "score BIGINT" +
-            ") WITH ( " +
-            "'connector' = 'doris'," +
-            "'jdbc-url'='jdbc:mysql://ip:port,ip:port?xxxxx'," +
-            "'load-url'='ip:port;ip:port'," +
-            "'database-name' = 'xxx'," +
-            "'table-name' = 'xxx'," +
-            "'username' = 'xxx'," +
-            "'password' = 'xxx'," +
-            "'sink.buffer-flush.max-rows' = '1000000'," +
-            "'sink.buffer-flush.max-bytes' = '300000000'," +
-            "'sink.buffer-flush.interval-ms' = '300000'," +
-            "'sink.buffer-flush.max-retries' = '3'" +
-            "'sink.properties.*' = '3'" + // stream load properties like `'sink.properties.columns' = 'k1=name, v1=score'`
-            ")"
-    );
+// create a table with `structure` and `properties`
+tEnv.executeSql(
+    "CREATE TABLE USER_RESULT(" +
+        "name VARCHAR," +
+        "score BIGINT" +
+    ") WITH ( " +
+        "'connector' = 'doris'," +
+        "'jdbc-url'='jdbc:mysql://ip:port,ip:port?xxxxx'," +
+        "'load-url'='ip:port;ip:port'," +
+        "'database-name' = 'xxx'," +
+        "'table-name' = 'xxx'," +
+        "'username' = 'xxx'," +
+        "'password' = 'xxx'," +
+        "'sink.buffer-flush.max-rows' = '1000000'," +
+        "'sink.buffer-flush.max-bytes' = '300000000'," +
+        "'sink.buffer-flush.interval-ms' = '300000'," +
+        "'sink.max-retries' = '3'" +
+        "'sink.properties.*' = '3'" + // stream load properties like `'sink.properties.columns' = 'k1=name, v1=score'`
+    ")"
+);
 
-    // insert values into the table created above
-    tEnv.executeSql(
-        "INSERT INTO USER_RESULT\n" +
-        "VALUES ('lebron', 99), ('stephen', 99)"
-    ).await();
+// insert values into the table created above
+tEnv.executeSql(
+    "INSERT INTO USER_RESULT\n" +
+    "VALUES ('lebron', 99), ('stephen', 99)"
+).await();
 
 ```
 
 ## Sink Options
 
 | Option | Required | Default | Type | Description |
-|  ----  | ----  | ----  | ----  | ----  |
+|  :-:  | :-:  | :-:  | :-:  | :-:  |
 | connector | YES | NONE | String |`doris`|
 | jdbc-url | YES | NONE | String | jdbc url used to execute queries with doris. |
 | load-url | YES | NONE | String | http urls like `fe_ip:http_port;fe_ip:http_port` separated with `;`, used to batch sinking. |
@@ -82,9 +82,9 @@ fromElements(TEST_DATA)
 | table-name | YES | NONE | String | doris table name |
 | username | YES | NONE | String | doris connecting username |
 | password | YES | NONE | String | doris connecting password |
-| sink.semantic | NO | `at-least-once` | String | `at-least-once` or `exactly-once`(which will `only flush on checkpoint`). |
+| sink.semantic | NO | `at-least-once` | String | `at-least-once` or `exactly-once`(which will `only flush at checkpoint`, and options(`sink.buffer-flush.*`) will not work). |
 | sink.buffer-flush.max-bytes | NO | 67108864 | String | the max batching size of serialized data, range in `[64MB, 10GB]`. |
 | sink.buffer-flush.max-rows | NO | 64000 | String | the max batching rows, range in `[64,000, 5000,000]`. |
-| sink.buffer-flush.max-retries | NO | 1 | String | max retry times of the stream load request, range in `[0, 10]`. |
 | sink.buffer-flush.interval-ms | NO | 1000 | String | the flushing time interval, range in `[1000ms, 3600000ms]`. |
+| sink.max-retries | NO | 1 | String | max retry times of the stream load request, range in `[0, 10]`. |
 | sink.properties.* | NO | NONE | String | the stream load properties like `'sink.properties.columns' = 'k1=name, v1=score'`. |

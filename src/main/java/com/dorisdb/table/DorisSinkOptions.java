@@ -60,7 +60,7 @@ public class DorisSinkOptions implements Serializable {
         .longType().defaultValue(64000L).withDescription("Max row count of the flush.");
     public static final ConfigOption<Long> SINK_BATCH_FLUSH_INTERVAL = ConfigOptions.key("sink.buffer-flush.interval-ms")
         .longType().defaultValue(300000L).withDescription("Flush interval of the row batch in millisecond.");
-    public static final ConfigOption<Integer> SINK_BATCH_MAX_RETRIES = ConfigOptions.key("sink.buffer-flush.max-retries")
+    public static final ConfigOption<Integer> SINK_MAX_RETRIES = ConfigOptions.key("sink.max-retries")
         .intType().defaultValue(1).withDescription("Max flushing retry times of the row batch.");
     
     // Sink semantic
@@ -110,7 +110,7 @@ public class DorisSinkOptions implements Serializable {
     }
 
     public int getSinkMaxRetries() {
-        int maxRetries = tableOptions.get(SINK_BATCH_MAX_RETRIES).intValue();
+        int maxRetries = tableOptions.get(SINK_MAX_RETRIES).intValue();
         if (maxRetries < 0) {
             return 0;
         }

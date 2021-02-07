@@ -105,7 +105,7 @@ public class DorisSinkManager implements Serializable {
             synchronized (DorisSinkManager.this) {
                 if (!closed) {
                     try {
-                        flush();
+                        flush(createBatchLabel());
                     } catch (Exception e) {
                         flushException = e;
                     }
@@ -124,16 +124,18 @@ public class DorisSinkManager implements Serializable {
                 return;
             }
             if (batchCount >= sinkOptions.getSinkMaxRows() || batchSize >= sinkOptions.getSinkMaxBytes()) {
-                flush();
+                flush(createBatchLabel());
             }
         } catch (Exception e) {
             throw new IOException("Writing records to Doris failed.", e);
         }
     }
 
-    public synchronized void flush() throws IOException {
+    public synchronized void flush(String label) throws IOException {
         checkFlushException();
-        String label = UUID.randomUUID().toString();
+        if (batchCount == 0) {
+            return;
+        }
         for (int i = 0; i <= sinkOptions.getSinkMaxRetries(); i++) {
             try {
                 tryToFlush(label);
@@ -167,13 +169,29 @@ public class DorisSinkManager implements Serializable {
 
             if (batchCount > 0) {
                 try {
-                    flush();
+                    flush(createBatchLabel());
                 } catch (Exception e) {
                     throw new RuntimeException("Writing records to Doris failed.", e);
                 }
             }
         }
         checkFlushException();
+    }
+
+    public String createBatchLabel() {
+        return UUID.randomUUID().toString();
+    }
+
+    public List<String> getBufferedBatchList() {
+        return buffer;
+    }
+
+    public void setBufferedBatchList(List<String> buffer) {
+        if (!DorisSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
+            return;
+        }
+        this.buffer.clear();
+        this.buffer.addAll(buffer);
     }
 
     private void tryToFlush(String label) throws IOException {

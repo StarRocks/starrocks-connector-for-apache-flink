@@ -69,12 +69,14 @@ public class DorisDynamicTableSinkITTest extends DorisSinkBaseTest {
             "'sink.buffer-flush.max-rows' = '" + OPTIONS.getSinkMaxRows() + "'," +
             "'sink.buffer-flush.max-bytes' = '" + OPTIONS.getSinkMaxBytes() + "'," +
             "'sink.buffer-flush.interval-ms' = '" + OPTIONS.getSinkMaxFlushInterval() + "'," +
-            "'sink.buffer-flush.max-retries' = '" + OPTIONS.getSinkMaxRetries() + "'" +
+            "'sink.max-retries' = '" + OPTIONS.getSinkMaxRetries() + "'" +
             ")";
         tEnv.executeSql(createSQL);
 
         String exMsg = "";
         try {
+            tEnv.executeSql("INSERT INTO USER_RESULT\n" +
+                "VALUES ('lebron', 99), ('stephen', 99)").await();
             tEnv.executeSql("INSERT INTO USER_RESULT\n" +
                 "VALUES ('lebron', 99), ('stephen', 99)").await();
         } catch (Exception e) {
