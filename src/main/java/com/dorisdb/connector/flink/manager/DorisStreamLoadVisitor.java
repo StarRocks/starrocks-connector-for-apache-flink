@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package com.dorisdb.manager;
+package com.dorisdb.connector.flink.manager;
 
 
 import java.io.DataInputStream;
@@ -23,7 +23,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
-import com.dorisdb.table.DorisSinkOptions;
+import com.dorisdb.connector.flink.table.DorisSinkOptions;
 import com.alibaba.fastjson.JSON;
 
 import org.apache.commons.codec.binary.Base64;

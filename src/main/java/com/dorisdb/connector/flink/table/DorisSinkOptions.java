@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package com.dorisdb.table;
+package com.dorisdb.connector.flink.table;
 
 import org.apache.flink.calcite.shaded.com.google.common.base.Preconditions;
 import org.apache.flink.configuration.ConfigOption;

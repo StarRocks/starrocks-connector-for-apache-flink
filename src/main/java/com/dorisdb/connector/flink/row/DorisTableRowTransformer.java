@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package com.dorisdb.row;
+package com.dorisdb.connector.flink.row;
 
 import java.io.Serializable;
 import java.sql.Date;

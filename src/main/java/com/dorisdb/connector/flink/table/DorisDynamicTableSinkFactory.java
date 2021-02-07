@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package com.dorisdb.table;
+package com.dorisdb.connector.flink.table;
 
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ReadableConfig;

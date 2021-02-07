@@ -12,9 +12,9 @@
  * limitations under the License.
  */
 
-package com.dorisdb.table;
+package com.dorisdb.connector.flink.table;
 
-import com.dorisdb.row.DorisTableRowTransformer;
+import com.dorisdb.connector.flink.row.DorisTableRowTransformer;
 
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.table.api.TableSchema;

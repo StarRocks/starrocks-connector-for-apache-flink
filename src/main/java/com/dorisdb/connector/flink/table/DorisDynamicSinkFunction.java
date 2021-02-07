@@ -12,10 +12,10 @@
  * limitations under the License.
  */
 
-package com.dorisdb.table;
+package com.dorisdb.connector.flink.table;
 
-import com.dorisdb.row.DorisIRowTransformer;
-import com.dorisdb.manager.DorisSinkManager;
+import com.dorisdb.connector.flink.row.DorisIRowTransformer;
+import com.dorisdb.connector.flink.manager.DorisSinkManager;
 
 import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ListStateDescriptor;

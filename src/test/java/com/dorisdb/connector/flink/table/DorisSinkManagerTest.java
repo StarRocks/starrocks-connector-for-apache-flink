@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package com.dorisdb.table;
+package com.dorisdb.connector.flink.table;
 
 import org.apache.flink.runtime.util.ExecutorThreadFactory;
 import org.apache.flink.shaded.guava18.com.google.common.collect.Lists;
@@ -27,9 +27,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import com.dorisdb.DorisSinkBaseTest;
-import com.dorisdb.manager.DorisQueryVisitor;
-import com.dorisdb.manager.DorisSinkManager;
+import com.dorisdb.connector.flink.DorisSinkBaseTest;
+import com.dorisdb.connector.flink.manager.DorisQueryVisitor;
+import com.dorisdb.connector.flink.manager.DorisSinkManager;
 import mockit.Expectations;
 import mockit.Mocked;
 

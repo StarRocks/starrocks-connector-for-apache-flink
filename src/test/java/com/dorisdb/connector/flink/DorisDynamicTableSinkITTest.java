@@ -12,9 +12,9 @@
  * limitations under the License.
  */
 
-package com.dorisdb;
+package com.dorisdb.connector.flink;
 
-import com.dorisdb.manager.DorisQueryVisitor;
+import com.dorisdb.connector.flink.manager.DorisQueryVisitor;
 
 import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.TableEnvironment;

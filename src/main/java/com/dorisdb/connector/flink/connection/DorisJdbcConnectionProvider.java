@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package com.dorisdb.connection;
+package com.dorisdb.connector.flink.connection;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

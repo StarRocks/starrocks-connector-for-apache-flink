@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package com.dorisdb.manager;
+package com.dorisdb.connector.flink.manager;
 
 import java.io.Serializable;
 import java.sql.Connection;
@@ -25,7 +25,7 @@ import java.util.List;
 import java.sql.ResultSetMetaData;
 import java.util.Map;
 
-import com.dorisdb.connection.DorisJdbcConnectionProvider;
+import com.dorisdb.connector.flink.connection.DorisJdbcConnectionProvider;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

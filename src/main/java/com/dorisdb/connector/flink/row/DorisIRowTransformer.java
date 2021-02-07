@@ -12,19 +12,17 @@
  * limitations under the License.
  */
 
-package com.dorisdb.connection;
+package com.dorisdb.connector.flink.row;
 
-import org.apache.flink.annotation.Internal;
-import java.sql.Connection;
+import org.apache.flink.api.common.functions.RuntimeContext;
+import org.apache.flink.table.api.TableSchema;
 
-/**
- * connection provider.
- */
-@Internal
-public interface DorisJdbcConnectionIProvider {
+public interface DorisIRowTransformer<T> {
 
-    Connection getConnection() throws Exception;
+    void setTableSchema(TableSchema tableSchema);
 
-    Connection reestablishConnection() throws Exception;
+    void setRuntimeContext(RuntimeContext ctx);
+
+    String transform(T record);
     
 }

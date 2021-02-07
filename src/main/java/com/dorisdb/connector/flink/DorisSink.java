@@ -12,14 +12,14 @@
  * limitations under the License.
  */
 
-package com.dorisdb;
+package com.dorisdb.connector.flink;
 
 import org.apache.flink.streaming.api.functions.sink.SinkFunction;
 import org.apache.flink.table.api.TableSchema;
 
-import com.dorisdb.row.DorisGenericRowTransformer;
-import com.dorisdb.table.DorisDynamicSinkFunction;
-import com.dorisdb.table.DorisSinkOptions;
+import com.dorisdb.connector.flink.row.DorisGenericRowTransformer;
+import com.dorisdb.connector.flink.table.DorisDynamicSinkFunction;
+import com.dorisdb.connector.flink.table.DorisSinkOptions;
 
 public class DorisSink {
 

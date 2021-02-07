@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package com.dorisdb.row;
+package com.dorisdb.connector.flink.row;
 
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.junit.Test;
@@ -27,7 +27,7 @@ import java.math.BigDecimal;
 import java.util.Map;
 
 import com.alibaba.fastjson.JSON;
-import com.dorisdb.DorisSinkBaseTest;
+import com.dorisdb.connector.flink.DorisSinkBaseTest;
 
 public class DorisGenericRowTransformerTest extends DorisSinkBaseTest {
 

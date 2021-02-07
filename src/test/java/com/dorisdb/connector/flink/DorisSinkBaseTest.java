@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package com.dorisdb;
+package com.dorisdb.connector.flink;
 
 import static org.junit.Assert.assertEquals;
 
@@ -26,8 +26,8 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.alibaba.fastjson.JSON;
-import com.dorisdb.table.DorisSinkOptions;
-import com.dorisdb.table.DorisSinkSemantic;
+import com.dorisdb.connector.flink.table.DorisSinkOptions;
+import com.dorisdb.connector.flink.table.DorisSinkSemantic;
 
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.TableSchema;

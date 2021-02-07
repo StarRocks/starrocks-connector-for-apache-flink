@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package com.dorisdb.manager;
+package com.dorisdb.connector.flink.manager;
 
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.types.logical.LogicalTypeRoot;
@@ -38,10 +38,10 @@ import org.apache.flink.runtime.util.ExecutorThreadFactory;
 import org.apache.flink.shaded.guava18.com.google.common.collect.Lists;
 import org.apache.flink.table.api.TableColumn;
 
-import com.dorisdb.table.DorisSinkOptions;
-import com.dorisdb.table.DorisSinkSemantic;
-import com.dorisdb.connection.DorisJdbcConnectionOptions;
-import com.dorisdb.connection.DorisJdbcConnectionProvider;
+import com.dorisdb.connector.flink.table.DorisSinkOptions;
+import com.dorisdb.connector.flink.table.DorisSinkSemantic;
+import com.dorisdb.connector.flink.connection.DorisJdbcConnectionOptions;
+import com.dorisdb.connector.flink.connection.DorisJdbcConnectionProvider;
 
 public class DorisSinkManager implements Serializable {
 

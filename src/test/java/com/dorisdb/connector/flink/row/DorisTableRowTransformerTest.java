@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package com.dorisdb.row;
+package com.dorisdb.connector.flink.row;
 
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
@@ -30,7 +30,7 @@ import java.time.LocalDate;
 import java.util.Map;
 
 import com.alibaba.fastjson.JSON;
-import com.dorisdb.DorisSinkBaseTest;
+import com.dorisdb.connector.flink.DorisSinkBaseTest;
 
 import org.apache.flink.table.data.DecimalData;
 import org.apache.flink.table.data.GenericRowData;
