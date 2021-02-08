@@ -15,6 +15,7 @@
 package com.dorisdb.connector.flink.row;
 
 import org.apache.flink.api.common.functions.RuntimeContext;
+import org.apache.flink.calcite.shaded.com.google.common.base.Strings;
 import org.junit.Test;
 
 import mockit.Injectable;
@@ -30,7 +31,6 @@ import com.alibaba.fastjson.JSON;
 import com.dorisdb.connector.flink.DorisSinkBaseTest;
 
 public class DorisGenericRowTransformerTest extends DorisSinkBaseTest {
-
 
     class UserInfoForTest {
         public byte age;
@@ -56,13 +56,22 @@ public class DorisGenericRowTransformerTest extends DorisSinkBaseTest {
         });
         rowTransformer.setRuntimeContext(runtimeCtx);
         rowTransformer.setTableSchema(TABLE_SCHEMA);
+        rowTransformer.setSerializer(DorisSerializerFactory.createSerializer(OPTIONS, TABLE_SCHEMA.getFieldNames()));
         UserInfoForTest rowData = createRowData();
         String result = rowTransformer.transform(rowData);
-        Map<String, Object> rMap = (Map<String, Object>)JSON.parse(result);
-        assertNotNull(rMap);
-        assertEquals(TABLE_SCHEMA.getFieldCount(), rMap.size());
-        for (String name : TABLE_SCHEMA.getFieldNames()) {
-            assertTrue(rMap.containsKey(name));
+
+        Map<String, String> loadProsp = OPTIONS.getSinkStreamLoadProperties();
+        String format = loadProsp.get("format");
+        if (Strings.isNullOrEmpty(format) || "csv".equalsIgnoreCase(format)) {
+            assertEquals(TABLE_SCHEMA.getFieldCount(), result.split("\t").length);
+        }
+        if ("json".equalsIgnoreCase(format)) {
+            Map<String, Object> rMap = (Map<String, Object>)JSON.parse(result);
+            assertNotNull(rMap);
+            assertEquals(TABLE_SCHEMA.getFieldCount(), rMap.size());
+            for (String name : TABLE_SCHEMA.getFieldNames()) {
+                assertTrue(rMap.containsKey(name));
+            }
         }
     }
 

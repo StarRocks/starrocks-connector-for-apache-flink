@@ -14,14 +14,10 @@
 
 package com.dorisdb.connector.flink.row;
 
-import java.io.Serializable;
 import java.sql.Date;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.function.Function;
-import com.alibaba.fastjson.JSON;
 
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
@@ -33,14 +29,14 @@ import org.apache.flink.table.types.logical.DecimalType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.TimestampType;
 
-public class DorisTableRowTransformer implements DorisIRowTransformer<RowData>, Serializable {
+public class DorisTableRowTransformer implements DorisIRowTransformer<RowData> {
 
     private static final long serialVersionUID = 1L;
 
     private TypeInformation<RowData> rowDataTypeInfo;
     private Function<RowData, RowData> valueTransform;
     private DataType[] dataTypes;
-    private String[] fieldNames;
+    private DorisISerializer serializer;
     private final SimpleDateFormat dateFormatter = new SimpleDateFormat("yyyy-MM-dd");
     private final SimpleDateFormat dateTimeFormatter = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss");
 
@@ -51,7 +47,6 @@ public class DorisTableRowTransformer implements DorisIRowTransformer<RowData>, 
     @Override
     public void setTableSchema(TableSchema ts) {
         dataTypes = ts.getFieldDataTypes();
-        fieldNames = ts.getFieldNames();
     }
 
     @Override
@@ -59,22 +54,22 @@ public class DorisTableRowTransformer implements DorisIRowTransformer<RowData>, 
         final TypeSerializer<RowData> typeSerializer = rowDataTypeInfo.createSerializer(runtimeCtx.getExecutionConfig());
         valueTransform = runtimeCtx.getExecutionConfig().isObjectReuseEnabled() ? typeSerializer::copy : Function.identity();
     }
+    
+    @Override
+    public void setSerializer(DorisISerializer serializer) {
+        this.serializer = serializer;
+    }
 
     @Override
     public String transform(RowData record) {
-        return toJsonString(valueTransform.apply(record));
-    }
-
-    private String toJsonString(RowData record) {
-        Map<String, Object> rowMap = new HashMap<>();
+        RowData transformRecord = valueTransform.apply(record);
+        Object[] values = new Object[dataTypes.length];
         int idx = 0;
-        for (String fieldName : fieldNames) {
-            DataType dataType = dataTypes[idx];
-            Object value = typeConvertion(dataType.getLogicalType(), record, idx);
-            rowMap.put(fieldName, value);
+        for (DataType dataType : dataTypes) {
+            values[idx] = typeConvertion(dataType.getLogicalType(), transformRecord, idx);
             idx++;
         }
-        return JSON.toJSONString(rowMap);
+        return serializer.serialize(values);
     }
 
     private Object typeConvertion(LogicalType type, RowData record, int pos) {

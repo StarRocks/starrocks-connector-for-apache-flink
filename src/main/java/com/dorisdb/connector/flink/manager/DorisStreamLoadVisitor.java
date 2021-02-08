@@ -23,6 +23,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
+import com.dorisdb.connector.flink.row.DorisSerializerFactory;
 import com.dorisdb.connector.flink.table.DorisSinkOptions;
 import com.alibaba.fastjson.JSON;
 
@@ -120,12 +121,10 @@ public class DorisStreamLoadVisitor implements Serializable {
             for (Map.Entry<String,String> entry : props.entrySet()) {
                 httpurlconnection.setRequestProperty(entry.getKey(), entry.getValue());
             }
-            httpurlconnection.setRequestProperty("label", "");
             httpurlconnection.setRequestProperty("Expect", "100-continue");
-            httpurlconnection.setRequestProperty("strip_outer_array", "true");
             httpurlconnection.setRequestProperty("label", labeledJson.f0);
             httpurlconnection.setRequestProperty("Authorization", getBasicAuthHeader(sinkOptions.getUsername(), sinkOptions.getPassword()));
-            httpurlconnection.getOutputStream().write(new StringBuilder("[").append(String.join(",", labeledJson.f1)).append("]").toString().getBytes(StandardCharsets.UTF_8));
+            httpurlconnection.getOutputStream().write(DorisSerializerFactory.joinRows(sinkOptions, labeledJson.f1));
             httpurlconnection.getOutputStream().flush();
             httpurlconnection.getOutputStream().close();
             int code = httpurlconnection.getResponseCode();

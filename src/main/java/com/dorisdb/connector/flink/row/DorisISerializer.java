@@ -16,17 +16,8 @@ package com.dorisdb.connector.flink.row;
 
 import java.io.Serializable;
 
-import org.apache.flink.api.common.functions.RuntimeContext;
-import org.apache.flink.table.api.TableSchema;
+public interface DorisISerializer extends Serializable {
 
-public interface DorisIRowTransformer<T> extends Serializable {
-
-    void setTableSchema(TableSchema tableSchema);
-
-    void setRuntimeContext(RuntimeContext ctx);
-
-    void setSerializer(DorisISerializer serializer);
-
-    String transform(T record);
+    String serialize(Object[] values);
     
 }

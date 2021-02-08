@@ -15,6 +15,7 @@
 package com.dorisdb.connector.flink.table;
 
 import com.dorisdb.connector.flink.row.DorisIRowTransformer;
+import com.dorisdb.connector.flink.row.DorisSerializerFactory;
 import com.dorisdb.connector.flink.manager.DorisSinkManager;
 
 import org.apache.flink.api.common.state.ListState;
@@ -44,6 +45,7 @@ public class DorisDynamicSinkFunction<T> extends RichSinkFunction<T> implements 
  
     public DorisDynamicSinkFunction(DorisSinkOptions sinkOptions, TableSchema schema, DorisIRowTransformer<T> rowTransformer) {
         rowTransformer.setTableSchema(schema);
+        rowTransformer.setSerializer(DorisSerializerFactory.createSerializer(sinkOptions, schema.getFieldNames()));
         this.rowTransformer = rowTransformer;
         this.sinkOptions = sinkOptions;
         this.sinkManager = new DorisSinkManager(sinkOptions, schema);
