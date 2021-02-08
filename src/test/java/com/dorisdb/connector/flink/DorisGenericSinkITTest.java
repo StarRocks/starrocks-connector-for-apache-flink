@@ -76,5 +76,42 @@ public class DorisGenericSinkITTest extends DorisSinkBaseTest {
             exMsg = e.getMessage();
         }
         assertFalse(exMsg, exMsg.length() > 0);
+
+        // real case
+        // mockSuccessResponse();
+        // StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // env.setRestartStrategy(new RestartStrategies.NoRestartStrategyConfiguration());
+        // env.setParallelism(1);
+        // env.fromElements(TEST_DATA)
+        //     .addSink(DorisSink.sink(
+        //         TableSchema.builder()
+        //             .field("k1", DataTypes.TINYINT())
+        //             .field("k2", DataTypes.DECIMAL(10, 2))
+        //             .field("v1", DataTypes.CHAR(10))
+        //             .field("v2", DataTypes.INT())
+        //             .build(),
+        //         DorisSinkOptions.builder()
+        //             .withProperty("jdbc-url", "jdbc:mysql://172.26.92.139:28533")
+        //             .withProperty("load-url", "172.26.92.139:28531;172.26.92.139:28531")
+        //             .withProperty("database-name", "aa")
+        //             .withProperty("table-name", "test")
+        //             .withProperty("username", "root")
+        //             .withProperty("password", "")
+        //             .withProperty("sink.properties.column_separator", "\\x02")
+        //             .build(),
+        //         (slots, te) -> {
+        //             slots[0] = te.score;
+        //             slots[1] = te.score;
+        //             slots[2] = te.name;
+        //             slots[3] = te.score;
+        //         }));
+
+        // String exMsg = "";
+        // try {
+        //     env.execute();
+        // } catch (Exception e) {
+        //     exMsg = e.getMessage();
+        // }
+        // assertFalse(exMsg, exMsg.length() > 0);
     }
 }

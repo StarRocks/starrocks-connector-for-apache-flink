@@ -21,7 +21,6 @@ import java.io.Serializable;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 
 import com.dorisdb.connector.flink.row.DorisSerializerFactory;
 import com.dorisdb.connector.flink.table.DorisSinkOptions;
@@ -55,7 +54,14 @@ public class DorisStreamLoadVisitor implements Serializable {
         if (null == host) {
             throw new IOException("None of the host in `load_url` could be connected.");
         }
-        Map<String, Object> loadResult = doHttpPut(host, labeledJson);
+        String loadUrl = new StringBuilder(host)
+            .append("/api/")
+            .append(sinkOptions.getDatabaseName())
+            .append("/")
+            .append(sinkOptions.getTableName())
+            .append("/_stream_load")
+            .toString();
+        Map<String, Object> loadResult = doHttpPut(loadUrl, labeledJson);
         final String keyStatus = "Status";
         if (null == loadResult || !loadResult.containsKey(keyStatus)) {
             throw new IOException("Unable to flush data to doris: unknown result status.");
@@ -96,24 +102,15 @@ public class DorisStreamLoadVisitor implements Serializable {
     }
 
     @SuppressWarnings("unchecked")
-    private Map<String, Object> doHttpPut(String host, Tuple2<String, List<String>> labeledJson) throws IOException {
+    private Map<String, Object> doHttpPut(String loadUrl, Tuple2<String, List<String>> labeledJson) throws IOException {
         URL url = null;
         HttpURLConnection httpurlconnection = null;
-        HttpURLConnection.setFollowRedirects(true);
-        StringBuilder loadUrl = new StringBuilder(host)
-            .append("/api/")
-            .append(sinkOptions.getDatabaseName())
-            .append("/")
-            .append(sinkOptions.getTableName())
-            .append("/_stream_load");
         if (LOG.isDebugEnabled()) {
-            LOG.debug(String.format("Executing stream load to: '%s', rows: '%s'", loadUrl.toString(), labeledJson.f1.size()));
+            LOG.debug(String.format("Executing stream load to: '%s', rows: '%s'", loadUrl, labeledJson.f1.size()));
         }
         try {
-            url = new URL(loadUrl.toString());
+            url = new URL(loadUrl);
             httpurlconnection = (HttpURLConnection) url.openConnection();
-            httpurlconnection.setDoInput(true);
-            httpurlconnection.setDoOutput(true);
             httpurlconnection.setConnectTimeout(1000);
             httpurlconnection.setReadTimeout(300000);
             httpurlconnection.setRequestMethod("PUT");
@@ -124,11 +121,17 @@ public class DorisStreamLoadVisitor implements Serializable {
             httpurlconnection.setRequestProperty("Expect", "100-continue");
             httpurlconnection.setRequestProperty("label", labeledJson.f0);
             httpurlconnection.setRequestProperty("Authorization", getBasicAuthHeader(sinkOptions.getUsername(), sinkOptions.getPassword()));
+            httpurlconnection.setDoInput(true);
+            httpurlconnection.setDoOutput(true);
+            httpurlconnection.setInstanceFollowRedirects(false);
             httpurlconnection.getOutputStream().write(DorisSerializerFactory.joinRows(sinkOptions, labeledJson.f1));
             httpurlconnection.getOutputStream().flush();
             httpurlconnection.getOutputStream().close();
             int code = httpurlconnection.getResponseCode();
- 
+
+            if(307 == httpurlconnection.getResponseCode()){
+                return doHttpPut(httpurlconnection.getHeaderField("Location"), labeledJson);
+            }
             if (200 != code) {
                 LOG.warn("Request failed with code:{}", code);
                 return null;
@@ -157,7 +160,7 @@ public class DorisStreamLoadVisitor implements Serializable {
     
     private String getBasicAuthHeader(String username, String password) {
         String auth = username + ":" + password;
-        byte[] encodedAuth = Base64.encodeBase64(auth.getBytes(StandardCharsets.US_ASCII));
+        byte[] encodedAuth = Base64.encodeBase64(auth.getBytes());
         return new StringBuilder("Basic ").append(new String(encodedAuth)).toString();
     }
 

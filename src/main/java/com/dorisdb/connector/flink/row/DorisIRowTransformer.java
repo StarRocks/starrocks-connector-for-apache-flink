@@ -25,8 +25,6 @@ public interface DorisIRowTransformer<T> extends Serializable {
 
     void setRuntimeContext(RuntimeContext ctx);
 
-    void setSerializer(DorisISerializer serializer);
-
-    String transform(T record);
+    Object[] transform(T record);
     
 }

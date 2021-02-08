@@ -15,6 +15,7 @@
 package com.dorisdb.connector.flink.table;
 
 import com.dorisdb.connector.flink.row.DorisIRowTransformer;
+import com.dorisdb.connector.flink.row.DorisISerializer;
 import com.dorisdb.connector.flink.row.DorisSerializerFactory;
 import com.dorisdb.connector.flink.manager.DorisSinkManager;
 
@@ -39,13 +40,14 @@ public class DorisDynamicSinkFunction<T> extends RichSinkFunction<T> implements 
     private DorisSinkManager sinkManager;
     private DorisIRowTransformer<T> rowTransformer;
     private DorisSinkOptions sinkOptions;
+    private DorisISerializer serializer;
 
     // state only works with `DorisSinkSemantic.EXACTLY_ONCE`
     private transient ListState<Tuple2<String, List<String>>> checkpointedState;
  
     public DorisDynamicSinkFunction(DorisSinkOptions sinkOptions, TableSchema schema, DorisIRowTransformer<T> rowTransformer) {
         rowTransformer.setTableSchema(schema);
-        rowTransformer.setSerializer(DorisSerializerFactory.createSerializer(sinkOptions, schema.getFieldNames()));
+        this.serializer = DorisSerializerFactory.createSerializer(sinkOptions, schema.getFieldNames());
         this.rowTransformer = rowTransformer;
         this.sinkOptions = sinkOptions;
         this.sinkManager = new DorisSinkManager(sinkOptions, schema);
@@ -68,7 +70,9 @@ public class DorisDynamicSinkFunction<T> extends RichSinkFunction<T> implements 
             }
             checkpointedState.clear();
         }
-        sinkManager.writeRecord(rowTransformer.transform(value));
+        sinkManager.writeRecord(
+            serializer.serialize(rowTransformer.transform(value))
+        );
     }
 
     @Override

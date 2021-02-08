@@ -36,7 +36,6 @@ public class DorisTableRowTransformer implements DorisIRowTransformer<RowData> {
     private TypeInformation<RowData> rowDataTypeInfo;
     private Function<RowData, RowData> valueTransform;
     private DataType[] dataTypes;
-    private DorisISerializer serializer;
     private final SimpleDateFormat dateFormatter = new SimpleDateFormat("yyyy-MM-dd");
     private final SimpleDateFormat dateTimeFormatter = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss");
 
@@ -54,14 +53,9 @@ public class DorisTableRowTransformer implements DorisIRowTransformer<RowData> {
         final TypeSerializer<RowData> typeSerializer = rowDataTypeInfo.createSerializer(runtimeCtx.getExecutionConfig());
         valueTransform = runtimeCtx.getExecutionConfig().isObjectReuseEnabled() ? typeSerializer::copy : Function.identity();
     }
-    
-    @Override
-    public void setSerializer(DorisISerializer serializer) {
-        this.serializer = serializer;
-    }
 
     @Override
-    public String transform(RowData record) {
+    public Object[] transform(RowData record) {
         RowData transformRecord = valueTransform.apply(record);
         Object[] values = new Object[dataTypes.length];
         int idx = 0;
@@ -69,7 +63,7 @@ public class DorisTableRowTransformer implements DorisIRowTransformer<RowData> {
             values[idx] = typeConvertion(dataType.getLogicalType(), transformRecord, idx);
             idx++;
         }
-        return serializer.serialize(values);
+        return values;
     }
 
     private Object typeConvertion(LogicalType type, RowData record, int pos) {

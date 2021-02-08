@@ -28,7 +28,6 @@ public class DorisGenericRowTransformer<T> implements DorisIRowTransformer<T> {
 
     private RowConsumer<T> consumer;
     private String[] fieldNames;
-    private DorisISerializer serializer;
 
     public DorisGenericRowTransformer(RowConsumer<T> consumer) {
         this.consumer = consumer;
@@ -43,15 +42,10 @@ public class DorisGenericRowTransformer<T> implements DorisIRowTransformer<T> {
     public void setRuntimeContext(RuntimeContext ctx) {}
 
     @Override
-    public void setSerializer(DorisISerializer serializer) {
-        this.serializer = serializer;
-    }
-
-    @Override
-    public String transform(T record) {
+    public Object[] transform(T record) {
         Object[] rowData = new Object[fieldNames.length];
         consumer.accept(rowData, record);
-        return serializer.serialize(rowData);
+        return rowData;
     }
     
 }

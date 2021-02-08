@@ -47,9 +47,8 @@ public class DorisTableRowTransformerTest extends DorisSinkBaseTest {
         DorisTableRowTransformer rowTransformer = new DorisTableRowTransformer(rowDataTypeInfo);
         rowTransformer.setRuntimeContext(runtimeCtx);
         rowTransformer.setTableSchema(TABLE_SCHEMA);
-        rowTransformer.setSerializer(DorisSerializerFactory.createSerializer(OPTIONS, TABLE_SCHEMA.getFieldNames()));
         GenericRowData rowData = createRowData();
-        String result = rowTransformer.transform(rowData);
+        String result = DorisSerializerFactory.createSerializer(OPTIONS, TABLE_SCHEMA.getFieldNames()).serialize(rowTransformer.transform(rowData));
 
         Map<String, String> loadProsp = OPTIONS.getSinkStreamLoadProperties();
         String format = loadProsp.get("format");

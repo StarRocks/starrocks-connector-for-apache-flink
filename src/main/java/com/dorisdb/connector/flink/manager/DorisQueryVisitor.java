@@ -47,7 +47,7 @@ public class DorisQueryVisitor implements Serializable {
     }
 
     public List<Map<String, Object>> getTableColumnsMetaData() {
-        final String query = "select `COLUMN_NAME`, `DATA_TYPE`, `COLUMN_SIZE`, `DECIMAL_DIGITS` from `information_schema`.`COLUMNS` where `TABLE_SCHEMA`=? and `TABLE_SCHEMA`=?;";
+        final String query = "select `COLUMN_NAME`, `DATA_TYPE`, `COLUMN_SIZE`, `DECIMAL_DIGITS` from `information_schema`.`COLUMNS` where `TABLE_SCHEMA`=? and `TABLE_NAME`=?;";
         List<Map<String, Object>> rows;
         try {
             if (LOG.isDebugEnabled()) {
@@ -57,7 +57,7 @@ public class DorisQueryVisitor implements Serializable {
         } catch (ClassNotFoundException se) {
             throw new IllegalArgumentException("Failed to find jdbc driver." + se.getMessage(), se);
         } catch (SQLException se) {
-            throw new IllegalArgumentException("Failed to get table schema info from doris." + se.getMessage(), se);
+            throw new IllegalArgumentException("Failed to get table schema info from doris. " + se.getMessage(), se);
         }
         return rows;
     }
