@@ -145,7 +145,7 @@ public class DorisStreamLoadVisitor implements Serializable {
         } catch (MalformedURLException e) {
             LOG.warn("Unable to parse url:{}", loadUrl.toString(), e);
         } catch (Exception e) {
-            throw new IOException("Failed to do stream load with exception.", e.getMessage());
+            throw new IOException("Failed to do stream load with exception.", e);
         } finally {
             url = null;
             if (httpurlconnection != null) {
