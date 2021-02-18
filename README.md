@@ -4,8 +4,38 @@
 
 ### Intgerate with your existing project:
 
-Append this line `com.dorisdb.table.DorisDynamicTableSinkFactory` to the file located at:
+- Add this line `com.dorisdb.table.DorisDynamicTableSinkFactory` to the file:
 `src/main/resources/META-INF/services/org.apache.flink.table.factories.Factory`
+
+- Add these to your `pom.xml`:
+
+```xml
+
+<repositories>
+    <repository>
+        <id>dorisdb-maven-releases</id>
+        <url>http://username:password@nexus.dorisdb.com/repository/maven-releases/</url>
+    </repository>
+    <repository>
+        <id>dorisdb-maven-snapshots</id>
+        <url>http://username:password@nexus.dorisdb.com/repository/maven-snapshots/</url>
+    </repository>
+</repositories>
+    
+```
+
+AND:
+
+```xml
+
+<dependency>
+    <groupId>com.dorisdb.connector</groupId>
+    <artifactId>flink-connector-doris</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+</dependency>
+    
+```
+
 
 ### Use it like below:
 
