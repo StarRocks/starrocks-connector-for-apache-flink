@@ -39,8 +39,8 @@ public abstract class DorisSinkBaseTest {
 
     protected final int AVAILABLE_QUERY_PORT = 53318;
     protected final String JDBC_URL = "jdbc:mysql://127.0.0.1:53316,127.0.0.1:" + AVAILABLE_QUERY_PORT;
-    protected final int AVAILABLE_HTTP_PORT = 28005;
-    protected final String LOAD_URL = "127.0.0.1:28001;127.0.0.1:" + AVAILABLE_HTTP_PORT;
+    protected final int AVAILABLE_HTTP_PORT = 28595;
+    protected final String LOAD_URL = "127.0.0.1:28591;127.0.0.1:" + AVAILABLE_HTTP_PORT;
     protected final String DATABASE = "test";
     protected final String TABLE = "test_tbl";
     protected final String USERNAME = "root";
@@ -139,7 +139,6 @@ public abstract class DorisSinkBaseTest {
     @Test
     public void testSinkCommonProperties() {
     
-        OPTIONS.validate();
         assertEquals(JDBC_URL, OPTIONS.getJdbcUrl());
         assertEquals(DATABASE, OPTIONS.getDatabaseName());
         assertEquals(TABLE, OPTIONS.getTableName());

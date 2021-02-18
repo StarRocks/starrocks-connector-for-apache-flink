@@ -33,7 +33,6 @@ public class DorisDynamicTableSinkFactory implements DynamicTableSinkFactory {
         ReadableConfig options = helper.getOptions();
         // validate some special properties
         DorisSinkOptions sinkOptions = new DorisSinkOptions(options, context.getCatalogTable().getOptions());
-        sinkOptions.validate();
         TableSchema physicalSchema = TableSchemaUtils.getPhysicalSchema(context.getCatalogTable().getSchema());
         return new DorisDynamicTableSink(sinkOptions, physicalSchema);
     }
