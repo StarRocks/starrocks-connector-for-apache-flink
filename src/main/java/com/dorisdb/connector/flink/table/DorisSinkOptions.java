@@ -20,7 +20,6 @@ import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.table.api.ValidationException;
-import org.apache.http.HttpHost;
 
 import java.io.Serializable;
 import java.util.Arrays;
@@ -172,18 +171,9 @@ public class DorisSinkOptions implements Serializable {
     private void validateStreamLoadUrl() {
         tableOptions.getOptional(LOAD_URL).ifPresent(urlList -> {
             for (String host : urlList) {
-                HttpHost httpHost;
-                try {
-                    httpHost = HttpHost.create(host);
-                } catch (Exception e) {
+                if (host.split(":").length < 2 || host.split("\\.").length != 4) {
                     throw new ValidationException(String.format(
                         "Could not parse host '%s' in option '%s'. It should follow the format 'host_name:port'.",
-                        host,
-                        LOAD_URL.key()));
-                }
-                if (null != httpHost && httpHost.getPort() < 0) {
-                    throw new ValidationException(String.format(
-                        "Could not parse host '%s' in option '%s'. It should follow the format 'host_name:port'. Missing port.",
                         host,
                         LOAD_URL.key()));
                 }

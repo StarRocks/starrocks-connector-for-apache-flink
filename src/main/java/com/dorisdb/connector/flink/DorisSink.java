@@ -18,6 +18,7 @@ import org.apache.flink.streaming.api.functions.sink.SinkFunction;
 import org.apache.flink.table.api.TableSchema;
 
 import com.dorisdb.connector.flink.row.DorisGenericRowTransformer;
+import com.dorisdb.connector.flink.row.DorisSinkRowBuilder;
 import com.dorisdb.connector.flink.table.DorisDynamicSinkFunction;
 import com.dorisdb.connector.flink.table.DorisSinkOptions;
 
@@ -37,7 +38,7 @@ public class DorisSink {
     public static <T> SinkFunction<T> sink(
         TableSchema flinkTableSchema,
         DorisSinkOptions sinkOptions,
-        DorisGenericRowTransformer.RowConsumer<T> rowDataTransformer) {
+        DorisSinkRowBuilder<T> rowDataTransformer) {
             return new DorisDynamicSinkFunction<>(
                 sinkOptions,
                 flinkTableSchema,

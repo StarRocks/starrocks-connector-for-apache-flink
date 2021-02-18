@@ -28,7 +28,6 @@ import com.alibaba.fastjson.JSON;
 
 import org.apache.commons.codec.binary.Base64;
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.http.ParseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -145,10 +144,8 @@ public class DorisStreamLoadVisitor implements Serializable {
             }
         } catch (MalformedURLException e) {
             LOG.warn("Unable to parse url:{}", loadUrl.toString(), e);
-        } catch (ParseException e) {
-            throw new IOException("Unable to convert stream load result to string.", e);
-        } catch (IOException e) {
-            throw e;
+        } catch (Exception e) {
+            throw new IOException("Failed to do stream load with exception.", e.getMessage());
         } finally {
             url = null;
             if (httpurlconnection != null) {

@@ -37,9 +37,9 @@ import org.junit.Test;
 
 public abstract class DorisSinkBaseTest {
 
-    protected final int AVAILABLE_QUERY_PORT = 53317;
+    protected final int AVAILABLE_QUERY_PORT = 53318;
     protected final String JDBC_URL = "jdbc:mysql://127.0.0.1:53316,127.0.0.1:" + AVAILABLE_QUERY_PORT;
-    protected final int AVAILABLE_HTTP_PORT = 28002;
+    protected final int AVAILABLE_HTTP_PORT = 28005;
     protected final String LOAD_URL = "127.0.0.1:28001;127.0.0.1:" + AVAILABLE_HTTP_PORT;
     protected final String DATABASE = "test";
     protected final String TABLE = "test_tbl";

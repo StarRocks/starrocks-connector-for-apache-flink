@@ -73,18 +73,18 @@ public class DorisSinkManager implements Serializable {
         this.dorisStreamLoadVisitor = new DorisStreamLoadVisitor(sinkOptions);
         // validate table structure
         typesMap = new HashMap<>();
-        typesMap.put("bigint", Lists.newArrayList(LogicalTypeRoot.BIGINT));
-        typesMap.put("largeint", Lists.newArrayList(LogicalTypeRoot.DECIMAL, LogicalTypeRoot.BIGINT));
+        typesMap.put("bigint", Lists.newArrayList(LogicalTypeRoot.BIGINT, LogicalTypeRoot.INTEGER));
+        typesMap.put("largeint", Lists.newArrayList(LogicalTypeRoot.DECIMAL, LogicalTypeRoot.BIGINT, LogicalTypeRoot.INTEGER));
         typesMap.put("boolean", Lists.newArrayList(LogicalTypeRoot.BOOLEAN));
-        typesMap.put("char", Lists.newArrayList(LogicalTypeRoot.CHAR));
+        typesMap.put("char", Lists.newArrayList(LogicalTypeRoot.CHAR, LogicalTypeRoot.VARCHAR));
         typesMap.put("date", Lists.newArrayList(LogicalTypeRoot.DATE, LogicalTypeRoot.VARCHAR));
         typesMap.put("datetime", Lists.newArrayList(LogicalTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE, LogicalTypeRoot.VARCHAR));
-        typesMap.put("decimal", Lists.newArrayList(LogicalTypeRoot.DECIMAL));
-        typesMap.put("double", Lists.newArrayList(LogicalTypeRoot.DOUBLE));
-        typesMap.put("float", Lists.newArrayList(LogicalTypeRoot.FLOAT));
+        typesMap.put("decimal", Lists.newArrayList(LogicalTypeRoot.DECIMAL, LogicalTypeRoot.BIGINT, LogicalTypeRoot.INTEGER, LogicalTypeRoot.DOUBLE, LogicalTypeRoot.FLOAT));
+        typesMap.put("double", Lists.newArrayList(LogicalTypeRoot.DOUBLE, LogicalTypeRoot.BIGINT, LogicalTypeRoot.INTEGER));
+        typesMap.put("float", Lists.newArrayList(LogicalTypeRoot.FLOAT, LogicalTypeRoot.INTEGER));
         typesMap.put("int", Lists.newArrayList(LogicalTypeRoot.INTEGER));
-        typesMap.put("tinyint", Lists.newArrayList(LogicalTypeRoot.TINYINT));
-        typesMap.put("smallint", Lists.newArrayList(LogicalTypeRoot.SMALLINT));
+        typesMap.put("tinyint", Lists.newArrayList(LogicalTypeRoot.TINYINT, LogicalTypeRoot.INTEGER));
+        typesMap.put("smallint", Lists.newArrayList(LogicalTypeRoot.SMALLINT, LogicalTypeRoot.INTEGER));
         typesMap.put("varchar", Lists.newArrayList(LogicalTypeRoot.VARCHAR));
         typesMap.put("bitmap", Lists.newArrayList(LogicalTypeRoot.VARCHAR));
         if (!sinkOptions.hasColumnMappingProperty()) {

@@ -14,22 +14,17 @@
 
 package com.dorisdb.connector.flink.row;
 
-import java.io.Serializable;
-import java.util.function.BiConsumer;
-
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.table.api.TableSchema;
 
 public class DorisGenericRowTransformer<T> implements DorisIRowTransformer<T> {
-
-    public static interface RowConsumer<T> extends BiConsumer<Object[], T>, Serializable {}
     
     private static final long serialVersionUID = 1L;
 
-    private RowConsumer<T> consumer;
+    private DorisSinkRowBuilder<T> consumer;
     private String[] fieldNames;
 
-    public DorisGenericRowTransformer(RowConsumer<T> consumer) {
+    public DorisGenericRowTransformer(DorisSinkRowBuilder<T> consumer) {
         this.consumer = consumer;
     }
 
