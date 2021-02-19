@@ -4,7 +4,7 @@
 
 ### Intgerate with your existing project:
 
-- Add this line `com.dorisdb.table.DorisDynamicTableSinkFactory` to the file:
+- Add `com.dorisdb.table.DorisDynamicTableSinkFactory` to:
 `src/main/resources/META-INF/services/org.apache.flink.table.factories.Factory`
 
 - Add these to your `pom.xml`:
@@ -31,7 +31,7 @@ AND:
 <dependency>
     <groupId>com.dorisdb.connector</groupId>
     <artifactId>flink-connector-doris</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version></version>
 </dependency>
     
 ```
@@ -93,12 +93,6 @@ tEnv.executeSql(
     ")"
 );
 
-// insert values into the table created above
-tEnv.executeSql(
-    "INSERT INTO USER_RESULT\n" +
-    "VALUES ('lebron', 99), ('stephen', 99)"
-).await();
-
 ```
 
 ## Sink Options
@@ -106,15 +100,15 @@ tEnv.executeSql(
 | Option | Required | Default | Type | Description |
 |  :-:  | :-:  | :-:  | :-:  | :-:  |
 | connector | YES | NONE | String |`doris`|
-| jdbc-url | YES | NONE | String | jdbc url used to execute queries with doris. |
-| load-url | YES | NONE | String | http urls like `fe_ip:http_port;fe_ip:http_port` separated with `;`, used to batch sinking. |
+| jdbc-url | YES | NONE | String | this will be used to execute queries in doris. |
+| load-url | YES | NONE | String | `fe_ip:http_port;fe_ip:http_port` separated with `;`, which would be used to do the batch sinking. |
 | database-name | YES | NONE | String | doris database name |
 | table-name | YES | NONE | String | doris table name |
 | username | YES | NONE | String | doris connecting username |
 | password | YES | NONE | String | doris connecting password |
-| sink.semantic | NO | `at-least-once` | String | `at-least-once` or `exactly-once`(which will `only flush at checkpoint`, and options(`sink.buffer-flush.*`) will not work). |
-| sink.buffer-flush.max-bytes | NO | 67108864 | String | the max batching size of serialized data, range in `[64MB, 10GB]`. |
-| sink.buffer-flush.max-rows | NO | 64000 | String | the max batching rows, range in `[64,000, 5000,000]`. |
-| sink.buffer-flush.interval-ms | NO | 1000 | String | the flushing time interval, range in `[1000ms, 3600000ms]`. |
-| sink.max-retries | NO | 1 | String | max retry times of the stream load request, range in `[0, 10]`. |
+| sink.semantic | NO | `at-least-once` | String | `at-least-once` or `exactly-once`(`flush at checkpoint only` and options like `sink.buffer-flush.*` won't work either). |
+| sink.buffer-flush.max-bytes | NO | 67108864 | String | the max batching size of the serialized data, range: `[64MB, 10GB]`. |
+| sink.buffer-flush.max-rows | NO | 64000 | String | the max batching rows, range: `[64,000, 5000,000]`. |
+| sink.buffer-flush.interval-ms | NO | 1000 | String | the flushing time interval, range: `[1000ms, 3600000ms]`. |
+| sink.max-retries | NO | 1 | String | max retry times of the stream load request, range: `[0, 10]`. |
 | sink.properties.* | NO | NONE | String | the stream load properties like `'sink.properties.columns' = 'k1=name, v1=score'`. |
