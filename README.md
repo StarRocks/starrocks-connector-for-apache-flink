@@ -1,6 +1,6 @@
 # flink-connector-doris
 
-## Quick Start
+## Prerequisites
 
 ### Intgerate with your existing project:
 
@@ -37,7 +37,7 @@ AND:
 ```
 
 
-### Use it like below:
+### Start using like:
 
 ```java
 
