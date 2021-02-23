@@ -39,11 +39,11 @@ public class DorisSink {
         TableSchema flinkTableSchema,
         DorisSinkOptions sinkOptions,
         DorisSinkRowBuilder<T> rowDataTransformer) {
-            return new DorisDynamicSinkFunction<>(
-                sinkOptions,
-                flinkTableSchema,
-                new DorisGenericRowTransformer<>(rowDataTransformer)
-            );
+        return new DorisDynamicSinkFunction<>(
+            sinkOptions,
+            flinkTableSchema,
+            new DorisGenericRowTransformer<>(rowDataTransformer)
+        );
     }
 
     private DorisSink() {}
