@@ -40,31 +40,66 @@ AND:
 ### Use it like below:
 
 ```java
+// sink with stream transformation
+class RowData {
+    public int k1;
+    public String v1;
+    public RowData(int k1, String v1) {
+        ......
+    }
+}
+fromElements(
+    new RowData[]{
+        new RowData(1024, "test1"),
+        new RowData(2048, "test2"),
+        new RowData(3072, "test3")
+    }
+)
+.addSink(
+    DorisSink.sink(
+        // the table structure
+        TableSchema.builder()
+            .field("score", DataTypes.INT())
+            .field("name", DataTypes.VARCHAR(20))
+            .build(),
+        // the sink options
+        DorisSinkOptions.builder()
+            .withProperty("jdbc-url", "jdbc:mysql://ip:port,ip:port?xxxxx")
+            .withProperty("load-url", "ip:port;ip:port")
+            .withProperty("username", "xxx")
+            .withProperty("password", "xxx")
+            .withProperty("table-name", "xxx")
+            .withProperty("database-name", "xxx")
+            .build(),
+        // set the slots with streamRowData
+        (slots, streamRowData) -> {
+            slots[0] = streamRowData.score;
+            slots[1] = streamRowData.name;
+        }
+    )
+);
 
-fromElements(TEST_DATA)
-    .addSink(
-        DorisSink.sink(
-            // the table structure
-            TableSchema.builder()
-                .field("score", DataTypes.INT())
-                .field("name", DataTypes.VARCHAR(20))
-                .build(),
-            // the sink options
-            DorisSinkOptions.builder()
-                .withProperty("jdbc-url", "jdbc:mysql://ip:port,ip:port?xxxxx")
-                .withProperty("load-url", "ip:port;ip:port")
-                .withProperty("username", "xxx")
-                .withProperty("password", "xxx")
-                .withProperty("table-name", "xxx")
-                .withProperty("database-name", "xxx")
-                .build(),
-            // set the slots with streamRowData
-            (slots, streamRowData) -> {
-                slots[0] = streamRowData.score;
-                slots[1] = streamRowData.name;
-            }
-        )
-    );
+// sink with raw json string stream
+fromElements(new String[]{
+    "{\"k1\": \"1024\", \"v1\": \"test1\"}",
+    "{\"k1\": \"2048\", \"v1\": \"test2\"}",
+    "{\"k1\": \"3072\", \"v1\": \"test3\"}"
+})
+.addSink(
+    DorisSink.sink(
+        // the sink options
+        DorisSinkOptions.builder()
+            .withProperty("jdbc-url", "jdbc:mysql://ip:port,ip:port?xxxxx")
+            .withProperty("load-url", "ip:port;ip:port")
+            .withProperty("username", "xxx")
+            .withProperty("password", "xxx")
+            .withProperty("table-name", "xxx")
+            .withProperty("database-name", "xxx")
+            .withProperty("sink.properties.format", "json")
+            .withProperty("sink.properties.strip_outer_array", "true")
+            .build()
+    )
+);
 
 ```
 

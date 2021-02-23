@@ -36,8 +36,8 @@ public class DorisGenericSinkITTest extends DorisSinkBaseTest {
 
         private static final long serialVersionUID = 1L;
 
-        public final Integer score;
-        public final String name;
+        public Integer score;
+        public String name;
 
         public TestEntry(Integer score, String name) {
             this.score = score;
@@ -49,7 +49,7 @@ public class DorisGenericSinkITTest extends DorisSinkBaseTest {
         new TestEntry(99, "lebron"),
         new TestEntry(99, "stephen")
     };
-
+    
     @Test
     public void testBatchSink() {
         List<Map<String, String>> meta = new ArrayList<>();
@@ -90,7 +90,6 @@ public class DorisGenericSinkITTest extends DorisSinkBaseTest {
             exMsg = e.getMessage();
         }
         assertFalse(exMsg, exMsg.length() > 0);
-
         // real case
         // mockSuccessResponse();
         // StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
@@ -128,4 +127,5 @@ public class DorisGenericSinkITTest extends DorisSinkBaseTest {
         // }
         // assertFalse(exMsg, exMsg.length() > 0);
     }
+
 }

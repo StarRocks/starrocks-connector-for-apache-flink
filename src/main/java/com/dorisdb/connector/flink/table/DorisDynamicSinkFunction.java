@@ -53,10 +53,17 @@ public class DorisDynamicSinkFunction<T> extends RichSinkFunction<T> implements 
         this.sinkManager = new DorisSinkManager(sinkOptions, schema);
     }
  
+    public DorisDynamicSinkFunction(DorisSinkOptions sinkOptions) {
+        this.sinkOptions = sinkOptions;
+        this.sinkManager = new DorisSinkManager(sinkOptions, null);
+    }
+ 
     @Override
     public void open(Configuration parameters) throws Exception {
         super.open(parameters);
-        rowTransformer.setRuntimeContext(getRuntimeContext());
+        if (null != rowTransformer) {
+            rowTransformer.setRuntimeContext(getRuntimeContext());
+        }
         sinkManager.startScheduler();
     }
 
@@ -69,6 +76,11 @@ public class DorisDynamicSinkFunction<T> extends RichSinkFunction<T> implements 
                 sinkManager.flush(state.f0);
             }
             checkpointedState.clear();
+        }
+        if (null == serializer) {
+            // raw data sink
+            sinkManager.writeRecord((String)value);
+            return;
         }
         sinkManager.writeRecord(
             serializer.serialize(rowTransformer.transform(value))

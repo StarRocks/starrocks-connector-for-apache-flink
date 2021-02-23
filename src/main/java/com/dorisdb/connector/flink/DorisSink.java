@@ -46,5 +46,18 @@ public class DorisSink {
         );
     }
 
+    /**
+     * Create a Doris DataStream sink, stream elements could only be String.
+     * <p>
+     * Note: the objects passed to the return sink can be processed in batch and retried.
+     * Therefore, objects can not be {@link org.apache.flink.api.common.ExecutionConfig#enableObjectReuse() reused}.
+     * </p>
+     *
+     * @param sinkOptions          DorisSinkOptions as the document listed, such as jdbc-url, load-url, batch size and maximum retries
+     */
+    public static SinkFunction<String> sink(DorisSinkOptions sinkOptions) {
+        return new DorisDynamicSinkFunction<>(sinkOptions);
+    }
+
     private DorisSink() {}
 }
