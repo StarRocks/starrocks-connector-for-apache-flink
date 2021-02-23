@@ -36,7 +36,7 @@ public class DorisCsvSerializerTest extends DorisSinkBaseTest {
         List<String> rows = originRows.stream()
             .map(vals -> serializer.serialize(vals))
             .collect(Collectors.toList());
-        String data = new String(DorisSerializerFactory.joinRows(OPTIONS, rows));
+        String data = new String(joinRows(rows));
         String[] parsedRows = data.split("\n");
         assertEquals(rows.size(), parsedRows.length);
 
@@ -59,7 +59,7 @@ public class DorisCsvSerializerTest extends DorisSinkBaseTest {
         List<String> rows = originRows.stream()
             .map(vals -> serializer.serialize(vals))
             .collect(Collectors.toList());
-        String data = new String(DorisSerializerFactory.joinRows(OPTIONS, rows));
+        String data = new String(joinRows(rows));
         String[] parsedRows = data.split("\n");
         assertEquals(rows.size(), parsedRows.length);
 

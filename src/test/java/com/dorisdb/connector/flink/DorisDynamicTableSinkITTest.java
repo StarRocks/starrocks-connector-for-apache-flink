@@ -14,13 +14,10 @@
 
 package com.dorisdb.connector.flink;
 
-import com.dorisdb.connector.flink.manager.DorisQueryVisitor;
-
 import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.TableEnvironment;
 import org.junit.Test;
 
-import mockit.Mocked;
 import mockit.Expectations;
 
 import static org.junit.Assert.assertFalse;
@@ -30,9 +27,6 @@ import java.util.List;
 import java.util.Map;
 
 public class DorisDynamicTableSinkITTest extends DorisSinkBaseTest {
-
-    @Mocked
-    private transient DorisQueryVisitor v;
     
     @Test
     public void testBatchSink() {

@@ -14,24 +14,23 @@
 
 package com.dorisdb.connector.flink;
 
-import com.dorisdb.connector.flink.manager.DorisQueryVisitor;
-
 import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.TableSchema;
 import org.junit.Test;
 
-import mockit.Mocked;
+import mockit.Expectations;
 
 import static org.junit.Assert.assertFalse;
 
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class DorisGenericSinkITTest extends DorisSinkBaseTest {
-
-    @Mocked
-    private transient DorisQueryVisitor v;
 
     class TestEntry implements Serializable {
 
@@ -53,6 +52,21 @@ public class DorisGenericSinkITTest extends DorisSinkBaseTest {
 
     @Test
     public void testBatchSink() {
+        List<Map<String, String>> meta = new ArrayList<>();
+        meta.add(new HashMap<String, String>(){{
+            put("COLUMN_NAME", "name");
+            put("DATA_TYPE", "varchar");
+        }});
+        meta.add(new HashMap<String, String>(){{
+            put("COLUMN_NAME", "score");
+            put("DATA_TYPE", "bigint");
+        }});
+        new Expectations(){
+            {
+                v.getTableColumnsMetaData();
+                result = meta;
+            }
+        };
         mockSuccessResponse();
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setRestartStrategy(new RestartStrategies.NoRestartStrategyConfiguration());

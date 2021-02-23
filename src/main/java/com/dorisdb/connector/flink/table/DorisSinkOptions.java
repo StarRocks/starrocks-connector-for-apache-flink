@@ -35,6 +35,12 @@ public class DorisSinkOptions implements Serializable {
     private static final long KILO_BYTES_SCALE = 1024l;
     private static final long MEGA_BYTES_SCALE = KILO_BYTES_SCALE * KILO_BYTES_SCALE;
     private static final long GIGA_BYTES_SCALE = MEGA_BYTES_SCALE * KILO_BYTES_SCALE;
+
+    public enum StreamLoadFormat {
+        CSV, JSON;
+    }
+
+    private static final String FORMAT_KEY = "format";
     
     // required sink configurations
     public static final ConfigOption<String> JDBC_URL = ConfigOptions.key("jdbc-url")
@@ -167,6 +173,15 @@ public class DorisSinkOptions implements Serializable {
 
     public boolean hasColumnMappingProperty() {
         return streamLoadProps.containsKey("columns");
+    }
+
+    public StreamLoadFormat getStreamLoadFormat() {
+        Map<String, String> loadProsp = getSinkStreamLoadProperties();
+        String format = loadProsp.get(FORMAT_KEY);
+        if (null != format && StreamLoadFormat.JSON.name().equalsIgnoreCase(format)) {
+            return StreamLoadFormat.JSON;
+        }
+        return StreamLoadFormat.CSV;
     }
 
     private void validateStreamLoadUrl() {

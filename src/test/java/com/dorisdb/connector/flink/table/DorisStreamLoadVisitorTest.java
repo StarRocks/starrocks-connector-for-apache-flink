@@ -31,7 +31,7 @@ public class DorisStreamLoadVisitorTest extends DorisSinkBaseTest {
     @Test
     public void testNoAvailableHost() throws IOException {
         stopHttpServer();
-        DorisStreamLoadVisitor visitor = new DorisStreamLoadVisitor(OPTIONS);
+        DorisStreamLoadVisitor visitor = new DorisStreamLoadVisitor(OPTIONS, TABLE_SCHEMA.getFieldNames());
         // test failed
         String exMsg = "";
         try {
@@ -44,7 +44,7 @@ public class DorisStreamLoadVisitorTest extends DorisSinkBaseTest {
 
     @Test
     public void testDoStreamLoad() throws IOException {
-        DorisStreamLoadVisitor visitor = new DorisStreamLoadVisitor(OPTIONS);
+        DorisStreamLoadVisitor visitor = new DorisStreamLoadVisitor(OPTIONS, TABLE_SCHEMA.getFieldNames());
         // test failed
         String exMsg = "";
         try {

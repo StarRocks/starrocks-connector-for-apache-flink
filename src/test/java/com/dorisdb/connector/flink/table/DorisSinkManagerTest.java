@@ -28,24 +28,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import com.dorisdb.connector.flink.DorisSinkBaseTest;
-import com.dorisdb.connector.flink.manager.DorisQueryVisitor;
 import com.dorisdb.connector.flink.manager.DorisSinkManager;
 import mockit.Expectations;
-import mockit.Mocked;
 
 public class DorisSinkManagerTest extends DorisSinkBaseTest {
 
     @Test
-    public void testValidateTableStructure(@Mocked DorisQueryVisitor v) {
-        new Expectations(){
-            {
-                v.getTableColumnsMetaData();
-                result = DORIS_TABLE_META.keySet().stream().map(k -> new HashMap<String, Object>(){{
-                    put("COLUMN_NAME", k);
-                    put("DATA_TYPE", DORIS_TABLE_META.get(k).toString());
-                }}).collect(Collectors.toList());;
-            }
-        };
+    public void testValidateTableStructure() {
+        mockTableStructure();
         OPTIONS.getSinkStreamLoadProperties().remove("columns");
         assertTrue(!OPTIONS.hasColumnMappingProperty());
         // test succeeded
@@ -88,7 +78,8 @@ public class DorisSinkManagerTest extends DorisSinkBaseTest {
     }
 
     @Test
-    public void testWriteMaxBatch(@Mocked DorisQueryVisitor v) throws IOException {
+    public void testWriteMaxBatch() throws IOException {
+        mockTableStructure();
         long maxRows = OPTIONS.getSinkMaxRows();
         stopHttpServer();
         try {
@@ -112,7 +103,8 @@ public class DorisSinkManagerTest extends DorisSinkBaseTest {
     }
 
     @Test
-    public void testWriteMaxBytes(@Mocked DorisQueryVisitor v) throws IOException {
+    public void testWriteMaxBytes() throws IOException {
+        mockTableStructure();
         long maxSize = OPTIONS.getSinkMaxBytes();
         stopHttpServer();
         int rowLength = 100000;
@@ -138,7 +130,8 @@ public class DorisSinkManagerTest extends DorisSinkBaseTest {
     }
 
     @Test
-    public void testWriteMaxRetries(@Mocked DorisQueryVisitor v) throws IOException {
+    public void testWriteMaxRetries() throws IOException {
+        mockTableStructure();
         int maxRetries = OPTIONS.getSinkMaxRetries();
         if (maxRetries <= 0) return;
         stopHttpServer();
@@ -170,7 +163,8 @@ public class DorisSinkManagerTest extends DorisSinkBaseTest {
     }
 
     @Test
-    public void testFlush(@Mocked DorisQueryVisitor v) throws IOException {
+    public void testFlush() throws IOException {
+        mockTableStructure();
         mockSuccessResponse();
         String exMsg = "";
         try {

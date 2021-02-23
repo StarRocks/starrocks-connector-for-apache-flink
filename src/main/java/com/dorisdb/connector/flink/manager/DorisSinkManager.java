@@ -70,7 +70,7 @@ public class DorisSinkManager implements Serializable {
         DorisJdbcConnectionOptions jdbcOptions = new DorisJdbcConnectionOptions(sinkOptions.getJdbcUrl(), sinkOptions.getUsername(), sinkOptions.getPassword());
         this.jdbcConnProvider = new DorisJdbcConnectionProvider(jdbcOptions);
         this.dorisQueryVisitor = new DorisQueryVisitor(jdbcConnProvider, sinkOptions.getDatabaseName(), sinkOptions.getTableName());
-        this.dorisStreamLoadVisitor = new DorisStreamLoadVisitor(sinkOptions);
+        this.dorisStreamLoadVisitor = new DorisStreamLoadVisitor(sinkOptions, flinkSchema.getFieldNames());
         // validate table structure
         typesMap = new HashMap<>();
         typesMap.put("bigint", Lists.newArrayList(LogicalTypeRoot.BIGINT, LogicalTypeRoot.INTEGER));

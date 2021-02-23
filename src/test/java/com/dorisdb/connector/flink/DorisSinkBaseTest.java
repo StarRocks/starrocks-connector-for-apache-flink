@@ -21,11 +21,15 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import com.alibaba.fastjson.JSON;
+import com.dorisdb.connector.flink.manager.DorisQueryVisitor;
 import com.dorisdb.connector.flink.table.DorisSinkOptions;
 import com.dorisdb.connector.flink.table.DorisSinkSemantic;
 
@@ -35,7 +39,13 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import mockit.Mocked;
+import mockit.Expectations;
+
 public abstract class DorisSinkBaseTest {
+
+    @Mocked
+    protected DorisQueryVisitor v;
 
     protected final int AVAILABLE_QUERY_PORT = 53318;
     protected final String JDBC_URL = "jdbc:mysql://127.0.0.1:53316,127.0.0.1:" + AVAILABLE_QUERY_PORT;
@@ -51,7 +61,6 @@ public abstract class DorisSinkBaseTest {
     protected final String SINK_MAX_ROWS = "1002000";
     protected final String SINK_MAX_RETRIES = "2";
     protected final Map<String, String> SINK_PROPS = new HashMap<String, String>(){{
-        put("columns", "a=a, b=b");
         put("filter-ratio", "0");
     }};
     protected final String SINK_PROPS_FILTER_RATIO = "0";
@@ -63,7 +72,7 @@ public abstract class DorisSinkBaseTest {
     private ServerSocket serverSocket;
 
     @Before
-    public void initializeOptiosn() {
+    public void initializeOptions() {
         DorisSinkOptions.Builder builder = DorisSinkOptions.builder()
             .withProperty("jdbc-url", JDBC_URL)
             .withProperty("load-url", LOAD_URL)
@@ -150,7 +159,6 @@ public abstract class DorisSinkBaseTest {
         assertEquals(LOAD_URL.split(";").length, OPTIONS.getLoadUrlList().size());
         assertEquals(SINK_SEMANTIC, OPTIONS.getSemantic());
         assertEquals(SINK_PROPS.size(), OPTIONS.getSinkStreamLoadProperties().size());
-        assertEquals(true, OPTIONS.hasColumnMappingProperty());
     }
 
     @After
@@ -159,6 +167,18 @@ public abstract class DorisSinkBaseTest {
             serverSocket.close();
         }
         serverSocket = null;
+    }
+
+    protected void mockTableStructure() {
+        new Expectations(){
+            {
+                v.getTableColumnsMetaData();
+                result = DORIS_TABLE_META.keySet().stream().map(k -> new HashMap<String, Object>(){{
+                    put("COLUMN_NAME", k);
+                    put("DATA_TYPE", DORIS_TABLE_META.get(k).toString());
+                }}).collect(Collectors.toList());;
+            }
+        };
     }
 
     protected void mockMapResponse(Map<String, Object> resp) {
@@ -185,5 +205,15 @@ public abstract class DorisSinkBaseTest {
         r.put("Message", "Failed to do stream loading.");
         mockMapResponse(r);
         return label;
+    }
+
+    protected byte[] joinRows(List<String> rows) {
+        if (DorisSinkOptions.StreamLoadFormat.CSV.equals(OPTIONS.getStreamLoadFormat())) {
+            return String.join("\n", rows).getBytes(StandardCharsets.UTF_8);
+        }
+        if (DorisSinkOptions.StreamLoadFormat.JSON.equals(OPTIONS.getStreamLoadFormat())) {
+            return new StringBuilder("[").append(String.join(",", rows)).append("]").toString().getBytes(StandardCharsets.UTF_8);
+        }
+        throw new RuntimeException("Failed to join rows data, unsupported `format` from stream load properties:");
     }
 }

@@ -42,7 +42,7 @@ public class DorisJsonSerializerTest extends DorisSinkBaseTest {
         List<String> rows = originRows.stream()
             .map(vals -> serializer.serialize(vals))
             .collect(Collectors.toList());
-        String result = new String(DorisSerializerFactory.joinRows(OPTIONS, rows));
+        String result = new String(joinRows(rows));
 
         List<Map<String, Object>> rMapList = (List<Map<String, Object>>)JSON.parse(result);
         assertEquals(rMapList.size(), originRows.size());

@@ -21,8 +21,8 @@ import java.io.Serializable;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 
-import com.dorisdb.connector.flink.row.DorisSerializerFactory;
 import com.dorisdb.connector.flink.table.DorisSinkOptions;
 import com.alibaba.fastjson.JSON;
 
@@ -42,9 +42,11 @@ public class DorisStreamLoadVisitor implements Serializable {
     private static final Logger LOG = LoggerFactory.getLogger(DorisStreamLoadVisitor.class);
 
     private final DorisSinkOptions sinkOptions;
+    private final String[] fieldNames;
     private int pos;
 
-    public DorisStreamLoadVisitor(DorisSinkOptions sinkOptions) {
+    public DorisStreamLoadVisitor(DorisSinkOptions sinkOptions, String[] fieldNames) {
+        this.fieldNames = fieldNames;
         this.sinkOptions = sinkOptions;
     }
 
@@ -60,7 +62,7 @@ public class DorisStreamLoadVisitor implements Serializable {
             .append(sinkOptions.getTableName())
             .append("/_stream_load")
             .toString();
-        Map<String, Object> loadResult = doHttpPut(loadUrl, labeledRows.f0, DorisSerializerFactory.joinRows(sinkOptions, labeledRows.f1));
+        Map<String, Object> loadResult = doHttpPut(loadUrl, labeledRows.f0, joinRows(labeledRows.f1));
         final String keyStatus = "Status";
         if (null == loadResult || !loadResult.containsKey(keyStatus)) {
             throw new IOException("Unable to flush data to doris: unknown result status.");
@@ -100,6 +102,16 @@ public class DorisStreamLoadVisitor implements Serializable {
         }
     }
 
+    private byte[] joinRows(List<String> rows) {
+        if (DorisSinkOptions.StreamLoadFormat.CSV.equals(sinkOptions.getStreamLoadFormat())) {
+            return String.join("\n", rows).getBytes(StandardCharsets.UTF_8);
+        }
+        if (DorisSinkOptions.StreamLoadFormat.JSON.equals(sinkOptions.getStreamLoadFormat())) {
+            return new StringBuilder("[").append(String.join(",", rows)).append("]").toString().getBytes(StandardCharsets.UTF_8);
+        }
+        throw new RuntimeException("Failed to join rows data, unsupported `format` from stream load properties:");
+    }
+
     @SuppressWarnings("unchecked")
     private Map<String, Object> doHttpPut(String loadUrl, String label, byte[] data) throws IOException {
         URL url = null;
@@ -116,6 +128,9 @@ public class DorisStreamLoadVisitor implements Serializable {
             Map<String, String> props = sinkOptions.getSinkStreamLoadProperties();
             for (Map.Entry<String,String> entry : props.entrySet()) {
                 httpurlconnection.setRequestProperty(entry.getKey(), entry.getValue());
+            }
+            if (!props.containsKey("columns") && DorisSinkOptions.StreamLoadFormat.CSV.equals(sinkOptions.getStreamLoadFormat())) {
+                httpurlconnection.setRequestProperty("columns", String.join(",", fieldNames));
             }
             httpurlconnection.setRequestProperty("Expect", "100-continue");
             httpurlconnection.setRequestProperty("label", label);
