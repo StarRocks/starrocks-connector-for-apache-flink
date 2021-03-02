@@ -103,7 +103,7 @@ fromElements(
 ```java
 
 // create a table with `structure` and `properties`
-// Needed: Add `com.dorisdb.table.DorisDynamicTableSinkFactory` to: `src/main/resources/META-INF/services/org.apache.flink.table.factories.Factory`
+// Needed: Add `com.dorisdb.connector.flink.table.DorisDynamicTableSinkFactory` to: `src/main/resources/META-INF/services/org.apache.flink.table.factories.Factory`
 tEnv.executeSql(
     "CREATE TABLE USER_RESULT(" +
         "name VARCHAR," +
