@@ -14,12 +14,9 @@
 
 package com.dorisdb.connector.flink.manager;
 
-
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.Serializable;
 import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
@@ -28,6 +25,16 @@ import com.alibaba.fastjson.JSON;
 
 import org.apache.commons.codec.binary.Base64;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.http.HttpEntity;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpPut;
+import org.apache.http.entity.ByteArrayEntity;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.DefaultRedirectStrategy;
+import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -92,7 +99,7 @@ public class DorisStreamLoadVisitor implements Serializable {
         try {  
             URL url = new URL(host);
             HttpURLConnection co =  (HttpURLConnection) url.openConnection();
-            co.setConnectTimeout(100);
+            co.setConnectTimeout(1000);
             co.connect();
             co.disconnect();
             return true;
@@ -114,60 +121,42 @@ public class DorisStreamLoadVisitor implements Serializable {
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> doHttpPut(String loadUrl, String label, byte[] data) throws IOException {
-        URL url = null;
-        HttpURLConnection httpurlconnection = null;
-        if (LOG.isDebugEnabled()) {
-            LOG.debug(String.format("Executing stream load to: '%s'", loadUrl));
-        }
-        try {
-            url = new URL(loadUrl);
-            httpurlconnection = (HttpURLConnection) url.openConnection();
-            httpurlconnection.setConnectTimeout(1000);
-            httpurlconnection.setReadTimeout(300000);
-            httpurlconnection.setRequestMethod("PUT");
+        LOG.info(String.format("Executing stream load to: '%s', size: '%s'", loadUrl, data.length));
+        final HttpClientBuilder httpClientBuilder = HttpClients.custom()
+            .setRedirectStrategy(new DefaultRedirectStrategy() {
+                @Override
+                protected boolean isRedirectable(String method) {
+                    return true;
+                }
+            });
+        try (CloseableHttpClient httpclient = httpClientBuilder.build()) {
+            HttpPut httpPut = new HttpPut(loadUrl);
             Map<String, String> props = sinkOptions.getSinkStreamLoadProperties();
             for (Map.Entry<String,String> entry : props.entrySet()) {
-                httpurlconnection.setRequestProperty(entry.getKey(), entry.getValue());
+                httpPut.setHeader(entry.getKey(), entry.getValue());
             }
             if (!props.containsKey("columns") && DorisSinkOptions.StreamLoadFormat.CSV.equals(sinkOptions.getStreamLoadFormat())) {
-                httpurlconnection.setRequestProperty("columns", String.join(",", fieldNames));
+                httpPut.setHeader("columns", String.join(",", fieldNames));
             }
-            httpurlconnection.setRequestProperty("Expect", "100-continue");
-            httpurlconnection.setRequestProperty("label", label);
-            httpurlconnection.setRequestProperty("Authorization", getBasicAuthHeader(sinkOptions.getUsername(), sinkOptions.getPassword()));
-            httpurlconnection.setDoInput(true);
-            httpurlconnection.setDoOutput(true);
-            httpurlconnection.setInstanceFollowRedirects(false);
-            httpurlconnection.getOutputStream().write(data);
-            httpurlconnection.getOutputStream().flush();
-            httpurlconnection.getOutputStream().close();
-            int code = httpurlconnection.getResponseCode();
-
-            if(307 == httpurlconnection.getResponseCode()){
-                return doHttpPut(httpurlconnection.getHeaderField("Location"), label, data);
-            }
-            if (200 != code) {
-                LOG.warn("Request failed with code:{}", code);
-                return null;
-            }
-            try(DataInputStream in = new DataInputStream(httpurlconnection.getInputStream())) {
-                int len = in.available();
-                byte[] by = new byte[len];
-                in.readFully(by);
-                String result = new String(by);
-                return (Map<String, Object>)JSON.parse(result);
-            }
-        } catch (MalformedURLException e) {
-            LOG.warn("Unable to parse url:{}", loadUrl.toString(), e);
-        } catch (Exception e) {
-            throw new IOException("Failed to do stream load with exception.", e);
-        } finally {
-            url = null;
-            if (httpurlconnection != null) {
-                httpurlconnection.disconnect();
+            httpPut.setHeader("Expect", "100-continue");
+            httpPut.setHeader("label", label);
+            httpPut.setHeader("Authorization", getBasicAuthHeader(sinkOptions.getUsername(), sinkOptions.getPassword()));
+            httpPut.setEntity(new ByteArrayEntity(data));
+            httpPut.setConfig(RequestConfig.custom().setRedirectsEnabled(true).build());
+            try (CloseableHttpResponse resp = httpclient.execute(httpPut)) {
+                int code = resp.getStatusLine().getStatusCode();
+                if (200 != code) {
+                    LOG.warn("Request failed with code:{}", code);
+                    return null;
+                }
+                HttpEntity respEntity = resp.getEntity();
+                if (null == respEntity) {
+                    LOG.warn("Request failed with empty response.");
+                    return null;
+                }
+                return (Map<String, Object>)JSON.parse(EntityUtils.toString(respEntity));
             }
         }
-        return null;
     }
     
     private String getBasicAuthHeader(String username, String password) {
