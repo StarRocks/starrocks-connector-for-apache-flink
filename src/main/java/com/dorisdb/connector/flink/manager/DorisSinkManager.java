@@ -139,6 +139,7 @@ public class DorisSinkManager implements Serializable {
         for (int i = 0; i <= sinkOptions.getSinkMaxRetries(); i++) {
             try {
                 tryToFlush(label);
+                buffer.clear();
                 batchCount = 0;
                 batchSize = 0;
                 startScheduler();

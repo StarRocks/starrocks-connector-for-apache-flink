@@ -31,7 +31,6 @@ import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.DefaultRedirectStrategy;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
@@ -122,13 +121,7 @@ public class DorisStreamLoadVisitor implements Serializable {
     @SuppressWarnings("unchecked")
     private Map<String, Object> doHttpPut(String loadUrl, String label, byte[] data) throws IOException {
         LOG.info(String.format("Executing stream load to: '%s', size: '%s'", loadUrl, data.length));
-        final HttpClientBuilder httpClientBuilder = HttpClients.custom()
-            .setRedirectStrategy(new DefaultRedirectStrategy() {
-                @Override
-                protected boolean isRedirectable(String method) {
-                    return true;
-                }
-            });
+        final HttpClientBuilder httpClientBuilder = HttpClients.custom();
         try (CloseableHttpClient httpclient = httpClientBuilder.build()) {
             HttpPut httpPut = new HttpPut(loadUrl);
             Map<String, String> props = sinkOptions.getSinkStreamLoadProperties();
@@ -140,11 +133,15 @@ public class DorisStreamLoadVisitor implements Serializable {
             }
             httpPut.setHeader("Expect", "100-continue");
             httpPut.setHeader("label", label);
+            httpPut.setHeader("Content-Type", "application/x-www-form-urlencoded");
             httpPut.setHeader("Authorization", getBasicAuthHeader(sinkOptions.getUsername(), sinkOptions.getPassword()));
             httpPut.setEntity(new ByteArrayEntity(data));
             httpPut.setConfig(RequestConfig.custom().setRedirectsEnabled(true).build());
             try (CloseableHttpResponse resp = httpclient.execute(httpPut)) {
                 int code = resp.getStatusLine().getStatusCode();
+                if (307 == code) {
+                    return doHttpPut(resp.getFirstHeader("location").getValue(), label, data);
+                }
                 if (200 != code) {
                     LOG.warn("Request failed with code:{}", code);
                     return null;
