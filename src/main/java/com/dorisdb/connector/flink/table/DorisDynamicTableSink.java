@@ -39,9 +39,9 @@ public class DorisDynamicTableSink implements DynamicTableSink {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public SinkRuntimeProvider getSinkRuntimeProvider(Context context) {
-        final TypeInformation<RowData> rowDataTypeInfo =
-                context.createTypeInformation(flinkSchema.toRowDataType());
+        final TypeInformation<RowData> rowDataTypeInfo = (TypeInformation<RowData>)context.createTypeInformation(flinkSchema.toRowDataType());
         DorisDynamicSinkFunction<RowData> dorisSinkFunction = new DorisDynamicSinkFunction<>(
             sinkOptions,
             flinkSchema,

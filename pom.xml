@@ -25,7 +25,7 @@ limitations under the License.
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven-enforcer-plugin.version>3.0.0-M3</maven-enforcer-plugin.version>
         <maven-surefire-plugin.version>3.0.0-M4</maven-surefire-plugin.version>
-        <flink.version>1.12.0</flink.version>
+        <flink.version>1.11.0</flink.version>
         <scala.version>2.11</scala.version>
     </properties>
     <dependencies>

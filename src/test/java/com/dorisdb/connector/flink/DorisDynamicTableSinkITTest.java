@@ -70,9 +70,9 @@ public class DorisDynamicTableSinkITTest extends DorisSinkBaseTest {
         String exMsg = "";
         try {
             tEnv.executeSql("INSERT INTO USER_RESULT\n" +
-                "VALUES ('lebron', 99), ('stephen', 99)").await();
+                "VALUES ('lebron', 99), ('stephen', 99)").collect();
             tEnv.executeSql("INSERT INTO USER_RESULT\n" +
-                "VALUES ('lebron', 99), ('stephen', 99)").await();
+                "VALUES ('lebron', 99), ('stephen', 99)").collect();
         } catch (Exception e) {
             exMsg = e.getMessage();
         }

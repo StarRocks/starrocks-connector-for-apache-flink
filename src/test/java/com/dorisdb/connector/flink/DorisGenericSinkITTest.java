@@ -46,8 +46,10 @@ public class DorisGenericSinkITTest extends DorisSinkBaseTest {
     }
 
     private final TestEntry[] TEST_DATA = {
-        new TestEntry(99, "lebron"),
-        new TestEntry(99, "stephen")
+        new TestEntry(99, "paul"),
+        new TestEntry(98, "lebron"),
+        new TestEntry(99, "stephen"),
+        new TestEntry(98, "klay")
     };
     
     @Test

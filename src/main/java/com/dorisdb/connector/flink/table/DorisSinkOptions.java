@@ -242,18 +242,18 @@ public class DorisSinkOptions implements Serializable {
     * Builder for {@link DorisSinkOptions}.
     */
     public static final class Builder {
-        private final Map<String, String> tableOptionsMap;
+        private final Configuration conf;
         public Builder() {
-            this.tableOptionsMap = new HashMap<>();
+            conf = new Configuration();
         }
 
         public Builder withProperty(String key, String value) {
-            tableOptionsMap.put(key, value);
+            conf.setString(key, value);
             return this;
         }
 
         public DorisSinkOptions build() {
-            return new DorisSinkOptions(Configuration.fromMap(tableOptionsMap), tableOptionsMap);
+            return new DorisSinkOptions(conf, conf.toMap());
         }
     }
 
