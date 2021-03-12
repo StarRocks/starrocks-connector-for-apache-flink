@@ -35,7 +35,7 @@ public class DorisCsvSerializer implements DorisISerializer {
         StringBuilder sb = new StringBuilder();
         int idx = 0;
         for (Object val : values) {
-            sb.append(val);
+            sb.append(null == val ? "\\N" : val);
             if (idx++ < values.length - 1) {
                 sb.append(columnSeparator);
             }
