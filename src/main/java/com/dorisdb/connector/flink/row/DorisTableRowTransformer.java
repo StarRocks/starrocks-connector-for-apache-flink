@@ -67,6 +67,9 @@ public class DorisTableRowTransformer implements DorisIRowTransformer<RowData> {
     }
 
     private Object typeConvertion(LogicalType type, RowData record, int pos) {
+        if (record.isNullAt(pos)) {
+            return null;
+        }
         switch (type.getTypeRoot()) {
             case BOOLEAN: 
                 return record.getBoolean(pos);
