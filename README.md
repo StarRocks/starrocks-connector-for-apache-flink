@@ -139,8 +139,8 @@ tEnv.executeSql(
 | username | YES | NONE | String | doris connecting username |
 | password | YES | NONE | String | doris connecting password |
 | sink.semantic | NO | `at-least-once` | String | `at-least-once` or `exactly-once`(`flush at checkpoint only` and options like `sink.buffer-flush.*` won't work either). |
-| sink.buffer-flush.max-bytes | NO | 67108864 | String | the max batching size of the serialized data, range: `[64MB, 10GB]`. |
-| sink.buffer-flush.max-rows | NO | 64000 | String | the max batching rows, range: `[64,000, 5000,000]`. |
+| sink.buffer-flush.max-bytes | NO | 104857600(100M) | String | the max batching size of the serialized data, range: `[64MB, 10GB]`. |
+| sink.buffer-flush.max-rows | NO | 500000 | String | the max batching rows, range: `[64,000, 5000,000]`. |
 | sink.buffer-flush.interval-ms | NO | 1000 | String | the flushing time interval, range: `[1000ms, 3600000ms]`. |
 | sink.max-retries | NO | 1 | String | max retry times of the stream load request, range: `[0, 10]`. |
 | sink.properties.* | NO | NONE | String | the stream load properties like `'sink.properties.columns' = 'k1=name, v1=score'`. |

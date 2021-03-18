@@ -119,7 +119,7 @@ public class DorisSinkManager implements Serializable {
         try {
             buffer.add(record);
             batchCount++;
-            batchSize += record.length();
+            batchSize += record.getBytes().length;
             if (DorisSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
                 return;
             }

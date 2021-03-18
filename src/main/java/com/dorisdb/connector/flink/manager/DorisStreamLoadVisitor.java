@@ -74,10 +74,11 @@ public class DorisStreamLoadVisitor implements Serializable {
         if (null == loadResult || !loadResult.containsKey(keyStatus)) {
             throw new IOException("Unable to flush data to doris: unknown result status.");
         }
+        if (LOG.isDebugEnabled()) {
+            LOG.debug(String.format("Stream Load response: \n%s\n", JSON.toJSONString(loadResult)));
+        }
         if (loadResult.get(keyStatus).equals("Fail")) {
-            throw new IOException(
-                new StringBuilder("Failed to flush data to doris.").append(loadResult.get("Message").toString()).toString()
-            );
+            throw new DorisStreamLoadFailedException("Failed to flush data to doris.", loadResult);
         }
     }
 
