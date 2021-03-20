@@ -93,9 +93,11 @@ public class DorisSinkManagerTest extends DorisSinkBaseTest {
         String exMsg = "";
         try {
             DorisSinkManager mgr = new DorisSinkManager(OPTIONS, TABLE_SCHEMA);
-            for (int i = 0; i < maxRows; i++) {
-                mgr.writeRecord("test record");
+            mgr.startAsyncFlushing();
+            for (int i = 0; i < maxRows * 3; i++) {
+                mgr.writeRecord("test record"+i);
             }
+            mgr.close();
         } catch (Exception e) {
             exMsg = e.getMessage();
         }
@@ -119,10 +121,12 @@ public class DorisSinkManagerTest extends DorisSinkBaseTest {
         String exMsg = "";
         try {
             DorisSinkManager mgr = new DorisSinkManager(OPTIONS, TABLE_SCHEMA);
+            mgr.startAsyncFlushing();
             for (int i = 0; i < maxSize / rowLength + 1; i++) {
                 mgr.writeRecord(new String(new char[rowLength]));
             }
             mgr.writeRecord(new String(new char[rowLength]));
+            mgr.close();
         } catch (Exception e) {
             exMsg = e.getMessage();
         }
@@ -139,9 +143,11 @@ public class DorisSinkManagerTest extends DorisSinkBaseTest {
         String exMsg = "";
         try {
             DorisSinkManager mgr = new DorisSinkManager(OPTIONS, TABLE_SCHEMA);
+            mgr.startAsyncFlushing();
             for (int i = 0; i < OPTIONS.getSinkMaxRows(); i++) {
                 mgr.writeRecord("");
             }
+            mgr.close();
         } catch (Exception e) {
             exMsg = e.getMessage();
         }
@@ -163,14 +169,15 @@ public class DorisSinkManagerTest extends DorisSinkBaseTest {
     }
 
     @Test
-    public void testFlush() throws IOException {
+    public void testFlush() throws Exception {
         mockTableStructure();
         mockSuccessResponse();
         String exMsg = "";
         try {
             DorisSinkManager mgr = new DorisSinkManager(OPTIONS, TABLE_SCHEMA);
+            mgr.startAsyncFlushing();
             mgr.writeRecord("");
-            mgr.flush(mgr.createBatchLabel());
+            mgr.close();
         } catch (Exception e) {
             exMsg = e.getMessage();
             throw e;
@@ -178,8 +185,9 @@ public class DorisSinkManagerTest extends DorisSinkBaseTest {
         assertEquals(0, exMsg.length());
         try {
             DorisSinkManager mgr = new DorisSinkManager(OPTIONS, TABLE_SCHEMA);
+            mgr.startAsyncFlushing();
             mgr.writeRecord("");
-            mgr.flush(mgr.createBatchLabel());
+            mgr.close();
         } catch (Exception e) {
             exMsg = e.getMessage();
             throw e;
@@ -188,8 +196,9 @@ public class DorisSinkManagerTest extends DorisSinkBaseTest {
         stopHttpServer();
         try {
             DorisSinkManager mgr = new DorisSinkManager(OPTIONS, TABLE_SCHEMA);
+            mgr.startAsyncFlushing();
             mgr.writeRecord("");
-            mgr.flush(mgr.createBatchLabel());
+            mgr.close();
         } catch (Exception e) {
             exMsg = e.getMessage();
         }

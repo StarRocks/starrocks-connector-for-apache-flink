@@ -20,7 +20,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.TimeUnit;
-
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -29,11 +28,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.stream.Collectors;
 
-import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.common.functions.RuntimeContext;
+import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.calcite.shaded.com.google.common.base.Strings;
+import org.apache.flink.metrics.Counter;
 import org.apache.flink.runtime.util.ExecutorThreadFactory;
 import org.apache.flink.shaded.guava18.com.google.common.collect.Lists;
 import org.apache.flink.table.api.TableColumn;
@@ -54,9 +57,18 @@ public class DorisSinkManager implements Serializable {
     private final DorisStreamLoadVisitor dorisStreamLoadVisitor;
     private final DorisSinkOptions sinkOptions;
     private final Map<String, List<LogicalTypeRoot>> typesMap;
+    private final LinkedBlockingDeque<Tuple3<String, Long, ArrayList<String>>> flushQueue = new LinkedBlockingDeque<>(1);
 
+    private transient Counter totalFlushBytes;
+    private transient Counter totalFlushRows;
+    private transient Counter totalFlushTime;
+    private transient Counter totalFlushTimeWithoutRetries;
+    private static final String COUNTER_TOTAL_FLUSH_BYTES = "totalFlushBytes";
+    private static final String COUNTER_TOTAL_FLUSH_ROWS = "totalFlushRows";
+    private static final String COUNTER_TOTAL_FLUSH_COST_TIME_WITHOUT_RETRIES = "totalFlushTimeNsWithoutRetries";
+    private static final String COUNTER_TOTAL_FLUSH_COST_TIME = "totalFlushTimeNs";
 
-    private final List<String> buffer = new ArrayList<>();
+    private final ArrayList<String> buffer = new ArrayList<>();
     private int batchCount = 0;
     private long batchSize = 0;
     private volatile boolean closed = false;
@@ -92,6 +104,30 @@ public class DorisSinkManager implements Serializable {
         }
     }
 
+    public void setRuntimeContext(RuntimeContext runtimeCtx) {
+        totalFlushBytes = runtimeCtx.getMetricGroup().counter(COUNTER_TOTAL_FLUSH_BYTES);
+        totalFlushRows = runtimeCtx.getMetricGroup().counter(COUNTER_TOTAL_FLUSH_ROWS);
+        totalFlushTime = runtimeCtx.getMetricGroup().counter(COUNTER_TOTAL_FLUSH_COST_TIME);
+        totalFlushTimeWithoutRetries = runtimeCtx.getMetricGroup().counter(COUNTER_TOTAL_FLUSH_COST_TIME_WITHOUT_RETRIES);
+    }
+
+    public void startAsyncFlushing() {
+        // start flush thread
+        Thread flushThread = new Thread(new Runnable(){
+            public void run() {
+                while(true) {
+                    try {
+                        asyncFlush();
+                    } catch (Exception e) {
+                        flushException = e;
+                    }
+                }
+            }   
+        });
+        flushThread.setDaemon(true);
+        flushThread.start();
+    }
+
     public void startScheduler() throws IOException {
         if (DorisSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
             return;
@@ -100,12 +136,14 @@ public class DorisSinkManager implements Serializable {
             scheduledFuture.cancel(false);
             this.scheduler.shutdown();
         }
-        this.scheduler = Executors.newScheduledThreadPool(1, new ExecutorThreadFactory("doris-table-sink"));
+        this.scheduler = Executors.newScheduledThreadPool(1, new ExecutorThreadFactory("doris-interval-sink"));
         this.scheduledFuture = this.scheduler.schedule(() -> {
             synchronized (DorisSinkManager.this) {
                 if (!closed) {
                     try {
-                        flush(createBatchLabel());
+                        String label = createBatchLabel();
+                        LOG.info(String.format("Doris interval Sinking triggered: label[%s].", label));
+                        flush(label, false);
                     } catch (Exception e) {
                         flushException = e;
                     }
@@ -119,44 +157,37 @@ public class DorisSinkManager implements Serializable {
         try {
             buffer.add(record);
             batchCount++;
-            batchSize += record.getBytes().length;
+            long bytes = record.getBytes().length;
+            batchSize += bytes;
             if (DorisSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
                 return;
             }
             if (batchCount >= sinkOptions.getSinkMaxRows() || batchSize >= sinkOptions.getSinkMaxBytes()) {
-                flush(createBatchLabel());
+                String label = createBatchLabel();
+                LOG.info(String.format("Doris buffer Sinking triggered: rows[%d] label[%s].", batchCount, label));
+                flush(label, false);
             }
         } catch (Exception e) {
             throw new IOException("Writing records to Doris failed.", e);
         }
     }
 
-    public synchronized void flush(String label) throws IOException {
+    public synchronized void flush(String label, boolean waitUtilDone) throws Exception {
         checkFlushException();
         if (batchCount == 0) {
+            if (waitUtilDone) {
+                waitAsyncFlushingDone();
+            }
             return;
         }
-        for (int i = 0; i <= sinkOptions.getSinkMaxRetries(); i++) {
-            try {
-                tryToFlush(label);
-                buffer.clear();
-                batchCount = 0;
-                batchSize = 0;
-                startScheduler();
-                break;
-            } catch (IOException e) {
-                LOG.warn("Failed to flush batch data to doris, retry times = {}", i, e);
-                if (i >= sinkOptions.getSinkMaxRetries()) {
-                    throw new IOException(e);
-                }
-                try {
-                    Thread.sleep(1000l * (i + 1));
-                } catch (InterruptedException ex) {
-                    Thread.currentThread().interrupt();
-                    throw new IOException("Unable to flush, interrupted while doing another attempt", e);
-                }
-            }
+        flushQueue.put(new Tuple3<>(label, batchSize,  new ArrayList<>(buffer)));
+        if (waitUtilDone) {
+            // wait the last flush
+            waitAsyncFlushingDone();
         }
+        buffer.clear();
+        batchCount = 0;
+        batchSize = 0;
     }
     
     public synchronized void close() {
@@ -167,13 +198,12 @@ public class DorisSinkManager implements Serializable {
                 scheduledFuture.cancel(false);
                 this.scheduler.shutdown();
             }
-
-            if (batchCount > 0) {
-                try {
-                    flush(createBatchLabel());
-                } catch (Exception e) {
-                    throw new RuntimeException("Writing records to Doris failed.", e);
-                }
+            try {
+                String label = createBatchLabel();
+                if (batchCount > 0) LOG.info(String.format("Doris Sink is about to close: label[%s].", label));
+                flush(label, true);
+            } catch (Exception e) {
+                throw new RuntimeException("Writing records to Doris failed.", e);
             }
         }
         checkFlushException();
@@ -195,9 +225,47 @@ public class DorisSinkManager implements Serializable {
         this.buffer.addAll(buffer);
     }
 
-    private void tryToFlush(String label) throws IOException {
-        // flush to Doris with stream load
-        dorisStreamLoadVisitor.doStreamLoad(new Tuple2<>(label, buffer));
+    private void waitAsyncFlushingDone() throws InterruptedException {
+        // wait previous flushings
+        flushQueue.put(new Tuple3<>("", 0l, null));
+        flushQueue.put(new Tuple3<>("", 0l, null));
+    }
+
+    private void asyncFlush() throws Exception {
+        Tuple3<String, Long, ArrayList<String>> flushData = flushQueue.take();
+        if (Strings.isNullOrEmpty(flushData.f0)) {
+            return;
+        }
+        LOG.info(String.format("Async stream load: rows[%d] bytes[%d] label[%s].", flushData.f2.size(), flushData.f1, flushData.f0));
+        long startWithRetries = System.nanoTime();
+        for (int i = 0; i <= sinkOptions.getSinkMaxRetries(); i++) {
+            try {
+                long start = System.nanoTime();
+                // flush to Doris with stream load
+                dorisStreamLoadVisitor.doStreamLoad(flushData);
+                LOG.info(String.format("Async stream load finished: label[%s].", flushData.f0));
+                // metrics
+                if (null != totalFlushBytes) {
+                    totalFlushBytes.inc(flushData.f1);
+                    totalFlushRows.inc(flushData.f2.size());
+                    totalFlushTime.inc(System.nanoTime() - startWithRetries);
+                    totalFlushTimeWithoutRetries.inc(System.nanoTime() - start);
+                }
+                startScheduler();
+                break;
+            } catch (Exception e) {
+                LOG.warn("Failed to flush batch data to doris, retry times = {}", i, e);
+                if (i >= sinkOptions.getSinkMaxRetries()) {
+                    throw new IOException(e);
+                }
+                try {
+                    Thread.sleep(1000l * (i + 1));
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("Unable to flush, interrupted while doing another attempt", e);
+                }
+            }
+        }
     }
 
     private void checkFlushException() {

@@ -24,7 +24,7 @@ import com.dorisdb.connector.flink.table.DorisSinkOptions;
 import com.alibaba.fastjson.JSON;
 
 import org.apache.commons.codec.binary.Base64;
-import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -38,6 +38,7 @@ import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -57,7 +58,7 @@ public class DorisStreamLoadVisitor implements Serializable {
         this.sinkOptions = sinkOptions;
     }
 
-    public void doStreamLoad(Tuple2<String, List<String>> labeledRows) throws IOException {
+    public void doStreamLoad(Tuple3<String, Long, ArrayList<String>> labeledRows) throws IOException {
         String host = getAvailableHost();
         if (null == host) {
             throw new IOException("None of the host in `load_url` could be connected.");
@@ -69,7 +70,7 @@ public class DorisStreamLoadVisitor implements Serializable {
             .append(sinkOptions.getTableName())
             .append("/_stream_load")
             .toString();
-        Map<String, Object> loadResult = doHttpPut(loadUrl, labeledRows.f0, joinRows(labeledRows.f1));
+        Map<String, Object> loadResult = doHttpPut(loadUrl, labeledRows.f0, joinRows(labeledRows.f2));
         final String keyStatus = "Status";
         if (null == loadResult || !loadResult.containsKey(keyStatus)) {
             throw new IOException("Unable to flush data to doris: unknown result status.");

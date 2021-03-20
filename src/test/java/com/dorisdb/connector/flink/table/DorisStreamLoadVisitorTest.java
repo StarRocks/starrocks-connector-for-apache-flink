@@ -15,6 +15,7 @@
 package com.dorisdb.connector.flink.table;
 
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.shaded.guava18.com.google.common.collect.Lists;
 import org.junit.Test;
 
@@ -35,7 +36,7 @@ public class DorisStreamLoadVisitorTest extends DorisSinkBaseTest {
         // test failed
         String exMsg = "";
         try {
-            visitor.doStreamLoad(new Tuple2<>(mockFailedResponse(), Lists.newArrayList("aaaa")));
+            visitor.doStreamLoad(new Tuple3<>(mockFailedResponse(), 0l, Lists.newArrayList("aaaa")));
         } catch (Exception e) {
             exMsg = e.getLocalizedMessage();
         }
@@ -48,7 +49,7 @@ public class DorisStreamLoadVisitorTest extends DorisSinkBaseTest {
         // test failed
         String exMsg = "";
         try {
-            visitor.doStreamLoad(new Tuple2<>(mockFailedResponse(), Lists.newArrayList("aaaa")));
+            visitor.doStreamLoad(new Tuple3<>(mockFailedResponse(), 0l, Lists.newArrayList("aaaa")));
         } catch (Exception e) {
             exMsg = e.getLocalizedMessage();
         }
@@ -56,7 +57,7 @@ public class DorisStreamLoadVisitorTest extends DorisSinkBaseTest {
         // test suucess
         exMsg = "";
         try {
-            visitor.doStreamLoad(new Tuple2<>(mockSuccessResponse(), Lists.newArrayList("aaaa")));
+            visitor.doStreamLoad(new Tuple3<>(mockSuccessResponse(), 0l, Lists.newArrayList("aaaa")));
         } catch (Exception e) {
             exMsg = e.getLocalizedMessage();
         }
