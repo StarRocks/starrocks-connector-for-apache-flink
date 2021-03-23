@@ -70,6 +70,7 @@ public class DorisStreamLoadVisitor implements Serializable {
             .append(sinkOptions.getTableName())
             .append("/_stream_load")
             .toString();
+        LOG.info(String.format("Start to join batch data: rows[%d] bytes[%d] label[%s].", labeledRows.f2.size(), labeledRows.f1, labeledRows.f0));
         Map<String, Object> loadResult = doHttpPut(loadUrl, labeledRows.f0, joinRows(labeledRows.f2));
         final String keyStatus = "Status";
         if (null == loadResult || !loadResult.containsKey(keyStatus)) {

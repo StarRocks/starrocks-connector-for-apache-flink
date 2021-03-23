@@ -132,10 +132,7 @@ public class DorisSinkManager implements Serializable {
         if (DorisSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
             return;
         }
-        if (this.scheduledFuture != null) {
-            scheduledFuture.cancel(false);
-            this.scheduler.shutdown();
-        }
+        stopScheduler();
         this.scheduler = Executors.newScheduledThreadPool(1, new ExecutorThreadFactory("doris-interval-sink"));
         this.scheduledFuture = this.scheduler.schedule(() -> {
             synchronized (DorisSinkManager.this) {
@@ -150,6 +147,13 @@ public class DorisSinkManager implements Serializable {
                 }
             }
         }, sinkOptions.getSinkMaxFlushInterval(), TimeUnit.MILLISECONDS);
+    }
+
+    public void stopScheduler() {
+        if (this.scheduledFuture != null) {
+            scheduledFuture.cancel(false);
+            this.scheduler.shutdown();
+        }
     }
 
     public final synchronized void writeRecord(String record) throws IOException {
@@ -236,6 +240,7 @@ public class DorisSinkManager implements Serializable {
         if (Strings.isNullOrEmpty(flushData.f0)) {
             return;
         }
+        stopScheduler();
         LOG.info(String.format("Async stream load: rows[%d] bytes[%d] label[%s].", flushData.f2.size(), flushData.f1, flushData.f0));
         long startWithRetries = System.nanoTime();
         for (int i = 0; i <= sinkOptions.getSinkMaxRetries(); i++) {
