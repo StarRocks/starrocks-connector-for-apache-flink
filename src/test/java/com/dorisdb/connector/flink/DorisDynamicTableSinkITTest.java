@@ -39,6 +39,14 @@ public class DorisDynamicTableSinkITTest extends DorisSinkBaseTest {
             put("COLUMN_NAME", "score");
             put("DATA_TYPE", "bigint");
         }});
+        meta.add(new HashMap<String, String>(){{
+            put("COLUMN_NAME", "d");
+            put("DATA_TYPE", "date");
+        }});
+        meta.add(new HashMap<String, String>(){{
+            put("COLUMN_NAME", "t");
+            put("DATA_TYPE", "datetime");
+        }});
         new Expectations(){
             {
                 v.getTableColumnsMetaData();
@@ -51,7 +59,9 @@ public class DorisDynamicTableSinkITTest extends DorisSinkBaseTest {
         mockSuccessResponse();
         String createSQL = "CREATE TABLE USER_RESULT(" +
             "name VARCHAR," +
-            "score BIGINT" +
+            "score BIGINT," +
+            "t TIMESTAMP(3)," +
+            "d DATE" +
             ") WITH ( " +
             "'connector' = 'doris'," +
             "'jdbc-url'='" + OPTIONS.getJdbcUrl() + "'," +
@@ -70,11 +80,10 @@ public class DorisDynamicTableSinkITTest extends DorisSinkBaseTest {
         String exMsg = "";
         try {
             tEnv.executeSql("INSERT INTO USER_RESULT\n" +
-                "VALUES ('lebron', 99)").collect();
-            Thread.sleep(1000);
+                "VALUES ('lebron', 99, TO_TIMESTAMP('2020-01-01 01:00:01'), TO_DATE('2020-01-01'))").collect();
             tEnv.executeSql("INSERT INTO USER_RESULT\n" +
-                "VALUES ('lebron', 99), ('stephen', 99)").collect();
-            Thread.sleep(1000);
+                "VALUES ('lebron', 99, TO_TIMESTAMP('2020-01-01 12:00:01'), TO_DATE('2020-01-01')), ('stephen', 99, TO_TIMESTAMP('2020-01-01 23:00:01'), TO_DATE('2020-01-01'))").collect();
+            Thread.sleep(2000);
         } catch (Exception e) {
             exMsg = e.getMessage();
         }

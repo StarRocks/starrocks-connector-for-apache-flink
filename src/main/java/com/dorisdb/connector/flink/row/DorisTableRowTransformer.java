@@ -37,7 +37,7 @@ public class DorisTableRowTransformer implements DorisIRowTransformer<RowData> {
     private Function<RowData, RowData> valueTransform;
     private DataType[] dataTypes;
     private final SimpleDateFormat dateFormatter = new SimpleDateFormat("yyyy-MM-dd");
-    private final SimpleDateFormat dateTimeFormatter = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss");
+    private final SimpleDateFormat dateTimeFormatter = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
     public DorisTableRowTransformer(TypeInformation<RowData> rowDataTypeInfo) {
         this.rowDataTypeInfo = rowDataTypeInfo;
