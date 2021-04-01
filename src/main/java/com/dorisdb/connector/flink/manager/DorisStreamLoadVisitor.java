@@ -80,6 +80,7 @@ public class DorisStreamLoadVisitor implements Serializable {
             LOG.debug(String.format("Stream Load response: \n%s\n", JSON.toJSONString(loadResult)));
         }
         if (loadResult.get(keyStatus).equals("Fail")) {
+            LOG.error(String.format("Stream Load response: \n%s\n", JSON.toJSONString(loadResult)));
             throw new DorisStreamLoadFailedException("Failed to flush data to doris.", loadResult);
         }
     }
