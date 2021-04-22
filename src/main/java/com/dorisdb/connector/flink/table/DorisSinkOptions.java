@@ -60,7 +60,7 @@ public class DorisSinkOptions implements Serializable {
     public static final ConfigOption<String> SINK_SEMANTIC = ConfigOptions.key("sink.semantic")
         .stringType().defaultValue(DorisSinkSemantic.AT_LEAST_ONCE.getName()).withDescription("Fault tolerance guarantee. `at-least-once` or `exactly-once`");
     public static final ConfigOption<Long> SINK_BATCH_MAX_SIZE = ConfigOptions.key("sink.buffer-flush.max-bytes")
-        .longType().defaultValue(100L * MEGA_BYTES_SCALE).withDescription("Max data bytes of the flush.");
+        .longType().defaultValue(90L * MEGA_BYTES_SCALE).withDescription("Max data bytes of the flush.");
     public static final ConfigOption<Long> SINK_BATCH_MAX_ROWS = ConfigOptions.key("sink.buffer-flush.max-rows")
         .longType().defaultValue(500000L).withDescription("Max row count of the flush.");
     public static final ConfigOption<Long> SINK_BATCH_FLUSH_INTERVAL = ConfigOptions.key("sink.buffer-flush.interval-ms")
