@@ -53,7 +53,7 @@ public class DorisQueryVisitor implements Serializable {
             if (LOG.isDebugEnabled()) {
                 LOG.debug(String.format("Executing query '%s'", query));
             }
-            rows = executQuery(query, this.database, this.table);
+            rows = executeQuery(query, this.database, this.table);
         } catch (ClassNotFoundException se) {
             throw new IllegalArgumentException("Failed to find jdbc driver." + se.getMessage(), se);
         } catch (SQLException se) {
@@ -62,7 +62,7 @@ public class DorisQueryVisitor implements Serializable {
         return rows;
     }
 
-    private List<Map<String, Object>> executQuery(String query, String... args) throws ClassNotFoundException, SQLException {
+    private List<Map<String, Object>> executeQuery(String query, String... args) throws ClassNotFoundException, SQLException {
         Connection dbConn = jdbcConnProvider.getConnection();
         PreparedStatement stmt = dbConn.prepareStatement(query);
         for (int i = 0; i < args.length; i++) {

@@ -140,6 +140,9 @@ public class DorisSinkManager implements Serializable {
                     try {
                         String label = createBatchLabel();
                         LOG.info(String.format("Doris interval Sinking triggered: label[%s].", label));
+                        if (batchCount == 0) {
+                            startScheduler();
+                        }
                         flush(label, false);
                     } catch (Exception e) {
                         flushException = e;
