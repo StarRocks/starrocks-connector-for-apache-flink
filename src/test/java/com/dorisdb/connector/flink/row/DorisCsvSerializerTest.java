@@ -69,4 +69,21 @@ public class DorisCsvSerializerTest extends DorisSinkBaseTest {
             }
         }
     }
+
+    @Test
+    public void testCumstomizedDelimiterSerialize() {
+        final String delimiter = "\\x02";
+        OPTIONS.getSinkStreamLoadProperties().put("row_delimiter", delimiter);
+        DorisISerializer serializer = DorisSerializerFactory.createSerializer(OPTIONS, TABLE_SCHEMA.getFieldNames());
+        List<Object[]> originRows = Arrays.asList(
+            new Object[]{1,"222",333.1,true},
+            new Object[]{2,"333",444.2,false}
+        );
+        List<String> rows = originRows.stream()
+            .map(vals -> serializer.serialize(vals))
+            .collect(Collectors.toList());
+        String data = new String(joinRows(rows));
+        String[] parsedRows = data.split(delimiter);
+        assertEquals(rows.size(), parsedRows.length);
+    }
 }

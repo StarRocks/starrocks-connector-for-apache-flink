@@ -30,6 +30,7 @@ import java.util.stream.Collectors;
 
 import com.alibaba.fastjson.JSON;
 import com.dorisdb.connector.flink.manager.DorisQueryVisitor;
+import com.dorisdb.connector.flink.row.DorisDelimiterParser;
 import com.dorisdb.connector.flink.table.DorisSinkOptions;
 import com.dorisdb.connector.flink.table.DorisSinkSemantic;
 
@@ -209,7 +210,8 @@ public abstract class DorisSinkBaseTest {
 
     protected byte[] joinRows(List<String> rows) {
         if (DorisSinkOptions.StreamLoadFormat.CSV.equals(OPTIONS.getStreamLoadFormat())) {
-            return String.join("\n", rows).getBytes(StandardCharsets.UTF_8);
+            String lineDelimiter = DorisDelimiterParser.parse(OPTIONS.getSinkStreamLoadProperties().get("row_delimiter"), "\n");
+            return (String.join(lineDelimiter, rows) + lineDelimiter).getBytes(StandardCharsets.UTF_8);
         }
         if (DorisSinkOptions.StreamLoadFormat.JSON.equals(OPTIONS.getStreamLoadFormat())) {
             return new StringBuilder("[").append(String.join(",", rows)).append("]").toString().getBytes(StandardCharsets.UTF_8);
