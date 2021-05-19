@@ -72,7 +72,7 @@ public class DorisTableRowTransformer implements DorisIRowTransformer<RowData> {
         }
         switch (type.getTypeRoot()) {
             case BOOLEAN: 
-                return record.getBoolean(pos);
+                return record.getBoolean(pos) ? 1L : 0L;
             case TINYINT:
                 return record.getByte(pos);
             case SMALLINT:
