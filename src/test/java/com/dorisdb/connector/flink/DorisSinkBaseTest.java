@@ -211,10 +211,25 @@ public abstract class DorisSinkBaseTest {
     protected byte[] joinRows(List<String> rows) {
         if (DorisSinkOptions.StreamLoadFormat.CSV.equals(OPTIONS.getStreamLoadFormat())) {
             String lineDelimiter = DorisDelimiterParser.parse(OPTIONS.getSinkStreamLoadProperties().get("row_delimiter"), "\n");
-            return (String.join(lineDelimiter, rows) + lineDelimiter).getBytes(StandardCharsets.UTF_8);
+            StringBuilder sb = new StringBuilder();
+            for (String row : rows) {
+                sb.append(row).append(lineDelimiter);
+            }
+            return sb.toString().getBytes(StandardCharsets.UTF_8);
         }
         if (DorisSinkOptions.StreamLoadFormat.JSON.equals(OPTIONS.getStreamLoadFormat())) {
-            return new StringBuilder("[").append(String.join(",", rows)).append("]").toString().getBytes(StandardCharsets.UTF_8);
+            StringBuilder sb = new StringBuilder();
+            sb.append("[");
+            boolean isFirstElement = true;
+            for (String row : rows) {
+                if (!isFirstElement) {
+                    sb.append(",");
+                }
+                sb.append(row);
+                isFirstElement = false;
+            }
+            sb.append("]");
+            return sb.toString().getBytes(StandardCharsets.UTF_8);
         }
         throw new RuntimeException("Failed to join rows data, unsupported `format` from stream load properties:");
     }

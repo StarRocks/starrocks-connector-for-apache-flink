@@ -18,7 +18,8 @@ limitations under the License.
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.dorisdb.connector</groupId>
     <artifactId>flink-connector-doris</artifactId>
-    <version>1.0.23-SNAPSHOT</version>
+    <version>1.0.25-SNAPSHOT</version>
+    <!-- <version>1.0.25_1.13-SNAPSHOT</version> -->
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
