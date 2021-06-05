@@ -57,6 +57,8 @@ public class DorisSinkOptions implements Serializable {
         .stringType().noDefaultValue().withDescription("Doris user password.");
 
     // optional sink configurations
+    public static final ConfigOption<Integer> SINK_CONNECT_TIMEOUT = ConfigOptions.key("sink.connect.timeout-ms")
+        .intType().defaultValue(1000).withDescription("Timeout in millisecond for connecting to the `load-url`.");
     public static final ConfigOption<String> SINK_SEMANTIC = ConfigOptions.key("sink.semantic")
         .stringType().defaultValue(DorisSinkSemantic.AT_LEAST_ONCE.getName()).withDescription("Fault tolerance guarantee. `at-least-once` or `exactly-once`");
     public static final ConfigOption<Long> SINK_BATCH_MAX_SIZE = ConfigOptions.key("sink.buffer-flush.max-bytes")
@@ -146,6 +148,17 @@ public class DorisSinkOptions implements Serializable {
             return 5000000l;
         }
         return maxRows;
+    }
+
+    public int getConnectTimout() {
+        int connectTimeout = tableOptions.get(SINK_CONNECT_TIMEOUT).intValue();
+        if (connectTimeout < 100) {
+            return 100;
+        }
+        if (connectTimeout > 60000) {
+            return 60000;
+        }
+        return connectTimeout;
     }
 
     public long getSinkMaxBytes() {

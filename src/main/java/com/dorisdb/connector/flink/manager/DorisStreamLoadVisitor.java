@@ -62,7 +62,7 @@ public class DorisStreamLoadVisitor implements Serializable {
     public void doStreamLoad(Tuple3<String, Long, ArrayList<String>> labeledRows) throws IOException {
         String host = getAvailableHost();
         if (null == host) {
-            throw new IOException("None of the host in `load_url` could be connected.");
+            throw new IOException("None of the hosts in `load_url` could be connected.");
         }
         String loadUrl = new StringBuilder(host)
             .append("/api/")
@@ -104,7 +104,7 @@ public class DorisStreamLoadVisitor implements Serializable {
         try {  
             URL url = new URL(host);
             HttpURLConnection co =  (HttpURLConnection) url.openConnection();
-            co.setConnectTimeout(1000);
+            co.setConnectTimeout(sinkOptions.getConnectTimout());
             co.connect();
             co.disconnect();
             return true;
