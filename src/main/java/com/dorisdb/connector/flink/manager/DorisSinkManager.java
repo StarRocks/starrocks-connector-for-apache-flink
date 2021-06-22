@@ -98,7 +98,7 @@ public class DorisSinkManager implements Serializable {
         typesMap.put("tinyint", Lists.newArrayList(LogicalTypeRoot.TINYINT, LogicalTypeRoot.INTEGER));
         typesMap.put("smallint", Lists.newArrayList(LogicalTypeRoot.SMALLINT, LogicalTypeRoot.INTEGER));
         typesMap.put("varchar", Lists.newArrayList(LogicalTypeRoot.VARCHAR));
-        typesMap.put("bitmap", Lists.newArrayList(LogicalTypeRoot.VARCHAR));
+        typesMap.put("bitmap", Lists.newArrayList(LogicalTypeRoot.VARCHAR, LogicalTypeRoot.TINYINT, LogicalTypeRoot.SMALLINT, LogicalTypeRoot.BIGINT, LogicalTypeRoot.INTEGER));
         if (!sinkOptions.hasColumnMappingProperty() && null != flinkSchema) {
             validateTableStructure(flinkSchema);
         }
