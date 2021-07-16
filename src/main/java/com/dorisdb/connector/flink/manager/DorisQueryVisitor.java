@@ -64,7 +64,7 @@ public class DorisQueryVisitor implements Serializable {
 
     private List<Map<String, Object>> executeQuery(String query, String... args) throws ClassNotFoundException, SQLException {
         Connection dbConn = jdbcConnProvider.getConnection();
-        PreparedStatement stmt = dbConn.prepareStatement(query);
+        PreparedStatement stmt = dbConn.prepareStatement(query, ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY);
         for (int i = 0; i < args.length; i++) {
             stmt.setString(i + 1, args[i]);
         }
