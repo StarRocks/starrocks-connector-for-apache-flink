@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
 import com.dorisdb.connector.flink.row.DorisDelimiterParser;
@@ -72,7 +73,7 @@ public class DorisStreamLoadVisitor implements Serializable {
             .append("/_stream_load")
             .toString();
         LOG.info(String.format("Start to join batch data: rows[%d] bytes[%d] label[%s].", labeledRows.f2.size(), labeledRows.f1, labeledRows.f0));
-        Map<String, Object> loadResult = doHttpPut(loadUrl, labeledRows.f0, joinRows(labeledRows.f2));
+        Map<String, Object> loadResult = doHttpPut(loadUrl, labeledRows.f0, joinRows(labeledRows.f2, labeledRows.f1.intValue()));
         final String keyStatus = "Status";
         if (null == loadResult || !loadResult.containsKey(keyStatus)) {
             throw new IOException("Unable to flush data to doris: unknown result status.");
@@ -114,28 +115,31 @@ public class DorisStreamLoadVisitor implements Serializable {
         }
     }
 
-    private byte[] joinRows(List<String> rows) {
+    private byte[] joinRows(List<String> rows, int totalBytes) throws IOException {
         if (DorisSinkOptions.StreamLoadFormat.CSV.equals(sinkOptions.getStreamLoadFormat())) {
-            String lineDelimiter = DorisDelimiterParser.parse(sinkOptions.getSinkStreamLoadProperties().get("row_delimiter"), "\n");
-            StringBuilder sb = new StringBuilder();
+            ByteBuffer bos = ByteBuffer.allocate(totalBytes + rows.size());
+            byte[] lineDelimiter = DorisDelimiterParser.parse(sinkOptions.getSinkStreamLoadProperties().get("row_delimiter"), "\n").getBytes(StandardCharsets.UTF_8);
             for (String row : rows) {
-                sb.append(row).append(lineDelimiter);
+                bos.put(row.getBytes(StandardCharsets.UTF_8));
+                bos.put(lineDelimiter);
             }
-            return sb.toString().getBytes(StandardCharsets.UTF_8);
+            return bos.array();
         }
+       
         if (DorisSinkOptions.StreamLoadFormat.JSON.equals(sinkOptions.getStreamLoadFormat())) {
-            StringBuilder sb = new StringBuilder();
-            sb.append("[");
+            ByteBuffer bos = ByteBuffer.allocate(totalBytes + rows.size() + 1);
+            bos.put("[".getBytes(StandardCharsets.UTF_8));
+            byte[] jsonDelimiter = ",".getBytes(StandardCharsets.UTF_8);
             boolean isFirstElement = true;
             for (String row : rows) {
                 if (!isFirstElement) {
-                    sb.append(",");
+                    bos.put(jsonDelimiter);
                 }
-                sb.append(row);
+                bos.put(row.getBytes(StandardCharsets.UTF_8));
                 isFirstElement = false;
             }
-            sb.append("]");
-            return sb.toString().getBytes(StandardCharsets.UTF_8);
+            bos.put("]".getBytes(StandardCharsets.UTF_8));
+            return bos.array();
         }
         throw new RuntimeException("Failed to join rows data, unsupported `format` from stream load properties:");
     }

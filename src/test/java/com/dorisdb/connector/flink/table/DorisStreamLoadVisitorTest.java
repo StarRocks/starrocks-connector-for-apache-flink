@@ -17,12 +17,16 @@ package com.dorisdb.connector.flink.table;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.shaded.guava18.com.google.common.collect.Lists;
+import org.apache.http.HttpEntity;
+import org.apache.http.entity.ByteArrayEntity;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 import com.dorisdb.connector.flink.DorisSinkBaseTest;
 import com.dorisdb.connector.flink.manager.DorisStreamLoadVisitor;
@@ -36,7 +40,7 @@ public class DorisStreamLoadVisitorTest extends DorisSinkBaseTest {
         // test failed
         String exMsg = "";
         try {
-            visitor.doStreamLoad(new Tuple3<>(mockFailedResponse(), 0l, Lists.newArrayList("aaaa")));
+            visitor.doStreamLoad(new Tuple3<>(mockFailedResponse(), (long)"aaaa".getBytes().length, Lists.newArrayList("aaaa")));
         } catch (Exception e) {
             exMsg = e.getLocalizedMessage();
         }
@@ -49,18 +53,31 @@ public class DorisStreamLoadVisitorTest extends DorisSinkBaseTest {
         // test failed
         String exMsg = "";
         try {
-            visitor.doStreamLoad(new Tuple3<>(mockFailedResponse(), 0l, Lists.newArrayList("aaaa")));
+            visitor.doStreamLoad(new Tuple3<>(mockFailedResponse(), (long)"aaaa".getBytes().length, Lists.newArrayList("aaaa")));
         } catch (Exception e) {
-            exMsg = e.getLocalizedMessage();
+            exMsg = e.getMessage();
         }
         assertTrue(0 < exMsg.length());
         // test suucess
         exMsg = "";
         try {
-            visitor.doStreamLoad(new Tuple3<>(mockSuccessResponse(), 0l, Lists.newArrayList("aaaa")));
+            visitor.doStreamLoad(new Tuple3<>(mockSuccessResponse(), (long)"aaaa".getBytes().length, Lists.newArrayList("aaaa")));
         } catch (Exception e) {
             exMsg = e.getLocalizedMessage();
         }
         assertEquals(0, exMsg.length());
+    }
+        
+    @Test
+    public void testMemoryUsage()  throws Exception {
+        // Runtime rt = Runtime.getRuntime();
+        // List<String> rows = new ArrayList<>();
+        // for (int i = 0; i < 500000; i++) {
+        //     rows.add("10000000000000000000100000000000000000001000000000000000000010000000000000000000100000000000000000001000000000000000000010000000000000000000100000000000000000001000000000000000000010000000000000000000");
+        // }
+        // long memBefore = rt.totalMemory();
+        // byte[] c = joinRows(rows);
+        // long memAfter = rt.totalMemory();
+        // assertEquals(memBefore, memAfter);
     }
 }

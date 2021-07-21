@@ -20,6 +20,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -32,7 +33,7 @@ import com.dorisdb.connector.flink.DorisSinkBaseTest;
 public class DorisJsonSerializerTest extends DorisSinkBaseTest {
 
     @Test
-    public void testCumstomizedSeparatorSerialize() {
+    public void testCumstomizedSeparatorSerialize() throws IOException {
         OPTIONS.getSinkStreamLoadProperties().put("format", "json");
         DorisISerializer serializer = DorisSerializerFactory.createSerializer(OPTIONS, TABLE_SCHEMA.getFieldNames());
         List<Object[]> originRows = Arrays.asList(
@@ -42,7 +43,7 @@ public class DorisJsonSerializerTest extends DorisSinkBaseTest {
         List<String> rows = originRows.stream()
             .map(vals -> serializer.serialize(vals))
             .collect(Collectors.toList());
-        String result = new String(joinRows(rows));
+        String result = new String(joinRows(rows, rows.stream().collect(Collectors.summingInt(r -> r.getBytes().length))));
 
         List<Map<String, Object>> rMapList = (List<Map<String, Object>>)JSON.parse(result);
         assertEquals(rMapList.size(), originRows.size());

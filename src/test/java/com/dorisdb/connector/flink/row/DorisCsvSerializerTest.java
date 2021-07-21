@@ -17,6 +17,8 @@ package com.dorisdb.connector.flink.row;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -27,7 +29,7 @@ import com.dorisdb.connector.flink.DorisSinkBaseTest;
 public class DorisCsvSerializerTest extends DorisSinkBaseTest {
 
     @Test
-    public void testSerialize() {
+    public void testSerialize() throws IOException {
         DorisISerializer serializer = DorisSerializerFactory.createSerializer(OPTIONS, TABLE_SCHEMA.getFieldNames());
         List<Object[]> originRows = Arrays.asList(
             new Object[]{1,"222",333.1,true},
@@ -36,7 +38,7 @@ public class DorisCsvSerializerTest extends DorisSinkBaseTest {
         List<String> rows = originRows.stream()
             .map(vals -> serializer.serialize(vals))
             .collect(Collectors.toList());
-        String data = new String(joinRows(rows));
+        String data = new String(joinRows(rows, rows.stream().collect(Collectors.summingInt(r -> r.getBytes().length))));
         String[] parsedRows = data.split("\n");
         assertEquals(rows.size(), parsedRows.length);
 
@@ -48,7 +50,7 @@ public class DorisCsvSerializerTest extends DorisSinkBaseTest {
     }
 
     @Test
-    public void testCumstomizedSeparatorSerialize() {
+    public void testCumstomizedSeparatorSerialize() throws IOException {
         final String separator = "\\x01";
         OPTIONS.getSinkStreamLoadProperties().put("column_separator", separator);
         DorisISerializer serializer = DorisSerializerFactory.createSerializer(OPTIONS, TABLE_SCHEMA.getFieldNames());
@@ -59,7 +61,7 @@ public class DorisCsvSerializerTest extends DorisSinkBaseTest {
         List<String> rows = originRows.stream()
             .map(vals -> serializer.serialize(vals))
             .collect(Collectors.toList());
-        String data = new String(joinRows(rows));
+        String data = new String(joinRows(rows, rows.stream().collect(Collectors.summingInt(r -> r.getBytes().length))));
         String[] parsedRows = data.split("\n");
         assertEquals(rows.size(), parsedRows.length);
 
@@ -71,7 +73,7 @@ public class DorisCsvSerializerTest extends DorisSinkBaseTest {
     }
 
     @Test
-    public void testCumstomizedDelimiterSerialize() {
+    public void testCumstomizedDelimiterSerialize() throws IOException {
         final String delimiter = "\\x02";
         OPTIONS.getSinkStreamLoadProperties().put("row_delimiter", delimiter);
         DorisISerializer serializer = DorisSerializerFactory.createSerializer(OPTIONS, TABLE_SCHEMA.getFieldNames());
@@ -82,7 +84,7 @@ public class DorisCsvSerializerTest extends DorisSinkBaseTest {
         List<String> rows = originRows.stream()
             .map(vals -> serializer.serialize(vals))
             .collect(Collectors.toList());
-        String data = new String(joinRows(rows));
+        String data = new String(joinRows(rows, rows.stream().collect(Collectors.summingInt(r -> r.getBytes().length))));
         String[] parsedRows = data.split(delimiter);
         assertEquals(rows.size(), parsedRows.length);
     }

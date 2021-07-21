@@ -18,8 +18,7 @@ limitations under the License.
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.dorisdb.connector</groupId>
     <artifactId>flink-connector-doris</artifactId>
-    <version>1.0.28-SNAPSHOT</version>
-    <!-- <version>1.0.28_1.13-SNAPSHOT</version> -->
+    <version>1.0.29-SNAPSHOT</version>
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
@@ -73,6 +72,11 @@ limitations under the License.
             <version>1.1.1</version>
         </dependency>
         <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>2.11.0</version>
+        </dependency>
+        <dependency>
             <groupId>org.apache.httpcomponents</groupId>
             <artifactId>httpcore</artifactId>
             <version>4.4.6</version>
@@ -102,6 +106,13 @@ limitations under the License.
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
             <version>4.12</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.alibaba.ververica</groupId>
+            <!-- add the dependency matching your database -->
+            <artifactId>flink-connector-mysql-cdc</artifactId>
+            <version>1.2.0</version>          
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -230,6 +241,7 @@ limitations under the License.
                             <artifactSet>
                                 <includes>
                                     <include>commons-codec:commons-codec</include>
+                                    <include>commons-io:commons-io</include>
                                     <include>commons-logging:*</include>
                                     <include>org.apache.httpcomponents:httpclient</include>
                                     <include>org.apache.httpcomponents:httpcore</include>

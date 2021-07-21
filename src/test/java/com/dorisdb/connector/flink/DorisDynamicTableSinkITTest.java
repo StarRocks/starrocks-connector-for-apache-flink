@@ -73,7 +73,8 @@ public class DorisDynamicTableSinkITTest extends DorisSinkBaseTest {
             "'sink.buffer-flush.max-rows' = '" + OPTIONS.getSinkMaxRows() + "'," +
             "'sink.buffer-flush.max-bytes' = '" + OPTIONS.getSinkMaxBytes() + "'," +
             "'sink.buffer-flush.interval-ms' = '" + OPTIONS.getSinkMaxFlushInterval() + "'," +
-            "'sink.max-retries' = '" + OPTIONS.getSinkMaxRetries() + "'" +
+            "'sink.properties.column_separator' = '\\x01'," +
+            "'sink.properties.row_delimiter' = '\\x02'" +
             ")";
         tEnv.executeSql(createSQL);
 
