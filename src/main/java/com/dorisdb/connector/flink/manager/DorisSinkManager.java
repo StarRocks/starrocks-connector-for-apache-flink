@@ -233,9 +233,10 @@ public class DorisSinkManager implements Serializable {
     }
 
     private void waitAsyncFlushingDone() throws InterruptedException {
-        // wait previous flushings
+        // wait for previous flushings
         flushQueue.put(new Tuple3<>("", 0l, null));
         flushQueue.put(new Tuple3<>("", 0l, null));
+        checkFlushException();
     }
 
     private void asyncFlush() throws Exception {
