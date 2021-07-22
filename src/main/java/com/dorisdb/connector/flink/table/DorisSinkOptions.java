@@ -91,6 +91,7 @@ public class DorisSinkOptions implements Serializable {
         validateRequired();
         validateStreamLoadUrl();
         validateSinkSemantic();
+        validateParamsRange();
     }
     
     public String getJdbcUrl() {
@@ -118,36 +119,19 @@ public class DorisSinkOptions implements Serializable {
     }
 
     public int getSinkMaxRetries() {
-        int maxRetries = tableOptions.get(SINK_MAX_RETRIES).intValue();
-        if (maxRetries < 0) {
-            return 0;
-        }
-        if (maxRetries > 10) {
-            return 10;
-        }
-        return maxRetries;
+        return tableOptions.get(SINK_MAX_RETRIES).intValue();
     }
 
     public long getSinkMaxFlushInterval() {
-        long maxFlushInterval = tableOptions.get(SINK_BATCH_FLUSH_INTERVAL).longValue();
-        if (maxFlushInterval < 1000l) {
-            return 1000l;
-        }
-        if (maxFlushInterval > 3600000l) {
-            return 3600000l;
-        }
-        return maxFlushInterval;
+        return tableOptions.get(SINK_BATCH_FLUSH_INTERVAL).longValue();
     }
 
     public long getSinkMaxRows() {
-        long maxRows = tableOptions.get(SINK_BATCH_MAX_ROWS).longValue();
-        if (maxRows < 64000) {
-            return 64000l;
-        }
-        if (maxRows > 5000000) {
-            return 5000000l;
-        }
-        return maxRows;
+        return tableOptions.get(SINK_BATCH_MAX_ROWS).longValue();
+    }
+
+    public long getSinkMaxBytes() {
+        return tableOptions.get(SINK_BATCH_MAX_SIZE).longValue();
     }
 
     public int getConnectTimout() {
@@ -159,17 +143,6 @@ public class DorisSinkOptions implements Serializable {
             return 60000;
         }
         return connectTimeout;
-    }
-
-    public long getSinkMaxBytes() {
-        long maxBytes = tableOptions.get(SINK_BATCH_MAX_SIZE).longValue();
-        if (maxBytes < 64 * MEGA_BYTES_SCALE) {
-            return 64 * MEGA_BYTES_SCALE;
-        }
-        if (maxBytes > 10 * GIGA_BYTES_SCALE) {
-            return 10 * GIGA_BYTES_SCALE;
-        }
-        return maxBytes;
     }
 
     public static Builder builder() {
@@ -219,6 +192,37 @@ public class DorisSinkOptions implements Serializable {
             }
         });
         this.sinkSemantic = DorisSinkSemantic.fromName(tableOptions.get(SINK_SEMANTIC));
+    }
+
+    private void validateParamsRange() {
+        tableOptions.getOptional(SINK_MAX_RETRIES).ifPresent(val -> {
+            if (val.intValue() < 0 || val.intValue() > 10) {
+                throw new ValidationException(
+                    String.format("Unsupported value '%d' for '%s'. Supported value range: [0, 10].",
+                        val, SINK_MAX_RETRIES.key()));
+            }
+        });
+        tableOptions.getOptional(SINK_BATCH_FLUSH_INTERVAL).ifPresent(val -> {
+            if (val.longValue() < 1000l || val.longValue() > 3600000l) {
+                throw new ValidationException(
+                    String.format("Unsupported value '%d' for '%s'. Supported value range: [1000, 3600000].",
+                        val, SINK_BATCH_FLUSH_INTERVAL.key()));
+            }
+        });
+        tableOptions.getOptional(SINK_BATCH_MAX_ROWS).ifPresent(val -> {
+            if (val.longValue() < 64000 || val.longValue() > 5000000) {
+                throw new ValidationException(
+                    String.format("Unsupported value '%d' for '%s'. Supported value range: [64000, 5000000].",
+                        val, SINK_BATCH_MAX_ROWS.key()));
+            }
+        });
+        tableOptions.getOptional(SINK_BATCH_MAX_SIZE).ifPresent(val -> {
+            if (val.longValue() < 64 * MEGA_BYTES_SCALE || val.longValue() > 10 * GIGA_BYTES_SCALE) {
+                throw new ValidationException(
+                    String.format("Unsupported value '%d' for '%s'. Supported value range: [%d, %d].",
+                        val, SINK_BATCH_MAX_SIZE.key(), 64 * MEGA_BYTES_SCALE, 10 * GIGA_BYTES_SCALE));
+            }
+        });
     }
 
     private void validateRequired() {
