@@ -222,7 +222,7 @@ public abstract class DorisSinkBaseTest {
         }
        
         if (DorisSinkOptions.StreamLoadFormat.JSON.equals(OPTIONS.getStreamLoadFormat())) {
-            ByteBuffer bos = ByteBuffer.allocate(totalBytes + rows.size() + 1);
+            ByteBuffer bos = ByteBuffer.allocate(totalBytes + (rows.isEmpty() ? 2 : rows.size() + 1));
             bos.put("[".getBytes(StandardCharsets.UTF_8));
             byte[] jsonDelimiter = ",".getBytes(StandardCharsets.UTF_8);
             boolean isFirstElement = true;
