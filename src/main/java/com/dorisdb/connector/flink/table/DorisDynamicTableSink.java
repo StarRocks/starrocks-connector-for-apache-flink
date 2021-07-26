@@ -35,7 +35,7 @@ public class DorisDynamicTableSink implements DynamicTableSink {
 
     @Override
     public ChangelogMode getChangelogMode(ChangelogMode requestedMode) {
-        return ChangelogMode.insertOnly();
+        return requestedMode;
     }
 
     @Override

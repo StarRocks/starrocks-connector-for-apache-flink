@@ -47,7 +47,7 @@ public class DorisQueryVisitor implements Serializable {
     }
 
     public List<Map<String, Object>> getTableColumnsMetaData() {
-        final String query = "select `COLUMN_NAME`, `DATA_TYPE`, `COLUMN_SIZE`, `DECIMAL_DIGITS` from `information_schema`.`COLUMNS` where `TABLE_SCHEMA`=? and `TABLE_NAME`=?;";
+        final String query = "select `COLUMN_NAME`, `COLUMN_KEY`, `DATA_TYPE`, `COLUMN_SIZE`, `DECIMAL_DIGITS` from `information_schema`.`COLUMNS` where `TABLE_SCHEMA`=? and `TABLE_NAME`=?;";
         List<Map<String, Object>> rows;
         try {
             if (LOG.isDebugEnabled()) {
@@ -83,6 +83,8 @@ public class DorisQueryVisitor implements Serializable {
             list.add(row);
         }
         rs.absolute(currRowIndex);
+        rs.close();
+        dbConn.close();
         return list;
     }
 }
