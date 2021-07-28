@@ -224,12 +224,16 @@ public class DorisSinkManager implements Serializable {
         return buffer;
     }
 
-    public void setBufferedBatchList(List<String> buffer) {
+    public void setBufferedBatchList(List<String> list) throws IOException {
         if (!DorisSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
             return;
         }
         this.buffer.clear();
-        this.buffer.addAll(buffer);
+        batchCount = 0;
+        batchSize = 0;
+        for (String row : list) {
+            writeRecord(row);
+        }
     }
 
     private void waitAsyncFlushingDone() throws InterruptedException {

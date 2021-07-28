@@ -32,6 +32,7 @@ import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
 import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
 import org.apache.flink.table.api.TableSchema;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class DorisDynamicSinkFunction<T> extends RichSinkFunction<T> implements CheckpointedFunction {
@@ -77,7 +78,7 @@ public class DorisDynamicSinkFunction<T> extends RichSinkFunction<T> implements 
     }
 
     @Override
-    public void invoke(T value, Context context) throws Exception {
+    public synchronized void invoke(T value, Context context) throws Exception {
         long start = System.nanoTime();
         if (DorisSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
             // flush the batch saved at last checkpoint state first    
@@ -115,11 +116,11 @@ public class DorisDynamicSinkFunction<T> extends RichSinkFunction<T> implements 
     }
 
     @Override
-    public void snapshotState(FunctionSnapshotContext context) throws Exception {
+    public synchronized void snapshotState(FunctionSnapshotContext context) throws Exception {
         if (DorisSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
             // save state
             checkpointedState.clear();
-            checkpointedState.add(new Tuple2<>(sinkManager.createBatchLabel(), sinkManager.getBufferedBatchList()));
+            checkpointedState.add(new Tuple2<>(sinkManager.createBatchLabel(), new ArrayList<>(sinkManager.getBufferedBatchList())));
             return;
         }
         sinkManager.flush(sinkManager.createBatchLabel(), true);

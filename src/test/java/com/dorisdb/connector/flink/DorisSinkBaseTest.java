@@ -69,6 +69,7 @@ public abstract class DorisSinkBaseTest {
     protected final String SINK_PROPS_FILTER_RATIO = "0";
 
     protected DorisSinkOptions OPTIONS;
+    protected DorisSinkOptions.Builder OPTIONS_BUILDER;
     protected TableSchema TABLE_SCHEMA;
     protected Map<String, String> DORIS_TABLE_META;
     protected String mockResonse = "";
@@ -90,6 +91,7 @@ public abstract class DorisSinkBaseTest {
             .withProperty("sink.max-retries", SINK_MAX_RETRIES);
         SINK_PROPS.keySet().stream().forEach(k -> builder.withProperty("sink.properties." + k, SINK_PROPS.get(k)));
         OPTIONS = builder.build();
+        OPTIONS_BUILDER = builder;
     }
 
     @Before

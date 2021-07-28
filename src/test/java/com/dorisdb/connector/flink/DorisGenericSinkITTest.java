@@ -30,6 +30,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.dorisdb.connector.flink.table.DorisSinkSemantic;
+
 public class DorisGenericSinkITTest extends DorisSinkBaseTest {
 
     class TestEntry implements Serializable {
@@ -119,6 +121,56 @@ public class DorisGenericSinkITTest extends DorisSinkBaseTest {
         //             slots[1] = te.score;
         //             slots[2] = te.name;
         //             slots[3] = te.score;
+        //         }));
+
+        // String exMsg = "";
+        // try {
+        //     env.execute();
+        // } catch (Exception e) {
+        //     exMsg = e.getMessage();
+        // }
+        // assertFalse(exMsg, exMsg.length() > 0);
+    }
+
+    @Test
+    public void testCheckPoint() {
+        // List<Map<String, String>> meta = new ArrayList<>();
+        // meta.add(new HashMap<String, String>(){{
+        //     put("COLUMN_NAME", "name");
+        //     put("COLUMN_KEY", "");
+        //     put("DATA_TYPE", "varchar");
+        // }});
+        // meta.add(new HashMap<String, String>(){{
+        //     put("COLUMN_NAME", "score");
+        //     put("COLUMN_KEY", "");
+        //     put("DATA_TYPE", "bigint");
+        // }});
+        // new Expectations(){
+        //     {
+        //         v.getTableColumnsMetaData();
+        //         result = meta;
+        //     }
+        // };
+        // mockSuccessResponse();
+        // StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // env.enableCheckpointing(2000);
+        // env.setRestartStrategy(new RestartStrategies.NoRestartStrategyConfiguration());
+        // env.setParallelism(1);
+        // env.fromElements(TEST_DATA)
+        //     .addSink(DorisSink.sink(
+        //         TableSchema.builder()
+        //             .field("score", DataTypes.INT())
+        //             .field("name", DataTypes.VARCHAR(20))
+        //             .build(),
+        //         OPTIONS_BUILDER
+        //             .withProperty("sink.semantic", DorisSinkSemantic.EXACTLY_ONCE.getName())
+        //             .build(),
+        //         (slots, te) -> {
+        //             slots[0] = te.score;
+        //             slots[1] = te.name;
+        //             try {
+        //                 Thread.sleep(1100);
+        //             } catch (Exception ex) {}
         //         }));
 
         // String exMsg = "";
