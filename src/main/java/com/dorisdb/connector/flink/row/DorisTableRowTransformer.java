@@ -55,13 +55,17 @@ public class DorisTableRowTransformer implements DorisIRowTransformer<RowData> {
     }
 
     @Override
-    public Object[] transform(RowData record) {
+    public Object[] transform(RowData record, boolean supportUpsertDelete) {
         RowData transformRecord = valueTransform.apply(record);
-        Object[] values = new Object[dataTypes.length];
+        Object[] values = new Object[dataTypes.length + (supportUpsertDelete ? 1 : 0)];
         int idx = 0;
         for (DataType dataType : dataTypes) {
             values[idx] = typeConvertion(dataType.getLogicalType(), transformRecord, idx);
             idx++;
+        }
+        if (supportUpsertDelete) {
+            // set `__op` column
+            values[idx] = DorisSinkOP.parse(record.getRowKind()).ordinal();
         }
         return values;
     }

@@ -25,6 +25,12 @@ public class DorisSerializerFactory {
             return new DorisCsvSerializer(sinkOptions.getSinkStreamLoadProperties().get("column_separator"));
         }
         if (DorisSinkOptions.StreamLoadFormat.JSON.equals(sinkOptions.getStreamLoadFormat())) {
+            if (sinkOptions.supportUpsertDelete()) {
+                String[] tmp = new String[fieldNames.length + 1];
+                System.arraycopy(fieldNames, 0, tmp, 0, fieldNames.length);
+                tmp[fieldNames.length] = DorisSinkOP.COLUMN_KEY;
+                fieldNames = tmp;
+            }
             return new DorisJsonSerializer(fieldNames);
         }
         throw new RuntimeException("Failed to create row serializer, unsupported `format` from stream load properties.");

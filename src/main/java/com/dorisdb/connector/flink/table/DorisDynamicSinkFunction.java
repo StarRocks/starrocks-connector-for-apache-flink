@@ -31,6 +31,8 @@ import org.apache.flink.runtime.state.FunctionSnapshotContext;
 import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
 import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
 import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.data.RowData;
+import org.apache.flink.types.RowKind;
 
 import java.util.List;
 
@@ -51,16 +53,16 @@ public class DorisDynamicSinkFunction<T> extends RichSinkFunction<T> implements 
     private transient ListState<Tuple2<String, List<String>>> checkpointedState;
  
     public DorisDynamicSinkFunction(DorisSinkOptions sinkOptions, TableSchema schema, DorisIRowTransformer<T> rowTransformer) {
+        this.sinkManager = new DorisSinkManager(sinkOptions, schema);
         rowTransformer.setTableSchema(schema);
         this.serializer = DorisSerializerFactory.createSerializer(sinkOptions, schema.getFieldNames());
         this.rowTransformer = rowTransformer;
         this.sinkOptions = sinkOptions;
-        this.sinkManager = new DorisSinkManager(sinkOptions, schema);
     }
  
     public DorisDynamicSinkFunction(DorisSinkOptions sinkOptions) {
-        this.sinkOptions = sinkOptions;
         this.sinkManager = new DorisSinkManager(sinkOptions, null);
+        this.sinkOptions = sinkOptions;
     }
  
     @Override
@@ -94,8 +96,12 @@ public class DorisDynamicSinkFunction<T> extends RichSinkFunction<T> implements 
             totalInvokeRowsTime.inc(System.nanoTime() - start);
             return;
         }
+        if (value instanceof RowData && !sinkOptions.supportUpsertDelete() && !RowKind.INSERT.equals(((RowData)value).getRowKind())) {
+            // only primary key table support `update` and `delete`
+            return;
+        }
         sinkManager.writeRecord(
-            serializer.serialize(rowTransformer.transform(value))
+            serializer.serialize(rowTransformer.transform(value, sinkOptions.supportUpsertDelete()))
         );
         totalInvokeRows.inc(1);
         totalInvokeRowsTime.inc(System.nanoTime() - start);

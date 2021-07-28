@@ -22,6 +22,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
 import com.dorisdb.connector.flink.row.DorisDelimiterParser;
+import com.dorisdb.connector.flink.row.DorisSinkOP;
 import com.dorisdb.connector.flink.table.DorisSinkOptions;
 import com.alibaba.fastjson.JSON;
 
@@ -117,8 +118,8 @@ public class DorisStreamLoadVisitor implements Serializable {
 
     private byte[] joinRows(List<String> rows, int totalBytes) throws IOException {
         if (DorisSinkOptions.StreamLoadFormat.CSV.equals(sinkOptions.getStreamLoadFormat())) {
-            ByteBuffer bos = ByteBuffer.allocate(totalBytes + rows.size());
             byte[] lineDelimiter = DorisDelimiterParser.parse(sinkOptions.getSinkStreamLoadProperties().get("row_delimiter"), "\n").getBytes(StandardCharsets.UTF_8);
+            ByteBuffer bos = ByteBuffer.allocate(totalBytes + rows.size() * lineDelimiter.length);
             for (String row : rows) {
                 bos.put(row.getBytes(StandardCharsets.UTF_8));
                 bos.put(lineDelimiter);
@@ -161,7 +162,11 @@ public class DorisStreamLoadVisitor implements Serializable {
                 httpPut.setHeader(entry.getKey(), entry.getValue());
             }
             if (!props.containsKey("columns") && DorisSinkOptions.StreamLoadFormat.CSV.equals(sinkOptions.getStreamLoadFormat())) {
-                httpPut.setHeader("columns", String.join(",", fieldNames));
+                String cols = String.join(",", fieldNames);
+                if (cols.length() > 0 && sinkOptions.supportUpsertDelete()) {
+                    cols += String.format(",%s,%s=%s", DorisSinkOP.TMP_COLUMN_KEY, DorisSinkOP.COLUMN_KEY, DorisSinkOP.TMP_COLUMN_KEY);
+                }
+                httpPut.setHeader("columns", cols);
             }
             httpPut.setHeader("Expect", "100-continue");
             httpPut.setHeader("label", label);
@@ -187,7 +192,7 @@ public class DorisStreamLoadVisitor implements Serializable {
     
     private String getBasicAuthHeader(String username, String password) {
         String auth = username + ":" + password;
-        byte[] encodedAuth = Base64.encodeBase64(auth.getBytes());
+        byte[] encodedAuth = Base64.encodeBase64(auth.getBytes(StandardCharsets.UTF_8));
         return new StringBuilder("Basic ").append(new String(encodedAuth)).toString();
     }
 

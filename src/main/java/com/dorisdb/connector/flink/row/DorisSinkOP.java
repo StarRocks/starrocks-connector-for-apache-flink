@@ -14,17 +14,24 @@
 
 package com.dorisdb.connector.flink.row;
 
-import java.io.Serializable;
+import org.apache.flink.types.RowKind;
 
-import org.apache.flink.api.common.functions.RuntimeContext;
-import org.apache.flink.table.api.TableSchema;
+/**
+ * Doris sink operator.
+ */
+public enum DorisSinkOP {
+    UPSERT, DELETE;
 
-public interface DorisIRowTransformer<T> extends Serializable {
+    public static final String TMP_COLUMN_KEY = "__tmp__op";
+    public static final String COLUMN_KEY = "__op";
 
-    void setTableSchema(TableSchema tableSchema);
-
-    void setRuntimeContext(RuntimeContext ctx);
-
-    Object[] transform(T record, boolean supportUpsertDelete);
-    
+    static DorisSinkOP parse(RowKind kind) {
+        if (RowKind.INSERT.equals(kind) || RowKind.UPDATE_AFTER.equals(kind)) {
+            return UPSERT;
+        }
+        if (RowKind.DELETE.equals(kind) || RowKind.UPDATE_BEFORE.equals(kind)) {
+            return DELETE;
+        }
+        throw new RuntimeException("Unsupported row kind.");
+    }
 }

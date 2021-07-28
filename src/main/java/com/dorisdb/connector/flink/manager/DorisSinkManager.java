@@ -22,6 +22,7 @@ import org.slf4j.LoggerFactory;
 import java.util.concurrent.TimeUnit;
 import java.io.IOException;
 import java.io.Serializable;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -84,7 +85,6 @@ public class DorisSinkManager implements Serializable {
         DorisJdbcConnectionOptions jdbcOptions = new DorisJdbcConnectionOptions(sinkOptions.getJdbcUrl(), sinkOptions.getUsername(), sinkOptions.getPassword());
         this.jdbcConnProvider = new DorisJdbcConnectionProvider(jdbcOptions);
         this.dorisQueryVisitor = new DorisQueryVisitor(jdbcConnProvider, sinkOptions.getDatabaseName(), sinkOptions.getTableName());
-        this.dorisStreamLoadVisitor = new DorisStreamLoadVisitor(sinkOptions, null == flinkSchema ? new String[]{} : flinkSchema.getFieldNames());
         // validate table structure
         typesMap = new HashMap<>();
         typesMap.put("bigint", Lists.newArrayList(LogicalTypeRoot.BIGINT, LogicalTypeRoot.INTEGER));
@@ -102,6 +102,7 @@ public class DorisSinkManager implements Serializable {
         typesMap.put("varchar", Lists.newArrayList(LogicalTypeRoot.VARCHAR));
         typesMap.put("bitmap", Lists.newArrayList(LogicalTypeRoot.VARCHAR, LogicalTypeRoot.TINYINT, LogicalTypeRoot.SMALLINT, LogicalTypeRoot.BIGINT, LogicalTypeRoot.INTEGER));
         validateTableStructure(flinkSchema);
+        this.dorisStreamLoadVisitor = new DorisStreamLoadVisitor(sinkOptions, null == flinkSchema ? new String[]{} : flinkSchema.getFieldNames());
     }
 
     public void setRuntimeContext(RuntimeContext runtimeCtx) {
@@ -164,7 +165,7 @@ public class DorisSinkManager implements Serializable {
         try {
             buffer.add(record);
             batchCount++;
-            long bytes = record.getBytes().length;
+            long bytes = record.getBytes(StandardCharsets.UTF_8).length;
             batchSize += bytes;
             if (DorisSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
                 return;
