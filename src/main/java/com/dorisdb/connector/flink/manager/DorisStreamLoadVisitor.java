@@ -117,8 +117,8 @@ public class DorisStreamLoadVisitor implements Serializable {
 
     private byte[] joinRows(List<String> rows, int totalBytes) throws IOException {
         if (DorisSinkOptions.StreamLoadFormat.CSV.equals(sinkOptions.getStreamLoadFormat())) {
-            ByteBuffer bos = ByteBuffer.allocate(totalBytes + rows.size());
             byte[] lineDelimiter = DorisDelimiterParser.parse(sinkOptions.getSinkStreamLoadProperties().get("row_delimiter"), "\n").getBytes(StandardCharsets.UTF_8);
+            ByteBuffer bos = ByteBuffer.allocate(totalBytes + rows.size() * lineDelimiter.length);
             for (String row : rows) {
                 bos.put(row.getBytes(StandardCharsets.UTF_8));
                 bos.put(lineDelimiter);
