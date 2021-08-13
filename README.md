@@ -33,7 +33,6 @@ AND:
     
 ```
 
-
 ### Start using like
 
 ```java
@@ -131,9 +130,11 @@ tEnv.executeSql(
 
 ## Using flink-cdc as source
 
+`Note that the SQL in steps 6,7,8 could be auto-generated using the` [dorisdb-migrate-tool](http://dorisdb-release.dorisdb.com/dmt.tar.gz?Expires=1988476953&OSSAccessKeyId=LTAI4GFYjbX9e7QmFnAAvkt8&Signature=vpV727KMXTcaYqnjl0SrFadTFIk%3D).
+
 1. [Download Flink](https://flink.apache.org/downloads.html)
 
-2. [Download Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/wiki/Downloads)
+2. [Download Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases)
 
 3. [Download Flink DorisDB connector](http://dorisdbvisitor:dorisdbvisitor134@nexus.dorisdb.com)
 

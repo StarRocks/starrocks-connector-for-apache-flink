@@ -22,7 +22,6 @@ import org.apache.flink.types.RowKind;
 public enum DorisSinkOP {
     UPSERT, DELETE;
 
-    public static final String TMP_COLUMN_KEY = "__tmp__op";
     public static final String COLUMN_KEY = "__op";
 
     static DorisSinkOP parse(RowKind kind) {

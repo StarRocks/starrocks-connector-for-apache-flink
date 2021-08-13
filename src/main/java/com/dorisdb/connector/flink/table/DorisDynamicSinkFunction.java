@@ -32,9 +32,19 @@ import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
 import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.data.binary.NestedRowData;
 import org.apache.flink.types.RowKind;
+import org.apache.flink.util.InstantiationUtil;
 
+import io.debezium.util.Strings;
+import net.sf.jsqlparser.parser.CCJSqlParserUtil;
+import net.sf.jsqlparser.statement.Statement;
+import net.sf.jsqlparser.statement.alter.Alter;
+import net.sf.jsqlparser.statement.truncate.Truncate;
+
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class DorisDynamicSinkFunction<T> extends RichSinkFunction<T> implements CheckpointedFunction {
 
@@ -79,6 +89,7 @@ public class DorisDynamicSinkFunction<T> extends RichSinkFunction<T> implements 
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public void invoke(T value, Context context) throws Exception {
         long start = System.nanoTime();
         if (DorisSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
@@ -99,6 +110,33 @@ public class DorisDynamicSinkFunction<T> extends RichSinkFunction<T> implements 
         if (value instanceof RowData && !sinkOptions.supportUpsertDelete() && !RowKind.INSERT.equals(((RowData)value).getRowKind())) {
             // only primary key table support `update` and `delete`
             return;
+        }
+        if (value instanceof NestedRowData) {
+            final int headerSize = 256;
+            NestedRowData ddlData = (NestedRowData) value;
+            if (ddlData.getSegments().length != 1 || ddlData.getSegments()[0].size() < headerSize) {
+                return;
+            }
+            int totalSize = ddlData.getSegments()[0].size();
+            byte[] data = new byte[totalSize - headerSize];
+            ddlData.getSegments()[0].get(headerSize, data);
+            Map<String, String> ddlMap = InstantiationUtil.deserializeObject(data, HashMap.class.getClassLoader());
+            if (null == ddlMap 
+                || "true".equals(ddlMap.get("snapshot"))
+                || Strings.isNullOrEmpty(ddlMap.get("ddl"))
+                || Strings.isNullOrEmpty(ddlMap.get("databaseName"))) {
+                return;
+            }
+            Statement stmt = CCJSqlParserUtil.parse(ddlMap.get("ddl"));
+            if (stmt instanceof Truncate) {
+                Truncate truncate = (Truncate) stmt;
+                if (!sinkOptions.getTableName().equalsIgnoreCase(truncate.getTable().getName())) {
+                    return;
+                }
+                // TODO: add ddl to queue
+            } else if (stmt instanceof Alter) {
+                Alter alter = (Alter) stmt;
+            }
         }
         sinkManager.writeRecord(
             serializer.serialize(rowTransformer.transform(value, sinkOptions.supportUpsertDelete()))

@@ -15,20 +15,26 @@
 package com.dorisdb.connector.flink;
 
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+// import org.apache.flink.core.memory.HeapMemorySegment;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.source.SourceFunction;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.TableEnvironment;
 import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.data.binary.NestedRowData;
+import org.apache.flink.table.runtime.typeutils.RowDataSerializer;
 import org.apache.flink.util.Collector;
 import org.apache.kafka.connect.source.SourceRecord;
+import com.alibaba.ververica.cdc.debezium.table.RowDataDebeziumDeserializeSchema;
 import org.junit.Test;
 
 import mockit.Expectations;
 
 import static org.junit.Assert.assertFalse;
 
+import java.io.ByteArrayOutputStream;
+import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -37,7 +43,6 @@ import java.util.Map;
 
 import com.alibaba.ververica.cdc.connectors.mysql.MySQLSource;
 import com.alibaba.ververica.cdc.debezium.DebeziumDeserializationSchema;
-import com.alibaba.ververica.cdc.debezium.table.RowDataDebeziumDeserializeSchema;
 import com.dorisdb.connector.flink.table.DorisSinkOptions;
 import com.mysql.jdbc.Driver;
 
@@ -89,66 +94,68 @@ public class DorisCDCTest {
         // assertFalse(exMsg, exMsg.length() > 0);
     }
     
-    @Test
-    public void testCDCSQLSink() {
-        EnvironmentSettings bsSettings = EnvironmentSettings.newInstance()
-        .useBlinkPlanner().inStreamingMode().build();
-        TableEnvironment tEnv = TableEnvironment.create(bsSettings);
-        String createSQL = "CREATE TABLE cdc_src(" +
-            "k1 tinyint not null," +
-            "k2 tinyint not null," +
-            "v1 char(10)," +
-            "v2 int," +
-            "v3 date," +
-            "v4 timestamp," +
-            "v5 timestamp," +
-            " primary key (k1, k2) not enforced " +
-            ") WITH ( " +
-            "'connector' = 'mysql-cdc'," +
-            "'hostname' = 'localhost', " +
-            "'port' = '3306', " +
-            "'username' = 'root', " +
-            "'password' = '123456', " +
-            "'database-name' = 'datax_test', " +
-            "'table-name' = 'test9' " +
-            ")";
-        tEnv.executeSql(createSQL);
-        Class<Driver> a = Driver.class;
+    // @Test
+    // public void testCDCSQLSink() throws Exception {
+    //     EnvironmentSettings bsSettings = EnvironmentSettings.newInstance()
+    //     .useBlinkPlanner().inStreamingMode().build();
+    //     TableEnvironment tEnv = TableEnvironment.create(bsSettings);
+    //     String createSQL = "CREATE TABLE cdc_src(" +
+    //         "k1 tinyint not null," +
+    //         "k2 tinyint not null," +
+    //         "v1 char(10)," +
+    //         "v2 int," +
+    //         "v3 date," +
+    //         "v4 timestamp," +
+    //         "v5 timestamp," +
+    //         " primary key (k1, k2) not enforced " +
+    //         ") WITH ( " +
+    //         "'connector' = 'mysql-cdc'," +
+    //         "'hostname' = 'localhost', " +
+    //         "'port' = '3306', " +
+    //         "'username' = 'root', " +
+    //         "'password' = '123456', " +
+    //         "'database-name' = 'datax_test', " +
+    //         "'table-name' = 'test9', " +
+    //         "'debezium.include.schema.changes' = 'true', " +
+    //         "'debezium.key.converter.schemas.enable' = 'true', " +
+    //         "'debezium.value.converter.schemas.enable' = 'true', " +
+    //         "'debezium.database.history.store.only.monitored.tables.ddl' = 'true' " +
+    //         ")";
+    //     tEnv.executeSql(createSQL);
+    //     Class<Driver> a = Driver.class;
+    //     String createDstSQL = "CREATE TABLE cdc_dst(" +
+    //         "k1 tinyint not null," +
+    //         "k2 tinyint not null," +
+    //         "v1 char(10)," +
+    //         "v2 int," +
+    //         "v3 date," +
+    //         "v4 timestamp," +
+    //         "v5 timestamp," +
+    //         " primary key (k1, k2) not enforced " +
+    //         ") WITH ( " +
+    //         "'connector' = 'doris'," +
+    //         "'jdbc-url'='jdbc:mysql://172.26.92.139:8887'," +
+    //         "'load-url'='172.26.92.139:8531'," +
+    //         "'database-name' = 'aa'," +
+    //         "'table-name' = 'test9'," +
+    //         "'username' = 'root'," +
+    //         "'password' = ''," +
+    //         "'sink.buffer-flush.interval-ms' = '3000'," +
+    //         "'sink.properties.format' = 'json'," +
+    //         "'sink.properties.strip_outer_array' = 'true'," +
+    //         "'sink.properties.column_separator' = '\\x01'," +
+    //         "'sink.properties.row_delimiter' = '\\x02'" +
+    //         ")";
+    //     tEnv.executeSql(createDstSQL);
 
-        String createDstSQL = "CREATE TABLE cdc_dst(" +
-            "k1 tinyint not null," +
-            "k2 tinyint not null," +
-            "v1 char(10)," +
-            "v2 int," +
-            "v3 date," +
-            "v4 timestamp," +
-            "v5 timestamp," +
-            " primary key (k1, k2) not enforced " +
-            ") WITH ( " +
-            "'connector' = 'doris'," +
-            "'jdbc-url'='jdbc:mysql://172.26.92.139:8887'," +
-            "'load-url'='172.26.92.139:8531'," +
-            "'database-name' = 'aa'," +
-            "'table-name' = 'test9'," +
-            "'username' = 'root'," +
-            "'password' = ''," +
-            "'sink.buffer-flush.interval-ms' = '3000'," +
-            "'sink.properties.format' = 'json'," +
-            "'sink.properties.strip_outer_array' = 'true'," +
-            "'sink.properties.column_separator' = '\\x01'," +
-            "'sink.properties.row_delimiter' = '\\x02'" +
-            ")";
-        tEnv.executeSql(createDstSQL);
-
-        String exMsg = "";
-        try {
-            tEnv.executeSql("insert into cdc_dst select * from cdc_src").collect();
-            Thread.sleep(2000000);
-        } catch (Exception e) {
-            exMsg = e.getMessage();
-        }
-        assertFalse(exMsg, exMsg.length() > 0);
-    }
-
+    //     String exMsg = "";
+    //     try {
+    //         tEnv.executeSql("insert into cdc_dst select * from cdc_src").collect();
+    //         Thread.sleep(2000000);
+    //     } catch (Exception e) {
+    //         exMsg = e.getMessage();
+    //     }
+    //     assertFalse(exMsg, exMsg.length() > 0);
+    // }
 
 }

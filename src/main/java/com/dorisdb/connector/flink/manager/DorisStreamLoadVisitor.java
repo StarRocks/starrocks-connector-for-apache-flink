@@ -161,10 +161,10 @@ public class DorisStreamLoadVisitor implements Serializable {
             for (Map.Entry<String,String> entry : props.entrySet()) {
                 httpPut.setHeader(entry.getKey(), entry.getValue());
             }
-            if (!props.containsKey("columns") && DorisSinkOptions.StreamLoadFormat.CSV.equals(sinkOptions.getStreamLoadFormat())) {
+            if (!props.containsKey("columns") && (sinkOptions.supportUpsertDelete() || DorisSinkOptions.StreamLoadFormat.CSV.equals(sinkOptions.getStreamLoadFormat()))) {
                 String cols = String.join(",", fieldNames);
                 if (cols.length() > 0 && sinkOptions.supportUpsertDelete()) {
-                    cols += String.format(",%s,%s=%s", DorisSinkOP.TMP_COLUMN_KEY, DorisSinkOP.COLUMN_KEY, DorisSinkOP.TMP_COLUMN_KEY);
+                    cols += String.format(",%s", DorisSinkOP.COLUMN_KEY);
                 }
                 httpPut.setHeader("columns", cols);
             }
