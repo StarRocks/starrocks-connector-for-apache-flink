@@ -16,6 +16,7 @@ package com.dorisdb.connector.flink.row;
 
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.data.RowData;
 
 public class DorisGenericRowTransformer<T> implements DorisIRowTransformer<T> {
     
@@ -37,9 +38,13 @@ public class DorisGenericRowTransformer<T> implements DorisIRowTransformer<T> {
     public void setRuntimeContext(RuntimeContext ctx) {}
 
     @Override
-    public Object[] transform(T record) {
-        Object[] rowData = new Object[fieldNames.length];
+    public Object[] transform(T record, boolean supportUpsertDelete) {
+        Object[] rowData = new Object[fieldNames.length + (supportUpsertDelete ? 1 : 0)];
         consumer.accept(rowData, record);
+        if (supportUpsertDelete && (record instanceof RowData)) {
+            // set `__op` column
+            rowData[rowData.length - 1] = DorisSinkOP.parse(((RowData)record).getRowKind()).ordinal();
+        }
         return rowData;
     }
     

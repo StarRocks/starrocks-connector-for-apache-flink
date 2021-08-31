@@ -22,10 +22,12 @@ import org.slf4j.LoggerFactory;
 import java.util.concurrent.TimeUnit;
 import java.io.IOException;
 import java.io.Serializable;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingDeque;
@@ -40,6 +42,7 @@ import org.apache.flink.metrics.Counter;
 import org.apache.flink.runtime.util.ExecutorThreadFactory;
 import org.apache.flink.shaded.guava18.com.google.common.collect.Lists;
 import org.apache.flink.table.api.TableColumn;
+import org.apache.flink.table.api.constraints.UniqueConstraint;
 
 import com.dorisdb.connector.flink.table.DorisSinkOptions;
 import com.dorisdb.connector.flink.table.DorisSinkSemantic;
@@ -82,7 +85,6 @@ public class DorisSinkManager implements Serializable {
         DorisJdbcConnectionOptions jdbcOptions = new DorisJdbcConnectionOptions(sinkOptions.getJdbcUrl(), sinkOptions.getUsername(), sinkOptions.getPassword());
         this.jdbcConnProvider = new DorisJdbcConnectionProvider(jdbcOptions);
         this.dorisQueryVisitor = new DorisQueryVisitor(jdbcConnProvider, sinkOptions.getDatabaseName(), sinkOptions.getTableName());
-        this.dorisStreamLoadVisitor = new DorisStreamLoadVisitor(sinkOptions, null == flinkSchema ? new String[]{} : flinkSchema.getFieldNames());
         // validate table structure
         typesMap = new HashMap<>();
         typesMap.put("bigint", Lists.newArrayList(LogicalTypeRoot.BIGINT, LogicalTypeRoot.INTEGER));
@@ -99,9 +101,8 @@ public class DorisSinkManager implements Serializable {
         typesMap.put("smallint", Lists.newArrayList(LogicalTypeRoot.SMALLINT, LogicalTypeRoot.INTEGER));
         typesMap.put("varchar", Lists.newArrayList(LogicalTypeRoot.VARCHAR));
         typesMap.put("bitmap", Lists.newArrayList(LogicalTypeRoot.VARCHAR, LogicalTypeRoot.TINYINT, LogicalTypeRoot.SMALLINT, LogicalTypeRoot.BIGINT, LogicalTypeRoot.INTEGER));
-        if (!sinkOptions.hasColumnMappingProperty() && null != flinkSchema) {
-            validateTableStructure(flinkSchema);
-        }
+        validateTableStructure(flinkSchema);
+        this.dorisStreamLoadVisitor = new DorisStreamLoadVisitor(sinkOptions, null == flinkSchema ? new String[]{} : flinkSchema.getFieldNames());
     }
 
     public void setRuntimeContext(RuntimeContext runtimeCtx) {
@@ -164,7 +165,7 @@ public class DorisSinkManager implements Serializable {
         try {
             buffer.add(record);
             batchCount++;
-            long bytes = record.getBytes().length;
+            long bytes = record.getBytes(StandardCharsets.UTF_8).length;
             batchSize += bytes;
             if (DorisSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
                 return;
@@ -292,8 +293,38 @@ public class DorisSinkManager implements Serializable {
     }
     
     private void validateTableStructure(TableSchema flinkSchema) {
+        if (null == flinkSchema) {
+            return;
+        }
+        Optional<UniqueConstraint> constraint = flinkSchema.getPrimaryKey();
         List<Map<String, Object>> rows = dorisQueryVisitor.getTableColumnsMetaData();
-        if (null == rows || flinkSchema.getFieldCount() != rows.size()) {
+        if (null == rows) {
+            throw new IllegalArgumentException("Couldn't get the sink table's column info.");
+        }
+        // validate primary keys
+        List<String> primayKeys = new ArrayList<>();
+        for (int i = 0; i < rows.size(); i++) {
+            String keysType = rows.get(i).get("COLUMN_KEY").toString();
+            if (!"PRI".equals(keysType)) {
+                continue;
+            }
+            primayKeys.add(rows.get(i).get("COLUMN_NAME").toString().toLowerCase());
+        }
+        if (!primayKeys.isEmpty()) {
+            if (!constraint.isPresent()) {
+                throw new IllegalArgumentException("Source table schema should contain primary keys.");
+            }
+            if (constraint.get().getColumns().size() != primayKeys.size() ||
+                !constraint.get().getColumns().stream().allMatch(col -> primayKeys.contains(col))) {
+                throw new IllegalArgumentException("Primary keys of the source table does not match the ones of the sink table.");
+            }
+            sinkOptions.enableUpsertDelete();
+        }
+        
+        if (sinkOptions.hasColumnMappingProperty()) {
+            return;
+        }
+        if (flinkSchema.getFieldCount() != rows.size()) {
             throw new IllegalArgumentException("Fields count mismatch.");
         }
         List<TableColumn> flinkCols = flinkSchema.getTableColumns();

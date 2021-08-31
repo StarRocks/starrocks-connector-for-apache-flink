@@ -59,10 +59,12 @@ public class DorisGenericSinkITTest extends DorisSinkBaseTest {
         List<Map<String, String>> meta = new ArrayList<>();
         meta.add(new HashMap<String, String>(){{
             put("COLUMN_NAME", "name");
+            put("COLUMN_KEY", "");
             put("DATA_TYPE", "varchar");
         }});
         meta.add(new HashMap<String, String>(){{
             put("COLUMN_NAME", "score");
+            put("COLUMN_KEY", "");
             put("DATA_TYPE", "bigint");
         }});
         new Expectations(){

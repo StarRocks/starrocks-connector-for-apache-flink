@@ -33,18 +33,22 @@ public class DorisDynamicTableSinkITTest extends DorisSinkBaseTest {
         List<Map<String, String>> meta = new ArrayList<>();
         meta.add(new HashMap<String, String>(){{
             put("COLUMN_NAME", "name");
+            put("COLUMN_KEY", "");
             put("DATA_TYPE", "varchar");
         }});
         meta.add(new HashMap<String, String>(){{
             put("COLUMN_NAME", "score");
+            put("COLUMN_KEY", "");
             put("DATA_TYPE", "bigint");
         }});
         meta.add(new HashMap<String, String>(){{
             put("COLUMN_NAME", "d");
+            put("COLUMN_KEY", "");
             put("DATA_TYPE", "date");
         }});
         meta.add(new HashMap<String, String>(){{
             put("COLUMN_NAME", "t");
+            put("COLUMN_KEY", "");
             put("DATA_TYPE", "datetime");
         }});
         new Expectations(){

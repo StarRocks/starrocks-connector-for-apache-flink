@@ -79,6 +79,7 @@ public class DorisSinkOptions implements Serializable {
     private final Map<String, String> streamLoadProps = new HashMap<>();
     private final Map<String, String> tableOptionsMap;
     private DorisSinkSemantic sinkSemantic;
+    private boolean supportUpsertDelete;
 
     public DorisSinkOptions(ReadableConfig options, Map<String, String> optionsMap) {
         this.tableOptions = options;
@@ -168,6 +169,14 @@ public class DorisSinkOptions implements Serializable {
             return StreamLoadFormat.JSON;
         }
         return StreamLoadFormat.CSV;
+    }
+
+    public void enableUpsertDelete() {
+        supportUpsertDelete = true;
+    }
+
+    public boolean supportUpsertDelete() {
+        return supportUpsertDelete;
     }
 
     private void validateStreamLoadUrl() {

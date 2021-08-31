@@ -64,6 +64,7 @@ public class DorisSinkManagerTest extends DorisSinkBaseTest {
                 v.getTableColumnsMetaData();
                 result = DORIS_TABLE_META.keySet().stream().map(k -> new HashMap<String, Object>(){{
                     put("COLUMN_NAME", k);
+                    put("COLUMN_KEY", "");
                     put("DATA_TYPE", "varchar");
                 }}).collect(Collectors.toList());;
             }

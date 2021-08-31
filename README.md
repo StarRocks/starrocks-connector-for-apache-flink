@@ -11,11 +11,11 @@
 <repositories>
     <repository>
         <id>dorisdb-maven-releases</id>
-        <url>http://username:password@nexus.dorisdb.com/repository/maven-releases/</url>
+        <url>http://dorisdbvisitor:dorisdbvisitor134@nexus.dorisdb.com/repository/maven-releases/</url>
     </repository>
     <repository>
         <id>dorisdb-maven-snapshots</id>
-        <url>http://username:password@nexus.dorisdb.com/repository/maven-snapshots/</url>
+        <url>http://dorisdbvisitor:dorisdbvisitor134@nexus.dorisdb.com/repository/maven-snapshots/</url>
     </repository>
 </repositories>
     
@@ -33,8 +33,7 @@ AND:
     
 ```
 
-
-### Start using like:
+### Start using like
 
 ```java
 
@@ -87,6 +86,8 @@ fromElements(
             .withProperty("password", "xxx")
             .withProperty("table-name", "xxx")
             .withProperty("database-name", "xxx")
+            .withProperty("sink.properties.column_separator", "\\x01")
+            .withProperty("sink.properties.row_delimiter", "\\x02")
             .build(),
         // set the slots with streamRowData
         (slots, streamRowData) -> {
@@ -119,13 +120,71 @@ tEnv.executeSql(
         "'sink.buffer-flush.max-rows' = '1000000'," +
         "'sink.buffer-flush.max-bytes' = '300000000'," +
         "'sink.buffer-flush.interval-ms' = '300000'," +
+        "'sink.properties.column_separator' = '\\x01'," +
+        "'sink.properties.row_delimiter' = '\\x02'," +
         "'sink.max-retries' = '3'" +
         "'sink.properties.*' = 'xxx'" + // stream load properties like `'sink.properties.columns' = 'k1, v1'`
     ")"
 );
-
-
 ```
+
+## Using flink-cdc as source
+
+`Note that the SQL in steps 6,7,8 could be auto-generated using the` [dorisdb-migrate-tool](http://dorisdb-release.dorisdb.com/dmt.tar.gz?Expires=1988476953&OSSAccessKeyId=LTAI4GFYjbX9e7QmFnAAvkt8&Signature=vpV727KMXTcaYqnjl0SrFadTFIk%3D).
+
+1. [Download Flink](https://flink.apache.org/downloads.html)
+
+2. [Download Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases)
+
+3. [Download Flink DorisDB connector](http://dorisdbvisitor:dorisdbvisitor134@nexus.dorisdb.com)
+
+4. Untar flink and put `flink-sql-connector-mysql-cdc-xxx.jar`, `flink-connector-doris-xxx.jar` to `flink-xxx/lib/`
+
+5. Execute `flink-xxxx/bin/sql-client.sh embedded`.
+
+6. Create source table:
+
+    ```sql
+    CREATE TABLE mysql_src (
+        name  VARCHAR,
+        score  BIGINT,
+        PRIMARY KEY (name) not enforced
+    ) WITH (
+        'connector' = 'mysql-cdc',
+        'hostname'='127.0.0.1',
+        'port'='3306',
+        'username' = 'username',
+        'password' = 'xxx',
+        'database-name' = 'xxx',
+        'table-name' = 'xxx'
+    )
+    ```
+
+7. Create sink table:
+
+    ```sql
+    CREATE TABLE dorisdb_sink (
+        name  VARCHAR,
+        score  BIGINT,
+        PRIMARY KEY (name) not enforced
+    ) WITH (
+        'connector' = 'doris',
+        'jdbc-url'='jdbc:mysql://fe_ip:query_port,fe_ip:query_port?xxxxx',
+        'load-url'='fe_ip:http_port;fe_ip:http_port',
+        'database-name' = 'xxx',
+        'table-name' = 'xxx',
+        'username' = 'xxx',
+        'password' = 'xxx',
+        'sink.properties.column_separator' = '\x01',
+        'sink.properties.row_delimiter' = '\x02'
+    )
+    ```
+
+8. Execute command to sync mysql data:
+
+    ```sql
+    INSERT INTO dorisdb_sink select * from mysql_src;
+    ```
 
 ## Sink Options
 

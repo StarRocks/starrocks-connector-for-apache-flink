@@ -52,7 +52,7 @@ public abstract class DorisSinkBaseTest {
 
     protected final int AVAILABLE_QUERY_PORT = 53328;
     protected final String JDBC_URL = "jdbc:mysql://127.0.0.1:53316,127.0.0.1:" + AVAILABLE_QUERY_PORT;
-    protected final int AVAILABLE_HTTP_PORT = 29599;
+    protected final int AVAILABLE_HTTP_PORT = 29591;
     protected final String LOAD_URL = "127.0.0.1:28591;127.0.0.1:" + AVAILABLE_HTTP_PORT;
     protected final String DATABASE = "test";
     protected final String TABLE = "test_tbl";
@@ -180,6 +180,7 @@ public abstract class DorisSinkBaseTest {
                 v.getTableColumnsMetaData();
                 result = DORIS_TABLE_META.keySet().stream().map(k -> new HashMap<String, Object>(){{
                     put("COLUMN_NAME", k);
+                    put("COLUMN_KEY", "");
                     put("DATA_TYPE", DORIS_TABLE_META.get(k).toString());
                 }}).collect(Collectors.toList());;
             }
@@ -214,8 +215,8 @@ public abstract class DorisSinkBaseTest {
 
     protected byte[] joinRows(List<String> rows, int totalBytes) throws IOException {
         if (DorisSinkOptions.StreamLoadFormat.CSV.equals(OPTIONS.getStreamLoadFormat())) {
-            ByteBuffer bos = ByteBuffer.allocate(totalBytes + rows.size());
             byte[] lineDelimiter = DorisDelimiterParser.parse(OPTIONS.getSinkStreamLoadProperties().get("row_delimiter"), "\n").getBytes(StandardCharsets.UTF_8);
+            ByteBuffer bos = ByteBuffer.allocate(totalBytes + rows.size() * lineDelimiter.length);
             for (String row : rows) {
                 bos.put(row.getBytes(StandardCharsets.UTF_8));
                 bos.put(lineDelimiter);
