@@ -1,33 +1,20 @@
-# flink-connector-doris
+# flink-connector-starrocks
 
 ## Prerequisites
 
-### Intgerate with your existing project:
+### Intgerate with your existing project
 
-- Add these to your `pom.xml`:
+- Add these to the `pom.xml`:
 
 ```xml
-
-<repositories>
-    <repository>
-        <id>dorisdb-maven-releases</id>
-        <url>http://dorisdbvisitor:dorisdbvisitor134@nexus.dorisdb.com/repository/maven-releases/</url>
-    </repository>
-    <repository>
-        <id>dorisdb-maven-snapshots</id>
-        <url>http://dorisdbvisitor:dorisdbvisitor134@nexus.dorisdb.com/repository/maven-snapshots/</url>
-    </repository>
-</repositories>
-    
-```
 
 AND:
 
 ```xml
 
 <dependency>
-    <groupId>com.dorisdb.connector</groupId>
-    <artifactId>flink-connector-doris</artifactId>
+    <groupId>com.starrocks.connector</groupId>
+    <artifactId>flink-connector-starrocks</artifactId>
     <version></version>
 </dependency>
     
@@ -42,9 +29,9 @@ fromElements(new String[]{
     "{\"score\": \"99\", \"name\": \"stephen\"}",
     "{\"score\": \"100\", \"name\": \"lebron\"}"
 }).addSink(
-    DorisSink.sink(
+    StarRocksSink.sink(
         // the sink options
-        DorisSinkOptions.builder()
+        StarRocksSinkOptions.builder()
             .withProperty("jdbc-url", "jdbc:mysql://ip:port,ip:port?xxxxx")
             .withProperty("load-url", "ip:port;ip:port")
             .withProperty("username", "xxx")
@@ -72,14 +59,14 @@ fromElements(
         new RowData(100, "lebron")
     }
 ).addSink(
-    DorisSink.sink(
+    StarRocksSink.sink(
         // the table structure
         TableSchema.builder()
             .field("score", DataTypes.INT())
             .field("name", DataTypes.VARCHAR(20))
             .build(),
         // the sink options
-        DorisSinkOptions.builder()
+        StarRocksSinkOptions.builder()
             .withProperty("jdbc-url", "jdbc:mysql://ip:port,ip:port?xxxxx")
             .withProperty("load-url", "ip:port;ip:port")
             .withProperty("username", "xxx")
@@ -104,13 +91,13 @@ fromElements(
 ```java
 
 // create a table with `structure` and `properties`
-// Needed: Add `com.dorisdb.connector.flink.table.DorisDynamicTableSinkFactory` to: `src/main/resources/META-INF/services/org.apache.flink.table.factories.Factory`
+// Needed: Add `com.starrocks.connector.flink.table.StarRocksDynamicTableSinkFactory` to: `src/main/resources/META-INF/services/org.apache.flink.table.factories.Factory`
 tEnv.executeSql(
     "CREATE TABLE USER_RESULT(" +
         "name VARCHAR," +
         "score BIGINT" +
     ") WITH ( " +
-        "'connector' = 'doris'," +
+        "'connector' = 'starrocks'," +
         "'jdbc-url'='jdbc:mysql://ip:port,ip:port?xxxxx'," +
         "'load-url'='ip:port;ip:port'," +
         "'database-name' = 'xxx'," +
@@ -130,15 +117,15 @@ tEnv.executeSql(
 
 ## Using flink-cdc as source
 
-`Note that the SQL in steps 6,7,8 could be auto-generated using the` [dorisdb-migrate-tool](http://dorisdb-release.dorisdb.com/dmt.tar.gz?Expires=1988476953&OSSAccessKeyId=LTAI4GFYjbX9e7QmFnAAvkt8&Signature=vpV727KMXTcaYqnjl0SrFadTFIk%3D).
+`Note that the SQL in steps 6,7,8 could be auto-generated using the` [starrocks-migrate-tool](http://dorisdb-release.dorisdb.com/dmt.tar.gz?Expires=1988476953&OSSAccessKeyId=LTAI4GFYjbX9e7QmFnAAvkt8&Signature=vpV727KMXTcaYqnjl0SrFadTFIk%3D).
 
 1. [Download Flink](https://flink.apache.org/downloads.html)
 
 2. [Download Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases)
 
-3. [Download Flink DorisDB connector](http://dorisdbvisitor:dorisdbvisitor134@nexus.dorisdb.com)
+3. [Download Flink StarRocks connector](http://dorisdbvisitor:dorisdbvisitor134@nexus.dorisdb.com)
 
-4. Untar flink and put `flink-sql-connector-mysql-cdc-xxx.jar`, `flink-connector-doris-xxx.jar` to `flink-xxx/lib/`
+4. Untar flink and put `flink-sql-connector-mysql-cdc-xxx.jar`, `flink-connector-starrocks-xxx.jar` to `flink-xxx/lib/`
 
 5. Execute `flink-xxxx/bin/sql-client.sh embedded`.
 
@@ -163,12 +150,12 @@ tEnv.executeSql(
 7. Create sink table:
 
     ```sql
-    CREATE TABLE dorisdb_sink (
+    CREATE TABLE starrocks_sink (
         name  VARCHAR,
         score  BIGINT,
         PRIMARY KEY (name) not enforced
     ) WITH (
-        'connector' = 'doris',
+        'connector' = 'starrocks',
         'jdbc-url'='jdbc:mysql://fe_ip:query_port,fe_ip:query_port?xxxxx',
         'load-url'='fe_ip:http_port;fe_ip:http_port',
         'database-name' = 'xxx',
@@ -183,20 +170,20 @@ tEnv.executeSql(
 8. Execute command to sync mysql data:
 
     ```sql
-    INSERT INTO dorisdb_sink select * from mysql_src;
+    INSERT INTO starrocks_sink select * from mysql_src;
     ```
 
 ## Sink Options
 
 | Option | Required | Default | Type | Description |
 |  :-:  | :-:  | :-:  | :-:  | :-:  |
-| connector | YES | NONE | String |`doris`|
-| jdbc-url | YES | NONE | String | this will be used to execute queries in doris. |
+| connector | YES | NONE | String |`starrocks`|
+| jdbc-url | YES | NONE | String | this will be used to execute queries in starrocks. |
 | load-url | YES | NONE | String | `fe_ip:http_port;fe_ip:http_port` separated with `;`, which would be used to do the batch sinking. |
-| database-name | YES | NONE | String | doris database name |
-| table-name | YES | NONE | String | doris table name |
-| username | YES | NONE | String | doris connecting username |
-| password | YES | NONE | String | doris connecting password |
+| database-name | YES | NONE | String | starrocks database name |
+| table-name | YES | NONE | String | starrocks table name |
+| username | YES | NONE | String | starrocks connecting username |
+| password | YES | NONE | String | starrocks connecting password |
 | sink.semantic | NO | `at-least-once` | String | `at-least-once` or `exactly-once`(`flush at checkpoint only` and options like `sink.buffer-flush.*` won't work either). |
 | sink.buffer-flush.max-bytes | NO | 94371840(90M) | String | the max batching size of the serialized data, range: `[64MB, 10GB]`. |
 | sink.buffer-flush.max-rows | NO | 500000 | String | the max batching rows, range: `[64,000, 5000,000]`. |
