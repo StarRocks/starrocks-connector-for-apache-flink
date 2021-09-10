@@ -41,7 +41,7 @@ public class StarRocksDynamicTableSink implements DynamicTableSink {
     @Override
     @SuppressWarnings("unchecked")
     public SinkRuntimeProvider getSinkRuntimeProvider(Context context) {
-        final TypeInformation<RowData> rowDataTypeInfo = (TypeInformation<RowData>)context.createTypeInformation(flinkSchema.toRowDataType());
+        final TypeInformation<RowData> rowDataTypeInfo = context.createTypeInformation(flinkSchema.toRowDataType());
         StarRocksDynamicSinkFunction<RowData> starrocksSinkFunction = new StarRocksDynamicSinkFunction<>(
             sinkOptions,
             flinkSchema,

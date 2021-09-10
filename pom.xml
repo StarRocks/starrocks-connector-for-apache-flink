@@ -18,14 +18,14 @@ limitations under the License.
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.starrocks.connector</groupId>
     <artifactId>flink-connector-starrocks</artifactId>
-    <version>1.1.0_flink-1.11</version>
+    <version>1.1.0_flink-1.13</version>
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven-enforcer-plugin.version>3.0.0-M3</maven-enforcer-plugin.version>
         <maven-surefire-plugin.version>3.0.0-M4</maven-surefire-plugin.version>
-        <flink.version>1.11.0</flink.version>
+        <flink.version>1.13.0</flink.version>
         <scala.version>2.11</scala.version>
     </properties>
     <dependencies>
