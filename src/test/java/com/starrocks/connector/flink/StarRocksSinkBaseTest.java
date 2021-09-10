@@ -88,7 +88,8 @@ public abstract class StarRocksSinkBaseTest {
             .withProperty("sink.buffer-flush.interval-ms", SINK_MAX_INTERVAL)
             .withProperty("sink.buffer-flush.max-bytes", SINK_MAX_BYTES)
             .withProperty("sink.buffer-flush.max-rows", SINK_MAX_ROWS)
-            .withProperty("sink.max-retries", SINK_MAX_RETRIES);
+            .withProperty("sink.max-retries", SINK_MAX_RETRIES)
+            .withProperty("sink.connect.timeout-ms", "2000");
         SINK_PROPS.keySet().stream().forEach(k -> builder.withProperty("sink.properties." + k, SINK_PROPS.get(k)));
         OPTIONS = builder.build();
         OPTIONS_BUILDER = builder;

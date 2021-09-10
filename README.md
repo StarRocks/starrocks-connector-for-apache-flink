@@ -15,7 +15,10 @@ AND:
 <dependency>
     <groupId>com.starrocks.connector</groupId>
     <artifactId>flink-connector-starrocks</artifactId>
-    <version></version>
+    <!-- for flink-1.11, flink-1.12 -->
+    <version>1.1.0_flink-1.11</version>
+    <!-- for flink-1.13 -->
+    <version>1.1.0_flink-1.13</version>
 </dependency>
     
 ```
@@ -86,7 +89,7 @@ fromElements(
 
 ```
 
-**OR**
+### OR
 
 ```java
 
@@ -114,64 +117,6 @@ tEnv.executeSql(
     ")"
 );
 ```
-
-## Using flink-cdc as source
-
-`Note that the SQL in steps 6,7,8 could be auto-generated using the` [starrocks-migrate-tool](http://dorisdb-release.dorisdb.com/dmt.tar.gz?Expires=1988476953&OSSAccessKeyId=LTAI4GFYjbX9e7QmFnAAvkt8&Signature=vpV727KMXTcaYqnjl0SrFadTFIk%3D).
-
-1. [Download Flink](https://flink.apache.org/downloads.html)
-
-2. [Download Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases)
-
-3. [Download Flink StarRocks connector](http://dorisdbvisitor:dorisdbvisitor134@nexus.dorisdb.com)
-
-4. Untar flink and put `flink-sql-connector-mysql-cdc-xxx.jar`, `flink-connector-starrocks-xxx.jar` to `flink-xxx/lib/`
-
-5. Execute `flink-xxxx/bin/sql-client.sh embedded`.
-
-6. Create source table:
-
-    ```sql
-    CREATE TABLE mysql_src (
-        name  VARCHAR,
-        score  BIGINT,
-        PRIMARY KEY (name) not enforced
-    ) WITH (
-        'connector' = 'mysql-cdc',
-        'hostname'='127.0.0.1',
-        'port'='3306',
-        'username' = 'username',
-        'password' = 'xxx',
-        'database-name' = 'xxx',
-        'table-name' = 'xxx'
-    )
-    ```
-
-7. Create sink table:
-
-    ```sql
-    CREATE TABLE starrocks_sink (
-        name  VARCHAR,
-        score  BIGINT,
-        PRIMARY KEY (name) not enforced
-    ) WITH (
-        'connector' = 'starrocks',
-        'jdbc-url'='jdbc:mysql://fe_ip:query_port,fe_ip:query_port?xxxxx',
-        'load-url'='fe_ip:http_port;fe_ip:http_port',
-        'database-name' = 'xxx',
-        'table-name' = 'xxx',
-        'username' = 'xxx',
-        'password' = 'xxx',
-        'sink.properties.column_separator' = '\x01',
-        'sink.properties.row_delimiter' = '\x02'
-    )
-    ```
-
-8. Execute command to sync mysql data:
-
-    ```sql
-    INSERT INTO starrocks_sink select * from mysql_src;
-    ```
 
 ## Sink Options
 
