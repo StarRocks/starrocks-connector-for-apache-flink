@@ -4,16 +4,11 @@
 
 ### Intgerate with your existing project
 
-- Add these to the `pom.xml`:
-
-```xml
-
-AND:
 
 ```xml
 
 <dependency>
-    <groupId>com.starrocks.connector</groupId>
+    <groupId>com.starrocks</groupId>
     <artifactId>flink-connector-starrocks</artifactId>
     <!-- for flink-1.11, flink-1.12 -->
     <version>1.1.0_flink-1.11</version>
