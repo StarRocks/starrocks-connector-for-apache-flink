@@ -4,10 +4,6 @@
 
 ### Intgerate with your existing project
 
-
-```xml
-
-
 ```xml
 
 <dependency>
