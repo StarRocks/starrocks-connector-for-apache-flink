@@ -43,7 +43,7 @@ limitations under the License.
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.starrocks</groupId>
     <artifactId>flink-connector-starrocks</artifactId>
-    <version>1.1.0_flink-1.11</version>
+    <version>1.1.1_flink-1.11</version>
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
@@ -137,12 +137,6 @@ limitations under the License.
             <artifactId>junit</artifactId>
             <version>4.12</version>
             <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.alibaba.ververica</groupId>
-            <!-- add the dependency matching your database -->
-            <artifactId>flink-connector-mysql-cdc</artifactId>
-            <version>1.2-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>org.apache.flink</groupId>
