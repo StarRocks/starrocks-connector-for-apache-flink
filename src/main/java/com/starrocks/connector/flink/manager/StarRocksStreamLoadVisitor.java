@@ -84,7 +84,7 @@ public class StarRocksStreamLoadVisitor implements Serializable {
         }
         if (loadResult.get(keyStatus).equals("Fail")) {
             LOG.error(String.format("Stream Load response: \n%s\n", JSON.toJSONString(loadResult)));
-            throw new StarRocksStreamLoadFailedException(String.format("Failed to flush data to StarRocks.\sError response:%s", JSON.toJSONString(loadResult)), loadResult);
+            throw new StarRocksStreamLoadFailedException(String.format("Failed to flush data to StarRocks, Error response: \n%s\n", JSON.toJSONString(loadResult)), loadResult);
         }
     }
 
