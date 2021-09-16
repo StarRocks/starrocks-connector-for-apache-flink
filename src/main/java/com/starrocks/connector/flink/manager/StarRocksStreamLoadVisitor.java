@@ -77,14 +77,14 @@ public class StarRocksStreamLoadVisitor implements Serializable {
         Map<String, Object> loadResult = doHttpPut(loadUrl, labeledRows.f0, joinRows(labeledRows.f2, labeledRows.f1.intValue()));
         final String keyStatus = "Status";
         if (null == loadResult || !loadResult.containsKey(keyStatus)) {
-            throw new IOException("Unable to flush data to StarRocks: unknown result status.");
+            throw new IOException("Unable to flush data to StarRocks: unknown result status, usually caused by authentication or permission related problems.");
         }
         if (LOG.isDebugEnabled()) {
             LOG.debug(String.format("Stream Load response: \n%s\n", JSON.toJSONString(loadResult)));
         }
         if (loadResult.get(keyStatus).equals("Fail")) {
             LOG.error(String.format("Stream Load response: \n%s\n", JSON.toJSONString(loadResult)));
-            throw new StarRocksStreamLoadFailedException("Failed to flush data to StarRocks.", loadResult);
+            throw new StarRocksStreamLoadFailedException(String.format("Failed to flush data to StarRocks.\sError response:%s", JSON.toJSONString(loadResult)), loadResult);
         }
     }
 
