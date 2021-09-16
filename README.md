@@ -131,3 +131,7 @@ tEnv.executeSql(
 | sink.max-retries | NO | 1 | String | max retry times of the stream load request, range: `[0, 10]`. |
 | sink.connect.timeout-ms | NO | 1000 | String | Timeout in millisecond for connecting to the `load-url`, range: `[100, 60000]`. |
 | sink.properties.* | NO | NONE | String | the stream load properties like `'sink.properties.columns' = 'k1, v1'`. |
+
+### Notes
+
+`Flush` was triggered(`at-least-once`) when: `cachedRows >= ${sink.buffer-flush.max-rows} || cachedBytes >= ${sink.buffer-flush.max-bytes} || idleTime >= ${sink.buffer-flush.interval-ms}`
