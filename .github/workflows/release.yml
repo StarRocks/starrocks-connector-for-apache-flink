@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - run: git checkout main
+      - name: Pacakge main
+        uses: xlui/action-maven-cli@jdk8
+        with:
+          lifecycle: 'clean validate package -Dmaven.test.skip=true'
+      - id: p1
+        run: find target/ -name "flink-connector*.jar" | grep -i "[0-9].jar" | xargs -i cp {} ./ && echo ::set-output name=jar::$(ls -t flink-connector*.jar | head -n 1)
+      - run: git checkout main_flink-1.11
+      - name: Pacakge main_flink-1.11
+        uses: xlui/action-maven-cli@jdk8
+        with:
+          lifecycle: 'clean validate package -Dmaven.test.skip=true'
+      - id: p2
+        run: find target/ -name "flink-connector*.jar" | grep -i "[0-9].jar" | xargs -i cp {} ./ && echo ::set-output name=jar::$(ls -t flink-connector*.jar | head -n 1)
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ${{ steps.p1.outputs.jar }}
+            ${{ steps.p2.outputs.jar }}

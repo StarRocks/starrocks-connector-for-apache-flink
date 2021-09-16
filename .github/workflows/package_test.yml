@@ -1,0 +1,15 @@
+name: Package Test
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - run: git checkout main
+      - name: Pacakge Test
+        uses: xlui/action-maven-cli@jdk8
+        with:
+          lifecycle: 'clean validate package'
