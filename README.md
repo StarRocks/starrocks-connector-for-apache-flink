@@ -10,9 +10,9 @@
     <groupId>com.starrocks</groupId>
     <artifactId>flink-connector-starrocks</artifactId>
     <!-- for flink-1.11, flink-1.12 -->
-    <version>1.1.0_flink-1.11</version>
+    <version>1.1.1_flink-1.11</version>
     <!-- for flink-1.13 -->
-    <version>1.1.0_flink-1.13</version>
+    <version>1.1.1_flink-1.13</version>
 </dependency>
     
 ```
