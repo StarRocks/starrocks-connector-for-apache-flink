@@ -30,23 +30,20 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.starrocks.connector.flink.StarRocksSink;
-import com.starrocks.connector.flink.table.StarRocksSinkSemantic;
+class TestEntry implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
+    public Integer score;
+    public String name;
+
+    public TestEntry(Integer score, String name) {
+        this.score = score;
+        this.name = name;
+    }
+}
 
 public class StarRocksGenericSinkITTest extends StarRocksSinkBaseTest {
-
-    class TestEntry implements Serializable {
-
-        private static final long serialVersionUID = 1L;
-
-        public Integer score;
-        public String name;
-
-        public TestEntry(Integer score, String name) {
-            this.score = score;
-            this.name = name;
-        }
-    }
 
     private final TestEntry[] TEST_DATA = {
         new TestEntry(99, "paul"),
