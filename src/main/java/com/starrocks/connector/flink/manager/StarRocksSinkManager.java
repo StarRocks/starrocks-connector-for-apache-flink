@@ -60,7 +60,7 @@ public class StarRocksSinkManager implements Serializable {
     private final StarRocksStreamLoadVisitor starrocksStreamLoadVisitor;
     private final StarRocksSinkOptions sinkOptions;
     private final Map<String, List<LogicalTypeRoot>> typesMap;
-    private final LinkedBlockingDeque<Tuple3<String, Long, ArrayList<String>>> flushQueue = new LinkedBlockingDeque<>(1);
+    private final LinkedBlockingDeque<Tuple3<String, Long, ArrayList<byte[]>>> flushQueue = new LinkedBlockingDeque<>(1);
 
     private transient Counter totalFlushBytes;
     private transient Counter totalFlushRows;
@@ -71,7 +71,7 @@ public class StarRocksSinkManager implements Serializable {
     private static final String COUNTER_TOTAL_FLUSH_COST_TIME_WITHOUT_RETRIES = "totalFlushTimeNsWithoutRetries";
     private static final String COUNTER_TOTAL_FLUSH_COST_TIME = "totalFlushTimeNs";
 
-    private final ArrayList<String> buffer = new ArrayList<>();
+    private final ArrayList<byte[]> buffer = new ArrayList<>();
     private int batchCount = 0;
     private long batchSize = 0;
     private volatile boolean closed = false;
@@ -163,9 +163,10 @@ public class StarRocksSinkManager implements Serializable {
     public final synchronized void writeRecord(String record) throws IOException {
         checkFlushException();
         try {
-            buffer.add(record);
+            byte[] bts = record.getBytes();
+            buffer.add(bts);
             batchCount++;
-            long bytes = record.getBytes(StandardCharsets.UTF_8).length;
+            long bytes = bts.length;
             batchSize += bytes;
             if (StarRocksSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
                 return;
@@ -221,19 +222,19 @@ public class StarRocksSinkManager implements Serializable {
         return UUID.randomUUID().toString();
     }
 
-    public List<String> getBufferedBatchList() {
+    public List<byte[]> getBufferedBatchList() {
         return buffer;
     }
 
-    public void setBufferedBatchList(List<String> list) throws IOException {
+    public void setBufferedBatchList(List<byte[]> list) throws IOException {
         if (!StarRocksSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
             return;
         }
         this.buffer.clear();
         batchCount = 0;
         batchSize = 0;
-        for (String row : list) {
-            writeRecord(row);
+        for (byte[] row : list) {
+            writeRecord(new String(row, StandardCharsets.UTF_8));
         }
     }
 
@@ -245,7 +246,7 @@ public class StarRocksSinkManager implements Serializable {
     }
 
     private void asyncFlush() throws Exception {
-        Tuple3<String, Long, ArrayList<String>> flushData = flushQueue.take();
+        Tuple3<String, Long, ArrayList<byte[]>> flushData = flushQueue.take();
         if (Strings.isNullOrEmpty(flushData.f0)) {
             return;
         }

@@ -21,6 +21,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -28,8 +29,6 @@ import java.util.stream.Collectors;
 
 import com.alibaba.fastjson.JSON;
 import com.starrocks.connector.flink.StarRocksSinkBaseTest;
-import com.starrocks.connector.flink.row.StarRocksISerializer;
-import com.starrocks.connector.flink.row.StarRocksSerializerFactory;
 
 
 public class StarRocksJsonSerializerTest extends StarRocksSinkBaseTest {
@@ -42,10 +41,10 @@ public class StarRocksJsonSerializerTest extends StarRocksSinkBaseTest {
             new Object[]{1,"222",333.1,true,"1dsasd","ppp","2020-01-01"},
             new Object[]{2,"333",444.2,false,"1dsasd","ppp","2020-01-01"}
         );
-        List<String> rows = originRows.stream()
-            .map(vals -> serializer.serialize(vals))
+        List<byte[]> rows = originRows.stream()
+            .map(vals -> serializer.serialize(vals).getBytes(StandardCharsets.UTF_8))
             .collect(Collectors.toList());
-        String result = new String(joinRows(rows, rows.stream().collect(Collectors.summingInt(r -> r.getBytes().length))));
+        String result = new String(joinRows(rows, rows.stream().collect(Collectors.summingInt(r -> r.length))));
 
         List<Map<String, Object>> rMapList = (List<Map<String, Object>>)JSON.parse(result);
         assertEquals(rMapList.size(), originRows.size());

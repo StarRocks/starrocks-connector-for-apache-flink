@@ -40,7 +40,7 @@ public class StarRocksStreamLoadVisitorTest extends StarRocksSinkBaseTest {
         // test failed
         String exMsg = "";
         try {
-            visitor.doStreamLoad(new Tuple3<>(mockFailedResponse(), (long)"aaaa".getBytes().length, Lists.newArrayList("aaaa")));
+            visitor.doStreamLoad(new Tuple3<>(mockFailedResponse(), (long)"aaaa".getBytes().length, Lists.newArrayList("aaaa".getBytes())));
         } catch (Exception e) {
             exMsg = e.getLocalizedMessage();
         }
@@ -53,7 +53,7 @@ public class StarRocksStreamLoadVisitorTest extends StarRocksSinkBaseTest {
         // test failed
         String exMsg = "";
         try {
-            visitor.doStreamLoad(new Tuple3<>(mockFailedResponse(), (long)"aaaa".getBytes().length, Lists.newArrayList("aaaa")));
+            visitor.doStreamLoad(new Tuple3<>(mockFailedResponse(), (long)"aaaa".getBytes().length, Lists.newArrayList("aaaa".getBytes())));
         } catch (Exception e) {
             exMsg = e.getMessage();
         }
@@ -61,7 +61,7 @@ public class StarRocksStreamLoadVisitorTest extends StarRocksSinkBaseTest {
         // test suucess
         exMsg = "";
         try {
-            visitor.doStreamLoad(new Tuple3<>(mockSuccessResponse(), (long)"aaaa".getBytes().length, Lists.newArrayList("aaaa")));
+            visitor.doStreamLoad(new Tuple3<>(mockSuccessResponse(), (long)"aaaa".getBytes().length, Lists.newArrayList("aaaa".getBytes())));
         } catch (Exception e) {
             exMsg = e.getLocalizedMessage();
         }
