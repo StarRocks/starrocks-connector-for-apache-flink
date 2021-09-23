@@ -61,7 +61,7 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
     private static final String COUNTER_INVOKE_ROWS = "totalInvokeRows";
 
     // state only works with `StarRocksSinkSemantic.EXACTLY_ONCE`
-    private transient ListState<Tuple2<String, List<String>>> checkpointedState;
+    private transient ListState<Tuple2<String, List<byte[]>>> checkpointedState;
  
     public StarRocksDynamicSinkFunction(StarRocksSinkOptions sinkOptions, TableSchema schema, StarRocksIRowTransformer<T> rowTransformer) {
         this.sinkManager = new StarRocksSinkManager(sinkOptions, schema);
@@ -94,7 +94,7 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
         long start = System.nanoTime();
         if (StarRocksSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
             // flush the batch saved at last checkpoint state first    
-            for (Tuple2<String, List<String>> state : checkpointedState.get()) {
+            for (Tuple2<String, List<byte[]>> state : checkpointedState.get()) {
                 sinkManager.setBufferedBatchList(state.f1);
                 sinkManager.flush(state.f0, true);
             }
@@ -150,10 +150,10 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
         if (!StarRocksSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
             return;
         }
-        ListStateDescriptor<Tuple2<String, List<String>>> descriptor =
+        ListStateDescriptor<Tuple2<String, List<byte[]>>> descriptor =
             new ListStateDescriptor<>(
                 "buffered-rows",
-                TypeInformation.of(new TypeHint<Tuple2<String, List<String>>>(){})
+                TypeInformation.of(new TypeHint<Tuple2<String, List<byte[]>>>(){})
             );
         checkpointedState = context.getOperatorStateStore().getListState(descriptor);
     }

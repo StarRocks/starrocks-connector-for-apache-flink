@@ -61,7 +61,7 @@ public class StarRocksStreamLoadVisitor implements Serializable {
         this.sinkOptions = sinkOptions;
     }
 
-    public void doStreamLoad(Tuple3<String, Long, ArrayList<String>> labeledRows) throws IOException {
+    public void doStreamLoad(Tuple3<String, Long, ArrayList<byte[]>> labeledRows) throws IOException {
         String host = getAvailableHost();
         if (null == host) {
             throw new IOException("None of the hosts in `load_url` could be connected.");
@@ -116,12 +116,12 @@ public class StarRocksStreamLoadVisitor implements Serializable {
         }
     }
 
-    private byte[] joinRows(List<String> rows, int totalBytes) throws IOException {
+    private byte[] joinRows(List<byte[]> rows, int totalBytes) throws IOException {
         if (StarRocksSinkOptions.StreamLoadFormat.CSV.equals(sinkOptions.getStreamLoadFormat())) {
             byte[] lineDelimiter = StarRocksDelimiterParser.parse(sinkOptions.getSinkStreamLoadProperties().get("row_delimiter"), "\n").getBytes(StandardCharsets.UTF_8);
             ByteBuffer bos = ByteBuffer.allocate(totalBytes + rows.size() * lineDelimiter.length);
-            for (String row : rows) {
-                bos.put(row.getBytes(StandardCharsets.UTF_8));
+            for (byte[] row : rows) {
+                bos.put(row);
                 bos.put(lineDelimiter);
             }
             return bos.array();
@@ -132,11 +132,11 @@ public class StarRocksStreamLoadVisitor implements Serializable {
             bos.put("[".getBytes(StandardCharsets.UTF_8));
             byte[] jsonDelimiter = ",".getBytes(StandardCharsets.UTF_8);
             boolean isFirstElement = true;
-            for (String row : rows) {
+            for (byte[] row : rows) {
                 if (!isFirstElement) {
                     bos.put(jsonDelimiter);
                 }
-                bos.put(row.getBytes(StandardCharsets.UTF_8));
+                bos.put(row);
                 isFirstElement = false;
             }
             bos.put("]".getBytes(StandardCharsets.UTF_8));

@@ -19,13 +19,12 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
 import com.starrocks.connector.flink.StarRocksSinkBaseTest;
-import com.starrocks.connector.flink.row.StarRocksISerializer;
-import com.starrocks.connector.flink.row.StarRocksSerializerFactory;
 
 
 public class StarRocksCsvSerializerTest extends StarRocksSinkBaseTest {
@@ -37,10 +36,10 @@ public class StarRocksCsvSerializerTest extends StarRocksSinkBaseTest {
             new Object[]{1,"222",333.1,true},
             new Object[]{2,"333",444.2,false}
         );
-        List<String> rows = originRows.stream()
-            .map(vals -> serializer.serialize(vals))
+        List<byte[]> rows = originRows.stream()
+            .map(vals -> serializer.serialize(vals).getBytes(StandardCharsets.UTF_8))
             .collect(Collectors.toList());
-        String data = new String(joinRows(rows, rows.stream().collect(Collectors.summingInt(r -> r.getBytes().length))));
+        String data = new String(joinRows(rows, rows.stream().collect(Collectors.summingInt(r -> r.length))));
         String[] parsedRows = data.split("\n");
         assertEquals(rows.size(), parsedRows.length);
 
@@ -60,10 +59,10 @@ public class StarRocksCsvSerializerTest extends StarRocksSinkBaseTest {
             new Object[]{1,"222",333.1,true},
             new Object[]{2,"333",444.2,false}
         );
-        List<String> rows = originRows.stream()
-            .map(vals -> serializer.serialize(vals))
+        List<byte[]> rows = originRows.stream()
+            .map(vals -> serializer.serialize(vals).getBytes(StandardCharsets.UTF_8))
             .collect(Collectors.toList());
-        String data = new String(joinRows(rows, rows.stream().collect(Collectors.summingInt(r -> r.getBytes().length))));
+        String data = new String(joinRows(rows, rows.stream().collect(Collectors.summingInt(r -> r.length))));
         String[] parsedRows = data.split("\n");
         assertEquals(rows.size(), parsedRows.length);
 
@@ -83,10 +82,10 @@ public class StarRocksCsvSerializerTest extends StarRocksSinkBaseTest {
             new Object[]{1,"222",333.1,true},
             new Object[]{2,"333",444.2,false}
         );
-        List<String> rows = originRows.stream()
-            .map(vals -> serializer.serialize(vals))
+        List<byte[]> rows = originRows.stream()
+            .map(vals -> serializer.serialize(vals).getBytes(StandardCharsets.UTF_8))
             .collect(Collectors.toList());
-        String data = new String(joinRows(rows, rows.stream().collect(Collectors.summingInt(r -> r.getBytes().length))));
+        String data = new String(joinRows(rows, rows.stream().collect(Collectors.summingInt(r -> r.length))));
         String[] parsedRows = data.split(delimiter);
         assertEquals(rows.size(), parsedRows.length);
     }
