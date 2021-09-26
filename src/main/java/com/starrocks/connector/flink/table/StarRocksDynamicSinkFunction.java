@@ -93,7 +93,7 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
     public synchronized void invoke(T value, Context context) throws Exception {
         long start = System.nanoTime();
         if (StarRocksSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
-            // flush the batch saved at last checkpoint state first    
+            // flush the batch saved at last checkpoint
             for (Tuple2<String, List<byte[]>> state : checkpointedState.get()) {
                 sinkManager.setBufferedBatchList(state.f1);
                 sinkManager.flush(state.f0, true);
