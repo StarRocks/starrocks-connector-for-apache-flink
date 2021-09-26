@@ -166,8 +166,7 @@ public class StarRocksSinkManager implements Serializable {
             byte[] bts = record.getBytes();
             buffer.add(bts);
             batchCount++;
-            long bytes = bts.length;
-            batchSize += bytes;
+            batchSize += bts.length;
             if (StarRocksSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
                 return;
             }
