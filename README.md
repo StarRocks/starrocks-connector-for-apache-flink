@@ -4,19 +4,18 @@
 
 ### Intgerate with your existing project
 
-
 ```xml
-
 <dependency>
     <groupId>com.starrocks</groupId>
     <artifactId>flink-connector-starrocks</artifactId>
     <!-- for flink-1.11, flink-1.12 -->
-    <version>1.1.1_flink-1.11</version>
+    <version>x.x.x_flink-1.11</version>
     <!-- for flink-1.13 -->
-    <version>1.1.1_flink-1.13</version>
+    <version>x.x.x_flink-1.13</version>
 </dependency>
-    
 ```
+
+Click [here](https://search.maven.org/search?q=g:com.starrocks) to get the latest version.
 
 ### Start using like
 
