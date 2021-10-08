@@ -101,6 +101,13 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
                 final int decimalPrecision = ((DecimalType) type).getPrecision();
                 final int decimalScale = ((DecimalType) type).getScale();
                 return record.getDecimal(pos, decimalPrecision, decimalScale).toBigDecimal();
+            case BINARY:
+                final byte[] bts = record.getBinary(pos);
+                long value = 0;
+                for (int i = 0; i < bts.length; i++) {
+                    value += (bts[i] & 0xffL) << (8 * i);
+                }
+                return value;
             default:
                 throw new UnsupportedOperationException("Unsupported type:" + type);
         }
