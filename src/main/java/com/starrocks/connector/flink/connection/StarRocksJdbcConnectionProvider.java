@@ -44,9 +44,13 @@ public class StarRocksJdbcConnectionProvider implements StarRocksJdbcConnectionI
         if (connection == null) {
             synchronized (this) {
                 if (connection == null) {
-                    Class.forName(jdbcOptions.getDriverName());
+                    try {
+                        Class.forName(jdbcOptions.getCjDriverName());
+                    } catch (ClassNotFoundException ex) {
+                        Class.forName(jdbcOptions.getDriverName());
+                    }
                     if (jdbcOptions.getUsername().isPresent()) {
-                        connection = DriverManager.getConnection(jdbcOptions.getDbURL(), jdbcOptions.getUsername().get(), jdbcOptions.getPassword().orElse(null));
+                        connection = DriverManager.getConnection(jdbcOptions.getDbURL(), jdbcOptions.getUsername().orElse(null), jdbcOptions.getPassword().orElse(null));
                     } else {
                         connection = DriverManager.getConnection(jdbcOptions.getDbURL());
                     }
