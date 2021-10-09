@@ -16,7 +16,6 @@ package com.starrocks.connector.flink;
 
 import static org.junit.Assert.assertEquals;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -149,22 +148,6 @@ public abstract class StarRocksSinkBaseTest {
                 
             }
         }).start();
-    }
-
-    @Test
-    public void testSinkCommonProperties() {
-    
-        assertEquals(JDBC_URL, OPTIONS.getJdbcUrl());
-        assertEquals(DATABASE, OPTIONS.getDatabaseName());
-        assertEquals(TABLE, OPTIONS.getTableName());
-        assertEquals(Long.parseLong(SINK_MAX_INTERVAL), OPTIONS.getSinkMaxFlushInterval());
-        assertEquals(Long.parseLong(SINK_MAX_BYTES), OPTIONS.getSinkMaxBytes());
-        assertEquals(Long.parseLong(SINK_MAX_RETRIES), OPTIONS.getSinkMaxRetries());
-        assertEquals(Long.parseLong(SINK_MAX_ROWS), OPTIONS.getSinkMaxRows());
-
-        assertEquals(LOAD_URL.split(";").length, OPTIONS.getLoadUrlList().size());
-        assertEquals(SINK_SEMANTIC, OPTIONS.getSemantic());
-        assertEquals(SINK_PROPS.size(), OPTIONS.getSinkStreamLoadProperties().size());
     }
 
     @After
