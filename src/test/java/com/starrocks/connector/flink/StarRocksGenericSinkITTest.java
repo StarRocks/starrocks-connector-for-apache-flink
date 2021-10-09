@@ -22,6 +22,7 @@ import org.junit.Test;
 
 import mockit.Expectations;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 
 import java.io.Serializable;
@@ -133,53 +134,17 @@ public class StarRocksGenericSinkITTest extends StarRocksSinkBaseTest {
     }
 
     @Test
-    public void testCheckPoint() {
-        // List<Map<String, String>> meta = new ArrayList<>();
-        // meta.add(new HashMap<String, String>(){{
-        //     put("COLUMN_NAME", "name");
-        //     put("COLUMN_KEY", "");
-        //     put("DATA_TYPE", "varchar");
-        // }});
-        // meta.add(new HashMap<String, String>(){{
-        //     put("COLUMN_NAME", "score");
-        //     put("COLUMN_KEY", "");
-        //     put("DATA_TYPE", "bigint");
-        // }});
-        // new Expectations(){
-        //     {
-        //         v.getTableColumnsMetaData();
-        //         result = meta;
-        //     }
-        // };
-        // mockSuccessResponse();
-        // StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        // env.enableCheckpointing(2000);
-        // env.setRestartStrategy(new RestartStrategies.NoRestartStrategyConfiguration());
-        // env.setParallelism(1);
-        // env.fromElements(TEST_DATA)
-        //     .addSink(StarRocksSink.sink(
-        //         TableSchema.builder()
-        //             .field("score", DataTypes.INT())
-        //             .field("name", DataTypes.VARCHAR(20))
-        //             .build(),
-        //         OPTIONS_BUILDER
-        //             .withProperty("sink.semantic", StarRocksSinkSemantic.EXACTLY_ONCE.getName())
-        //             .build(),
-        //         (slots, te) -> {
-        //             slots[0] = te.score;
-        //             slots[1] = te.name;
-        //             try {
-        //                 Thread.sleep(1100);
-        //             } catch (Exception ex) {}
-        //         }));
-
-        // String exMsg = "";
-        // try {
-        //     env.execute();
-        // } catch (Exception e) {
-        //     exMsg = e.getMessage();
-        // }
-        // assertFalse(exMsg, exMsg.length() > 0);
+    public void testSinkCommonProperties() {
+        assertEquals(JDBC_URL, OPTIONS.getJdbcUrl());
+        assertEquals(DATABASE, OPTIONS.getDatabaseName());
+        assertEquals(TABLE, OPTIONS.getTableName());
+        assertEquals(Long.parseLong(SINK_MAX_INTERVAL), OPTIONS.getSinkMaxFlushInterval());
+        assertEquals(Long.parseLong(SINK_MAX_BYTES), OPTIONS.getSinkMaxBytes());
+        assertEquals(Long.parseLong(SINK_MAX_RETRIES), OPTIONS.getSinkMaxRetries());
+        assertEquals(Long.parseLong(SINK_MAX_ROWS), OPTIONS.getSinkMaxRows());
+        assertEquals(LOAD_URL.split(";").length, OPTIONS.getLoadUrlList().size());
+        assertEquals(SINK_SEMANTIC, OPTIONS.getSemantic());
+        assertEquals(SINK_PROPS.size(), OPTIONS.getSinkStreamLoadProperties().size());
     }
 
 }
