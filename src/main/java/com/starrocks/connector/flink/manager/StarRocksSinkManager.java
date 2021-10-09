@@ -163,7 +163,7 @@ public class StarRocksSinkManager implements Serializable {
     public final synchronized void writeRecord(String record) throws IOException {
         checkFlushException();
         try {
-            byte[] bts = record.getBytes();
+            byte[] bts = record.getBytes(StandardCharsets.UTF_8);
             buffer.add(bts);
             batchCount++;
             batchSize += bts.length;
