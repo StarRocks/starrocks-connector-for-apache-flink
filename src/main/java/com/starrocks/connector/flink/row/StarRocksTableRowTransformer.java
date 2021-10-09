@@ -105,7 +105,7 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
                 final byte[] bts = record.getBinary(pos);
                 long value = 0;
                 for (int i = 0; i < bts.length; i++) {
-                    value += (bts[i] & 0xffL) << (8 * i);
+                    value += (bts[bts.length - i - 1] & 0xffL) << (8 * i);
                 }
                 return value;
             default:
