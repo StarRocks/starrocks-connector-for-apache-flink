@@ -315,12 +315,12 @@ public class StarRocksSinkManager implements Serializable {
                 throw new IllegalArgumentException("Source table schema should contain primary keys.");
             }
             if (constraint.get().getColumns().size() != primayKeys.size() ||
-                !constraint.get().getColumns().stream().allMatch(col -> primayKeys.contains(col))) {
-                throw new IllegalArgumentException("Primary keys of the source table does not match the ones of the sink table.");
+                !constraint.get().getColumns().stream().allMatch(col -> primayKeys.contains(col.toLowerCase()))) {
+                throw new IllegalArgumentException("Primary keys of the source table do not match with the ones of the sink table.");
             }
             sinkOptions.enableUpsertDelete();
         }
-        
+
         if (sinkOptions.hasColumnMappingProperty()) {
             return;
         }
