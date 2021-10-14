@@ -42,8 +42,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
  
 public class StarRocksStreamLoadVisitor implements Serializable {
@@ -162,7 +164,7 @@ public class StarRocksStreamLoadVisitor implements Serializable {
                 httpPut.setHeader(entry.getKey(), entry.getValue());
             }
             if (!props.containsKey("columns") && (sinkOptions.supportUpsertDelete() || StarRocksSinkOptions.StreamLoadFormat.CSV.equals(sinkOptions.getStreamLoadFormat()))) {
-                String cols = String.join(",", fieldNames);
+                String cols = String.join(",", Arrays.asList(fieldNames).stream().map(f -> String.format("`%s`", f.trim().replace("`", ""))).collect(Collectors.toList()));
                 if (cols.length() > 0 && sinkOptions.supportUpsertDelete()) {
                     cols += String.format(",%s", StarRocksSinkOP.COLUMN_KEY);
                 }
