@@ -24,6 +24,7 @@ import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.data.TimestampData;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.DecimalType;
 import org.apache.flink.table.types.logical.LogicalType;
@@ -37,8 +38,8 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
     private Function<RowData, RowData> valueTransform;
     private DataType[] dataTypes;
     private final SimpleDateFormat dateFormatter = new SimpleDateFormat("yyyy-MM-dd");
-    private final SimpleDateFormat dateTimeFormatter = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-
+    private final SimpleDateFormat dateTimeFormatterMs = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+    
     public StarRocksTableRowTransformer(TypeInformation<RowData> rowDataTypeInfo) {
         this.rowDataTypeInfo = rowDataTypeInfo;
     }
@@ -95,8 +96,14 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
             case DATE:
                 return dateFormatter.format(Date.valueOf(LocalDate.ofEpochDay(record.getInt(pos))));
             case TIMESTAMP_WITHOUT_TIME_ZONE:
+            case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
                 final int timestampPrecision =((TimestampType) type).getPrecision();
-                return dateTimeFormatter.format(new Date(record.getTimestamp(pos, timestampPrecision).toTimestamp().getTime()));
+                final TimestampData ts = record.getTimestamp(pos, timestampPrecision);
+                final String msDt = dateTimeFormatterMs.format(ts.getMillisecond());
+                if (0 == ts.getNanoOfMillisecond() || timestampPrecision <= 3) {
+                    return msDt;
+                }
+                return String.format("%s%03d", msDt, Math.floorDiv(ts.getNanoOfMillisecond(), 1000));
             case DECIMAL: // for both largeint and decimal
                 final int decimalPrecision = ((DecimalType) type).getPrecision();
                 final int decimalScale = ((DecimalType) type).getScale();
