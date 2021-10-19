@@ -71,7 +71,7 @@ public class StarRocksTableRowTransformerTest extends StarRocksSinkBaseTest {
         GenericRowData genericRowData = new GenericRowData(TABLE_SCHEMA.getFieldCount());
         genericRowData.setField(0, (byte)20);
         genericRowData.setField(1, StringData.fromString("xxxssss"));
-        genericRowData.setField(2, TimestampData.fromTimestamp(Timestamp.valueOf("2021-02-02 12:22:22.006")));
+        genericRowData.setField(2, TimestampData.fromTimestamp(Timestamp.valueOf("2021-02-02 12:22:22.006007")));
         genericRowData.setField(3, (int)LocalDate.now().toEpochDay());
         genericRowData.setField(4, DecimalData.fromBigDecimal(BigDecimal.valueOf(1000), 10, 2));
         genericRowData.setField(5, (short)30);

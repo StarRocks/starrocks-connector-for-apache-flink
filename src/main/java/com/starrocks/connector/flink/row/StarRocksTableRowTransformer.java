@@ -37,7 +37,6 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
     private Function<RowData, RowData> valueTransform;
     private DataType[] dataTypes;
     private final SimpleDateFormat dateFormatter = new SimpleDateFormat("yyyy-MM-dd");
-    private final SimpleDateFormat dateTimeFormatter = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
     public StarRocksTableRowTransformer(TypeInformation<RowData> rowDataTypeInfo) {
         this.rowDataTypeInfo = rowDataTypeInfo;
@@ -96,7 +95,7 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
                 return dateFormatter.format(Date.valueOf(LocalDate.ofEpochDay(record.getInt(pos))));
             case TIMESTAMP_WITHOUT_TIME_ZONE:
                 final int timestampPrecision =((TimestampType) type).getPrecision();
-                return dateTimeFormatter.format(new Date(record.getTimestamp(pos, timestampPrecision).toTimestamp().getTime()));
+                return record.getTimestamp(pos, timestampPrecision).toTimestamp().toString();
             case DECIMAL: // for both largeint and decimal
                 final int decimalPrecision = ((DecimalType) type).getPrecision();
                 final int decimalScale = ((DecimalType) type).getScale();
