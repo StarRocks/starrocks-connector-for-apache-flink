@@ -24,7 +24,6 @@ import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.data.RowData;
-import org.apache.flink.table.data.TimestampData;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.DecimalType;
 import org.apache.flink.table.types.logical.LogicalType;
@@ -98,12 +97,7 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
             case TIMESTAMP_WITHOUT_TIME_ZONE:
             case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
                 final int timestampPrecision =((TimestampType) type).getPrecision();
-                final TimestampData ts = record.getTimestamp(pos, timestampPrecision);
-                final String msDt = dateTimeFormatterMs.format(ts.getMillisecond());
-                if (0 == ts.getNanoOfMillisecond() || timestampPrecision <= 3) {
-                    return msDt;
-                }
-                return String.format("%s%03d", msDt, Math.floorDiv(ts.getNanoOfMillisecond(), 1000));
+                return record.getTimestamp(pos, timestampPrecision).toLocalDateTime().toString();
             case DECIMAL: // for both largeint and decimal
                 final int decimalPrecision = ((DecimalType) type).getPrecision();
                 final int decimalScale = ((DecimalType) type).getScale();
