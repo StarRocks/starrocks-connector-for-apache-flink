@@ -4,6 +4,8 @@ import com.alibaba.fastjson.JSONObject;
 import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionOptions;
 import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
 import com.starrocks.connector.flink.exception.HttpException;
+import com.starrocks.connector.flink.related.QueryBeXTablets;
+import com.starrocks.connector.flink.related.QueryInfo;
 import com.starrocks.connector.flink.related.QueryPlan;
 import com.starrocks.connector.flink.related.Tablet;
 import com.starrocks.connector.flink.table.StarRocksSourceOptions;
@@ -14,9 +16,7 @@ import okhttp3.*;
 
 import java.io.IOException;
 import java.io.Serializable;
-import java.sql.SQLException;
 import java.util.*;
-import java.util.concurrent.LinkedBlockingDeque;
 
 public class StarRocksSourceManager implements Serializable {
 
@@ -28,10 +28,6 @@ public class StarRocksSourceManager implements Serializable {
 
     private final StarRocksJdbcConnectionProvider jdbcConnProvider;
 
-    private LinkedBlockingDeque blockingDeque;
-
-    public StarRocksSourceReader sourceReader;
-
     public StarRocksSourceManager(StarRocksSourceOptions sourceOptions) {
 
         this.sourceOptions = sourceOptions;
@@ -39,7 +35,7 @@ public class StarRocksSourceManager implements Serializable {
         this.jdbcConnProvider = new StarRocksJdbcConnectionProvider(jdbcOptions);
     }
 
-    public void startToRead() throws SQLException, ClassNotFoundException, IOException, HttpException {
+    public QueryInfo getQueryInfo() throws IOException, HttpException {
 
         String columns = sourceOptions.getColums() == null ? "*" : sourceOptions.getColums();
         String filter = sourceOptions.getFilter() == null ? "" : " where " + sourceOptions.getFilter();
@@ -52,8 +48,12 @@ public class StarRocksSourceManager implements Serializable {
                 sourceOptions.getTableName(),
                 httpNodes[new Random().nextInt(httpNodes.length)]);
         Map<String, Set<Long>> beXTablets = transferQueryPlanToBeXTablet(plan);
-        sourceReader = new StarRocksSourceReader(beXTablets, plan.getOpaqued_query_plan());
-        sourceReader.startRead();
+        List<QueryBeXTablets> queryBeXTabletsList = new ArrayList<>();
+        beXTablets.forEach((be, tablets) -> {
+            QueryBeXTablets queryBeXTablets = new QueryBeXTablets(be, new ArrayList<>(tablets));
+            queryBeXTabletsList.add(queryBeXTablets);
+        });
+        return new QueryInfo(plan, queryBeXTabletsList);
     }
 
     private static Map<String, Set<Long>> transferQueryPlanToBeXTablet(QueryPlan queryPlan) {
