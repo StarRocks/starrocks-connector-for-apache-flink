@@ -8,7 +8,6 @@ import org.apache.flink.configuration.ReadableConfig;
 
 import java.io.Serializable;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Map;
 
 public class StarRocksSourceOptions implements Serializable {
@@ -22,6 +21,13 @@ public class StarRocksSourceOptions implements Serializable {
             .stringType().noDefaultValue().withDescription("Host of the jdbc address like: `jdbc:mysql://fe_ip1:query_port,fe_ip2:query_port...`.");
     public static final ConfigOption<String> HTTP_NODES = ConfigOptions.key("http-nodes")
             .stringType().noDefaultValue().withDescription("Hosts of the http node like: `fe_ip1:http_port,fe_ip2:http_port...`.");
+
+    public static final ConfigOption<String> BE_SOCKET_TIMEOUT = ConfigOptions.key("be-socket-timeout")
+            .stringType().noDefaultValue().withDescription("be socket timeout");
+    public static final ConfigOption<String> BE_CONNECT_TIMEOUT = ConfigOptions.key("be-connect-timeout")
+            .stringType().noDefaultValue().withDescription("be connect timeout");
+
+
     public static final ConfigOption<String> USERNAME = ConfigOptions.key("username")
             .stringType().noDefaultValue().withDescription("StarRocks user name.");
     public static final ConfigOption<String> PASSWORD = ConfigOptions.key("password")
@@ -38,6 +44,14 @@ public class StarRocksSourceOptions implements Serializable {
             .stringType().noDefaultValue().withDescription("filters");
 
 
+    public static final ConfigOption<String> BATCH_SIZE = ConfigOptions.key("batch-size")
+            .stringType().noDefaultValue().withDescription("batch size");
+
+    public static final ConfigOption<String> QUERTY_TIMEOUT = ConfigOptions.key("query-timeout")
+            .stringType().noDefaultValue().withDescription("be connect timeout");
+
+    public static final ConfigOption<String> MEM_LIMIT = ConfigOptions.key("mem-limit")
+            .stringType().noDefaultValue().withDescription("be connect timeout");
 
     public StarRocksSourceOptions(ReadableConfig options, Map<String, String> optionsMap) {
         this.tableOptions = options;
@@ -73,6 +87,12 @@ public class StarRocksSourceOptions implements Serializable {
         return tableOptions.get(HTTP_NODES);
     }
 
+    public String getBeSocketTimeout() { return tableOptions.get(BE_SOCKET_TIMEOUT); }
+
+    public String getBeConnectTimeout() {
+        return tableOptions.get(BE_CONNECT_TIMEOUT);
+    }
+
     public String getDatabaseName() {
         return tableOptions.get(DATABASE_NAME);
     }
@@ -95,6 +115,18 @@ public class StarRocksSourceOptions implements Serializable {
 
     public String getFilter() {
         return tableOptions.get(FILTER);
+    }
+
+    public String getBatchSize() {
+        return tableOptions.get(BATCH_SIZE);
+    }
+
+    public String getQueryTimeout() {
+        return tableOptions.get(QUERTY_TIMEOUT);
+    }
+
+    public String getMemLimit() {
+        return tableOptions.get(MEM_LIMIT);
     }
 
 

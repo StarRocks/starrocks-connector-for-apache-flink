@@ -1,8 +1,11 @@
 package com.starrocks.connector.flink.related;
 
+import java.io.Serializable;
 import java.util.List;
 
-public class Tablet {
+public class Tablet implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     private List<String> routings;
     private int version;
