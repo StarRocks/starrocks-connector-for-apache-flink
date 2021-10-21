@@ -1,9 +1,12 @@
 package com.starrocks.connector.flink.related;
 
+import java.io.Serializable;
 import java.util.Map;
-import java.util.Objects;
 
-public class QueryPlan {
+
+public class QueryPlan implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     private int status;
     private String opaqued_query_plan;
