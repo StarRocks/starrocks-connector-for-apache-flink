@@ -7,10 +7,6 @@
 package com.starrocks.connector.flink.thrift;
 
 
-import java.util.Map;
-import java.util.HashMap;
-import org.apache.thrift.TEnum;
-
 public enum TFileType implements org.apache.thrift.TEnum {
   FILE_LOCAL(0),
   FILE_BROKER(1),

@@ -7,10 +7,6 @@
 package com.starrocks.connector.flink.thrift;
 
 
-import java.util.Map;
-import java.util.HashMap;
-import org.apache.thrift.TEnum;
-
 public enum TCompressionType implements org.apache.thrift.TEnum {
   UNKNOWN_COMPRESSION(0),
   DEFAULT_COMPRESSION(1),
