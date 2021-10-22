@@ -112,7 +112,6 @@ public class StarRocksSourceManager implements Serializable {
         }
 
         JSONObject jsonObject = JSONObject.parseObject(responseStr);
-        QueryPlan queryPlan = JSONObject.toJavaObject(jsonObject, QueryPlan.class);
-        return queryPlan;
+        return JSONObject.toJavaObject(jsonObject, QueryPlan.class);
     }
 }
