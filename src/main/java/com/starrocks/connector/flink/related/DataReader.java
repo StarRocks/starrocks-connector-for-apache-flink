@@ -1,5 +1,6 @@
 package com.starrocks.connector.flink.related;
 
+import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
 import com.starrocks.connector.flink.exception.StarRocksException;
 import com.starrocks.connector.flink.thrift.TScanNextBatchParams;
 import com.starrocks.connector.flink.thrift.TScanOpenParams;
@@ -12,6 +13,8 @@ import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransportException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
 import java.util.List;
@@ -19,8 +22,9 @@ import java.util.concurrent.LinkedBlockingDeque;
 
 public class DataReader implements Serializable {
 
-    private TStarrocksExternalService.Client client;
+    private static final Logger LOG = LoggerFactory.getLogger(StarRocksJdbcConnectionProvider.class);
 
+    private TStarrocksExternalService.Client client;
     private final String IP;
     private final int PORT;
     private Schema schema;
@@ -40,13 +44,17 @@ public class DataReader implements Serializable {
         WAITING,RUNNING,DONE
     }
 
-    public DataReader(String ip, int port, int socketTimeout, int connectTimeout) throws TTransportException {
+    public DataReader(String ip, int port, int socketTimeout, int connectTimeout) throws StarRocksException {
         this.IP = ip;
         this.PORT = port;
         this.dataQueue = new LinkedBlockingDeque<>();
         TBinaryProtocol.Factory factory = new TBinaryProtocol.Factory();
         TSocket socket = new TSocket(IP, PORT, socketTimeout, connectTimeout);
-        socket.open();
+        try {
+            socket.open();
+        } catch (TTransportException e) {
+            throw  new StarRocksException(e.getMessage());
+        }
         TProtocol protocol = factory.getProtocol(socket);
         client = new TStarrocksExternalService.Client(protocol);
     }
@@ -54,7 +62,7 @@ public class DataReader implements Serializable {
     public void openScanner(List<Long> tablets, String opaqued_query_plan,
                             String db, String table,
                             int batchSize, int queryTimeout, int memLimit,
-                            String user, String pwd) throws TException {
+                            String user, String pwd) throws StarRocksException {
 
         TScanOpenParams params = new TScanOpenParams();
         params.setCluster(Const.DEFAULT_CLUSTER_NAME);
@@ -69,7 +77,12 @@ public class DataReader implements Serializable {
         params.setMem_limit(memLimit);
         params.setUser(user);
         params.setPasswd(pwd);
-        TScanOpenResult result = client.open_scanner(params);
+        TScanOpenResult result = null;
+        try {
+            result = client.open_scanner(params);
+        } catch (TException e) {
+            throw new StarRocksException(e.getMessage());
+        }
         this.schema = Schema.genSchema(result.getSelected_columns());
         this.contextId = result.getContext_id();
     }
@@ -96,16 +109,9 @@ public class DataReader implements Serializable {
         Thread thread = new Thread(() -> {
             try {
                 this.continueToRead(params);
-            } catch (TException e) {
+            } catch (TException | StarRocksException | InterruptedException e) {
                 e.printStackTrace();
-            } catch (StarRocksException e) {
-                e.printStackTrace();
-                // todo
-                System.out.println("StarRocksException" + e.getMessage());
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-                // todo
-                System.out.println("InterruptedException" + e.getMessage());
+                LOG.error(e.getMessage());
             }
         });
         thread.start();
