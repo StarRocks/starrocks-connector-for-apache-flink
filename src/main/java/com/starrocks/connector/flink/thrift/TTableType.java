@@ -7,10 +7,6 @@
 package com.starrocks.connector.flink.thrift;
 
 
-import java.util.Map;
-import java.util.HashMap;
-import org.apache.thrift.TEnum;
-
 public enum TTableType implements org.apache.thrift.TEnum {
   MYSQL_TABLE(0),
   OLAP_TABLE(1),

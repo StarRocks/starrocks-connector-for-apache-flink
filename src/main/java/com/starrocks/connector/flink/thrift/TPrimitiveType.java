@@ -7,10 +7,6 @@
 package com.starrocks.connector.flink.thrift;
 
 
-import java.util.Map;
-import java.util.HashMap;
-import org.apache.thrift.TEnum;
-
 public enum TPrimitiveType implements org.apache.thrift.TEnum {
   INVALID_TYPE(0),
   NULL_TYPE(1),
