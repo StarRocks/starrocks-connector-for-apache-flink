@@ -7,10 +7,6 @@
 package com.starrocks.connector.flink.thrift;
 
 
-import java.util.Map;
-import java.util.HashMap;
-import org.apache.thrift.TEnum;
-
 public enum TVarType implements org.apache.thrift.TEnum {
   SESSION(0),
   GLOBAL(1);

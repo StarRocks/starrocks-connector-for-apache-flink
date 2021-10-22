@@ -17,8 +17,6 @@
 
 package com.starrocks.connector.flink.related;
 
-import java.util.Objects;
-
 public class Field {
     private String name;
     private String type;

@@ -7,16 +7,28 @@ import com.starrocks.connector.flink.exception.HttpException;
 import com.starrocks.connector.flink.related.QueryBeXTablets;
 import com.starrocks.connector.flink.related.QueryInfo;
 import com.starrocks.connector.flink.related.QueryPlan;
-import com.starrocks.connector.flink.related.Tablet;
 import com.starrocks.connector.flink.table.StarRocksSourceOptions;
-
+import okhttp3.Credentials;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import okhttp3.*;
 
 import java.io.IOException;
 import java.io.Serializable;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Random;
+import java.util.Set;
+
+
 
 public class StarRocksSourceManager implements Serializable {
 

@@ -21,7 +21,6 @@ import com.starrocks.connector.flink.thrift.TScanColumnDesc;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 public class Schema {
     private int status = 0;

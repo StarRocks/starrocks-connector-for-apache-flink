@@ -1,8 +1,12 @@
 package com.starrocks.connector.flink.related;
 
-import com.esotericsoftware.minlog.Log;
 import com.starrocks.connector.flink.exception.StarRocksException;
-import com.starrocks.connector.flink.thrift.*;
+import com.starrocks.connector.flink.thrift.TScanNextBatchParams;
+import com.starrocks.connector.flink.thrift.TScanOpenParams;
+import com.starrocks.connector.flink.thrift.TScanOpenResult;
+import com.starrocks.connector.flink.thrift.TStarrocksExternalService;
+import com.starrocks.connector.flink.thrift.TScanBatchResult;
+import com.starrocks.connector.flink.thrift.TScanCloseParams;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TProtocol;

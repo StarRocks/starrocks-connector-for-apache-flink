@@ -6,11 +6,6 @@
  */
 package com.starrocks.connector.flink.thrift;
 
-
-import java.util.Map;
-import java.util.HashMap;
-import org.apache.thrift.TEnum;
-
 public enum QueryState implements org.apache.thrift.TEnum {
   CREATED(0),
   INITIALIZED(1),

@@ -52,6 +52,7 @@ limitations under the License.
         <maven-surefire-plugin.version>3.0.0-M4</maven-surefire-plugin.version>
         <flink.version>1.13.0</flink.version>
         <scala.version>2.11</scala.version>
+        <arrow.version>5.0.0</arrow.version>
     </properties>
     <dependencies>
         <!-- Table ecosystem -->
@@ -157,12 +158,12 @@ limitations under the License.
         <dependency>
             <groupId>org.apache.arrow</groupId>
             <artifactId>arrow-vector</artifactId>
-            <version>5.0.0</version>
+            <version>${arrow.version}</version>
         </dependency>
         <dependency>
             <groupId>org.apache.arrow</groupId>
             <artifactId>arrow-memory-netty</artifactId>
-            <version>5.0.0</version>
+            <version>${arrow.version}</version>
         </dependency>
         <dependency>
             <groupId>org.apache.flink</groupId>
