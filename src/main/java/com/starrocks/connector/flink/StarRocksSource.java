@@ -1,11 +1,12 @@
 package com.starrocks.connector.flink;
 
 import com.starrocks.connector.flink.exception.StarRocksException;
-import com.starrocks.connector.flink.related.DataReader;
 import com.starrocks.connector.flink.related.Const;
+import com.starrocks.connector.flink.related.DataReader;
 import com.starrocks.connector.flink.related.QueryBeXTablets;
 import com.starrocks.connector.flink.related.QueryInfo;
 import com.starrocks.connector.flink.table.StarRocksSourceOptions;
+import org.apache.flink.api.common.typeinfo.TypeHint;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.configuration.Configuration;
@@ -78,6 +79,6 @@ public class StarRocksSource extends RichParallelSourceFunction<List<?>> impleme
 
     @Override
     public TypeInformation<List<?>> getProducedType() {
-        return null;
+        return TypeInformation.of(new TypeHint<List<?>>() {});
     }
 }

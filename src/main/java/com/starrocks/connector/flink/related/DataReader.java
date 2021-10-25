@@ -83,7 +83,7 @@ public class DataReader implements Serializable {
             result = client.open_scanner(params);
             if (!TStatusCode.OK.equals(result.getStatus().getStatus_code())) {
                 throw new StarRocksException(
-                        "open scanner was wrong"
+                        "Open scanner failed."
                         + result.getStatus().getStatus_code()
                         + result.getStatus().getError_msgs()
                 );
@@ -109,7 +109,7 @@ public class DataReader implements Serializable {
             }
             if (!TStatusCode.OK.equals(result.getStatus().getStatus_code())) {
                 throw new StarRocksException(
-                        "get next was wrong"
+                        "Get next failed."
                                 + result.getStatus().getStatus_code()
                                 + result.getStatus().getError_msgs()
                 );
@@ -141,7 +141,7 @@ public class DataReader implements Serializable {
             TScanBatchResult result = client.get_next(params);
             if (!TStatusCode.OK.equals(result.getStatus().getStatus_code())) {
                 throw new StarRocksException(
-                        "get next was wrong"
+                        "Get next failed."
                                 + result.getStatus().getStatus_code()
                                 + result.getStatus().getError_msgs()
                 );
