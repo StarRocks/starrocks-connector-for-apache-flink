@@ -28,7 +28,7 @@ public class StarRocksSourceTest {
         StarRocksSourceManager manager = new StarRocksSourceManager(options);
         QueryInfo queryInfo = manager.getQueryInfo();
 
-        final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(queryInfo.getBeXTablets().size());
         env.addSource(new StarRocksSource(options, queryInfo)).print();
         env.execute("StarRocks flink source");

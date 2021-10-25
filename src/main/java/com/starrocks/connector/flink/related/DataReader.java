@@ -2,12 +2,13 @@ package com.starrocks.connector.flink.related;
 
 import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
 import com.starrocks.connector.flink.exception.StarRocksException;
+import com.starrocks.connector.flink.thrift.TScanBatchResult;
+import com.starrocks.connector.flink.thrift.TScanCloseParams;
 import com.starrocks.connector.flink.thrift.TScanNextBatchParams;
 import com.starrocks.connector.flink.thrift.TScanOpenParams;
 import com.starrocks.connector.flink.thrift.TScanOpenResult;
 import com.starrocks.connector.flink.thrift.TStarrocksExternalService;
-import com.starrocks.connector.flink.thrift.TScanBatchResult;
-import com.starrocks.connector.flink.thrift.TScanCloseParams;
+import com.starrocks.connector.flink.thrift.TStatusCode;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TProtocol;
@@ -80,6 +81,13 @@ public class DataReader implements Serializable {
         TScanOpenResult result = null;
         try {
             result = client.open_scanner(params);
+            if (!TStatusCode.OK.equals(result.getStatus().getStatus_code())) {
+                throw new StarRocksException(
+                        "open scanner was wrong"
+                        + result.getStatus().getStatus_code()
+                        + result.getStatus().getError_msgs()
+                );
+            }
         } catch (TException e) {
             throw new StarRocksException(e.getMessage());
         }
@@ -98,6 +106,13 @@ public class DataReader implements Serializable {
             result = client.get_next(params);
             if (!result.eos) {
                 handleResult(result);
+            }
+            if (!TStatusCode.OK.equals(result.getStatus().getStatus_code())) {
+                throw new StarRocksException(
+                        "get next was wrong"
+                                + result.getStatus().getStatus_code()
+                                + result.getStatus().getError_msgs()
+                );
             }
         } catch (TException | InterruptedException e) {
             throw new StarRocksException(e.getMessage());
@@ -124,6 +139,13 @@ public class DataReader implements Serializable {
         while (!this.readerEOS) {
             params.setOffset(this.readerOffset);
             TScanBatchResult result = client.get_next(params);
+            if (!TStatusCode.OK.equals(result.getStatus().getStatus_code())) {
+                throw new StarRocksException(
+                        "get next was wrong"
+                                + result.getStatus().getStatus_code()
+                                + result.getStatus().getError_msgs()
+                );
+            }
             this.readerEOS = result.eos;
             if (!readerEOS) {
                 handleResult(result);
