@@ -41,13 +41,10 @@ public class StarRocksSourceManager implements Serializable {
 
     private final StarRocksSourceOptions sourceOptions;
 
-    private final StarRocksJdbcConnectionProvider jdbcConnProvider;
 
     public StarRocksSourceManager(StarRocksSourceOptions sourceOptions) {
 
         this.sourceOptions = sourceOptions;
-        StarRocksJdbcConnectionOptions jdbcOptions = new StarRocksJdbcConnectionOptions(sourceOptions.getJdbcUrl(), sourceOptions.getUsername(), sourceOptions.getPassword());
-        this.jdbcConnProvider = new StarRocksJdbcConnectionProvider(jdbcOptions);
     }
 
     public QueryInfo getQueryInfo() throws IOException, HttpException {

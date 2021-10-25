@@ -8,6 +8,7 @@ import org.apache.flink.configuration.ReadableConfig;
 
 import java.io.Serializable;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Map;
 
 public class StarRocksSourceOptions implements Serializable {
@@ -15,16 +16,14 @@ public class StarRocksSourceOptions implements Serializable {
 
     private final ReadableConfig tableOptions;
     private final Map<String, String> tableOptionsMap;
+    private final Map<String, String> tableSQLProps = new HashMap<>();
 
-    // required source configurations
-    public static final ConfigOption<String> JDBC_URL = ConfigOptions.key("jdbc-url")
-            .stringType().noDefaultValue().withDescription("Host of the jdbc address like: `jdbc:mysql://fe_ip1:query_port,fe_ip2:query_port...`.");
     public static final ConfigOption<String> HTTP_NODES = ConfigOptions.key("http-nodes")
             .stringType().noDefaultValue().withDescription("Hosts of the http node like: `fe_ip1:http_port,fe_ip2:http_port...`.");
 
-    public static final ConfigOption<String> BE_SOCKET_TIMEOUT = ConfigOptions.key("be-socket-timeout")
+    public static final ConfigOption<String> BE_SOCKET_TIMEOUT = ConfigOptions.key("be-socket-timeout-ms")
             .stringType().noDefaultValue().withDescription("be socket timeout");
-    public static final ConfigOption<String> BE_CONNECT_TIMEOUT = ConfigOptions.key("be-connect-timeout")
+    public static final ConfigOption<String> BE_CONNECT_TIMEOUT = ConfigOptions.key("be-connect-timeout-ms")
             .stringType().noDefaultValue().withDescription("be connect timeout");
 
 
@@ -53,10 +52,23 @@ public class StarRocksSourceOptions implements Serializable {
     public static final ConfigOption<String> MEM_LIMIT = ConfigOptions.key("mem-limit")
             .stringType().noDefaultValue().withDescription("be connect timeout");
 
+    public static final String SOURCE_PROPERTIES_PREFIX = "source.properties.";
+
     public StarRocksSourceOptions(ReadableConfig options, Map<String, String> optionsMap) {
         this.tableOptions = options;
         this.tableOptionsMap = optionsMap;
+        parseSinkStreamLoadProperties();
         this.validateRequired();
+    }
+
+    private void parseSinkStreamLoadProperties() {
+        tableOptionsMap.keySet().stream()
+                .filter(key -> key.startsWith(SOURCE_PROPERTIES_PREFIX))
+                .forEach(key -> {
+                    final String value = tableOptionsMap.get(key);
+                    final String subKey = key.substring((SOURCE_PROPERTIES_PREFIX).length()).toLowerCase();
+                    tableSQLProps.put(subKey, value);
+                });
     }
 
     private void validateRequired() {
@@ -65,7 +77,6 @@ public class StarRocksSourceOptions implements Serializable {
                 PASSWORD,
                 TABLE_NAME,
                 DATABASE_NAME,
-                JDBC_URL,
                 HTTP_NODES,
         };
         int presentCount = 0;
@@ -77,10 +88,6 @@ public class StarRocksSourceOptions implements Serializable {
         String[] propertyNames = Arrays.stream(configOptions).map(ConfigOption::key).toArray(String[]::new);
         Preconditions.checkArgument(configOptions.length == presentCount || presentCount == 0,
                 "Either all or none of the following options should be provided:\n" + String.join("\n", propertyNames));
-    }
-
-    public String getJdbcUrl() {
-        return tableOptions.get(JDBC_URL);
     }
 
     public String getHttpNodes() {

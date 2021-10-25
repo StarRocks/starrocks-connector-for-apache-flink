@@ -3,6 +3,7 @@ package com.starrocks.connector.flink.table;
 import com.starrocks.connector.flink.exception.HttpException;
 import com.starrocks.connector.flink.manager.StarRocksSourceManager;
 import com.starrocks.connector.flink.related.QueryInfo;
+import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.connector.ChangelogMode;
 import org.apache.flink.table.connector.source.DynamicTableSource;
 import org.apache.flink.table.connector.source.InputFormatProvider;
@@ -13,15 +14,15 @@ import java.io.IOException;
 
 public class StarRocksDynamicTableSource implements ScanTableSource, LookupTableSource {
 
-    private static final long serialVersionUID = 1L;
+    private transient TableSchema flinkSchema;
     private final StarRocksSourceOptions options;
 
     private StarRocksSourceManager manager;
 
-    public StarRocksDynamicTableSource(StarRocksSourceOptions options) {
-
-        manager = new StarRocksSourceManager(options);
+    public StarRocksDynamicTableSource(StarRocksSourceOptions options, TableSchema schema) {
         this.options = options;
+        this.flinkSchema = schema;
+        manager = new StarRocksSourceManager(options);
     }
 
     @Override
@@ -45,7 +46,7 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
 
     @Override
     public DynamicTableSource copy() {
-        return new StarRocksDynamicTableSource(this.options);
+        return new StarRocksDynamicTableSource(this.options, this.flinkSchema);
     }
 
     @Override
