@@ -8,23 +8,26 @@ import com.starrocks.connector.flink.related.QueryBeXTablets;
 import com.starrocks.connector.flink.related.QueryInfo;
 import com.starrocks.connector.flink.related.QueryPlan;
 import com.starrocks.connector.flink.table.StarRocksSourceOptions;
-import okhttp3.Credentials;
-import okhttp3.MediaType;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
+
+import org.apache.commons.codec.binary.Base64;
+import org.apache.http.HttpEntity;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.ByteArrayEntity;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 
@@ -55,10 +58,7 @@ public class StarRocksSourceManager implements Serializable {
         LOG.info("query sql [{}]", querySQL);
         String[] httpNodes = sourceOptions.getHttpNodes().split(",");
 
-        QueryPlan plan = getQueryPlan(querySQL,
-                sourceOptions.getDatabaseName(),
-                sourceOptions.getTableName(),
-                httpNodes[new Random().nextInt(httpNodes.length)]);
+        QueryPlan plan = getQueryPlan(querySQL, httpNodes[new Random().nextInt(httpNodes.length)], sourceOptions);
         Map<String, Set<Long>> beXTablets = transferQueryPlanToBeXTablet(plan);
         List<QueryBeXTablets> queryBeXTabletsList = new ArrayList<>();
         beXTablets.forEach((be, tablets) -> {
@@ -90,28 +90,38 @@ public class StarRocksSourceManager implements Serializable {
         return beXTablets;
     }
 
-    private static QueryPlan getQueryPlan(String querySQL, String dbName, String tableName, String httpNode) throws IOException, HttpException {
-
-        OkHttpClient client = new OkHttpClient.Builder().authenticator((route, response) -> {
-            String credential = Credentials.basic("root", "");
-            return response.request().newBuilder().header("Authorization", credential).build();
-        }).build();
-
+    private static QueryPlan getQueryPlan(String querySQL, String httpNode, StarRocksSourceOptions sourceOptions) throws IOException, HttpException {
+        
+        String url = "http://" + httpNode + "/api/" + sourceOptions.getDatabaseName() + "/" + sourceOptions.getTableName() + "/_query_plan";
         Map<String, Object> bodyMap = new HashMap<>();
         bodyMap.put("sql", querySQL);
-        MediaType JSON = MediaType.parse("application/json;charset=utf-8");
-        RequestBody requestBody = RequestBody.create(JSON, new JSONObject(bodyMap).toString());
-        String url = "http://" + httpNode + "/api/" + dbName + "/" + tableName + "/_query_plan";
-        Request request = new Request.Builder().url(url).post(requestBody).build();
-        Response response = client.newCall(request).execute();
-        String responseStr = Objects.requireNonNull(response.body()).string();
-        Map<String, Object> responseMap =  JSONObject.parseObject(responseStr);
-        String status = responseMap.get("status").toString();
-        if (!status.equals("200")) {
-            throw new HttpException(responseStr);
-        }
+        String body = new JSONObject(bodyMap).toString();
 
-        JSONObject jsonObject = JSONObject.parseObject(responseStr);
-        return JSONObject.toJavaObject(jsonObject, QueryPlan.class);
+        try(CloseableHttpClient httpClient = HttpClients.createDefault()) {
+            HttpPost post = new HttpPost(url);
+            post.setHeader("Content-Type", "application/json;charset=UTF-8");
+            post.setHeader("Authorization", getBasicAuthHeader(sourceOptions.getUsername(), sourceOptions.getPassword()));
+            post.setEntity(new ByteArrayEntity(body.getBytes()));
+            try(CloseableHttpResponse response = httpClient.execute(post)) {
+                int code = response.getStatusLine().getStatusCode();
+                if (200 != code) {
+                    LOG.warn("Request failed with code:{}", code);
+                    return null;
+                }
+                HttpEntity respEntity = response.getEntity();
+                if (null == respEntity) {
+                    LOG.warn("Request failed with empty response.");
+                    return null;
+                }
+                JSONObject jsonObject = JSONObject.parseObject(EntityUtils.toString(respEntity));
+                return JSONObject.toJavaObject(jsonObject, QueryPlan.class);
+            }
+        }
+    }
+
+    private static String getBasicAuthHeader(String username, String password) {
+        String auth = username + ":" + password;
+        byte[] encodedAuth = Base64.encodeBase64(auth.getBytes(StandardCharsets.UTF_8));
+        return new StringBuilder("Basic ").append(new String(encodedAuth)).toString();
     }
 }
