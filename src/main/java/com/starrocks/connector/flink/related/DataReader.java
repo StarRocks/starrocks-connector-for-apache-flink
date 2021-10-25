@@ -1,6 +1,5 @@
 package com.starrocks.connector.flink.related;
 
-import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
 import com.starrocks.connector.flink.exception.StarRocksException;
 import com.starrocks.connector.flink.thrift.TScanBatchResult;
 import com.starrocks.connector.flink.thrift.TScanCloseParams;
@@ -23,7 +22,7 @@ import java.util.concurrent.LinkedBlockingDeque;
 
 public class DataReader implements Serializable {
 
-    private static final Logger LOG = LoggerFactory.getLogger(StarRocksJdbcConnectionProvider.class);
+    private static final Logger LOG = LoggerFactory.getLogger(DataReader.class);
 
     private TStarrocksExternalService.Client client;
     private final String IP;
