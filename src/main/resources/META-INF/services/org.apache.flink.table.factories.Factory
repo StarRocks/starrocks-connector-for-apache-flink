@@ -11,3 +11,4 @@
 # limitations under the License.
 
 com.starrocks.connector.flink.table.StarRocksDynamicTableSinkFactory
+com.starrocks.connector.flink.table.StarRocksDynamicTableSourceFactory
