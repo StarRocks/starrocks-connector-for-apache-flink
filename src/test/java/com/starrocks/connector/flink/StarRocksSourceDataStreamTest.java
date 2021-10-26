@@ -3,6 +3,7 @@ package com.starrocks.connector.flink;
 
 import com.starrocks.connector.flink.manager.StarRocksSourceManager;
 import com.starrocks.connector.flink.related.QueryInfo;
+import com.starrocks.connector.flink.table.StarRocksDynamicSourceFunction;
 import com.starrocks.connector.flink.table.StarRocksSourceOptions;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 
@@ -22,7 +23,7 @@ public class StarRocksSourceDataStreamTest {
                 .withProperty("table-name", "test_1")
                 .withProperty("database-name", "cjs_test")
                 .withProperty("columns", "col1, event_day")
-                .withProperty("filter", "col1 = 0")
+                // .withProperty("filter", "col1 = 0")
                 .build();
 
         StarRocksSourceManager manager = new StarRocksSourceManager(options);
@@ -30,7 +31,7 @@ public class StarRocksSourceDataStreamTest {
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(queryInfo.getBeXTablets().size());
-        env.addSource(new StarRocksSource(options, queryInfo)).print();
+        env.addSource(new StarRocksDynamicSourceFunction(options, queryInfo)).print();
         env.execute("StarRocks flink source");
     }
 }
