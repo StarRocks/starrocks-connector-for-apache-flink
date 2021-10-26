@@ -1,8 +1,6 @@
 package com.starrocks.connector.flink.manager;
 
 import com.alibaba.fastjson.JSONObject;
-import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionOptions;
-import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
 import com.starrocks.connector.flink.exception.HttpException;
 import com.starrocks.connector.flink.related.QueryBeXTablets;
 import com.starrocks.connector.flink.related.QueryInfo;
