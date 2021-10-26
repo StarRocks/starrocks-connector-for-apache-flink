@@ -23,7 +23,7 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
     public StarRocksDynamicTableSource(StarRocksSourceOptions options, TableSchema schema) {
         this.options = options;
         this.flinkSchema = schema;
-        manager = new StarRocksSourceManager(options);
+        
     }
 
     @Override
@@ -35,6 +35,7 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
     public ScanRuntimeProvider getScanRuntimeProvider(ScanContext scanContext) {
 
         manager = new StarRocksSourceManager(options);
+
         QueryInfo queryInfo;
         try {
             queryInfo = manager.getQueryInfo();
