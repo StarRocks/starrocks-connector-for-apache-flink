@@ -27,7 +27,7 @@ public class StarRocksSourceTest {
                         "  'database-name' = 'cjs_test',\n" +
                         "  'table-name' = 'test_1'\n" +
                         ")");
-        final Table result = tEnv.sqlQuery("SELECT * from test_1 where col1 = 4");
+        final Table result = tEnv.sqlQuery("SELECT * from test_1");
         tEnv.toRetractStream(result, Row.class).print();
         env.execute();
     }

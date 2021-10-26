@@ -1,9 +1,10 @@
 package com.starrocks.connector.flink.table;
 
-import com.starrocks.connector.flink.related.QueryBeXTablets;
 import org.apache.flink.core.io.InputSplit;
 
 import java.io.Serializable;
+
+import com.starrocks.connector.flink.source.QueryBeXTablets;
 
 public class StarRocksTableInputSplit implements InputSplit, Serializable {
 

@@ -2,7 +2,8 @@ package com.starrocks.connector.flink.table;
 
 import com.starrocks.connector.flink.exception.HttpException;
 import com.starrocks.connector.flink.manager.StarRocksSourceManager;
-import com.starrocks.connector.flink.related.QueryInfo;
+import com.starrocks.connector.flink.source.QueryInfo;
+
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.connector.ChangelogMode;
 import org.apache.flink.table.connector.source.DynamicTableSource;

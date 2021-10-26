@@ -2,7 +2,7 @@ package com.starrocks.connector.flink;
 
 
 import com.starrocks.connector.flink.manager.StarRocksSourceManager;
-import com.starrocks.connector.flink.related.QueryInfo;
+import com.starrocks.connector.flink.source.QueryInfo;
 import com.starrocks.connector.flink.table.StarRocksDynamicSourceFunction;
 import com.starrocks.connector.flink.table.StarRocksSourceOptions;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;

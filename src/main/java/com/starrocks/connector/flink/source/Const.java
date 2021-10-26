@@ -1,4 +1,4 @@
-package com.starrocks.connector.flink.related;
+package com.starrocks.connector.flink.source;
 
 public class Const {
     public static String DEFAULT_CLUSTER_NAME = "default_cluster";
