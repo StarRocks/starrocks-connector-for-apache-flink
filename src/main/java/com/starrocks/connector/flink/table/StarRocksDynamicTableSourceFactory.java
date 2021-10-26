@@ -52,6 +52,8 @@ public final class StarRocksDynamicTableSourceFactory implements DynamicTableSou
         options.add(StarRocksSourceOptions.BATCH_SIZE);
         options.add(StarRocksSourceOptions.QUERTY_TIMEOUT);
         options.add(StarRocksSourceOptions.MEM_LIMIT);
+        options.add(StarRocksSourceOptions.COLUMNS);
+        options.add(StarRocksSourceOptions.FILTER);
         return options;
     }
 }

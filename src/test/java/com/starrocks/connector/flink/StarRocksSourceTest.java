@@ -14,8 +14,8 @@ public class StarRocksSourceTest {
         final StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
         tEnv.executeSql(
                 "CREATE TABLE test_1 (" +
-                        "col1 TINYINT," +
-                        "event_day STRING " +
+                        "col1 TINYINT" +
+                        // "event_day STRING " +
                         ") " +
                         "WITH (\n" +
                         "  'connector' = 'starrocks-source',\n" +
@@ -24,10 +24,13 @@ public class StarRocksSourceTest {
                         "  'be-connect-timeout-ms' = '50000',\n" +
                         "  'username' = 'root',\n" +
                         "  'password' = '',\n" +
+                        // "  'columns' = 'col1, event_day',\n" +
+                        // "  'columns' = 'col1',\n" +
+                        "  'filter' = 'col1 > 4',\n" +
                         "  'database-name' = 'cjs_test',\n" +
                         "  'table-name' = 'test_1'\n" +
                         ")");
-        final Table result = tEnv.sqlQuery("SELECT * from test_1");
+        final Table result = tEnv.sqlQuery("SELECT * from test_1 where col1 = 7");
         tEnv.toRetractStream(result, Row.class).print();
         env.execute();
     }
