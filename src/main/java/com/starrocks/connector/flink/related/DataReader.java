@@ -18,7 +18,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
 import java.util.List;
-import java.util.concurrent.LinkedBlockingDeque;
+
 
 public class DataReader implements Serializable {
 
@@ -30,24 +30,17 @@ public class DataReader implements Serializable {
     private Schema schema;
     private String contextId;
     private int readerOffset = 0;
-    private boolean readerEOS = false;
+    private boolean resultEOS = false;
 
-    private final LinkedBlockingDeque<List<Object>> dataQueue;
 
-    public LinkedBlockingDeque<List<Object>> getDataQueue() {
-        return dataQueue;
-    }
+    private RowBatch curRowBatch;
+    private List<Object> curData;
 
-    private ReadJobStatus status;
-
-    private enum ReadJobStatus {
-        WAITING,RUNNING,DONE
-    }
 
     public DataReader(String ip, int port, int socketTimeout, int connectTimeout) throws StarRocksException {
         this.IP = ip;
         this.PORT = port;
-        this.dataQueue = new LinkedBlockingDeque<>();
+        
         TBinaryProtocol.Factory factory = new TBinaryProtocol.Factory();
         TSocket socket = new TSocket(IP, PORT, socketTimeout, connectTimeout);
         try {
@@ -94,76 +87,54 @@ public class DataReader implements Serializable {
         this.contextId = result.getContext_id();
     }
 
-    public boolean startToRead() throws StarRocksException {
+    public void startToRead() throws StarRocksException {
 
-        status = ReadJobStatus.WAITING;
         TScanNextBatchParams params = new TScanNextBatchParams();
         params.setContext_id(this.contextId);
         params.setOffset(this.readerOffset);
         TScanBatchResult result;
         try {
             result = client.get_next(params);
-            if (!result.eos) {
-                handleResult(result);
-            }
             if (!TStatusCode.OK.equals(result.getStatus().getStatus_code())) {
                 throw new StarRocksException(
                         "Get next failed."
                                 + result.getStatus().getStatus_code()
                                 + result.getStatus().getError_msgs()
                 );
+            }
+            this.resultEOS = result.eos;
+            if (!result.eos) {
+                handleResult(result);
             }
         } catch (TException | InterruptedException e) {
             throw new StarRocksException(e.getMessage());
         }
-        this.readerEOS = result.eos;
-        if (this.readerEOS) {
-            return false;
-        }
-        Thread thread = new Thread(() -> {
-            try {
-                this.continueToRead(params);
-            } catch (TException | StarRocksException | InterruptedException e) {
-                e.printStackTrace();
-                LOG.error(e.getMessage());
-            }
-        });
-        thread.start();
-        return true;
     }
 
-    private void continueToRead(TScanNextBatchParams params) throws TException, StarRocksException, InterruptedException {
 
-        status = ReadJobStatus.RUNNING;
-        while (!this.readerEOS) {
-            params.setOffset(this.readerOffset);
-            TScanBatchResult result = client.get_next(params);
-            if (!TStatusCode.OK.equals(result.getStatus().getStatus_code())) {
-                throw new StarRocksException(
-                        "Get next failed."
-                                + result.getStatus().getStatus_code()
-                                + result.getStatus().getError_msgs()
-                );
-            }
-            this.readerEOS = result.eos;
-            if (!readerEOS) {
-                handleResult(result);
-            }
-        }
-        status = ReadJobStatus.DONE;
+    public boolean hasNext() {
+        return this.curData != null;
     }
 
+    public List<Object> getNext() throws StarRocksException {
+
+        List<Object> preparedData = this.curData;
+        this.curData = null;
+        if (this.curRowBatch.hasNext()) {
+            this.curData = this.getNext();
+        }
+        if (this.curData != null) {
+            return preparedData;    
+        }
+        startToRead();
+        return preparedData;
+    }
+    
     private void handleResult(TScanBatchResult result) throws StarRocksException, InterruptedException {
         RowBatch rowBatch = new RowBatch(result, this.schema).readArrow();
         this.readerOffset = rowBatch.getReadRowCount() + this.readerOffset;
-        while (rowBatch.hasNext()) {
-            List<Object> row = rowBatch.next();
-            this.dataQueue.put(row);
-        }
-    }
-
-    public boolean jobDone() {
-        return this.status == ReadJobStatus.DONE && this.dataQueue.size() == 0;
+        this.curRowBatch = rowBatch;
+        this.curData = rowBatch.next();
     }
 
     public void close() throws StarRocksException {

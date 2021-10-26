@@ -29,7 +29,6 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
     private final QueryInfo queryInfo;
     private DataReader dataReader;
 
-    private boolean needRead;
 
     public StarRocksRowDataInputFormat(StarRocksSourceOptions sourceOptions, QueryInfo queryInfo) {
         this.sourceOptions = sourceOptions;
@@ -101,7 +100,7 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
         }
 
         try {
-            this.needRead = this.dataReader.startToRead();
+            this.dataReader.startToRead();
         } catch (StarRocksException e) {
             e.printStackTrace();
             LOG.error(e.getMessage());
@@ -110,21 +109,21 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
 
     @Override
     public boolean reachedEnd() throws IOException {
-        return !(!this.dataReader.jobDone() && needRead);
+        return !this.dataReader.hasNext();
     }
 
     @Override
     public RowData nextRecord(RowData rowData) throws IOException {
-        if (!(!this.dataReader.jobDone() && needRead)) {
+        if (!this.dataReader.hasNext()) {
             return null;
         }
         List<Object> row = null;
         try {
-            row = this.dataReader.getDataQueue().take();
-        } catch (InterruptedException e) {
+            row = this.dataReader.getNext();
+        } catch (StarRocksException e) {
             e.getMessage();
             LOG.error(e.getMessage());
-        }
+        } 
         GenericRowData genericRowData = new GenericRowData(row.size());
         for (int i = 0; i < row.size(); i++) {
             genericRowData.setField(i, row.get(i));

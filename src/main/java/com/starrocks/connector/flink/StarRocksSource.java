@@ -61,9 +61,9 @@ public class StarRocksSource extends RichParallelSourceFunction<List<?>> impleme
 
     @Override
     public void run(SourceContext<List<?>> sourceContext) throws Exception {
-        boolean needRead = this.dataReader.startToRead();
-        while (!this.dataReader.jobDone() && needRead) {
-            List<Object> row = this.dataReader.getDataQueue().take();
+        this.dataReader.startToRead();
+        while (this.dataReader.hasNext()) {
+            List<Object> row = this.dataReader.getNext();
             sourceContext.collect(row);
         }
     }
