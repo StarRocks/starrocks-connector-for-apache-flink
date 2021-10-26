@@ -1,4 +1,4 @@
-package com.starrocks.connector.flink.related;
+package com.starrocks.connector.flink.source;
 
 import java.io.Serializable;
 import java.util.List;

@@ -1,6 +1,6 @@
 package com.starrocks.connector.flink;
 
-import com.starrocks.connector.flink.related.QueryInfo;
+import com.starrocks.connector.flink.source.QueryInfo;
 import com.starrocks.connector.flink.table.StarRocksDynamicSourceFunction;
 import com.starrocks.connector.flink.table.StarRocksSourceOptions;
 

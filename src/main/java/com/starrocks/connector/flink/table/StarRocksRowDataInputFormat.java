@@ -1,10 +1,11 @@
 package com.starrocks.connector.flink.table;
 
 import com.starrocks.connector.flink.exception.StarRocksException;
-import com.starrocks.connector.flink.related.Const;
-import com.starrocks.connector.flink.related.DataReader;
-import com.starrocks.connector.flink.related.QueryBeXTablets;
-import com.starrocks.connector.flink.related.QueryInfo;
+import com.starrocks.connector.flink.source.Const;
+import com.starrocks.connector.flink.source.DataReader;
+import com.starrocks.connector.flink.source.QueryBeXTablets;
+import com.starrocks.connector.flink.source.QueryInfo;
+
 import org.apache.flink.api.common.io.DefaultInputSplitAssigner;
 import org.apache.flink.api.common.io.RichInputFormat;
 import org.apache.flink.api.common.io.statistics.BaseStatistics;

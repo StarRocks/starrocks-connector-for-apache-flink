@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.connector.flink.related;
+package com.starrocks.connector.flink.source;
 
 import com.starrocks.connector.flink.thrift.TScanColumnDesc;
 

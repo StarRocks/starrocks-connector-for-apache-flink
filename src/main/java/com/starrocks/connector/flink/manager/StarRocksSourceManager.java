@@ -2,9 +2,9 @@ package com.starrocks.connector.flink.manager;
 
 import com.alibaba.fastjson.JSONObject;
 import com.starrocks.connector.flink.exception.HttpException;
-import com.starrocks.connector.flink.related.QueryBeXTablets;
-import com.starrocks.connector.flink.related.QueryInfo;
-import com.starrocks.connector.flink.related.QueryPlan;
+import com.starrocks.connector.flink.source.QueryBeXTablets;
+import com.starrocks.connector.flink.source.QueryInfo;
+import com.starrocks.connector.flink.source.QueryPlan;
 import com.starrocks.connector.flink.table.StarRocksSourceOptions;
 
 import org.apache.commons.codec.binary.Base64;

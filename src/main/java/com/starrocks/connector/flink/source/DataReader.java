@@ -1,4 +1,4 @@
-package com.starrocks.connector.flink.related;
+package com.starrocks.connector.flink.source;
 
 import com.starrocks.connector.flink.exception.StarRocksException;
 import com.starrocks.connector.flink.thrift.TScanBatchResult;
