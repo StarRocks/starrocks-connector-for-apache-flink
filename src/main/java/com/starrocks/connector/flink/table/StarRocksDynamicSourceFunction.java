@@ -2,7 +2,6 @@ package com.starrocks.connector.flink.table;
 
 import com.starrocks.connector.flink.exception.StarRocksException;
 import com.starrocks.connector.flink.source.Const;
-import com.starrocks.connector.flink.source.DataReader;
 import com.starrocks.connector.flink.source.QueryBeXTablets;
 import com.starrocks.connector.flink.source.QueryInfo;
 
@@ -20,7 +19,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<L
     private final QueryInfo queryInfo;
     private QueryBeXTablets queryBeXTablets;
 
-    private DataReader dataReader;
+    private StarRocksSourceDataReader dataReader;
 
     public StarRocksDynamicSourceFunction(StarRocksSourceOptions sourceOptions, QueryInfo queryInfo) {
         this.sourceOptions = sourceOptions;
@@ -40,7 +39,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<L
                 Integer.parseInt(this.sourceOptions.getBeSocketTimeout()) : Const.DEFAULT_BE_SOCKET_TIMEOUT;
         int connectTimeout = this.sourceOptions.getBeConnectTimeout() != null ?
                 Integer.parseInt(this.sourceOptions.getBeConnectTimeout()) : Const.DEFAULT_BE_CONNECT_TIMEOUT;
-        this.dataReader = new DataReader(ip, port, socketTimeout, connectTimeout);
+        this.dataReader = new StarRocksSourceDataReader(ip, port, socketTimeout, connectTimeout);
 
         int batchSize = this.sourceOptions.getBatchSize() != null ?
                 Integer.parseInt(this.sourceOptions.getBatchSize()) : Const.DEFAULT_BATCH_SIZE;

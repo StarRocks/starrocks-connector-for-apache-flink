@@ -1,6 +1,9 @@
-package com.starrocks.connector.flink.source;
+package com.starrocks.connector.flink.table;
 
 import com.starrocks.connector.flink.exception.StarRocksException;
+import com.starrocks.connector.flink.source.Const;
+import com.starrocks.connector.flink.source.RowBatch;
+import com.starrocks.connector.flink.source.Schema;
 import com.starrocks.connector.flink.thrift.TScanBatchResult;
 import com.starrocks.connector.flink.thrift.TScanCloseParams;
 import com.starrocks.connector.flink.thrift.TScanNextBatchParams;
@@ -20,9 +23,9 @@ import java.io.Serializable;
 import java.util.List;
 
 
-public class DataReader implements Serializable {
+public class StarRocksSourceDataReader implements Serializable {
 
-    private static final Logger LOG = LoggerFactory.getLogger(DataReader.class);
+    private static final Logger LOG = LoggerFactory.getLogger(StarRocksSourceDataReader.class);
 
     private TStarrocksExternalService.Client client;
     private final String IP;
@@ -37,7 +40,7 @@ public class DataReader implements Serializable {
     private List<Object> curData;
 
 
-    public DataReader(String ip, int port, int socketTimeout, int connectTimeout) throws StarRocksException {
+    public StarRocksSourceDataReader(String ip, int port, int socketTimeout, int connectTimeout) throws StarRocksException {
         this.IP = ip;
         this.PORT = port;
         
