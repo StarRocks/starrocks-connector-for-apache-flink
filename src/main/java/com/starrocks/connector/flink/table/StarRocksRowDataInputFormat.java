@@ -2,7 +2,6 @@ package com.starrocks.connector.flink.table;
 
 import com.starrocks.connector.flink.exception.StarRocksException;
 import com.starrocks.connector.flink.source.Const;
-import com.starrocks.connector.flink.source.DataReader;
 import com.starrocks.connector.flink.source.QueryBeXTablets;
 import com.starrocks.connector.flink.source.QueryInfo;
 
@@ -28,7 +27,7 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
 
     private final StarRocksSourceOptions sourceOptions;
     private final QueryInfo queryInfo;
-    private DataReader dataReader;
+    private StarRocksSourceDataReader dataReader;
 
 
     public StarRocksRowDataInputFormat(StarRocksSourceOptions sourceOptions, QueryInfo queryInfo) {
@@ -74,7 +73,7 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
         int connectTimeout = this.sourceOptions.getBeConnectTimeout() != null ?
                 Integer.parseInt(this.sourceOptions.getBeConnectTimeout()) : Const.DEFAULT_BE_CONNECT_TIMEOUT;
         try {
-            this.dataReader = new DataReader(ip, port, socketTimeout, connectTimeout);
+            this.dataReader = new StarRocksSourceDataReader(ip, port, socketTimeout, connectTimeout);
         } catch (StarRocksException e) {
             e.printStackTrace();
             LOG.error(e.getMessage());

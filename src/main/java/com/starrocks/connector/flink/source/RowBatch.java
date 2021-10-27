@@ -245,6 +245,19 @@ public class RowBatch {
                             addValueToRow(rowIndex, DecimalData.fromBigDecimal(value, value.precision(), value.scale()));
                         }
                         break;
+                    case "DECIMAL128":
+                        Preconditions.checkArgument(mt.equals(Types.MinorType.DECIMAL),
+                                typeMismatchMessage(currentType, mt));
+                        DecimalVector decimalVectors = (DecimalVector) curFieldVector;
+                        for (int rowIndex = 0; rowIndex < rowCountInOneBatch; rowIndex++) {
+                            if (decimalVectors.isNull(rowIndex)) {
+                                addValueToRow(rowIndex, null);
+                                continue;
+                            }
+                            BigDecimal value = decimalVectors.getObject(rowIndex).stripTrailingZeros();
+                            addValueToRow(rowIndex, DecimalData.fromBigDecimal(value, value.precision(), value.scale()));
+                        }
+                        break;
                     case "DATE":
                     case "LARGEINT":
                     case "DATETIME":
