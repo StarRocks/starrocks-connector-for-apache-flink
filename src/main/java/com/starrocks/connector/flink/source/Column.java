@@ -17,17 +17,17 @@
 
 package com.starrocks.connector.flink.source;
 
-public class Field {
+public class Column {
     private String name;
     private String type;
     private String comment;
     private int precision;
     private int scale;
 
-    public Field() {
+    public Column() {
     }
 
-    public Field(String name, String type, String comment, int precision, int scale) {
+    public Column(String name, String type, String comment, int precision, int scale) {
         this.name = name;
         this.type = type;
         this.comment = comment;

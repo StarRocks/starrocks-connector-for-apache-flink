@@ -1,5 +1,6 @@
 package com.starrocks.connector.flink.table;
 
+
 import com.starrocks.connector.flink.exception.StarRocksException;
 import com.starrocks.connector.flink.source.Const;
 import com.starrocks.connector.flink.source.QueryBeXTablets;
@@ -14,6 +15,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.io.InputSplitAssigner;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.types.DataType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,12 +29,14 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
 
     private final StarRocksSourceOptions sourceOptions;
     private final QueryInfo queryInfo;
+    private final DataType[] flinkDataTypes;
     private StarRocksSourceDataReader dataReader;
 
 
-    public StarRocksRowDataInputFormat(StarRocksSourceOptions sourceOptions, QueryInfo queryInfo) {
+    public StarRocksRowDataInputFormat(StarRocksSourceOptions sourceOptions, QueryInfo queryInfo, DataType[] flinkDataTypes) {
         this.sourceOptions = sourceOptions;
         this.queryInfo = queryInfo;
+        this.flinkDataTypes = flinkDataTypes;
     }
 
     @Override
@@ -73,7 +77,7 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
         int connectTimeout = this.sourceOptions.getBeConnectTimeout() != null ?
                 Integer.parseInt(this.sourceOptions.getBeConnectTimeout()) : Const.DEFAULT_BE_CONNECT_TIMEOUT;
         try {
-            this.dataReader = new StarRocksSourceDataReader(ip, port, socketTimeout, connectTimeout);
+            this.dataReader = new StarRocksSourceDataReader(ip, port, socketTimeout, connectTimeout, flinkDataTypes);
         } catch (StarRocksException e) {
             e.printStackTrace();
             LOG.error(e.getMessage());

@@ -15,7 +15,7 @@ import java.io.IOException;
 
 public class StarRocksDynamicTableSource implements ScanTableSource, LookupTableSource {
 
-    private transient TableSchema flinkSchema;
+    private final TableSchema flinkSchema;
     private final StarRocksSourceOptions options;
 
     private StarRocksSourceManager manager;
@@ -23,7 +23,6 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
     public StarRocksDynamicTableSource(StarRocksSourceOptions options, TableSchema schema) {
         this.options = options;
         this.flinkSchema = schema;
-        
     }
 
     @Override
@@ -42,7 +41,7 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
         } catch (IOException | HttpException e) {
             throw new RuntimeException(e.getMessage());
         }
-        StarRocksRowDataInputFormat inputFormat = new StarRocksRowDataInputFormat(this.options, queryInfo);
+        StarRocksRowDataInputFormat inputFormat = new StarRocksRowDataInputFormat(this.options, queryInfo, flinkSchema.getFieldDataTypes());
         return InputFormatProvider.of(inputFormat);
     }
 

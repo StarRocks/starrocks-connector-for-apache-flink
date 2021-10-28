@@ -22,15 +22,15 @@ import com.starrocks.connector.flink.thrift.TScanColumnDesc;
 import java.util.ArrayList;
 import java.util.List;
 
-public class Schema {
+public class StarRocksSchema {
     private int status = 0;
-    private List<Field> properties;
+    private List<Column> properties;
 
-    public Schema() {
+    public StarRocksSchema() {
         properties = new ArrayList<>();
     }
 
-    public Schema(int fieldCount) {
+    public StarRocksSchema(int fieldCount) {
         properties = new ArrayList<>(fieldCount);
     }
 
@@ -42,23 +42,23 @@ public class Schema {
         this.status = status;
     }
 
-    public List<Field> getProperties() {
+    public List<Column> getProperties() {
         return properties;
     }
 
-    public void setProperties(List<Field> properties) {
+    public void setProperties(List<Column> properties) {
         this.properties = properties;
     }
 
     public void put(String name, String type, String comment, int scale, int precision) {
-        properties.add(new Field(name, type, comment, scale, precision));
+        properties.add(new Column(name, type, comment, scale, precision));
     }
 
-    public void put(Field f) {
+    public void put(Column f) {
         properties.add(f);
     }
 
-    public Field get(int index) {
+    public Column get(int index) {
         if (index >= properties.size()) {
             throw new IndexOutOfBoundsException("Index: " + index + ", Fields size：" + properties.size());
         }
@@ -69,9 +69,9 @@ public class Schema {
         return properties.size();
     }
 
-    public static Schema genSchema(List<TScanColumnDesc> tscanColumnDescs) {
-        Schema schema = new Schema(tscanColumnDescs.size());
-        tscanColumnDescs.stream().forEach(desc -> schema.put(new Field(desc.getName(), desc.getType().name(), "", 0, 0)));
+    public static StarRocksSchema genSchema(List<TScanColumnDesc> tscanColumnDescs) {
+        StarRocksSchema schema = new StarRocksSchema(tscanColumnDescs.size());
+        tscanColumnDescs.stream().forEach(desc -> schema.put(new Column(desc.getName(), desc.getType().name(), "", 0, 0)));
         return schema;
     }
 }

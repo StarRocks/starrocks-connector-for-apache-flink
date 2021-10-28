@@ -6,6 +6,9 @@ import com.starrocks.connector.flink.source.QueryInfo;
 import com.starrocks.connector.flink.table.StarRocksDynamicSourceFunction;
 import com.starrocks.connector.flink.table.StarRocksSourceOptions;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.catalog.ResolvedSchema;
 
 
 public class StarRocksSourceDataStreamTest {
@@ -28,12 +31,16 @@ public class StarRocksSourceDataStreamTest {
 
         StarRocksSourceManager manager = new StarRocksSourceManager(options);
         QueryInfo queryInfo = manager.getQueryInfo();
-
+        
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(queryInfo.getBeXTablets().size());
         env.addSource(StarRocksSource.source(
             options, 
-            queryInfo
+            queryInfo,
+            TableSchema.builder()
+            .field("score", DataTypes.INT())
+            .field("name", DataTypes.VARCHAR(20))
+            .build()
             )).print();
         env.execute("StarRocks flink source");
     }

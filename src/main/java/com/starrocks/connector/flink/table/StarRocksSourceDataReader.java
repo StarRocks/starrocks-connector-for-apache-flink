@@ -1,9 +1,9 @@
 package com.starrocks.connector.flink.table;
 
 import com.starrocks.connector.flink.exception.StarRocksException;
+import com.starrocks.connector.flink.row.RowBatch;
 import com.starrocks.connector.flink.source.Const;
-import com.starrocks.connector.flink.source.RowBatch;
-import com.starrocks.connector.flink.source.Schema;
+import com.starrocks.connector.flink.source.StarRocksSchema;
 import com.starrocks.connector.flink.thrift.TScanBatchResult;
 import com.starrocks.connector.flink.thrift.TScanCloseParams;
 import com.starrocks.connector.flink.thrift.TScanNextBatchParams;
@@ -11,6 +11,8 @@ import com.starrocks.connector.flink.thrift.TScanOpenParams;
 import com.starrocks.connector.flink.thrift.TScanOpenResult;
 import com.starrocks.connector.flink.thrift.TStarrocksExternalService;
 import com.starrocks.connector.flink.thrift.TStatusCode;
+
+import org.apache.flink.table.types.DataType;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TProtocol;
@@ -30,20 +32,19 @@ public class StarRocksSourceDataReader implements Serializable {
     private TStarrocksExternalService.Client client;
     private final String IP;
     private final int PORT;
-    private Schema schema;
+    private final DataType[] flinkDataTypes;
     private String contextId;
     private int readerOffset = 0;
-    private boolean resultEOS = false;
-
+    private StarRocksSchema srSchema;
 
     private RowBatch curRowBatch;
     private List<Object> curData;
 
 
-    public StarRocksSourceDataReader(String ip, int port, int socketTimeout, int connectTimeout) throws StarRocksException {
+    public StarRocksSourceDataReader(String ip, int port, int socketTimeout, int connectTimeout, DataType[] flinkDataTypes) throws StarRocksException {
         this.IP = ip;
         this.PORT = port;
-        
+        this.flinkDataTypes = flinkDataTypes;
         TBinaryProtocol.Factory factory = new TBinaryProtocol.Factory();
         TSocket socket = new TSocket(IP, PORT, socketTimeout, connectTimeout);
         try {
@@ -86,7 +87,7 @@ public class StarRocksSourceDataReader implements Serializable {
         } catch (TException e) {
             throw new StarRocksException(e.getMessage());
         }
-        this.schema = Schema.genSchema(result.getSelected_columns());
+        this.srSchema = StarRocksSchema.genSchema(result.getSelected_columns());
         this.contextId = result.getContext_id();
     }
 
@@ -105,7 +106,6 @@ public class StarRocksSourceDataReader implements Serializable {
                                 + result.getStatus().getError_msgs()
                 );
             }
-            this.resultEOS = result.eos;
             if (!result.eos) {
                 handleResult(result);
             }
@@ -134,7 +134,7 @@ public class StarRocksSourceDataReader implements Serializable {
     }
     
     private void handleResult(TScanBatchResult result) throws StarRocksException, InterruptedException {
-        RowBatch rowBatch = new RowBatch(result, this.schema).readArrow();
+        RowBatch rowBatch = new RowBatch(result, flinkDataTypes, srSchema).readArrow();
         this.readerOffset = rowBatch.getReadRowCount() + this.readerOffset;
         this.curRowBatch = rowBatch;
         this.curData = rowBatch.next();
