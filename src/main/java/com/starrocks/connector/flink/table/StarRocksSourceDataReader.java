@@ -1,7 +1,7 @@
 package com.starrocks.connector.flink.table;
 
 import com.starrocks.connector.flink.exception.StarRocksException;
-import com.starrocks.connector.flink.row.RowBatch;
+import com.starrocks.connector.flink.row.StarRocksSourceFlinkRows;
 import com.starrocks.connector.flink.source.Const;
 import com.starrocks.connector.flink.source.StarRocksSchema;
 import com.starrocks.connector.flink.thrift.TScanBatchResult;
@@ -37,7 +37,7 @@ public class StarRocksSourceDataReader implements Serializable {
     private int readerOffset = 0;
     private StarRocksSchema srSchema;
 
-    private RowBatch curRowBatch;
+    private StarRocksSourceFlinkRows curRowBatch;
     private List<Object> curData;
 
 
@@ -134,7 +134,7 @@ public class StarRocksSourceDataReader implements Serializable {
     }
     
     private void handleResult(TScanBatchResult result) throws StarRocksException, InterruptedException {
-        RowBatch rowBatch = new RowBatch(result, flinkDataTypes, srSchema).readArrow();
+        StarRocksSourceFlinkRows rowBatch = new StarRocksSourceFlinkRows(result, flinkDataTypes, srSchema).readArrow();
         this.readerOffset = rowBatch.getReadRowCount() + this.readerOffset;
         this.curRowBatch = rowBatch;
         this.curData = rowBatch.next();
