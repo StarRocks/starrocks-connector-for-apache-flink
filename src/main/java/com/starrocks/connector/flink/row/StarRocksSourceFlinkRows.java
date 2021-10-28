@@ -62,8 +62,8 @@ import java.util.NoSuchElementException;
 /**
  * row batch data container.
  */
-public class RowBatch {
-    private static Logger logger = LoggerFactory.getLogger(RowBatch.class);
+public class StarRocksSourceFlinkRows {
+    private static Logger logger = LoggerFactory.getLogger(StarRocksSourceFlinkRows.class);
 
     public static class Row {
         private List<Object> cols;
@@ -97,7 +97,7 @@ public class RowBatch {
         return rowBatch;
     }
 
-    public RowBatch(TScanBatchResult nextResult, DataType[] flinkDataTypes, StarRocksSchema srSchema) {
+    public StarRocksSourceFlinkRows(TScanBatchResult nextResult, DataType[] flinkDataTypes, StarRocksSchema srSchema) {
         this.flinkDataTypes = flinkDataTypes;
         this.starRocksSchema = srSchema;
         this.rootAllocator = new RootAllocator(Integer.MAX_VALUE);
@@ -107,7 +107,7 @@ public class RowBatch {
         this.offsetInRowBatch = 0;
     }
 
-    public RowBatch readArrow() throws StarRocksException {
+    public StarRocksSourceFlinkRows readArrow() throws StarRocksException {
         try {
             this.root = arrowStreamReader.getVectorSchemaRoot();
             while (arrowStreamReader.loadNextBatch()) {
