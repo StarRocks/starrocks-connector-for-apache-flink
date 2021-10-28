@@ -13,14 +13,14 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
-      - run: git checkout main
+      - run: git checkout main && git pull origin main
       - name: Pacakge main
         uses: xlui/action-maven-cli@jdk8
         with:
           lifecycle: 'clean validate package -Dmaven.test.skip=true'
       - id: p1
         run: find target/ -name "flink-connector*.jar" | grep -i "[0-9].jar" | xargs -i cp {} ./ && echo ::set-output name=jar::$(ls -t flink-connector*.jar | head -n 1)
-      - run: git checkout main_flink-1.11
+      - run: git checkout main_flink-1.11 && git pull origin main_flink-1.11
       - name: Pacakge main_flink-1.11
         uses: xlui/action-maven-cli@jdk8
         with:
