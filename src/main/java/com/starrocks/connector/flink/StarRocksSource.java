@@ -4,6 +4,8 @@ import com.starrocks.connector.flink.source.QueryInfo;
 import com.starrocks.connector.flink.table.StarRocksDynamicSourceFunction;
 import com.starrocks.connector.flink.table.StarRocksSourceOptions;
 
+import org.apache.flink.table.api.TableSchema;
+
 
 public class StarRocksSource {
     
@@ -15,9 +17,14 @@ public class StarRocksSource {
      */
     public static StarRocksDynamicSourceFunction source(
         StarRocksSourceOptions sourceOptions,
-        QueryInfo queryInfo) {
+        QueryInfo queryInfo,
+        TableSchema flinkSchema
+        ) {
+
         return new StarRocksDynamicSourceFunction(
             sourceOptions, 
-            queryInfo);
+            queryInfo,
+            flinkSchema
+            );
     }
 }

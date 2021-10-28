@@ -10,6 +10,7 @@ import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.source.RichParallelSourceFunction;
+import org.apache.flink.table.api.TableSchema;
 
 import java.util.List;
 
@@ -17,13 +18,15 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<L
 
     private final StarRocksSourceOptions sourceOptions;
     private final QueryInfo queryInfo;
+    private final TableSchema flinkSchema;
     private QueryBeXTablets queryBeXTablets;
 
     private StarRocksSourceDataReader dataReader;
 
-    public StarRocksDynamicSourceFunction(StarRocksSourceOptions sourceOptions, QueryInfo queryInfo) {
+    public StarRocksDynamicSourceFunction(StarRocksSourceOptions sourceOptions, QueryInfo queryInfo, TableSchema fSchema) {
         this.sourceOptions = sourceOptions;
         this.queryInfo = queryInfo;
+        this.flinkSchema = fSchema;
     }
 
     @Override
@@ -39,7 +42,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<L
                 Integer.parseInt(this.sourceOptions.getBeSocketTimeout()) : Const.DEFAULT_BE_SOCKET_TIMEOUT;
         int connectTimeout = this.sourceOptions.getBeConnectTimeout() != null ?
                 Integer.parseInt(this.sourceOptions.getBeConnectTimeout()) : Const.DEFAULT_BE_CONNECT_TIMEOUT;
-        this.dataReader = new StarRocksSourceDataReader(ip, port, socketTimeout, connectTimeout);
+        this.dataReader = new StarRocksSourceDataReader(ip, port, socketTimeout, connectTimeout, this.flinkSchema.getFieldDataTypes());
 
         int batchSize = this.sourceOptions.getBatchSize() != null ?
                 Integer.parseInt(this.sourceOptions.getBatchSize()) : Const.DEFAULT_BATCH_SIZE;

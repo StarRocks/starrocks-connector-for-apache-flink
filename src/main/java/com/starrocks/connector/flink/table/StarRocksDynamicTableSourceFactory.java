@@ -21,8 +21,8 @@ public final class StarRocksDynamicTableSourceFactory implements DynamicTableSou
         ReadableConfig options = helper.getOptions();
         // validate some special properties
         StarRocksSourceOptions sourceOptions = new StarRocksSourceOptions(options, context.getCatalogTable().getOptions());
-        TableSchema physicalSchema = TableSchemaUtils.getPhysicalSchema(context.getCatalogTable().getSchema());
-        return new StarRocksDynamicTableSource(sourceOptions, physicalSchema);
+        TableSchema flinkSchema = TableSchemaUtils.getPhysicalSchema(context.getCatalogTable().getSchema());;
+        return new StarRocksDynamicTableSource(sourceOptions, flinkSchema);
     }
 
 
