@@ -53,7 +53,7 @@ public class StarRocksSourceDataReader implements Serializable {
             throw  new StarRocksException(e.getMessage());
         }
         TProtocol protocol = factory.getProtocol(socket);
-        client = new TStarrocksExternalService.Client(protocol);
+        client = new TStarrocksExternalService.Client(protocol);   
     }
 
     public void openScanner(List<Long> tablets, String opaqued_query_plan,
@@ -124,7 +124,7 @@ public class StarRocksSourceDataReader implements Serializable {
         List<Object> preparedData = this.curData;
         this.curData = null;
         if (this.curRowBatch.hasNext()) {
-            this.curData = this.getNext();
+            this.curData = curRowBatch.next();
         }
         if (this.curData != null) {
             return preparedData;    
