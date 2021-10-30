@@ -31,7 +31,7 @@ import java.util.Set;
 
 
 
-public class StarRocksSourceManager implements Serializable {
+public class StarRocksSourceInfoVisitor implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
@@ -40,7 +40,7 @@ public class StarRocksSourceManager implements Serializable {
     private final StarRocksSourceOptions sourceOptions;
 
 
-    public StarRocksSourceManager(StarRocksSourceOptions sourceOptions) {
+    public StarRocksSourceInfoVisitor(StarRocksSourceOptions sourceOptions) {
 
         this.sourceOptions = sourceOptions;
     }
@@ -64,6 +64,7 @@ public class StarRocksSourceManager implements Serializable {
     }
 
     private static Map<String, Set<Long>> transferQueryPlanToBeXTablet(QueryPlan queryPlan) {
+
         Map<String, Set<Long>> beXTablets = new HashMap<>();
         queryPlan.getPartitions().forEach((tabletId, routingList) -> {
             int tabletCount = Integer.MAX_VALUE;
