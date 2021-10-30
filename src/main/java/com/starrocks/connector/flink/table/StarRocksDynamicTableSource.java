@@ -1,7 +1,7 @@
 package com.starrocks.connector.flink.table;
 
 import com.starrocks.connector.flink.exception.HttpException;
-import com.starrocks.connector.flink.manager.StarRocksSourceManager;
+import com.starrocks.connector.flink.manager.StarRocksSourceInfoVisitor;
 import com.starrocks.connector.flink.source.QueryInfo;
 
 import org.apache.flink.table.api.TableSchema;
@@ -13,12 +13,12 @@ import org.apache.flink.table.connector.source.ScanTableSource;
 
 import java.io.IOException;
 
-public class StarRocksDynamicTableSource implements ScanTableSource, LookupTableSource {
+public class StarRocksDynamicTableSource implements ScanTableSource {
 
     private final TableSchema flinkSchema;
     private final StarRocksSourceOptions options;
 
-    private StarRocksSourceManager manager;
+    private StarRocksSourceInfoVisitor manager;
 
     public StarRocksDynamicTableSource(StarRocksSourceOptions options, TableSchema schema) {
         this.options = options;
@@ -33,7 +33,7 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
     @Override
     public ScanRuntimeProvider getScanRuntimeProvider(ScanContext scanContext) {
 
-        manager = new StarRocksSourceManager(options);
+        manager = new StarRocksSourceInfoVisitor(options);
 
         QueryInfo queryInfo;
         try {
@@ -53,10 +53,5 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
     @Override
     public String asSummaryString() {
         return "StarRocks Table Source";
-    }
-
-    @Override
-    public LookupRuntimeProvider getLookupRuntimeProvider(LookupContext lookupContext) {
-        return null;
     }
 }

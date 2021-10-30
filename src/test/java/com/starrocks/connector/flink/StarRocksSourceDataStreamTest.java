@@ -1,7 +1,7 @@
 package com.starrocks.connector.flink;
 
 
-import com.starrocks.connector.flink.manager.StarRocksSourceManager;
+import com.starrocks.connector.flink.manager.StarRocksSourceInfoVisitor;
 import com.starrocks.connector.flink.source.QueryInfo;
 import com.starrocks.connector.flink.table.StarRocksDynamicSourceFunction;
 import com.starrocks.connector.flink.table.StarRocksSourceOptions;
@@ -29,7 +29,7 @@ public class StarRocksSourceDataStreamTest {
                 // .withProperty("filter", "col1 = 0")
                 .build();
 
-        StarRocksSourceManager manager = new StarRocksSourceManager(options);
+        StarRocksSourceInfoVisitor manager = new StarRocksSourceInfoVisitor(options);
         QueryInfo queryInfo = manager.getQueryInfo();
         
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();

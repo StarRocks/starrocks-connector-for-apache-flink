@@ -37,13 +37,6 @@ public class StarRocksSourceTest {
                     "  'table-name' = 'flink_type_test'\n" +
                 ")"
                 );
-        final Table result = tEnv.sqlQuery("SELECT * from flink_type_test");
-        tEnv.toRetractStream(result, Row.class).print();
-        try {
-            env.execute();
-        } catch (Exception e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-        }
+        tEnv.executeSql("SELECT * from flink_type_test").print();
     }
 }
