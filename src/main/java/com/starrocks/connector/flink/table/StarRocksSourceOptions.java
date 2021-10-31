@@ -18,15 +18,8 @@ public class StarRocksSourceOptions implements Serializable {
     private final Map<String, String> tableOptionsMap;
     private final Map<String, String> tableSQLProps = new HashMap<>();
 
-    public static final ConfigOption<String> HTTP_NODES = ConfigOptions.key("http-nodes")
-            .stringType().noDefaultValue().withDescription("Hosts of the http node like: `fe_ip1:http_port,fe_ip2:http_port...`.");
 
-    public static final ConfigOption<String> BE_SOCKET_TIMEOUT = ConfigOptions.key("be-socket-timeout-ms")
-            .stringType().noDefaultValue().withDescription("be socket timeout");
-    public static final ConfigOption<String> BE_CONNECT_TIMEOUT = ConfigOptions.key("be-connect-timeout-ms")
-            .stringType().noDefaultValue().withDescription("be connect timeout");
-
-
+    // required Options
     public static final ConfigOption<String> USERNAME = ConfigOptions.key("username")
             .stringType().noDefaultValue().withDescription("StarRocks user name.");
     public static final ConfigOption<String> PASSWORD = ConfigOptions.key("password")
@@ -36,32 +29,51 @@ public class StarRocksSourceOptions implements Serializable {
             .stringType().noDefaultValue().withDescription("Database name");
     public static final ConfigOption<String> TABLE_NAME = ConfigOptions.key("table-name")
             .stringType().noDefaultValue().withDescription("Table name");
+    
+    public static final ConfigOption<String> SCAN_URL = ConfigOptions.key("scan-url")
+            .stringType().noDefaultValue().withDescription("Hosts of the fe node like: `fe_ip1:http_port,fe_ip2:http_port...`.");
 
+    // optional Options
+    public static final ConfigOption<String> CONNECT_TIMEOUT_MS = ConfigOptions.key("scan.connect.timeout-ms")
+            .stringType().noDefaultValue().withDescription("connect timeout");
+        
+    public static final ConfigOption<String> BATCH_SIZE = ConfigOptions.key("scan.params.batch-size")
+            .stringType().noDefaultValue().withDescription("batch size");
+
+    public static final ConfigOption<String> PROPERTIES = ConfigOptions.key("scan.params.properties")
+            .stringType().noDefaultValue().withDescription("reserved params for use");
+    
+    public static final ConfigOption<String> LIMIT = ConfigOptions.key("scan.params.limit")
+            .stringType().noDefaultValue().withDescription("The query limit, if specified.");
+
+
+    public static final ConfigOption<String> KEEP_ALIVE_MIN = ConfigOptions.key("scan.params.keep-alive-min")
+            .stringType().noDefaultValue().withDescription("max keep alive time min");
+    
+    public static final ConfigOption<String> QUERTY_TIMEOUT = ConfigOptions.key("scan.params.query-timeout")
+            .stringType().noDefaultValue().withDescription("query timeout for a single query");
+
+    public static final ConfigOption<String> MEM_LIMIT = ConfigOptions.key("scan.params.mem-limit")
+            .stringType().noDefaultValue().withDescription("memory limit for a single query");
+
+
+
+    // ????
     public static final ConfigOption<String> COLUMNS = ConfigOptions.key("columns")
             .stringType().noDefaultValue().withDescription("columns");
     public static final ConfigOption<String> FILTER = ConfigOptions.key("filter")
             .stringType().noDefaultValue().withDescription("filters");
-
-
-    public static final ConfigOption<String> BATCH_SIZE = ConfigOptions.key("batch-size")
-            .stringType().noDefaultValue().withDescription("batch size");
-
-    public static final ConfigOption<String> QUERTY_TIMEOUT = ConfigOptions.key("query-timeout")
-            .stringType().noDefaultValue().withDescription("be connect timeout");
-
-    public static final ConfigOption<String> MEM_LIMIT = ConfigOptions.key("mem-limit")
-            .stringType().noDefaultValue().withDescription("be connect timeout");
-
-    public static final String SOURCE_PROPERTIES_PREFIX = "source.properties.";
+    
+    public static final String SOURCE_PROPERTIES_PREFIX = "scan.params.";
 
     public StarRocksSourceOptions(ReadableConfig options, Map<String, String> optionsMap) {
         this.tableOptions = options;
         this.tableOptionsMap = optionsMap;
-        parseSinkStreamLoadProperties();
+        parseSourceProperties();
         this.validateRequired();
     }
 
-    private void parseSinkStreamLoadProperties() {
+    private void parseSourceProperties() {
         tableOptionsMap.keySet().stream()
                 .filter(key -> key.startsWith(SOURCE_PROPERTIES_PREFIX))
                 .forEach(key -> {
@@ -77,7 +89,7 @@ public class StarRocksSourceOptions implements Serializable {
                 PASSWORD,
                 TABLE_NAME,
                 DATABASE_NAME,
-                HTTP_NODES,
+                SCAN_URL,
         };
         int presentCount = 0;
         for (ConfigOption<?> configOption : configOptions) {
@@ -90,14 +102,13 @@ public class StarRocksSourceOptions implements Serializable {
                 "Either all or none of the following options should be provided:\n" + String.join("\n", propertyNames));
     }
 
-    public String getHttpNodes() {
-        return tableOptions.get(HTTP_NODES);
+    // required Options
+    public String getUsername() {
+        return tableOptions.get(USERNAME);
     }
 
-    public String getBeSocketTimeout() { return tableOptions.get(BE_SOCKET_TIMEOUT); }
-
-    public String getBeConnectTimeout() {
-        return tableOptions.get(BE_CONNECT_TIMEOUT);
+    public String getPassword() {
+        return tableOptions.get(PASSWORD);
     }
 
     public String getDatabaseName() {
@@ -108,24 +119,29 @@ public class StarRocksSourceOptions implements Serializable {
         return tableOptions.get(TABLE_NAME);
     }
 
-    public String getUsername() {
-        return tableOptions.get(USERNAME);
+    public String getScanUrl() {
+        return tableOptions.get(SCAN_URL);
     }
 
-    public String getPassword() {
-        return tableOptions.get(PASSWORD);
-    }
 
-    public String getColums() {
-        return tableOptions.get(COLUMNS);
-    }
+    // optional Options
+    public String getConnectTimeoutMs() { return tableOptions.get(CONNECT_TIMEOUT_MS); }
 
-    public String getFilter() {
-        return tableOptions.get(FILTER);
-    }
-
+    
     public String getBatchSize() {
         return tableOptions.get(BATCH_SIZE);
+    }
+
+    public String getProperties() {
+        return tableOptions.get(PROPERTIES);
+    }
+
+    public String getLimit() {
+        return tableOptions.get(LIMIT);
+    }
+
+    public String getKeepAliveMin() {
+        return tableOptions.get(KEEP_ALIVE_MIN);
     }
 
     public String getQueryTimeout() {
@@ -136,6 +152,14 @@ public class StarRocksSourceOptions implements Serializable {
         return tableOptions.get(MEM_LIMIT);
     }
 
+    // ????
+    public String getColums() {
+        return tableOptions.get(COLUMNS);
+    }
+
+    public String getFilter() {
+        return tableOptions.get(FILTER);
+    }
 
     public static Builder builder() {
         return new Builder();

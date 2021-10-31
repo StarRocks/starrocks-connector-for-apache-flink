@@ -91,10 +91,10 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
         String beNode[] = queryBeXTablets.getBeNode().split(":");
         String ip = beNode[0];
         int port = Integer.parseInt(beNode[1]);
-        int socketTimeout = this.sourceOptions.getBeSocketTimeout() != null ?
-                Integer.parseInt(this.sourceOptions.getBeSocketTimeout()) : Const.DEFAULT_BE_SOCKET_TIMEOUT;
-        int connectTimeout = this.sourceOptions.getBeConnectTimeout() != null ?
-                Integer.parseInt(this.sourceOptions.getBeConnectTimeout()) : Const.DEFAULT_BE_CONNECT_TIMEOUT;
+        int socketTimeout = this.sourceOptions.getConnectTimeoutMs() != null ?
+                Integer.parseInt(this.sourceOptions.getConnectTimeoutMs()) : Const.DEFAULT_BE_SOCKET_TIMEOUT;
+        int connectTimeout = this.sourceOptions.getConnectTimeoutMs() != null ?
+                Integer.parseInt(this.sourceOptions.getConnectTimeoutMs()) : Const.DEFAULT_BE_CONNECT_TIMEOUT;
         try {
             this.dataReader = new StarRocksSourceDataReader(ip, port, socketTimeout, connectTimeout, flinkDataTypes, selectColumns);
         } catch (StarRocksException e) {
@@ -182,8 +182,6 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
         private String columns;
         private SelectColumn[] selectColumns;
         private String filter;
-        
-
         
         public Builder setSourceOptions(StarRocksSourceOptions sourceOptions) {
             this.sourceOptions = sourceOptions;

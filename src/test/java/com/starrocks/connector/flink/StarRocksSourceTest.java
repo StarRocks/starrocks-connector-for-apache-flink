@@ -28,7 +28,7 @@ public class StarRocksSourceTest {
                     "decimal_1 DECIMAL(27,9) \n"+
                 ") WITH (\n" +
                     "  'connector' = 'starrocks-source',\n" +
-                    "  'http-nodes' = '172.26.92.152:8634,172.26.92.152:8634,172.26.92.152:8634',\n" +
+                    "  'scan-url' = '172.26.92.152:8634,172.26.92.152:8634,172.26.92.152:8634',\n" +
                     "  'username' = 'root',\n" +
                     "  'password' = '',\n" +                
                     "  'database-name' = 'cjs_test',\n" +
@@ -37,7 +37,7 @@ public class StarRocksSourceTest {
                 );
         // tEnv.executeSql("SELECT * from flink_type_test where int_1 < 1 and (char_1 = 'A' or varchar_1 = 'B')").print();
         // tEnv.executeSql("SELECT int_1, char_1 from flink_type_test where char_1 = 'A' limit 1").print();
-        // tEnv.executeSql("SELECT int_1, char_1 from flink_type_test where char_1 = 'A'").print();
-        tEnv.executeSql("SELECT * from flink_type_test").print();
+        tEnv.executeSql("SELECT int_1, char_1 from flink_type_test where char_1 = 'A'").print();
+        // tEnv.executeSql("SELECT * from flink_type_test").print();
     }
 }

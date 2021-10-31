@@ -56,7 +56,7 @@ public class StarRocksSourceInfoVisitor implements Serializable {
             // querySQL = querySQL + " limit " + limit;
         }
         LOG.info("query sql [{}]", querySQL);
-        String[] httpNodes = sourceOptions.getHttpNodes().split(",");
+        String[] httpNodes = sourceOptions.getScanUrl().split(",");
         QueryPlan plan = getQueryPlan(querySQL, httpNodes[new Random().nextInt(httpNodes.length)], sourceOptions);
         Map<String, Set<Long>> beXTablets = transferQueryPlanToBeXTablet(plan);
         List<QueryBeXTablets> queryBeXTabletsList = new ArrayList<>();
