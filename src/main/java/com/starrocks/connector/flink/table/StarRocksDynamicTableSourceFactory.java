@@ -40,7 +40,7 @@ public final class StarRocksDynamicTableSourceFactory implements DynamicTableSou
         options.add(StarRocksSourceOptions.PASSWORD);
         options.add(StarRocksSourceOptions.TABLE_NAME);
         options.add(StarRocksSourceOptions.DATABASE_NAME);
-        options.add(StarRocksSourceOptions.HTTP_NODES);
+        options.add(StarRocksSourceOptions.SCAN_URL);
         return options;
     }
 
@@ -48,8 +48,8 @@ public final class StarRocksDynamicTableSourceFactory implements DynamicTableSou
     public Set<ConfigOption<?>> optionalOptions() {
 
         final Set<ConfigOption<?>> options = new HashSet<>();
-        options.add(StarRocksSourceOptions.BE_SOCKET_TIMEOUT);
-        options.add(StarRocksSourceOptions.BE_CONNECT_TIMEOUT);
+        options.add(StarRocksSourceOptions.CONNECT_TIMEOUT_MS);
+        options.add(StarRocksSourceOptions.CONNECT_TIMEOUT_MS);
         options.add(StarRocksSourceOptions.BATCH_SIZE);
         options.add(StarRocksSourceOptions.QUERTY_TIMEOUT);
         options.add(StarRocksSourceOptions.MEM_LIMIT);

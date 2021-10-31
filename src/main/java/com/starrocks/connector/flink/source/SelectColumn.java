@@ -3,6 +3,8 @@ package com.starrocks.connector.flink.source;
 import java.io.Serializable;
 
 public class SelectColumn implements Serializable {
+    
+    private static final long serialVersionUID = 1L;
 
     private String columnName;
     private int columnIndexInFlinkTable;

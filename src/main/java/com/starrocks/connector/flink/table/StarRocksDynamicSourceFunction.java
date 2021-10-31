@@ -4,6 +4,7 @@ import com.starrocks.connector.flink.exception.StarRocksException;
 import com.starrocks.connector.flink.source.Const;
 import com.starrocks.connector.flink.source.QueryBeXTablets;
 import com.starrocks.connector.flink.source.QueryInfo;
+import com.starrocks.connector.flink.source.SelectColumn;
 
 import org.apache.flink.api.common.typeinfo.TypeHint;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
@@ -11,6 +12,7 @@ import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.source.RichParallelSourceFunction;
 import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.types.DataType;
 
 import java.util.List;
 
@@ -18,15 +20,17 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<L
 
     private final StarRocksSourceOptions sourceOptions;
     private final QueryInfo queryInfo;
-    private final TableSchema flinkSchema;
+    private final DataType[] datatypes;
+    private final SelectColumn[] selectColumns;
     private QueryBeXTablets queryBeXTablets;
 
     private StarRocksSourceDataReader dataReader;
 
-    public StarRocksDynamicSourceFunction(StarRocksSourceOptions sourceOptions, QueryInfo queryInfo, TableSchema fSchema) {
+    public StarRocksDynamicSourceFunction(StarRocksSourceOptions sourceOptions, QueryInfo queryInfo, TableSchema fSchema, SelectColumn[] selectColumns) {
         this.sourceOptions = sourceOptions;
         this.queryInfo = queryInfo;
-        this.flinkSchema = fSchema;
+        this.datatypes = fSchema.getFieldDataTypes();
+        this.selectColumns = selectColumns;
     }
 
     @Override
@@ -38,11 +42,11 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<L
         String beNode[] = this.queryBeXTablets.getBeNode().split(":");
         String ip = beNode[0];
         int port = Integer.parseInt(beNode[1]);
-        int socketTimeout = this.sourceOptions.getBeSocketTimeout() != null ?
-                Integer.parseInt(this.sourceOptions.getBeSocketTimeout()) : Const.DEFAULT_BE_SOCKET_TIMEOUT;
-        int connectTimeout = this.sourceOptions.getBeConnectTimeout() != null ?
-                Integer.parseInt(this.sourceOptions.getBeConnectTimeout()) : Const.DEFAULT_BE_CONNECT_TIMEOUT;
-        this.dataReader = new StarRocksSourceDataReader(ip, port, socketTimeout, connectTimeout, this.flinkSchema.getFieldDataTypes(), null);
+        int socketTimeout = this.sourceOptions.getConnectTimeoutMs() != null ?
+                Integer.parseInt(this.sourceOptions.getConnectTimeoutMs()) : Const.DEFAULT_BE_SOCKET_TIMEOUT;
+        int connectTimeout = this.sourceOptions.getConnectTimeoutMs() != null ?
+                Integer.parseInt(this.sourceOptions.getConnectTimeoutMs()) : Const.DEFAULT_BE_CONNECT_TIMEOUT;
+        this.dataReader = new StarRocksSourceDataReader(ip, port, socketTimeout, connectTimeout, this.datatypes, selectColumns);
 
         int batchSize = this.sourceOptions.getBatchSize() != null ?
                 Integer.parseInt(this.sourceOptions.getBatchSize()) : Const.DEFAULT_BATCH_SIZE;
