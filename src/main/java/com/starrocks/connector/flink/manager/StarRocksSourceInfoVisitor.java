@@ -47,10 +47,11 @@ public class StarRocksSourceInfoVisitor implements Serializable {
 
     public QueryInfo getQueryInfo(String columns, String filter, long limit) throws IOException, HttpException {
 
-        columns = (columns == null || columns == "") ? "*" : columns;
-        filter = (filter == null || filter == "") ? "*" : filter;
-        String querySQL = "select " + columns + " from " + sourceOptions.getDatabaseName() + "." + sourceOptions.getTableName() + " where " +filter;
-        limit = limit <= 0 ? 0 : limit;
+        columns = (columns == null || columns.equals("")) ? "*" : columns;
+        String querySQL = "select " + columns + " from " + sourceOptions.getDatabaseName() + "." + sourceOptions.getTableName();
+        if (!(filter == null || filter.equals(""))) {
+            querySQL = querySQL + " where " + filter;
+        }
         if (limit > 0) {
             // querySQL = querySQL + " limit " + limit;
         }
