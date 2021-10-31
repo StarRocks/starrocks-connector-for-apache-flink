@@ -19,6 +19,7 @@ package com.starrocks.connector.flink.row;
 
 import com.starrocks.connector.flink.exception.StarRocksException;
 import com.starrocks.connector.flink.source.Const;
+import com.starrocks.connector.flink.source.SelectColumn;
 import com.starrocks.connector.flink.source.StarRocksSchema;
 import com.starrocks.connector.flink.thrift.TScanBatchResult;
 import com.starrocks.connector.flink.util.DataUtil;
@@ -90,15 +91,17 @@ public class StarRocksSourceFlinkRows {
     private VectorSchemaRoot root;
     private List<FieldVector> fieldVectors;
     private RootAllocator rootAllocator;
-    private final DataType[] flinkDataTypes;
+    private DataType[] flinkDataTypes;
+    private final SelectColumn[] selectColumns;
     private StarRocksSchema starRocksSchema;
 
     public List<Row> getRowBatch() {
         return rowBatch;
     }
 
-    public StarRocksSourceFlinkRows(TScanBatchResult nextResult, DataType[] flinkDataTypes, StarRocksSchema srSchema) {
+    public StarRocksSourceFlinkRows(TScanBatchResult nextResult, DataType[] flinkDataTypes, StarRocksSchema srSchema, SelectColumn[] selectColumns) {
         this.flinkDataTypes = flinkDataTypes;
+        this.selectColumns = selectColumns;
         this.starRocksSchema = srSchema;
         this.rootAllocator = new RootAllocator(Integer.MAX_VALUE);
         byte[] bytes = nextResult.getRows();
@@ -112,9 +115,9 @@ public class StarRocksSourceFlinkRows {
             this.root = arrowStreamReader.getVectorSchemaRoot();
             while (arrowStreamReader.loadNextBatch()) {
                 fieldVectors = root.getFieldVectors();
-                if (fieldVectors.size() != flinkDataTypes.length) {
+                if (fieldVectors.size() != selectColumns.length) {
                     logger.error("Schema size '{}' is not equal to arrow field size '{}'.",
-                            fieldVectors.size(), flinkDataTypes.length);
+                            fieldVectors.size(), selectColumns.length);
                     throw new StarRocksException("Load StarRocks data failed, schema size of fetch data is wrong.");
                 }
                 if (fieldVectors.size() == 0 || root.getRowCount() == 0) {
@@ -126,6 +129,12 @@ public class StarRocksSourceFlinkRows {
                 for (int i = 0; i < rowCountInOneBatch; ++i) {
                     rowBatch.add(new Row(fieldVectors.size()));
                 }
+
+                DataType[] dataTypes = new DataType[selectColumns.length];
+                for (int i = 0; i < selectColumns.length; i ++) {
+                    dataTypes[i] = flinkDataTypes[selectColumns[i].getColumnIndexInFlinkTable()];
+                }
+                flinkDataTypes = dataTypes;
                 transToFlinkDataType();
                 readRowCount += root.getRowCount();
             }

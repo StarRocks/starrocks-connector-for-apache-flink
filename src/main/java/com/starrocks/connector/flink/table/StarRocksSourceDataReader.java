@@ -3,6 +3,7 @@ package com.starrocks.connector.flink.table;
 import com.starrocks.connector.flink.exception.StarRocksException;
 import com.starrocks.connector.flink.row.StarRocksSourceFlinkRows;
 import com.starrocks.connector.flink.source.Const;
+import com.starrocks.connector.flink.source.SelectColumn;
 import com.starrocks.connector.flink.source.StarRocksSchema;
 import com.starrocks.connector.flink.thrift.TScanBatchResult;
 import com.starrocks.connector.flink.thrift.TScanCloseParams;
@@ -33,6 +34,7 @@ public class StarRocksSourceDataReader implements Serializable {
     private final String IP;
     private final int PORT;
     private final DataType[] flinkDataTypes;
+    private final SelectColumn[] selectColumns;
     private String contextId;
     private int readerOffset = 0;
     private StarRocksSchema srSchema;
@@ -41,15 +43,18 @@ public class StarRocksSourceDataReader implements Serializable {
     private List<Object> curData;
 
 
-    public StarRocksSourceDataReader(String ip, int port, int socketTimeout, int connectTimeout, DataType[] flinkDataTypes) throws StarRocksException {
+    public StarRocksSourceDataReader(String ip, int port, int socketTimeout, int connectTimeout, 
+                                        DataType[] flinkDataTypes, SelectColumn[] selectColumns) throws StarRocksException {
         this.IP = ip;
         this.PORT = port;
         this.flinkDataTypes = flinkDataTypes;
+        this.selectColumns = selectColumns;
         TBinaryProtocol.Factory factory = new TBinaryProtocol.Factory();
         TSocket socket = new TSocket(IP, PORT, socketTimeout, connectTimeout);
         try {
             socket.open();
         } catch (TTransportException e) {
+            socket.close();
             throw  new StarRocksException(e.getMessage());
         }
         TProtocol protocol = factory.getProtocol(socket);
@@ -134,7 +139,7 @@ public class StarRocksSourceDataReader implements Serializable {
     }
     
     private void handleResult(TScanBatchResult result) throws StarRocksException, InterruptedException {
-        StarRocksSourceFlinkRows rowBatch = new StarRocksSourceFlinkRows(result, flinkDataTypes, srSchema).readArrow();
+        StarRocksSourceFlinkRows rowBatch = new StarRocksSourceFlinkRows(result, flinkDataTypes, srSchema, selectColumns).readArrow();
         this.readerOffset = rowBatch.getReadRowCount() + this.readerOffset;
         this.curRowBatch = rowBatch;
         this.curData = rowBatch.next();

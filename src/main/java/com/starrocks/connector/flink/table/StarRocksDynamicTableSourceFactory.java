@@ -6,6 +6,7 @@ import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.connector.source.DynamicTableSource;
 import org.apache.flink.table.factories.DynamicTableSourceFactory;
 import org.apache.flink.table.factories.FactoryUtil;
+import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.utils.TableSchemaUtils;
 
 import java.util.HashSet;
@@ -21,8 +22,9 @@ public final class StarRocksDynamicTableSourceFactory implements DynamicTableSou
         ReadableConfig options = helper.getOptions();
         // validate some special properties
         StarRocksSourceOptions sourceOptions = new StarRocksSourceOptions(options, context.getCatalogTable().getOptions());
-        TableSchema flinkSchema = TableSchemaUtils.getPhysicalSchema(context.getCatalogTable().getSchema());;
-        return new StarRocksDynamicTableSource(sourceOptions, flinkSchema);
+        TableSchema flinkSchema = TableSchemaUtils.getPhysicalSchema(context.getCatalogTable().getSchema());
+        StarRocksRowDataInputFormat.Builder builder = StarRocksRowDataInputFormat.builder();
+        return new StarRocksDynamicTableSource(sourceOptions, flinkSchema, builder);
     }
 
 

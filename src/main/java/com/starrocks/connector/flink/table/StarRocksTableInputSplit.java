@@ -2,19 +2,18 @@ package com.starrocks.connector.flink.table;
 
 import org.apache.flink.core.io.InputSplit;
 
-import java.io.Serializable;
-
 import com.starrocks.connector.flink.source.QueryBeXTablets;
+import com.starrocks.connector.flink.source.QueryInfo;
 
-public class StarRocksTableInputSplit implements InputSplit, Serializable {
+public class StarRocksTableInputSplit implements InputSplit {
 
     private final int splitNumber;
-    private final QueryBeXTablets queryBeXTablets;
+    private final QueryInfo queryInfo;
 
-    public StarRocksTableInputSplit(int splitNumber, QueryBeXTablets queryBeXTablets) {
+    public StarRocksTableInputSplit(int splitNumber, QueryInfo queryInfo) {
         super();
         this.splitNumber = splitNumber;
-        this.queryBeXTablets = queryBeXTablets;
+        this.queryInfo = queryInfo;
     }
     
     @Override
@@ -22,7 +21,11 @@ public class StarRocksTableInputSplit implements InputSplit, Serializable {
         return splitNumber;
     }
 
-    public QueryBeXTablets getQueryBeXTablets() {
-        return queryBeXTablets;
+    public QueryInfo getQueryInfo() {
+        return queryInfo;
+    }
+
+    public QueryBeXTablets getBeXTablets() {
+        return queryInfo.getBeXTablets().get(splitNumber);
     }
 }
