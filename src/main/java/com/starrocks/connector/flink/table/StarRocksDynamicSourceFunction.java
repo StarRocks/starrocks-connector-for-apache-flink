@@ -42,7 +42,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<L
                 Integer.parseInt(this.sourceOptions.getBeSocketTimeout()) : Const.DEFAULT_BE_SOCKET_TIMEOUT;
         int connectTimeout = this.sourceOptions.getBeConnectTimeout() != null ?
                 Integer.parseInt(this.sourceOptions.getBeConnectTimeout()) : Const.DEFAULT_BE_CONNECT_TIMEOUT;
-        this.dataReader = new StarRocksSourceDataReader(ip, port, socketTimeout, connectTimeout, this.flinkSchema.getFieldDataTypes());
+        this.dataReader = new StarRocksSourceDataReader(ip, port, socketTimeout, connectTimeout, this.flinkSchema.getFieldDataTypes(), null);
 
         int batchSize = this.sourceOptions.getBatchSize() != null ?
                 Integer.parseInt(this.sourceOptions.getBatchSize()) : Const.DEFAULT_BATCH_SIZE;

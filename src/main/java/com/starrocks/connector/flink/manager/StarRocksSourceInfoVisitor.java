@@ -45,14 +45,17 @@ public class StarRocksSourceInfoVisitor implements Serializable {
         this.sourceOptions = sourceOptions;
     }
 
-    public QueryInfo getQueryInfo() throws IOException, HttpException {
+    public QueryInfo getQueryInfo(String columns, String filter, long limit) throws IOException, HttpException {
 
-        String columns = sourceOptions.getColums() == null ? "*" : sourceOptions.getColums();
-        String filter = sourceOptions.getFilter() == null ? "" : " where " + sourceOptions.getFilter();
-        String querySQL = "select " + columns + " from " + sourceOptions.getDatabaseName() + "." + sourceOptions.getTableName() + filter;
+        columns = (columns == null || columns == "") ? "*" : columns;
+        filter = (filter == null || filter == "") ? "*" : filter;
+        String querySQL = "select " + columns + " from " + sourceOptions.getDatabaseName() + "." + sourceOptions.getTableName() + " where " +filter;
+        limit = limit <= 0 ? 0 : limit;
+        if (limit > 0) {
+            // querySQL = querySQL + " limit " + limit;
+        }
         LOG.info("query sql [{}]", querySQL);
         String[] httpNodes = sourceOptions.getHttpNodes().split(",");
-
         QueryPlan plan = getQueryPlan(querySQL, httpNodes[new Random().nextInt(httpNodes.length)], sourceOptions);
         Map<String, Set<Long>> beXTablets = transferQueryPlanToBeXTablet(plan);
         List<QueryBeXTablets> queryBeXTabletsList = new ArrayList<>();

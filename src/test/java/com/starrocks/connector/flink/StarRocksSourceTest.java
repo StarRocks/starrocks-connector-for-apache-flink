@@ -1,18 +1,16 @@
 package com.starrocks.connector.flink;
 
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.table.api.Table;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
-import org.apache.flink.types.Row;
 
 
 public class StarRocksSourceTest {
 
     public static void main(String[] args) throws Exception {
 
-        final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);
-        final StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
+        StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
         tEnv.executeSql(
                 "CREATE TABLE flink_type_test (" +
                     "date_1 DATE," +
@@ -37,6 +35,9 @@ public class StarRocksSourceTest {
                     "  'table-name' = 'flink_type_test'\n" +
                 ")"
                 );
-        tEnv.executeSql("SELECT * from flink_type_test").print();
+        // tEnv.executeSql("SELECT * from flink_type_test where int_1 < 1 and (char_1 = 'A' or varchar_1 = 'B') limit 1");
+        // tEnv.executeSql("SELECT int_1, char_1 from flink_type_test where char_1 = 'A' limit 1").print();
+        tEnv.executeSql("SELECT int_1, char_1 from flink_type_test where char_1 = 'A'").print();
+        Thread.sleep(10000);
     }
 }
