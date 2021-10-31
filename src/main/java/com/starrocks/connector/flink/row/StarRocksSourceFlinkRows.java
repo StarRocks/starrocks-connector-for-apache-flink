@@ -115,9 +115,18 @@ public class StarRocksSourceFlinkRows {
             this.root = arrowStreamReader.getVectorSchemaRoot();
             while (arrowStreamReader.loadNextBatch()) {
                 fieldVectors = root.getFieldVectors();
-                if (fieldVectors.size() != selectColumns.length) {
+                
+                if (selectColumns != null) {
+                    DataType[] dataTypes = new DataType[selectColumns.length];
+                    for (int i = 0; i < selectColumns.length; i ++) {
+                        dataTypes[i] = flinkDataTypes[selectColumns[i].getColumnIndexInFlinkTable()];
+                    }
+                    flinkDataTypes = dataTypes.length == 0 ? flinkDataTypes : dataTypes;
+                }
+
+                if (fieldVectors.size() != flinkDataTypes.length) {
                     logger.error("Schema size '{}' is not equal to arrow field size '{}'.",
-                            fieldVectors.size(), selectColumns.length);
+                            fieldVectors.size(), flinkDataTypes.length);
                     throw new StarRocksException("Load StarRocks data failed, schema size of fetch data is wrong.");
                 }
                 if (fieldVectors.size() == 0 || root.getRowCount() == 0) {
@@ -129,12 +138,6 @@ public class StarRocksSourceFlinkRows {
                 for (int i = 0; i < rowCountInOneBatch; ++i) {
                     rowBatch.add(new Row(fieldVectors.size()));
                 }
-
-                DataType[] dataTypes = new DataType[selectColumns.length];
-                for (int i = 0; i < selectColumns.length; i ++) {
-                    dataTypes[i] = flinkDataTypes[selectColumns[i].getColumnIndexInFlinkTable()];
-                }
-                flinkDataTypes = dataTypes;
                 transToFlinkDataType();
                 readRowCount += root.getRowCount();
             }
