@@ -67,7 +67,7 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
 
         try {
             this.queryInfo = infoVisitor.getQueryInfo(this.columns, this.filter, this.limit);
-        } catch (HttpException e) {
+        } catch (HttpException | StarRocksException e) {
             e.printStackTrace();
             LOG.error(e.getMessage());
         }

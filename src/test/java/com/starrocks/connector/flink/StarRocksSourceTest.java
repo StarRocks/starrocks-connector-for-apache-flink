@@ -29,6 +29,7 @@ public class StarRocksSourceTest {
                 ") WITH (\n" +
                     "  'connector' = 'starrocks-source',\n" +
                     "  'scan-url' = '172.26.92.152:8634,172.26.92.152:8634,172.26.92.152:8634',\n" +
+                    "  'source.max-retries' = '4',\n" +
                     "  'username' = 'root',\n" +
                     "  'password' = '',\n" +                
                     "  'database-name' = 'cjs_test',\n" +

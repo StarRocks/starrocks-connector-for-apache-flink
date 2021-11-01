@@ -57,6 +57,11 @@ public class StarRocksSourceOptions implements Serializable {
             .stringType().noDefaultValue().withDescription("memory limit for a single query");
 
 
+    public static final ConfigOption<Integer> SOURCE_MAX_RETRIES = ConfigOptions.key("source.max-retries")
+            .intType().defaultValue(1).withDescription("Max request retry times.");
+
+    
+    
 
     // ????
     public static final ConfigOption<String> COLUMNS = ConfigOptions.key("columns")
@@ -150,6 +155,10 @@ public class StarRocksSourceOptions implements Serializable {
 
     public String getMemLimit() {
         return tableOptions.get(MEM_LIMIT);
+    }
+
+    public int getSourceMaxRetries() {
+        return tableOptions.get(SOURCE_MAX_RETRIES).intValue();
     }
 
     // ????
