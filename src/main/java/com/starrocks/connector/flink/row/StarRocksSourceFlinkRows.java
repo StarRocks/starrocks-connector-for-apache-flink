@@ -1,20 +1,3 @@
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
 package com.starrocks.connector.flink.row;
 
 import com.starrocks.connector.flink.exception.StarRocksException;
@@ -60,33 +43,16 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
 
-/**
- * row batch data container.
- */
+
 public class StarRocksSourceFlinkRows {
-    private static Logger logger = LoggerFactory.getLogger(StarRocksSourceFlinkRows.class);
 
-    public static class Row {
-        private List<Object> cols;
+    private static Logger LOG = LoggerFactory.getLogger(StarRocksSourceFlinkRows.class);
 
-        Row(int colCount) {
-            this.cols = new ArrayList<>(colCount);
-        }
-
-        public List<Object> getCols() {
-            return cols;
-        }
-
-        public void put(Object o) {
-            cols.add(o);
-        }
-    }
-
-    // offset for iterate the rowBatch
-    private int offsetInRowBatch = 0;
-    private int rowCountInOneBatch = 0;
-    private int readRowCount = 0;
-    private List<Row> rowBatch = new ArrayList<>();
+    private int offsetOfBatchForRead = 0;
+    private int rowCountOfBatch = 0;
+    
+    private int flinksRowsCount = 0;
+    private List<StarRocksSourceFlinkRow> sourceFlinkRows = new ArrayList<>();
     private final ArrowStreamReader arrowStreamReader;
     private VectorSchemaRoot root;
     private List<FieldVector> fieldVectors;
@@ -95,11 +61,12 @@ public class StarRocksSourceFlinkRows {
     private final SelectColumn[] selectColumns;
     private StarRocksSchema starRocksSchema;
 
-    public List<Row> getRowBatch() {
-        return rowBatch;
+    public List<StarRocksSourceFlinkRow> getFlinkRows() {
+        return sourceFlinkRows;
     }
 
-    public StarRocksSourceFlinkRows(TScanBatchResult nextResult, DataType[] flinkDataTypes, StarRocksSchema srSchema, SelectColumn[] selectColumns) {
+    public StarRocksSourceFlinkRows(TScanBatchResult nextResult, DataType[] flinkDataTypes, 
+                                    StarRocksSchema srSchema, SelectColumn[] selectColumns) {
         this.flinkDataTypes = flinkDataTypes;
         this.selectColumns = selectColumns;
         this.starRocksSchema = srSchema;
@@ -107,77 +74,55 @@ public class StarRocksSourceFlinkRows {
         byte[] bytes = nextResult.getRows();
         ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(bytes);
         this.arrowStreamReader = new ArrowStreamReader(byteArrayInputStream, rootAllocator);
-        this.offsetInRowBatch = 0;
+        this.offsetOfBatchForRead = 0;
     }
 
-    public StarRocksSourceFlinkRows readArrow() throws StarRocksException {
-        try {
-            this.root = arrowStreamReader.getVectorSchemaRoot();
-            while (arrowStreamReader.loadNextBatch()) {
-                fieldVectors = root.getFieldVectors();
-                
-                if (selectColumns != null) {
-                    DataType[] dataTypes = new DataType[selectColumns.length];
-                    for (int i = 0; i < selectColumns.length; i ++) {
-                        dataTypes[i] = flinkDataTypes[selectColumns[i].getColumnIndexInFlinkTable()];
-                    }
-                    flinkDataTypes = dataTypes.length == 0 ? flinkDataTypes : dataTypes;
-                }
+    public StarRocksSourceFlinkRows genFlinkRowsFromArrow() throws StarRocksException, IOException {
 
-                if (fieldVectors.size() != flinkDataTypes.length) {
-                    logger.error("Schema size '{}' is not equal to arrow field size '{}'.",
-                            fieldVectors.size(), flinkDataTypes.length);
-                    throw new StarRocksException("Load StarRocks data failed, schema size of fetch data is wrong.");
+        this.root = arrowStreamReader.getVectorSchemaRoot();
+        while (arrowStreamReader.loadNextBatch()) {
+
+            fieldVectors = root.getFieldVectors();
+            if (selectColumns != null) {
+                DataType[] dataTypes = new DataType[selectColumns.length];
+                for (int i = 0; i < selectColumns.length; i ++) {
+                    dataTypes[i] = flinkDataTypes[selectColumns[i].getColumnIndexInFlinkTable()];
                 }
-                if (fieldVectors.size() == 0 || root.getRowCount() == 0) {
-                    logger.debug("One batch in arrow has no data.");
-                    continue;
-                }
-                rowCountInOneBatch = root.getRowCount();
-                // init the rowBatch
-                for (int i = 0; i < rowCountInOneBatch; ++i) {
-                    rowBatch.add(new Row(fieldVectors.size()));
-                }
-                transToFlinkDataType();
-                readRowCount += root.getRowCount();
+                flinkDataTypes = dataTypes.length == 0 ? flinkDataTypes : dataTypes;
             }
-            return this;
-        } catch (Exception e) {
-            logger.error("Read StarRocks Data failed because: ", e);
-            throw new StarRocksException(e.getMessage());
-        } finally {
-            close();
+            if (fieldVectors.size() != flinkDataTypes.length) {
+                LOG.error("StarRocks schema size '{}' is not equal to arrow field size '{}'.", fieldVectors.size(), flinkDataTypes.length);
+                throw new StarRocksException("Generate flink rows failed.");
+            }
+            if (fieldVectors.size() == 0 || root.getRowCount() == 0) {
+                continue;
+            }
+            rowCountOfBatch = root.getRowCount();
+            for (int i = 0; i < rowCountOfBatch; ++i) {
+                sourceFlinkRows.add(new StarRocksSourceFlinkRow(fieldVectors.size()));
+            }
+            this.genFlinkRows();
+            flinksRowsCount += root.getRowCount();
         }
+        return this;
     }
 
     public boolean hasNext() {
-        if (offsetInRowBatch < readRowCount) {
-            return true;
-        }
-        return false;
+        return offsetOfBatchForRead < flinksRowsCount;
     }
 
-    private void addValueToRow(int rowIndex, Object obj) {
-        if (rowIndex > rowCountInOneBatch) {
-            String errMsg = "Get row offset: " + rowIndex + " larger than row size: " +
-                    rowCountInOneBatch;
-            logger.error(errMsg);
-            throw new NoSuchElementException(errMsg);
-        }
-        rowBatch.get(readRowCount + rowIndex).put(obj);
-    }
 
     public List<Object> next() throws StarRocksException {
+
         if (!hasNext()) {
-            String errMsg = "Get row offset:" + offsetInRowBatch + " larger than row size: " + readRowCount;
-            logger.error(errMsg);
-            throw new NoSuchElementException(errMsg);
+            LOG.error("read offset larger than flinksRowsCount");
+            throw new NoSuchElementException("read offset larger than flinksRowsCount");
         }
-        return rowBatch.get(offsetInRowBatch++).getCols();
+        return sourceFlinkRows.get(offsetOfBatchForRead ++).getColumns();
     }
 
     public int getReadRowCount() {
-        return readRowCount;
+        return flinksRowsCount;
     }
 
     public void close() {
@@ -188,19 +133,28 @@ public class StarRocksSourceFlinkRows {
             if (rootAllocator != null) {
                 rootAllocator.close();
             }
-        } catch (IOException ioe) {
-            // do nothing
+        } catch (IOException e) {
+            LOG.error(e.getMessage());
         }
     }
+    
+    private void setValueToFlinkRows(int rowIndex, Object obj) {
+        
+        if (rowIndex > rowCountOfBatch) {
+            String errMsg = "Get row offset: " + rowIndex + " larger than row size: " + rowCountOfBatch;
+            LOG.error(errMsg);
+            throw new NoSuchElementException(errMsg);
+        }
+        sourceFlinkRows.get(rowIndex).put(obj);
+    }
 
-
-    private void transToFlinkDataType() throws StarRocksException {
+    private void genFlinkRows() throws StarRocksException {
 
         try {
             for (int colIndex = 0; colIndex < fieldVectors.size(); colIndex ++) {
 
-                FieldVector curFieldVector = fieldVectors.get(colIndex);
-                Types.MinorType beShowDataType = curFieldVector.getMinorType();
+                FieldVector columnVector = fieldVectors.get(colIndex);
+                Types.MinorType beShowDataType = columnVector.getMinorType();
                 String starrocksType = starRocksSchema.get(colIndex).getType();
                 String flinkType = flinkDataTypes[colIndex].toString();
                 // starrocksType -> flinkType
@@ -215,40 +169,40 @@ public class StarRocksSourceFlinkRows {
 
                 switch (flinkType) {
                     case Const.DATA_TYPE_FLINK_DATE:
-                    transToFlinkDate(starrocksType, beShowDataType, curFieldVector);
+                    transToFlinkDate(starrocksType, beShowDataType, columnVector);
                     break;
                     case Const.DATA_TYPE_FLINK_TIMESTAMP:
-                    transToFlinkTimestamp(starrocksType, beShowDataType, curFieldVector);
+                    transToFlinkTimestamp(starrocksType, beShowDataType, columnVector);
                     break;
                     case Const.DATA_TYPE_FLINK_CHAR:
-                    transToFlinkChar(starrocksType, beShowDataType, curFieldVector);
+                    transToFlinkChar(starrocksType, beShowDataType, columnVector);
                     break;
                     case Const.DATA_TYPE_FLINK_STRING:
-                    transToFlinkString(starrocksType, beShowDataType, curFieldVector);
+                    transToFlinkString(starrocksType, beShowDataType, columnVector);
                     break;
                     case Const.DATA_TYPE_FLINK_BOOLEAN:
-                    transToFlinkBoolean(starrocksType, beShowDataType, curFieldVector);
+                    transToFlinkBoolean(starrocksType, beShowDataType, columnVector);
                     break;
                     case Const.DATA_TYPE_FLINK_TINYINT:
-                    transToFlinkTinyInt(starrocksType, beShowDataType, curFieldVector);
+                    transToFlinkTinyInt(starrocksType, beShowDataType, columnVector);
                     break;
                     case Const.DATA_TYPE_FLINK_SMALLINT:
-                    transToFlinkSmallInt(starrocksType, beShowDataType, curFieldVector);
+                    transToFlinkSmallInt(starrocksType, beShowDataType, columnVector);
                     break;
                     case Const.DATA_TYPE_FLINK_INT:
-                    transToFlinkInt(starrocksType, beShowDataType, curFieldVector);
+                    transToFlinkInt(starrocksType, beShowDataType, columnVector);
                     break;
                     case Const.DATA_TYPE_FLINK_BIGINT:
-                    transToFlinkBigInt(starrocksType, beShowDataType, curFieldVector);
+                    transToFlinkBigInt(starrocksType, beShowDataType, columnVector);
                     break;
                     case Const.DATA_TYPE_FLINK_FLOAT:
-                    transToFlinkFloat(starrocksType, beShowDataType, curFieldVector);
+                    transToFlinkFloat(starrocksType, beShowDataType, columnVector);
                     break;
                     case Const.DATA_TYPE_FLINK_DOUBLE:
-                    transToFlinkDouble(starrocksType, beShowDataType, curFieldVector);
+                    transToFlinkDouble(starrocksType, beShowDataType, columnVector);
                     break;
                     case Const.DATA_TYPE_FLINK_DECIMAL:
-                    transToFlinkDecimal(starrocksType, beShowDataType, curFieldVector);
+                    transToFlinkDecimal(starrocksType, beShowDataType, columnVector);
                     break;
                 }
             }
@@ -382,15 +336,15 @@ public class StarRocksSourceFlinkRows {
         // beShowDataType.String => Flink Date
         Preconditions.checkArgument(beShowDataType.equals(Types.MinorType.VARCHAR), "");
         VarCharVector varCharVector = (VarCharVector) curFieldVector;
-        for (int rowIndex = 0; rowIndex < rowCountInOneBatch; rowIndex ++) {
+        for (int rowIndex = 0; rowIndex < rowCountOfBatch; rowIndex ++) {
             if (varCharVector.isNull(rowIndex)) {
-                addValueToRow(rowIndex, null);
+                setValueToFlinkRows(rowIndex, null);
                 continue;
             }
             String value = new String(varCharVector.get(rowIndex));
             LocalDate date = LocalDate.parse(value, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
             int timestamp = (int)date.atStartOfDay(ZoneOffset.ofHours(8)).toLocalDate().toEpochDay();
-            addValueToRow(rowIndex, timestamp);
+            setValueToFlinkRows(rowIndex, timestamp);
         }
     }
 
@@ -398,15 +352,15 @@ public class StarRocksSourceFlinkRows {
         // beShowDataType.String => Flink Timestamp
         Preconditions.checkArgument(beShowDataType.equals(Types.MinorType.VARCHAR), "");
         VarCharVector varCharVector = (VarCharVector) curFieldVector;
-        for (int rowIndex = 0; rowIndex < rowCountInOneBatch; rowIndex ++) {
+        for (int rowIndex = 0; rowIndex < rowCountOfBatch; rowIndex ++) {
             if (varCharVector.isNull(rowIndex)) {
-                addValueToRow(rowIndex, null);
+                setValueToFlinkRows(rowIndex, null);
                 continue;
             }
             String value = new String(varCharVector.get(rowIndex));
             DateTimeFormatter df = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSS");
             LocalDateTime ldt = LocalDateTime.parse(value, df);
-            addValueToRow(rowIndex, TimestampData.fromLocalDateTime(ldt));
+            setValueToFlinkRows(rowIndex, TimestampData.fromLocalDateTime(ldt));
         }
     }
 
@@ -414,13 +368,13 @@ public class StarRocksSourceFlinkRows {
         // beShowDataType.String => Flink CHAR/VARCHAR/STRING
         Preconditions.checkArgument(beShowDataType.equals(Types.MinorType.VARCHAR), "");
         VarCharVector varCharVector = (VarCharVector) curFieldVector;
-        for (int rowIndex = 0; rowIndex < rowCountInOneBatch; rowIndex ++) {
+        for (int rowIndex = 0; rowIndex < rowCountOfBatch; rowIndex ++) {
             if (varCharVector.isNull(rowIndex)) {
-                addValueToRow(rowIndex, null);
+                setValueToFlinkRows(rowIndex, null);
                 continue;
             }
             String value = new String(varCharVector.get(rowIndex));
-            addValueToRow(rowIndex, StringData.fromString(value));
+            setValueToFlinkRows(rowIndex, StringData.fromString(value));
         }
     }
 
@@ -428,9 +382,9 @@ public class StarRocksSourceFlinkRows {
         // beShowDataType.Bit => Flink boolean
         Preconditions.checkArgument(beShowDataType.equals(Types.MinorType.BIT), "");
         BitVector bitVector = (BitVector) curFieldVector;
-        for (int rowIndex = 0; rowIndex < rowCountInOneBatch; rowIndex++) {
+        for (int rowIndex = 0; rowIndex < rowCountOfBatch; rowIndex++) {
             Object fieldValue = bitVector.isNull(rowIndex) ? null : bitVector.get(rowIndex) != 0;
-            addValueToRow(rowIndex, fieldValue);
+            setValueToFlinkRows(rowIndex, fieldValue);
         }
     }
 
@@ -438,9 +392,9 @@ public class StarRocksSourceFlinkRows {
         // beShowDataType.TinyInt => Flink TinyInt
         Preconditions.checkArgument(beShowDataType.equals(Types.MinorType.TINYINT), "");
         TinyIntVector tinyIntVector = (TinyIntVector) curFieldVector;
-        for (int rowIndex = 0; rowIndex < rowCountInOneBatch; rowIndex++) {
+        for (int rowIndex = 0; rowIndex < rowCountOfBatch; rowIndex++) {
             Object fieldValue = tinyIntVector.isNull(rowIndex) ? null : tinyIntVector.get(rowIndex);
-            addValueToRow(rowIndex, fieldValue);
+            setValueToFlinkRows(rowIndex, fieldValue);
         }
     }
 
@@ -448,9 +402,9 @@ public class StarRocksSourceFlinkRows {
         // beShowDataType.SmalInt => Flink SmalInt
         Preconditions.checkArgument(beShowDataType.equals(Types.MinorType.SMALLINT), "");
         SmallIntVector smallIntVector = (SmallIntVector) curFieldVector;
-        for (int rowIndex = 0; rowIndex < rowCountInOneBatch; rowIndex++) {
+        for (int rowIndex = 0; rowIndex < rowCountOfBatch; rowIndex++) {
             Object fieldValue = smallIntVector.isNull(rowIndex) ? null : smallIntVector.get(rowIndex);
-            addValueToRow(rowIndex, fieldValue);
+            setValueToFlinkRows(rowIndex, fieldValue);
         }
     }
 
@@ -458,9 +412,9 @@ public class StarRocksSourceFlinkRows {
         // beShowDataType.Int => Flink Int
         Preconditions.checkArgument(beShowDataType.equals(Types.MinorType.INT), "");
         IntVector intVector = (IntVector) curFieldVector;
-        for (int rowIndex = 0; rowIndex < rowCountInOneBatch; rowIndex++) {
+        for (int rowIndex = 0; rowIndex < rowCountOfBatch; rowIndex++) {
             Object fieldValue = intVector.isNull(rowIndex) ? null : intVector.get(rowIndex);
-            addValueToRow(rowIndex, fieldValue);
+            setValueToFlinkRows(rowIndex, fieldValue);
         }
     }
 
@@ -468,9 +422,9 @@ public class StarRocksSourceFlinkRows {
         // beShowDataType.BigInt => Flink BigInt
         Preconditions.checkArgument(beShowDataType.equals(Types.MinorType.BIGINT), "");
         BigIntVector bigIntVector = (BigIntVector) curFieldVector;
-        for (int rowIndex = 0; rowIndex < rowCountInOneBatch; rowIndex++) {
+        for (int rowIndex = 0; rowIndex < rowCountOfBatch; rowIndex++) {
             Object fieldValue = bigIntVector.isNull(rowIndex) ? null : bigIntVector.get(rowIndex);
-            addValueToRow(rowIndex, fieldValue);
+            setValueToFlinkRows(rowIndex, fieldValue);
         }
     }
 
@@ -478,9 +432,9 @@ public class StarRocksSourceFlinkRows {
         // beShowDataType.Float => Flink Float
         Preconditions.checkArgument(beShowDataType.equals(Types.MinorType.FLOAT4), "");
         Float4Vector float4Vector = (Float4Vector) curFieldVector;
-        for (int rowIndex = 0; rowIndex < rowCountInOneBatch; rowIndex++) {
+        for (int rowIndex = 0; rowIndex < rowCountOfBatch; rowIndex++) {
             Object fieldValue = float4Vector.isNull(rowIndex) ? null : float4Vector.get(rowIndex);
-            addValueToRow(rowIndex, fieldValue);
+            setValueToFlinkRows(rowIndex, fieldValue);
         }
     }
 
@@ -488,9 +442,9 @@ public class StarRocksSourceFlinkRows {
         // beShowDataType.Double => Flink Double
         Preconditions.checkArgument(beShowDataType.equals(Types.MinorType.FLOAT8), "");
         Float8Vector float8Vector = (Float8Vector) curFieldVector;
-        for (int rowIndex = 0; rowIndex < rowCountInOneBatch; rowIndex++) {
+        for (int rowIndex = 0; rowIndex < rowCountOfBatch; rowIndex++) {
             Object fieldValue = float8Vector.isNull(rowIndex) ? null : float8Vector.get(rowIndex);
-            addValueToRow(rowIndex, fieldValue);
+            setValueToFlinkRows(rowIndex, fieldValue);
         }
     }
 
@@ -498,13 +452,13 @@ public class StarRocksSourceFlinkRows {
         // beShowDataType.Decimal => Flink Decimal
         Preconditions.checkArgument(beShowDataType.equals(Types.MinorType.DECIMAL), "");
         DecimalVector decimalVector = (DecimalVector) curFieldVector;
-        for (int rowIndex = 0; rowIndex < rowCountInOneBatch; rowIndex++) {
+        for (int rowIndex = 0; rowIndex < rowCountOfBatch; rowIndex++) {
             if (decimalVector.isNull(rowIndex)) {
-                addValueToRow(rowIndex, null);
+                setValueToFlinkRows(rowIndex, null);
                 continue;
             }
             BigDecimal value = decimalVector.getObject(rowIndex);
-            addValueToRow(rowIndex, DecimalData.fromBigDecimal(value, value.precision(), value.scale()));
+            setValueToFlinkRows(rowIndex, DecimalData.fromBigDecimal(value, value.precision(), value.scale()));
         }
     }
 }

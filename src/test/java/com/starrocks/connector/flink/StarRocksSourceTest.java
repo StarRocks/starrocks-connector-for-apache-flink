@@ -36,9 +36,9 @@ public class StarRocksSourceTest {
                     "  'table-name' = 'flink_type_test'\n" +
                 ")"
                 );
-        // tEnv.executeSql("SELECT * from flink_type_test where int_1 < 1 and (char_1 = 'A' or varchar_1 = 'B')").print();
-        // tEnv.executeSql("SELECT int_1, char_1 from flink_type_test where char_1 = 'A' limit 1").print();
+        tEnv.executeSql("SELECT * from flink_type_test where int_1 < 1 and (char_1 = 'A' or varchar_1 = 'B')").print();
+        tEnv.executeSql("SELECT int_1, char_1 from flink_type_test where char_1 = 'A' limit 1").print();
         tEnv.executeSql("SELECT int_1, char_1 from flink_type_test where char_1 = 'A'").print();
-        // tEnv.executeSql("SELECT * from flink_type_test").print();
+        tEnv.executeSql("SELECT * from flink_type_test").print();
     }
 }

@@ -22,6 +22,7 @@ import org.apache.thrift.transport.TTransportException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.io.Serializable;
 import java.util.List;
 
@@ -39,7 +40,7 @@ public class StarRocksSourceDataReader implements Serializable {
     private int readerOffset = 0;
     private StarRocksSchema srSchema;
 
-    private StarRocksSourceFlinkRows curRowBatch;
+    private StarRocksSourceFlinkRows curFlinkRows;
     private List<Object> curData;
 
 
@@ -96,7 +97,7 @@ public class StarRocksSourceDataReader implements Serializable {
         this.contextId = result.getContext_id();
     }
 
-    public void startToRead() throws StarRocksException {
+    public void startToRead() throws StarRocksException, IOException {
 
         TScanNextBatchParams params = new TScanNextBatchParams();
         params.setContext_id(this.contextId);
@@ -124,12 +125,12 @@ public class StarRocksSourceDataReader implements Serializable {
         return this.curData != null;
     }
 
-    public List<Object> getNext() throws StarRocksException {
+    public List<Object> getNext() throws StarRocksException, IOException {
 
         List<Object> preparedData = this.curData;
         this.curData = null;
-        if (this.curRowBatch.hasNext()) {
-            this.curData = curRowBatch.next();
+        if (this.curFlinkRows.hasNext()) {
+            this.curData = curFlinkRows.next();
         }
         if (this.curData != null) {
             return preparedData;    
@@ -138,11 +139,11 @@ public class StarRocksSourceDataReader implements Serializable {
         return preparedData;
     }
     
-    private void handleResult(TScanBatchResult result) throws StarRocksException, InterruptedException {
-        StarRocksSourceFlinkRows rowBatch = new StarRocksSourceFlinkRows(result, flinkDataTypes, srSchema, selectColumns).readArrow();
-        this.readerOffset = rowBatch.getReadRowCount() + this.readerOffset;
-        this.curRowBatch = rowBatch;
-        this.curData = rowBatch.next();
+    private void handleResult(TScanBatchResult result) throws StarRocksException, InterruptedException, IOException {
+        StarRocksSourceFlinkRows flinkRows = new StarRocksSourceFlinkRows(result, flinkDataTypes, srSchema, selectColumns).genFlinkRowsFromArrow();
+        this.readerOffset = flinkRows.getReadRowCount() + this.readerOffset;
+        this.curFlinkRows = flinkRows;
+        this.curData = flinkRows.next();
     }
 
     public void close() throws StarRocksException {
