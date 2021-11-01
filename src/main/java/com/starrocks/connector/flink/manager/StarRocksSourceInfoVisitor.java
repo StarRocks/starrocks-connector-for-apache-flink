@@ -2,6 +2,7 @@ package com.starrocks.connector.flink.manager;
 
 import com.alibaba.fastjson.JSONObject;
 import com.starrocks.connector.flink.exception.HttpException;
+import com.starrocks.connector.flink.exception.StarRocksException;
 import com.starrocks.connector.flink.source.QueryBeXTablets;
 import com.starrocks.connector.flink.source.QueryInfo;
 import com.starrocks.connector.flink.source.QueryPlan;
@@ -13,6 +14,8 @@ import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.DefaultRedirectStrategy;
+import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
@@ -45,7 +48,7 @@ public class StarRocksSourceInfoVisitor implements Serializable {
         this.sourceOptions = sourceOptions;
     }
 
-    public QueryInfo getQueryInfo(String columns, String filter, long limit) throws IOException, HttpException {
+    public QueryInfo getQueryInfo(String columns, String filter, long limit) throws IOException, HttpException, StarRocksException {
 
         columns = (columns == null || columns.equals("")) ? "*" : columns;
         String querySQL = "select " + columns + " from " + sourceOptions.getDatabaseName() + "." + sourceOptions.getTableName();
@@ -90,33 +93,37 @@ public class StarRocksSourceInfoVisitor implements Serializable {
         return beXTablets;
     }
 
-    private static QueryPlan getQueryPlan(String querySQL, String httpNode, StarRocksSourceOptions sourceOptions) throws IOException, HttpException {
+    private static QueryPlan getQueryPlan(String querySQL, String httpNode, StarRocksSourceOptions sourceOptions) throws IOException, HttpException, StarRocksException {
         
         String url = "http://" + httpNode + "/api/" + sourceOptions.getDatabaseName() + "/" + sourceOptions.getTableName() + "/_query_plan";
         Map<String, Object> bodyMap = new HashMap<>();
         bodyMap.put("sql", querySQL);
         String body = new JSONObject(bodyMap).toString();
-
-        try(CloseableHttpClient httpClient = HttpClients.createDefault()) {
+        CloseableHttpResponse response = null;
+        int requsetCode = 0;
+        for (int i = 0; i < sourceOptions.getSourceMaxRetries(); i ++) {
+            CloseableHttpClient httpClient = HttpClients.createDefault();
             HttpPost post = new HttpPost(url);
             post.setHeader("Content-Type", "application/json;charset=UTF-8");
             post.setHeader("Authorization", getBasicAuthHeader(sourceOptions.getUsername(), sourceOptions.getPassword()));
             post.setEntity(new ByteArrayEntity(body.getBytes()));
-            try(CloseableHttpResponse response = httpClient.execute(post)) {
-                int code = response.getStatusLine().getStatusCode();
-                if (200 != code) {
-                    LOG.warn("Request failed with code:{}", code);
-                    return null;
-                }
-                HttpEntity respEntity = response.getEntity();
-                if (null == respEntity) {
-                    LOG.warn("Request failed with empty response.");
-                    return null;
-                }
-                JSONObject jsonObject = JSONObject.parseObject(EntityUtils.toString(respEntity));
-                return JSONObject.toJavaObject(jsonObject, QueryPlan.class);
+            response = httpClient.execute(post);
+            requsetCode = response.getStatusLine().getStatusCode();
+            if (200 != requsetCode) {
+                LOG.warn("Request failed with code:{}", requsetCode);
+                continue;
             }
         }
+        if (200 != requsetCode) {
+            throw new StarRocksException("Request failed with code " + requsetCode);
+        }
+        HttpEntity respEntity = response.getEntity();
+        if (null == respEntity) {
+            LOG.warn("Request failed with empty response.");
+            throw new StarRocksException("Request failed with empty response." + requsetCode);
+        }
+        JSONObject jsonObject = JSONObject.parseObject(EntityUtils.toString(respEntity));
+        return JSONObject.toJavaObject(jsonObject, QueryPlan.class);
     }
 
     private static String getBasicAuthHeader(String username, String password) {
