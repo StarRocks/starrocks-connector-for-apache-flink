@@ -124,7 +124,7 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
 
         try {
             this.dataReader.startToRead();
-        } catch (StarRocksException e) {
+        } catch (StarRocksException | IOException e) {
             e.printStackTrace();
             LOG.error(e.getMessage());
         }
