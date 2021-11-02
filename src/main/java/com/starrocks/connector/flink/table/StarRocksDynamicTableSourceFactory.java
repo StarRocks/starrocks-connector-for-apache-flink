@@ -48,14 +48,14 @@ public final class StarRocksDynamicTableSourceFactory implements DynamicTableSou
     public Set<ConfigOption<?>> optionalOptions() {
 
         final Set<ConfigOption<?>> options = new HashSet<>();
-        options.add(StarRocksSourceOptions.CONNECT_TIMEOUT_MS);
-        options.add(StarRocksSourceOptions.CONNECT_TIMEOUT_MS);
-        options.add(StarRocksSourceOptions.BATCH_SIZE);
-        options.add(StarRocksSourceOptions.QUERTY_TIMEOUT);
-        options.add(StarRocksSourceOptions.MEM_LIMIT);
+        options.add(StarRocksSourceOptions.SOURCE_CONNECT_TIMEOUT);
+        options.add(StarRocksSourceOptions.SCAN_BATCH_SIZE);
+        options.add(StarRocksSourceOptions.SCAN_PROPERTIES);
+        options.add(StarRocksSourceOptions.SCAN_LIMIT);
+        options.add(StarRocksSourceOptions.SCAN_KEEP_ALIVE_MIN);
+        options.add(StarRocksSourceOptions.SCAN_QUERTY_TIMEOUT);
+        options.add(StarRocksSourceOptions.SCAN_MEM_LIMIT);
         options.add(StarRocksSourceOptions.SOURCE_MAX_RETRIES);
-        options.add(StarRocksSourceOptions.COLUMNS);
-        options.add(StarRocksSourceOptions.FILTER);
         return options;
     }
 }

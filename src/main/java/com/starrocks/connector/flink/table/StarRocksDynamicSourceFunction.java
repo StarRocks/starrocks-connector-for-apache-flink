@@ -1,7 +1,6 @@
 package com.starrocks.connector.flink.table;
 
 import com.starrocks.connector.flink.exception.StarRocksException;
-import com.starrocks.connector.flink.source.Const;
 import com.starrocks.connector.flink.source.QueryBeXTablets;
 import com.starrocks.connector.flink.source.QueryInfo;
 import com.starrocks.connector.flink.source.SelectColumn;
@@ -42,27 +41,11 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<L
         String beNode[] = this.queryBeXTablets.getBeNode().split(":");
         String ip = beNode[0];
         int port = Integer.parseInt(beNode[1]);
-        int socketTimeout = this.sourceOptions.getConnectTimeoutMs() != null ?
-                Integer.parseInt(this.sourceOptions.getConnectTimeoutMs()) : Const.DEFAULT_BE_SOCKET_TIMEOUT;
-        int connectTimeout = this.sourceOptions.getConnectTimeoutMs() != null ?
-                Integer.parseInt(this.sourceOptions.getConnectTimeoutMs()) : Const.DEFAULT_BE_CONNECT_TIMEOUT;
-        this.dataReader = new StarRocksSourceDataReader(ip, port, socketTimeout, connectTimeout, this.datatypes, selectColumns);
-
-        int batchSize = this.sourceOptions.getBatchSize() != null ?
-                Integer.parseInt(this.sourceOptions.getBatchSize()) : Const.DEFAULT_BATCH_SIZE;
-        int queryTimeout = this.sourceOptions.getQueryTimeout() != null ?
-                Integer.parseInt(this.sourceOptions.getQueryTimeout()) : Const.DEFAULT_QUERY_TIMEOUT;
-        int memLimit = this.sourceOptions.getMemLimit() != null ?
-                Integer.parseInt(this.sourceOptions.getMemLimit()) : Const.DEFAULT_MEM_LIMIT;
-
+        this.dataReader = new StarRocksSourceDataReader(ip, port, this.datatypes, selectColumns, this.sourceOptions);
         this.dataReader.openScanner(
                 this.queryBeXTablets.getTabletIds(),
                 this.queryInfo.getQueryPlan().getOpaqued_query_plan(),
-                sourceOptions.getDatabaseName(),
-                sourceOptions.getTableName(),
-                batchSize, queryTimeout, memLimit,
-                sourceOptions.getUsername(),
-                sourceOptions.getPassword());
+                this.sourceOptions);
     }
 
     @Override

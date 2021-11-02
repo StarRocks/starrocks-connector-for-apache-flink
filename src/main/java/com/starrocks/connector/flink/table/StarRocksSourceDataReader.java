@@ -44,14 +44,14 @@ public class StarRocksSourceDataReader implements Serializable {
     private List<Object> curData;
 
 
-    public StarRocksSourceDataReader(String ip, int port, int socketTimeout, int connectTimeout, 
-                                        DataType[] flinkDataTypes, SelectColumn[] selectColumns) throws StarRocksException {
+    public StarRocksSourceDataReader(String ip, int port, DataType[] flinkDataTypes, SelectColumn[] selectColumns, 
+                                        StarRocksSourceOptions sourceOptions) throws StarRocksException {
         this.IP = ip;
         this.PORT = port;
         this.flinkDataTypes = flinkDataTypes;
         this.selectColumns = selectColumns;
         TBinaryProtocol.Factory factory = new TBinaryProtocol.Factory();
-        TSocket socket = new TSocket(IP, PORT, socketTimeout, connectTimeout);
+        TSocket socket = new TSocket(IP, PORT, sourceOptions.getConnectTimeoutMs(), sourceOptions.getConnectTimeoutMs());
         try {
             socket.open();
         } catch (TTransportException e) {
@@ -62,24 +62,28 @@ public class StarRocksSourceDataReader implements Serializable {
         client = new TStarrocksExternalService.Client(protocol);   
     }
 
-    public void openScanner(List<Long> tablets, String opaqued_query_plan,
-                            String db, String table,
-                            int batchSize, int queryTimeout, int memLimit,
-                            String user, String pwd) throws StarRocksException {
+    public void openScanner(List<Long> tablets, String opaqued_query_plan, StarRocksSourceOptions sourceOptions) throws StarRocksException {
 
         TScanOpenParams params = new TScanOpenParams();
-        params.setCluster(Const.DEFAULT_CLUSTER_NAME);
-        params.setDatabase(db);
-        params.setTable(table);
 
         params.setTablet_ids(tablets);
         params.setOpaqued_query_plan(opaqued_query_plan);
+        params.setCluster(Const.DEFAULT_CLUSTER_NAME);
 
-        params.setBatch_size(batchSize);
-        params.setQuery_timeout(queryTimeout);
-        params.setMem_limit(memLimit);
-        params.setUser(user);
-        params.setPasswd(pwd);
+        params.setDatabase(sourceOptions.getDatabaseName());
+        params.setTable(sourceOptions.getTableName());
+        params.setUser(sourceOptions.getUsername());
+        params.setPasswd(sourceOptions.getPassword());
+
+        params.setBatch_size(sourceOptions.getBatchSize());
+        if (sourceOptions.getProperties() != null ) {
+            params.setProperties(sourceOptions.getProperties());    
+        }
+        // params.setLimit(sourceOptions.getLimit());
+        params.setKeep_alive_min((short) sourceOptions.getKeepAliveMin());
+        params.setQuery_timeout(sourceOptions.getQueryTimeout());
+        params.setMem_limit(sourceOptions.getMemLimit());
+        
         TScanOpenResult result = null;
         try {
             result = client.open_scanner(params);
