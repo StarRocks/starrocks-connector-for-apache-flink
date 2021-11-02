@@ -11,6 +11,8 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.alibaba.fastjson.JSONObject;
+
 public class StarRocksSourceOptions implements Serializable {
 
 
@@ -34,28 +36,26 @@ public class StarRocksSourceOptions implements Serializable {
             .stringType().noDefaultValue().withDescription("Hosts of the fe node like: `fe_ip1:http_port,fe_ip2:http_port...`.");
 
     // optional Options
-    public static final ConfigOption<String> CONNECT_TIMEOUT_MS = ConfigOptions.key("scan.connect.timeout-ms")
-            .stringType().noDefaultValue().withDescription("connect timeout");
+    public static final ConfigOption<Integer> SOURCE_CONNECT_TIMEOUT = ConfigOptions.key("source.connect.timeout-ms")
+            .intType().defaultValue(1000).withDescription("connect timeout");
         
-    public static final ConfigOption<String> BATCH_SIZE = ConfigOptions.key("scan.params.batch-size")
-            .stringType().noDefaultValue().withDescription("batch size");
+    public static final ConfigOption<Integer> SCAN_BATCH_SIZE = ConfigOptions.key("scan.params.batch-size")
+            .intType().defaultValue(100).withDescription("batch size");
 
-    public static final ConfigOption<String> PROPERTIES = ConfigOptions.key("scan.params.properties")
+    public static final ConfigOption<String> SCAN_PROPERTIES = ConfigOptions.key("scan.params.properties")
             .stringType().noDefaultValue().withDescription("reserved params for use");
     
-    public static final ConfigOption<String> LIMIT = ConfigOptions.key("scan.params.limit")
-            .stringType().noDefaultValue().withDescription("The query limit, if specified.");
+    public static final ConfigOption<Integer> SCAN_LIMIT = ConfigOptions.key("scan.params.limit")
+            .intType().defaultValue(1).withDescription("The query limit, if specified.");
 
-
-    public static final ConfigOption<String> KEEP_ALIVE_MIN = ConfigOptions.key("scan.params.keep-alive-min")
-            .stringType().noDefaultValue().withDescription("max keep alive time min");
+    public static final ConfigOption<Integer> SCAN_KEEP_ALIVE_MIN = ConfigOptions.key("scan.params.keep-alive-min")
+            .intType().defaultValue(1).withDescription("max keep alive time min");
     
-    public static final ConfigOption<String> QUERTY_TIMEOUT = ConfigOptions.key("scan.params.query-timeout")
-            .stringType().noDefaultValue().withDescription("query timeout for a single query");
+    public static final ConfigOption<Integer> SCAN_QUERTY_TIMEOUT = ConfigOptions.key("scan.params.query-timeout")
+            .intType().defaultValue(1000).withDescription("query timeout for a single query");
 
-    public static final ConfigOption<String> MEM_LIMIT = ConfigOptions.key("scan.params.mem-limit")
-            .stringType().noDefaultValue().withDescription("memory limit for a single query");
-
+    public static final ConfigOption<Integer> SCAN_MEM_LIMIT = ConfigOptions.key("scan.params.mem-limit")
+            .intType().defaultValue(1024).withDescription("memory limit for a single query");
 
     public static final ConfigOption<Integer> SOURCE_MAX_RETRIES = ConfigOptions.key("source.max-retries")
             .intType().defaultValue(1).withDescription("Max request retry times.");
@@ -130,31 +130,44 @@ public class StarRocksSourceOptions implements Serializable {
 
 
     // optional Options
-    public String getConnectTimeoutMs() { return tableOptions.get(CONNECT_TIMEOUT_MS); }
-
-    
-    public String getBatchSize() {
-        return tableOptions.get(BATCH_SIZE);
+    public int getConnectTimeoutMs() { 
+        return tableOptions.get(SOURCE_CONNECT_TIMEOUT).intValue(); 
     }
 
-    public String getProperties() {
-        return tableOptions.get(PROPERTIES);
+    public int getBatchSize() {
+        return tableOptions.get(SCAN_BATCH_SIZE).intValue();
     }
 
-    public String getLimit() {
-        return tableOptions.get(LIMIT);
+    public Map<String, String> getProperties() {
+
+        String json = tableOptions.get(SCAN_PROPERTIES);
+        if (json == null) {
+            return null;
+        }
+        Map<String, Object> stringToMap =  JSONObject.parseObject(json);
+        Map<String, String> newMap = new HashMap<String,String>();
+        for (Map.Entry<String, Object> entry : stringToMap.entrySet()) {
+            if (entry.getValue() instanceof String) {
+                newMap.put(entry.getKey(), (String) entry.getValue());
+            }
+        }
+        return (Map<String, String>) newMap;
     }
 
-    public String getKeepAliveMin() {
-        return tableOptions.get(KEEP_ALIVE_MIN);
+    public int getLimit() {
+        return tableOptions.get(SCAN_LIMIT).intValue();
     }
 
-    public String getQueryTimeout() {
-        return tableOptions.get(QUERTY_TIMEOUT);
+    public int getKeepAliveMin() {
+        return tableOptions.get(SCAN_KEEP_ALIVE_MIN).intValue();
     }
 
-    public String getMemLimit() {
-        return tableOptions.get(MEM_LIMIT);
+    public int getQueryTimeout() {
+        return tableOptions.get(SCAN_QUERTY_TIMEOUT).intValue();
+    }
+
+    public int getMemLimit() {
+        return tableOptions.get(SCAN_MEM_LIMIT).intValue();
     }
 
     public int getSourceMaxRetries() {

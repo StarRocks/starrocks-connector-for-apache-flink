@@ -4,7 +4,6 @@ package com.starrocks.connector.flink.table;
 import com.starrocks.connector.flink.exception.HttpException;
 import com.starrocks.connector.flink.exception.StarRocksException;
 import com.starrocks.connector.flink.manager.StarRocksSourceInfoVisitor;
-import com.starrocks.connector.flink.source.Const;
 import com.starrocks.connector.flink.source.QueryBeXTablets;
 import com.starrocks.connector.flink.source.QueryInfo;
 import com.starrocks.connector.flink.source.SelectColumn;
@@ -91,32 +90,19 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
         String beNode[] = queryBeXTablets.getBeNode().split(":");
         String ip = beNode[0];
         int port = Integer.parseInt(beNode[1]);
-        int socketTimeout = this.sourceOptions.getConnectTimeoutMs() != null ?
-                Integer.parseInt(this.sourceOptions.getConnectTimeoutMs()) : Const.DEFAULT_BE_SOCKET_TIMEOUT;
-        int connectTimeout = this.sourceOptions.getConnectTimeoutMs() != null ?
-                Integer.parseInt(this.sourceOptions.getConnectTimeoutMs()) : Const.DEFAULT_BE_CONNECT_TIMEOUT;
+        
         try {
-            this.dataReader = new StarRocksSourceDataReader(ip, port, socketTimeout, connectTimeout, flinkDataTypes, selectColumns);
+            this.dataReader = new StarRocksSourceDataReader(ip, port, flinkDataTypes, selectColumns, this.sourceOptions);
         } catch (StarRocksException e) {
             e.printStackTrace();
             LOG.error(e.getMessage());
         }
-        int batchSize = this.sourceOptions.getBatchSize() != null ?
-                Integer.parseInt(this.sourceOptions.getBatchSize()) : Const.DEFAULT_BATCH_SIZE;
-        int queryTimeout = this.sourceOptions.getQueryTimeout() != null ?
-                Integer.parseInt(this.sourceOptions.getQueryTimeout()) : Const.DEFAULT_QUERY_TIMEOUT;
-        int memLimit = this.sourceOptions.getMemLimit() != null ?
-                Integer.parseInt(this.sourceOptions.getMemLimit()) : Const.DEFAULT_MEM_LIMIT;
 
         try {
             this.dataReader.openScanner(
                     queryBeXTablets.getTabletIds(),
                     starRocksTableInputSplit.getQueryInfo().getQueryPlan().getOpaqued_query_plan(),
-                    sourceOptions.getDatabaseName(),
-                    sourceOptions.getTableName(),
-                    batchSize, queryTimeout, memLimit,
-                    sourceOptions.getUsername(),
-                    sourceOptions.getPassword());
+                    this.sourceOptions);
         } catch (StarRocksException e) {
             e.printStackTrace();
             LOG.error(e.getMessage());

@@ -28,17 +28,28 @@ public class StarRocksSourceTest {
                     "decimal_1 DECIMAL(27,9) \n"+
                 ") WITH (\n" +
                     "  'connector' = 'starrocks-source',\n" +
+                    
+                    "  'source.connect.timeout-ms' = '2000',\n" +
+                    "  'scan.params.batch-size' = '4',\n" +
+                    "  'scan.params.properties' = '{ \"test_prop\" : \"cccccc\"}',\n" +
+                    "  'scan.params.limit' = '10',\n" +
+                    "  'scan.params.keep-alive-min' = '2',\n" +
+                    "  'scan.params.query-timeout' = '1200',\n" +
+                    "  'scan.params.mem-limit' = '2048',\n" +
+                    "  'source.max-retries' = '3',\n" +
+
                     "  'scan-url' = '172.26.92.152:8634,172.26.92.152:8634,172.26.92.152:8634',\n" +
-                    "  'source.max-retries' = '4',\n" +
                     "  'username' = 'root',\n" +
                     "  'password' = '',\n" +                
                     "  'database-name' = 'cjs_test',\n" +
                     "  'table-name' = 'flink_type_test'\n" +
                 ")"
                 );
-        tEnv.executeSql("SELECT * from flink_type_test where int_1 < 1 and (char_1 = 'A' or varchar_1 = 'B')").print();
-        tEnv.executeSql("SELECT int_1, char_1 from flink_type_test where char_1 = 'A' limit 1").print();
-        tEnv.executeSql("SELECT int_1, char_1 from flink_type_test where char_1 = 'A'").print();
+        
+        // tEnv.executeSql("SELECT tinyint_1 from flink_type_test where tinyint_1 > 0").print();
+        // tEnv.executeSql("SELECT * from flink_type_test where int_1 < 1 and (char_1 = 'A' or varchar_1 = 'B')").print();
+        // tEnv.executeSql("SELECT int_1, char_1 from flink_type_test where char_1 = 'A' limit 1").print();
+        // tEnv.executeSql("SELECT int_1, char_1 from flink_type_test where char_1 = 'A'").print();
         tEnv.executeSql("SELECT * from flink_type_test").print();
     }
 }

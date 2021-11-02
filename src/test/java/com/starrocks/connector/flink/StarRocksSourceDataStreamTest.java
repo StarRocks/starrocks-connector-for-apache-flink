@@ -2,13 +2,11 @@ package com.starrocks.connector.flink;
 
 import com.starrocks.connector.flink.manager.StarRocksSourceInfoVisitor;
 import com.starrocks.connector.flink.source.QueryInfo;
-import com.starrocks.connector.flink.source.SelectColumn;
 import com.starrocks.connector.flink.table.StarRocksSourceOptions;
 
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.TableSchema;
-import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 
 public class StarRocksSourceDataStreamTest {
 
