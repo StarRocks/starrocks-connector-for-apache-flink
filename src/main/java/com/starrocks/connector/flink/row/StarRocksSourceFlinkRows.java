@@ -1,6 +1,7 @@
 package com.starrocks.connector.flink.row;
 
 import com.starrocks.connector.flink.exception.StarRocksException;
+import com.starrocks.connector.flink.source.ColunmRichInfo;
 import com.starrocks.connector.flink.source.Const;
 import com.starrocks.connector.flink.source.SelectColumn;
 import com.starrocks.connector.flink.source.StarRocksSchema;
@@ -26,7 +27,6 @@ import org.apache.flink.table.data.DecimalData;
 import org.apache.flink.table.data.StringData;
 import org.apache.flink.table.data.TimestampData;
 
-import org.apache.flink.table.types.DataType;
 import org.apache.flink.util.Preconditions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,7 +57,7 @@ public class StarRocksSourceFlinkRows {
     private VectorSchemaRoot root;
     private List<FieldVector> fieldVectors;
     private RootAllocator rootAllocator;
-    private DataType[] flinkDataTypes;
+    private List<ColunmRichInfo> colunmRichInfos;
     private final SelectColumn[] selectColumns;
     private StarRocksSchema starRocksSchema;
 
@@ -65,9 +65,9 @@ public class StarRocksSourceFlinkRows {
         return sourceFlinkRows;
     }
 
-    public StarRocksSourceFlinkRows(TScanBatchResult nextResult, DataType[] flinkDataTypes, 
+    public StarRocksSourceFlinkRows(TScanBatchResult nextResult, List<ColunmRichInfo> colunmRichInfos, 
                                     StarRocksSchema srSchema, SelectColumn[] selectColumns) {
-        this.flinkDataTypes = flinkDataTypes;
+        this.colunmRichInfos = colunmRichInfos;
         this.selectColumns = selectColumns;
         this.starRocksSchema = srSchema;
         this.rootAllocator = new RootAllocator(Integer.MAX_VALUE);
@@ -83,23 +83,18 @@ public class StarRocksSourceFlinkRows {
         while (arrowStreamReader.loadNextBatch()) {
 
             fieldVectors = root.getFieldVectors();
-            if (selectColumns != null) {
-                DataType[] dataTypes = new DataType[selectColumns.length];
-                for (int i = 0; i < selectColumns.length; i ++) {
-                    dataTypes[i] = flinkDataTypes[selectColumns[i].getColumnIndexInFlinkTable()];
-                }
-                flinkDataTypes = dataTypes.length == 0 ? flinkDataTypes : dataTypes;
-            }
-            if (fieldVectors.size() != flinkDataTypes.length) {
-                LOG.error("StarRocks schema size '{}' is not equal to arrow field size '{}'.", fieldVectors.size(), flinkDataTypes.length);
-                throw new StarRocksException("Generate flink rows failed.");
-            }
             if (fieldVectors.size() == 0 || root.getRowCount() == 0) {
                 continue;
             }
             rowCountOfBatch = root.getRowCount();
+            int colunmSize = 0;
+            for (int i = 0; i < this.selectColumns.length; i ++) {
+                if (selectColumns[i].getNeedBack()) {
+                    colunmSize = colunmSize + 1;
+                }
+            }
             for (int i = 0; i < rowCountOfBatch; ++i) {
-                sourceFlinkRows.add(new StarRocksSourceFlinkRow(fieldVectors.size()));
+                sourceFlinkRows.add(new StarRocksSourceFlinkRow(colunmSize));
             }
             this.genFlinkRows();
             flinksRowsCount += root.getRowCount();
@@ -150,66 +145,65 @@ public class StarRocksSourceFlinkRows {
 
     private void genFlinkRows() throws StarRocksException {
 
-        try {
-            for (int colIndex = 0; colIndex < fieldVectors.size(); colIndex ++) {
+        for (int colIndex = 0; colIndex < this.selectColumns.length; colIndex ++) {
 
-                FieldVector columnVector = fieldVectors.get(colIndex);
-                Types.MinorType beShowDataType = columnVector.getMinorType();
-                String starrocksType = starRocksSchema.get(colIndex).getType();
-                String flinkType = flinkDataTypes[colIndex].toString();
-                // starrocksType -> flinkType
-                flinkType = DataUtil.ClearBracket(flinkType);
-                starrocksType = DataUtil.ClearBracket(starrocksType);
-                if (!Const.DataTypeRelationMap.containsKey(flinkType)) {
-                    throw new StarRocksException("flinkType not found" + flinkType);
-                }
-                if (!Const.DataTypeRelationMap.get(flinkType).contains(starrocksType)) {
-                    throw new StarRocksException("Does not support converting " + starrocksType + " to " + flinkType);
-                }
-
-                switch (flinkType) {
-                    case Const.DATA_TYPE_FLINK_DATE:
-                    transToFlinkDate(starrocksType, beShowDataType, columnVector);
-                    break;
-                    case Const.DATA_TYPE_FLINK_TIMESTAMP:
-                    transToFlinkTimestamp(starrocksType, beShowDataType, columnVector);
-                    break;
-                    case Const.DATA_TYPE_FLINK_CHAR:
-                    transToFlinkChar(starrocksType, beShowDataType, columnVector);
-                    break;
-                    case Const.DATA_TYPE_FLINK_STRING:
-                    transToFlinkString(starrocksType, beShowDataType, columnVector);
-                    break;
-                    case Const.DATA_TYPE_FLINK_BOOLEAN:
-                    transToFlinkBoolean(starrocksType, beShowDataType, columnVector);
-                    break;
-                    case Const.DATA_TYPE_FLINK_TINYINT:
-                    transToFlinkTinyInt(starrocksType, beShowDataType, columnVector);
-                    break;
-                    case Const.DATA_TYPE_FLINK_SMALLINT:
-                    transToFlinkSmallInt(starrocksType, beShowDataType, columnVector);
-                    break;
-                    case Const.DATA_TYPE_FLINK_INT:
-                    transToFlinkInt(starrocksType, beShowDataType, columnVector);
-                    break;
-                    case Const.DATA_TYPE_FLINK_BIGINT:
-                    transToFlinkBigInt(starrocksType, beShowDataType, columnVector);
-                    break;
-                    case Const.DATA_TYPE_FLINK_FLOAT:
-                    transToFlinkFloat(starrocksType, beShowDataType, columnVector);
-                    break;
-                    case Const.DATA_TYPE_FLINK_DOUBLE:
-                    transToFlinkDouble(starrocksType, beShowDataType, columnVector);
-                    break;
-                    case Const.DATA_TYPE_FLINK_DECIMAL:
-                    transToFlinkDecimal(starrocksType, beShowDataType, columnVector);
-                    break;
-                }
+            if (!this.selectColumns[colIndex].getNeedBack()) {
+                continue;
             }
-        } catch (StarRocksException e) {
-            close();
-            throw e;
-        }
+
+            FieldVector columnVector = fieldVectors.get(colIndex);
+            Types.MinorType beShowDataType = columnVector.getMinorType();
+            String starrocksType = starRocksSchema.get(colIndex).getType();
+            String flinkType = colunmRichInfos.get(this.selectColumns[colIndex].getColumnIndexInFlinkTable()).getDataType().toString();
+            // starrocksType -> flinkType
+            flinkType = DataUtil.ClearBracket(flinkType);
+            starrocksType = DataUtil.ClearBracket(starrocksType);
+            if (!Const.DataTypeRelationMap.containsKey(flinkType)) {
+                throw new StarRocksException("flinkType not found" + flinkType);
+            }
+            if (!Const.DataTypeRelationMap.get(flinkType).contains(starrocksType)) {
+                throw new StarRocksException("Does not support converting " + starrocksType + " to " + flinkType);
+            }
+
+            switch (flinkType) {
+                case Const.DATA_TYPE_FLINK_DATE:
+                transToFlinkDate(starrocksType, beShowDataType, columnVector);
+                break;
+                case Const.DATA_TYPE_FLINK_TIMESTAMP:
+                transToFlinkTimestamp(starrocksType, beShowDataType, columnVector);
+                break;
+                case Const.DATA_TYPE_FLINK_CHAR:
+                transToFlinkChar(starrocksType, beShowDataType, columnVector);
+                break;
+                case Const.DATA_TYPE_FLINK_STRING:
+                transToFlinkString(starrocksType, beShowDataType, columnVector);
+                break;
+                case Const.DATA_TYPE_FLINK_BOOLEAN:
+                transToFlinkBoolean(starrocksType, beShowDataType, columnVector);
+                break;
+                case Const.DATA_TYPE_FLINK_TINYINT:
+                transToFlinkTinyInt(starrocksType, beShowDataType, columnVector);
+                break;
+                case Const.DATA_TYPE_FLINK_SMALLINT:
+                transToFlinkSmallInt(starrocksType, beShowDataType, columnVector);
+                break;
+                case Const.DATA_TYPE_FLINK_INT:
+                transToFlinkInt(starrocksType, beShowDataType, columnVector);
+                break;
+                case Const.DATA_TYPE_FLINK_BIGINT:
+                transToFlinkBigInt(starrocksType, beShowDataType, columnVector);
+                break;
+                case Const.DATA_TYPE_FLINK_FLOAT:
+                transToFlinkFloat(starrocksType, beShowDataType, columnVector);
+                break;
+                case Const.DATA_TYPE_FLINK_DOUBLE:
+                transToFlinkDouble(starrocksType, beShowDataType, columnVector);
+                break;
+                case Const.DATA_TYPE_FLINK_DECIMAL:
+                transToFlinkDecimal(starrocksType, beShowDataType, columnVector);
+                break;
+            }
+        }      
     }
 
     private void transToFlinkDate(String starrocksType, Types.MinorType beShowDataType, FieldVector curFieldVector) {

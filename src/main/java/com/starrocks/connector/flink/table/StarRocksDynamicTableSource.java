@@ -1,5 +1,6 @@
 package com.starrocks.connector.flink.table;
 
+import org.apache.flink.table.api.TableColumn;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.connector.ChangelogMode;
 import org.apache.flink.table.connector.source.DynamicTableSource;
@@ -15,15 +16,13 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
+import com.starrocks.connector.flink.source.ColunmRichInfo;
 import com.starrocks.connector.flink.source.SelectColumn;
 
 public class StarRocksDynamicTableSource implements ScanTableSource, SupportsLimitPushDown, SupportsFilterPushDown, SupportsProjectionPushDown {
 
     private final TableSchema flinkSchema;
     private final StarRocksSourceOptions options;
-    private long limit;
-    private String filter;
-    private String columns;
     private int[] projectedFields;
     private StarRocksRowDataInputFormat.Builder builder = StarRocksRowDataInputFormat.builder();
 
@@ -41,8 +40,17 @@ public class StarRocksDynamicTableSource implements ScanTableSource, SupportsLim
     @Override
     public ScanRuntimeProvider getScanRuntimeProvider(ScanContext scanContext) {
         
-        builder.setFlinkDataTypes(this.flinkSchema.getFieldDataTypes()).
-                setSourceOptions(options);
+        builder.setSourceOptions(options);
+        
+        List<ColunmRichInfo> colunmRichInfos = new ArrayList<>();
+        List<TableColumn> tableColumns = this.flinkSchema.getTableColumns();
+        for (int i = 0; i < tableColumns.size(); i ++) {
+            TableColumn column = tableColumns.get(i);
+            colunmRichInfos.add(new ColunmRichInfo(column.getName(), i, column.getType()));
+        }
+        builder.setColunmRichInfos(colunmRichInfos);
+        
+
         StarRocksRowDataInputFormat format = builder.build();
         return InputFormatProvider.of(format);
     }
@@ -64,16 +72,16 @@ public class StarRocksDynamicTableSource implements ScanTableSource, SupportsLim
 
     @Override
     public void applyProjection(int[][] projectedFields) {
+        // if columns = "*", this func will not be called, so 'selectColumns' will be null
         this.projectedFields = Arrays.stream(projectedFields).mapToInt(value -> value[0]).toArray();
         ArrayList<String> columnList = new ArrayList<>();
         ArrayList<SelectColumn> selectColumns = new ArrayList<SelectColumn>(); 
         for (int index : this.projectedFields) {
             String columnName = flinkSchema.getFieldName(index).get();
             columnList.add(columnName);
-            selectColumns.add(new SelectColumn(columnName, index));
+            selectColumns.add(new SelectColumn(columnName, index, true));
         }
         String columns = String.join(", ", columnList);
-        this.columns = columns;
         builder.setColumns(columns);
         builder.setSelectColumns(selectColumns.toArray(new SelectColumn[selectColumns.size()]));
     }
@@ -91,14 +99,12 @@ public class StarRocksDynamicTableSource implements ScanTableSource, SupportsLim
             filters.add(str);
         }
         Optional<String> filter = Optional.of(String.join(" and ", filters));
-        this.filter = filter.get();
         builder.setFilter(filter.get());
         return Result.of(filtersExpressions, new ArrayList<>());
     }
 
     @Override
     public void applyLimit(long limit) {
-        this.limit = limit;
         builder.setLimit(limit);
     }
 }
