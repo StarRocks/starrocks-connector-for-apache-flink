@@ -26,4 +26,17 @@ public class DataUtil {
         }
         return context; 
     }
+
+    public static String addZeroForNum(String str, int strLength) {
+        int strLen = str.length();
+        if (strLen < strLength) {
+            while (strLen < strLength) {
+                StringBuffer sb = new StringBuffer();
+                sb.append(str).append("0");
+                str = sb.toString();
+                strLen = str.length();
+            }
+        }
+        return str;
+    }
 }
