@@ -57,11 +57,12 @@ public class StarRocksSourceTest {
         // tEnv.executeSql("SELECT int_1, char_1 from flink_type_test where char_1 = 'A'").print();
         // tEnv.executeSql("SELECT int_1, char_1 from flink_type_test where int_1 = -2147483648").print();
         // tEnv.executeSql("SELECT * from flink_type_test").print();
-        // tEnv.executeSql("SELECT int_1 from flink_type_test").print();
+
+        tEnv.executeSql("SELECT int_1 from flink_type_test").print();
         // tEnv.executeSql("SELECT tinyint_1 as ccc from flink_type_test").print();
 
         // ---------------------- unsupport ----------------------
-        tEnv.executeSql("SELECT count(*) from flink_type_test").print();
+        // tEnv.executeSql("SELECT count(*) from flink_type_test").print();
 
         
     }

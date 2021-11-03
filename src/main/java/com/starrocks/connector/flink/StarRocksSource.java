@@ -1,5 +1,8 @@
 package com.starrocks.connector.flink;
 
+import java.util.List;
+
+import com.starrocks.connector.flink.source.ColunmRichInfo;
 import com.starrocks.connector.flink.source.QueryInfo;
 import com.starrocks.connector.flink.source.SelectColumn;
 import com.starrocks.connector.flink.table.StarRocksDynamicSourceFunction;
@@ -20,14 +23,15 @@ public class StarRocksSource {
         StarRocksSourceOptions sourceOptions,
         QueryInfo queryInfo,
         TableSchema flinkSchema,
-        SelectColumn[] selectColumns
+        SelectColumn[] selectColumns,
+        List<ColunmRichInfo> colunmRichInfos
         ) {
-
         return new StarRocksDynamicSourceFunction(
             sourceOptions, 
             queryInfo,
             flinkSchema,
-            selectColumns
+            selectColumns, 
+            colunmRichInfos
             );
     }
 }
