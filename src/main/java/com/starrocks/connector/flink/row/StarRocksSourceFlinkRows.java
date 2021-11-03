@@ -8,6 +8,7 @@ import com.starrocks.connector.flink.source.StarRocksSchema;
 import com.starrocks.connector.flink.thrift.TScanBatchResult;
 import com.starrocks.connector.flink.util.DataUtil;
 
+
 import org.apache.arrow.memory.RootAllocator;
 
 import org.apache.arrow.vector.BigIntVector;
@@ -35,6 +36,7 @@ import org.slf4j.LoggerFactory;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -42,6 +44,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
+
+
 
 
 public class StarRocksSourceFlinkRows {
@@ -351,8 +355,17 @@ public class StarRocksSourceFlinkRows {
                 setValueToFlinkRows(rowIndex, null);
                 continue;
             }
+            String formatStringLong = "yyyy-MM-dd HH:mm:ss.SSSSSS";
+            String formatStringShort = "yyyy-MM-dd HH:mm:ss";
             String value = new String(varCharVector.get(rowIndex));
-            DateTimeFormatter df = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSS");
+            if (value.length() < formatStringShort.length()) {
+                throw new RuntimeException("");
+            }
+            if (value.length() == formatStringShort.length()) {
+                value = DataUtil.addZeroForNum(value + ".", formatStringLong.length());
+            } 
+            value = DataUtil.addZeroForNum(value, formatStringLong.length());
+            DateTimeFormatter df = DateTimeFormatter.ofPattern(formatStringLong);
             LocalDateTime ldt = LocalDateTime.parse(value, df);
             setValueToFlinkRows(rowIndex, TimestampData.fromLocalDateTime(ldt));
         }

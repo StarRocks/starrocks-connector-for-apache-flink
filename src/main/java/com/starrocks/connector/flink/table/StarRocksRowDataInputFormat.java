@@ -94,47 +94,49 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
             });
             this.selectColumns = nColumns.toArray(new SelectColumn[0]);
         } else {
-            String tmpFilter = filter.replace("(", "").replace(")","");
-            String[] express = tmpFilter.split(" ");
+            if (filter != null) {
+                String tmpFilter = filter.replace("(", "").replace(")","");
+                String[] express = tmpFilter.split(" ");
 
-            Set<String> selectedSet = new HashSet<>();
-            for (int i = 0; i < selectColumns.length; i ++) {
-                selectedSet.add(selectColumns[i].getColumnName());
-            }
+                Set<String> selectedSet = new HashSet<>();
+                for (int i = 0; i < selectColumns.length; i ++) {
+                    selectedSet.add(selectColumns[i].getColumnName());
+                }
 
-            List<String> expresstionCol = new ArrayList<>();
-            List<SelectColumn> addSelectColumns = new ArrayList<>();
-            for (int i = 0; i < express.length; i ++) {
-                if (express[i].equals("=") && !selectedSet.contains(express[i - 1])) {
-                    String columnName = express[i - 1];
-                    expresstionCol.add(columnName);
-                    int colunmIndex = -1;
-                    for (int y = 0; y < this.colunmRichInfos.size(); y ++) {
-                        if (this.colunmRichInfos.get(y).getColumnName().equals(columnName)) {
-                            colunmIndex = y;
+                List<String> expresstionCol = new ArrayList<>();
+                List<SelectColumn> addSelectColumns = new ArrayList<>();
+                for (int i = 0; i < express.length; i ++) {
+                    if (express[i].equals("=") && !selectedSet.contains(express[i - 1])) {
+                        String columnName = express[i - 1];
+                        expresstionCol.add(columnName);
+                        int colunmIndex = -1;
+                        for (int y = 0; y < this.colunmRichInfos.size(); y ++) {
+                            if (this.colunmRichInfos.get(y).getColumnName().equals(columnName)) {
+                                colunmIndex = y;
+                            }
                         }
+                        if (colunmIndex == -1) {
+                            throw new StarRocksException("could not found column when gen SQL");
+                        }
+                        addSelectColumns.add(new SelectColumn(columnName, colunmIndex, false));
                     }
-                    if (colunmIndex == -1) {
-                        throw new StarRocksException("could not found column when gen SQL");
+                }
+                SelectColumn[] newSelected = addSelectColumns.toArray(new SelectColumn[0]);
+                SelectColumn[] realSelectColumns = new SelectColumn[selectColumns.length + newSelected.length];
+                System.arraycopy(selectColumns, 0, realSelectColumns, 0, selectColumns.length);
+                System.arraycopy(newSelected, 0, realSelectColumns, selectColumns.length, newSelected.length);
+                this.selectColumns = realSelectColumns;
+                if (expresstionCol.size() > 0) {
+                    if (columns.equals("")) {
+                        columns = String.join(", ", expresstionCol);
+                    } else {
+                        columns = columns + ", " + String.join(", ", expresstionCol);
                     }
-                    addSelectColumns.add(new SelectColumn(columnName, colunmIndex, false));
                 }
             }
-
-            SelectColumn[] newSelected = addSelectColumns.toArray(new SelectColumn[0]);
-
-            SelectColumn[] realSelectColumns = new SelectColumn[selectColumns.length + newSelected.length];
-            System.arraycopy(selectColumns, 0, realSelectColumns, 0, selectColumns.length);
-            System.arraycopy(newSelected, 0, realSelectColumns, selectColumns.length, newSelected.length);
-
-            this.selectColumns = realSelectColumns;
-
-            if (expresstionCol.size() > 0) {
-                if (columns.equals("")) {
-                    columns = String.join(", ", expresstionCol);
-                } else {
-                    columns = columns + ", " + String.join(", ", expresstionCol);
-                }
+            if (filter == null && columns.equals("")) {
+                columns = "count(*)";
+                throw new RuntimeException("unsupport SQL -> count(*)");
             }
         }
 

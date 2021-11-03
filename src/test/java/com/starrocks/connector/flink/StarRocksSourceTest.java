@@ -47,21 +47,31 @@ public class StarRocksSourceTest {
                 );
         
         // tEnv.executeSql("SELECT tinyint_1 from flink_type_test where tinyint_1 > 0").print();
-
         // tEnv.executeSql("SELECT tinyint_1, int_1 from flink_type_test where tinyint_1 = 100 and int_1 = -2147483648").print();
         // tEnv.executeSql("SELECT tinyint_1, char_1 from flink_type_test where tinyint_1 = 100 and char_1 = 'A'").print();
         // tEnv.executeSql("SELECT char_1 from flink_type_test where int_1 < 1 and (char_1 = 'A' or varchar_1 = 'B')").print();
-
         // tEnv.executeSql("SELECT * from flink_type_test where int_1 < 1 and (char_1 = 'A' or varchar_1 = 'B')").print();
-
         // tEnv.executeSql("SELECT int_1, char_1 from flink_type_test where char_1 = 'A' and int_1 = -2147483648").print();
         // tEnv.executeSql("SELECT int_1, char_1 from flink_type_test where char_1 = 'A' limit 1").print();
         // tEnv.executeSql("SELECT char_1, int_1 from flink_type_test where char_1 = 'A'").print();
         // tEnv.executeSql("SELECT int_1, char_1 from flink_type_test where char_1 = 'A'").print();
-
         // tEnv.executeSql("SELECT int_1, char_1 from flink_type_test where int_1 = -2147483648").print();
+        // tEnv.executeSql("SELECT * from flink_type_test").print();
+        // tEnv.executeSql("SELECT int_1 from flink_type_test").print();
+        // tEnv.executeSql("SELECT tinyint_1 as ccc from flink_type_test").print();
 
+        // ---------------------- unsupport ----------------------
+        tEnv.executeSql("SELECT count(*) from flink_type_test").print();
 
-        tEnv.executeSql("SELECT * from flink_type_test").print();
+        
     }
+
+    // public static void main(String[] args) throws Exception {
+
+    //     StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+    //     env.setParallelism(1);
+    //     StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
+    //     tEnv.executeSql("CREATE TABLE duplicate_table_with_null_1 (k1 DATE, k2 TIMESTAMP(6), k3 CHAR(20), k4 VARCHAR, k5 BOOLEAN, k6 TINYINT, k7 SMALLINT, k8 INT, k9 BIGINT, k10 STRING, k11 FLOAT, k12 DOUBLE, k13 DECIMAL(27,9)) with ('connector'='starrocks-source', 'scan-url'='172.26.92.151:8234', 'username'='root', 'password'='', 'database-name'='test_broker_load1635926631014', 'table-name'='duplicate_table_with_null')");
+    //     tEnv.executeSql("SELECT * from duplicate_table_with_null_1").print();
+    // }
 }
