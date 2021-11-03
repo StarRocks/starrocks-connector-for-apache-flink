@@ -2,6 +2,7 @@ package com.starrocks.connector.flink.table;
 
 import com.starrocks.connector.flink.exception.StarRocksException;
 import com.starrocks.connector.flink.row.StarRocksSourceFlinkRows;
+import com.starrocks.connector.flink.source.ColunmRichInfo;
 import com.starrocks.connector.flink.source.Const;
 import com.starrocks.connector.flink.source.SelectColumn;
 import com.starrocks.connector.flink.source.StarRocksSchema;
@@ -13,7 +14,6 @@ import com.starrocks.connector.flink.thrift.TScanOpenResult;
 import com.starrocks.connector.flink.thrift.TStarrocksExternalService;
 import com.starrocks.connector.flink.thrift.TStatusCode;
 
-import org.apache.flink.table.types.DataType;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TProtocol;
@@ -34,7 +34,7 @@ public class StarRocksSourceDataReader implements Serializable {
     private TStarrocksExternalService.Client client;
     private final String IP;
     private final int PORT;
-    private final DataType[] flinkDataTypes;
+    private final List<ColunmRichInfo> colunmRichInfos;
     private final SelectColumn[] selectColumns;
     private String contextId;
     private int readerOffset = 0;
@@ -44,11 +44,11 @@ public class StarRocksSourceDataReader implements Serializable {
     private List<Object> curData;
 
 
-    public StarRocksSourceDataReader(String ip, int port, DataType[] flinkDataTypes, SelectColumn[] selectColumns, 
+    public StarRocksSourceDataReader(String ip, int port, List<ColunmRichInfo> colunmRichInfos, SelectColumn[] selectColumns, 
                                         StarRocksSourceOptions sourceOptions) throws StarRocksException {
         this.IP = ip;
         this.PORT = port;
-        this.flinkDataTypes = flinkDataTypes;
+        this.colunmRichInfos = colunmRichInfos;
         this.selectColumns = selectColumns;
         TBinaryProtocol.Factory factory = new TBinaryProtocol.Factory();
         TSocket socket = new TSocket(IP, PORT, sourceOptions.getConnectTimeoutMs(), sourceOptions.getConnectTimeoutMs());
@@ -144,7 +144,7 @@ public class StarRocksSourceDataReader implements Serializable {
     }
     
     private void handleResult(TScanBatchResult result) throws StarRocksException, InterruptedException, IOException {
-        StarRocksSourceFlinkRows flinkRows = new StarRocksSourceFlinkRows(result, flinkDataTypes, srSchema, selectColumns).genFlinkRowsFromArrow();
+        StarRocksSourceFlinkRows flinkRows = new StarRocksSourceFlinkRows(result, colunmRichInfos, srSchema, selectColumns).genFlinkRowsFromArrow();
         this.readerOffset = flinkRows.getReadRowCount() + this.readerOffset;
         this.curFlinkRows = flinkRows;
         this.curData = flinkRows.next();

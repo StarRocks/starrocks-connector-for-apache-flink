@@ -47,9 +47,21 @@ public class StarRocksSourceTest {
                 );
         
         // tEnv.executeSql("SELECT tinyint_1 from flink_type_test where tinyint_1 > 0").print();
+
+        // tEnv.executeSql("SELECT tinyint_1, int_1 from flink_type_test where tinyint_1 = 100 and int_1 = -2147483648").print();
+        // tEnv.executeSql("SELECT tinyint_1, char_1 from flink_type_test where tinyint_1 = 100 and char_1 = 'A'").print();
+        // tEnv.executeSql("SELECT char_1 from flink_type_test where int_1 < 1 and (char_1 = 'A' or varchar_1 = 'B')").print();
+
         // tEnv.executeSql("SELECT * from flink_type_test where int_1 < 1 and (char_1 = 'A' or varchar_1 = 'B')").print();
+
+        // tEnv.executeSql("SELECT int_1, char_1 from flink_type_test where char_1 = 'A' and int_1 = -2147483648").print();
         // tEnv.executeSql("SELECT int_1, char_1 from flink_type_test where char_1 = 'A' limit 1").print();
+        // tEnv.executeSql("SELECT char_1, int_1 from flink_type_test where char_1 = 'A'").print();
         // tEnv.executeSql("SELECT int_1, char_1 from flink_type_test where char_1 = 'A'").print();
+
+        // tEnv.executeSql("SELECT int_1, char_1 from flink_type_test where int_1 = -2147483648").print();
+
+
         tEnv.executeSql("SELECT * from flink_type_test").print();
     }
 }

@@ -8,11 +8,13 @@ public class SelectColumn implements Serializable {
 
     private String columnName;
     private int columnIndexInFlinkTable;
+    private boolean needBack;
 
 
-    public SelectColumn(String columnName, int columnIndexInFlinkTable){
+    public SelectColumn(String columnName, int columnIndexInFlinkTable, boolean needBack){
         this.columnName = columnName;
         this.columnIndexInFlinkTable = columnIndexInFlinkTable;
+        this.needBack = needBack;
     }
 
     public String getColumnName() {
@@ -29,6 +31,10 @@ public class SelectColumn implements Serializable {
 
     public void setColumnIndexInFlinkTable(int columnIndexInFlinkTable) {
         this.columnIndexInFlinkTable = columnIndexInFlinkTable;
+    }
+
+    public boolean getNeedBack() {
+        return needBack;
     }
 
 }

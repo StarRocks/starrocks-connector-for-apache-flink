@@ -41,7 +41,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<L
         String beNode[] = this.queryBeXTablets.getBeNode().split(":");
         String ip = beNode[0];
         int port = Integer.parseInt(beNode[1]);
-        this.dataReader = new StarRocksSourceDataReader(ip, port, this.datatypes, selectColumns, this.sourceOptions);
+        this.dataReader = new StarRocksSourceDataReader(ip, port, null, selectColumns, this.sourceOptions);
         this.dataReader.openScanner(
                 this.queryBeXTablets.getTabletIds(),
                 this.queryInfo.getQueryPlan().getOpaqued_query_plan(),
