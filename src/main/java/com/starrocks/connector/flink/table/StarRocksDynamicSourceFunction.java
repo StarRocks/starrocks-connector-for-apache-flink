@@ -1,6 +1,7 @@
 package com.starrocks.connector.flink.table;
 
 import com.starrocks.connector.flink.exception.StarRocksException;
+import com.starrocks.connector.flink.source.ColunmRichInfo;
 import com.starrocks.connector.flink.source.QueryBeXTablets;
 import com.starrocks.connector.flink.source.QueryInfo;
 import com.starrocks.connector.flink.source.SelectColumn;
@@ -24,12 +25,16 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<L
     private QueryBeXTablets queryBeXTablets;
 
     private StarRocksSourceDataReader dataReader;
+    private final List<ColunmRichInfo> colunmRichInfos;
+    
 
-    public StarRocksDynamicSourceFunction(StarRocksSourceOptions sourceOptions, QueryInfo queryInfo, TableSchema fSchema, SelectColumn[] selectColumns) {
+    public StarRocksDynamicSourceFunction(StarRocksSourceOptions sourceOptions, QueryInfo queryInfo, TableSchema fSchema, 
+                                            SelectColumn[] selectColumns, List<ColunmRichInfo> colunmRichInfos) {
         this.sourceOptions = sourceOptions;
         this.queryInfo = queryInfo;
         this.datatypes = fSchema.getFieldDataTypes();
         this.selectColumns = selectColumns;
+        this.colunmRichInfos = colunmRichInfos;
     }
 
     @Override
@@ -41,7 +46,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<L
         String beNode[] = this.queryBeXTablets.getBeNode().split(":");
         String ip = beNode[0];
         int port = Integer.parseInt(beNode[1]);
-        this.dataReader = new StarRocksSourceDataReader(ip, port, null, selectColumns, this.sourceOptions);
+        this.dataReader = new StarRocksSourceDataReader(ip, port, colunmRichInfos, selectColumns, this.sourceOptions);
         this.dataReader.openScanner(
                 this.queryBeXTablets.getTabletIds(),
                 this.queryInfo.getQueryPlan().getOpaqued_query_plan(),

@@ -52,16 +52,16 @@ public class StarRocksSourceFlinkRows {
 
     private static Logger LOG = LoggerFactory.getLogger(StarRocksSourceFlinkRows.class);
 
-    private int offsetOfBatchForRead = 0;
-    private int rowCountOfBatch = 0;
-    
-    private int flinksRowsCount = 0;
+    private int offsetOfBatchForRead;
+    private int rowCountOfBatch;
+    private int flinksRowsCount;
+
     private List<StarRocksSourceFlinkRow> sourceFlinkRows = new ArrayList<>();
     private final ArrowStreamReader arrowStreamReader;
     private VectorSchemaRoot root;
     private List<FieldVector> fieldVectors;
     private RootAllocator rootAllocator;
-    private List<ColunmRichInfo> colunmRichInfos;
+    private final List<ColunmRichInfo> colunmRichInfos;
     private final SelectColumn[] selectColumns;
     private StarRocksSchema starRocksSchema;
 
@@ -71,6 +71,7 @@ public class StarRocksSourceFlinkRows {
 
     public StarRocksSourceFlinkRows(TScanBatchResult nextResult, List<ColunmRichInfo> colunmRichInfos, 
                                     StarRocksSchema srSchema, SelectColumn[] selectColumns) {
+
         this.colunmRichInfos = colunmRichInfos;
         this.selectColumns = selectColumns;
         this.starRocksSchema = srSchema;
@@ -85,7 +86,6 @@ public class StarRocksSourceFlinkRows {
 
         this.root = arrowStreamReader.getVectorSchemaRoot();
         while (arrowStreamReader.loadNextBatch()) {
-
             fieldVectors = root.getFieldVectors();
             if (fieldVectors.size() == 0 || root.getRowCount() == 0) {
                 continue;
@@ -114,8 +114,8 @@ public class StarRocksSourceFlinkRows {
     public List<Object> next() throws StarRocksException {
 
         if (!hasNext()) {
-            LOG.error("read offset larger than flinksRowsCount");
-            throw new NoSuchElementException("read offset larger than flinksRowsCount");
+            LOG.error("offset larger than flinksRowsCount");
+            throw new StarRocksException("read offset larger than flinksRowsCount");
         }
         return sourceFlinkRows.get(offsetOfBatchForRead ++).getColumns();
     }
