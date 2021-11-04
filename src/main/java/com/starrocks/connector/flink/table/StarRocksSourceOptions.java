@@ -37,37 +37,29 @@ public class StarRocksSourceOptions implements Serializable {
 
     // optional Options
     public static final ConfigOption<Integer> SOURCE_CONNECT_TIMEOUT = ConfigOptions.key("source.connect.timeout-ms")
-            .intType().defaultValue(1000).withDescription("connect timeout");
+            .intType().defaultValue(1000).withDescription("Connect timeout");
         
     public static final ConfigOption<Integer> SCAN_BATCH_SIZE = ConfigOptions.key("scan.params.batch-size")
-            .intType().defaultValue(100).withDescription("batch size");
+            .intType().defaultValue(100).withDescription("Batch size");
 
     public static final ConfigOption<String> SCAN_PROPERTIES = ConfigOptions.key("scan.params.properties")
-            .stringType().noDefaultValue().withDescription("reserved params for use");
+            .stringType().noDefaultValue().withDescription("Reserved params for use");
     
     public static final ConfigOption<Integer> SCAN_LIMIT = ConfigOptions.key("scan.params.limit")
             .intType().defaultValue(1).withDescription("The query limit, if specified.");
 
     public static final ConfigOption<Integer> SCAN_KEEP_ALIVE_MIN = ConfigOptions.key("scan.params.keep-alive-min")
-            .intType().defaultValue(1).withDescription("max keep alive time min");
+            .intType().defaultValue(1).withDescription("Max keep alive time min");
     
     public static final ConfigOption<Integer> SCAN_QUERTY_TIMEOUT = ConfigOptions.key("scan.params.query-timeout")
-            .intType().defaultValue(1000).withDescription("query timeout for a single query");
+            .intType().defaultValue(1000).withDescription("Query timeout for a single query");
 
     public static final ConfigOption<Integer> SCAN_MEM_LIMIT = ConfigOptions.key("scan.params.mem-limit")
-            .intType().defaultValue(1024).withDescription("memory limit for a single query");
+            .intType().defaultValue(1024).withDescription("Memory limit for a single query");
 
     public static final ConfigOption<Integer> SOURCE_MAX_RETRIES = ConfigOptions.key("source.max-retries")
             .intType().defaultValue(1).withDescription("Max request retry times.");
 
-    
-    
-
-    // ????
-    public static final ConfigOption<String> COLUMNS = ConfigOptions.key("columns")
-            .stringType().noDefaultValue().withDescription("columns");
-    public static final ConfigOption<String> FILTER = ConfigOptions.key("filter")
-            .stringType().noDefaultValue().withDescription("filters");
     
     public static final String SOURCE_PROPERTIES_PREFIX = "scan.params.";
 
@@ -172,15 +164,6 @@ public class StarRocksSourceOptions implements Serializable {
 
     public int getSourceMaxRetries() {
         return tableOptions.get(SOURCE_MAX_RETRIES).intValue();
-    }
-
-    // ????
-    public String getColums() {
-        return tableOptions.get(COLUMNS);
-    }
-
-    public String getFilter() {
-        return tableOptions.get(FILTER);
     }
 
     public static Builder builder() {
