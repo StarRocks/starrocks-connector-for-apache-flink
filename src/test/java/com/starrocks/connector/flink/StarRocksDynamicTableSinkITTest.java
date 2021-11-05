@@ -42,6 +42,46 @@ public class StarRocksDynamicTableSinkITTest extends StarRocksSinkBaseTest {
             put("DATA_TYPE", "bigint");
         }});
         meta.add(new HashMap<String, String>(){{
+            put("COLUMN_NAME", "a");
+            put("COLUMN_KEY", "");
+            put("DATA_TYPE", "varchar");
+        }});
+        meta.add(new HashMap<String, String>(){{
+            put("COLUMN_NAME", "e");
+            put("COLUMN_KEY", "");
+            put("DATA_TYPE", "array");
+        }});
+        meta.add(new HashMap<String, String>(){{
+            put("COLUMN_NAME", "f");
+            put("COLUMN_KEY", "");
+            put("DATA_TYPE", "array");
+        }});
+        meta.add(new HashMap<String, String>(){{
+            put("COLUMN_NAME", "g");
+            put("COLUMN_KEY", "");
+            put("DATA_TYPE", "array");
+        }});
+        meta.add(new HashMap<String, String>(){{
+            put("COLUMN_NAME", "h");
+            put("COLUMN_KEY", "");
+            put("DATA_TYPE", "array");
+        }});
+        meta.add(new HashMap<String, String>(){{
+            put("COLUMN_NAME", "i");
+            put("COLUMN_KEY", "");
+            put("DATA_TYPE", "map");
+        }});
+        meta.add(new HashMap<String, String>(){{
+            put("COLUMN_NAME", "j");
+            put("COLUMN_KEY", "");
+            put("DATA_TYPE", "map");
+        }});
+        meta.add(new HashMap<String, String>(){{
+            put("COLUMN_NAME", "k");
+            put("COLUMN_KEY", "");
+            put("DATA_TYPE", "map");
+        }});
+        meta.add(new HashMap<String, String>(){{
             put("COLUMN_NAME", "d");
             put("COLUMN_KEY", "");
             put("DATA_TYPE", "date");
@@ -65,6 +105,14 @@ public class StarRocksDynamicTableSinkITTest extends StarRocksSinkBaseTest {
             "name VARCHAR," +
             "score BIGINT," +
             "t TIMESTAMP(3)," +
+            "a ROW<k1 int, k2 string>," +
+            "e ARRAY<ROW<k1 int, k2 string>>," +
+            "f ARRAY<STRING>," +
+            "g ARRAY<DECIMAL(2,1)>," +
+            "h ARRAY<ARRAY<STRING>>," +
+            "i MAP<STRING,INT>," +
+            "j MAP<STRING, MAP<STRING,INT>>," +
+            "k MAP<STRING, ARRAY<INT>>," +
             "d DATE" +
             ") WITH ( " +
             "'connector' = 'starrocks'," +
@@ -77,6 +125,8 @@ public class StarRocksDynamicTableSinkITTest extends StarRocksSinkBaseTest {
             "'sink.buffer-flush.max-rows' = '" + OPTIONS.getSinkMaxRows() + "'," +
             "'sink.buffer-flush.max-bytes' = '" + OPTIONS.getSinkMaxBytes() + "'," +
             "'sink.buffer-flush.interval-ms' = '" + OPTIONS.getSinkMaxFlushInterval() + "'," +
+            // "'sink.properties.format' = 'json'," +
+            // "'sink.properties.strip_outer_array' = 'true'," +
             "'sink.properties.column_separator' = '\\x01'," +
             "'sink.properties.row_delimiter' = '\\x02'" +
             ")";
@@ -85,9 +135,7 @@ public class StarRocksDynamicTableSinkITTest extends StarRocksSinkBaseTest {
         String exMsg = "";
         try {
             tEnv.executeSql("INSERT INTO USER_RESULT\n" +
-                "VALUES ('lebron', 99, TO_TIMESTAMP('2020-01-01 01:00:01'), TO_DATE('2020-01-01'))").collect();
-            tEnv.executeSql("INSERT INTO USER_RESULT\n" +
-                "VALUES ('lebron', 99, TO_TIMESTAMP('2020-01-01 12:00:01'), TO_DATE('2020-01-01')), ('stephen', 99, TO_TIMESTAMP('2020-01-01 23:00:01'), TO_DATE('2020-01-01'))").collect();
+                "VALUES ('lebron', 99, TO_TIMESTAMP('2020-01-01 01:00:01'), row(1,'a'), array[row(1,'a')], array['accc','bccc'], array[1.2,2.3], array[array['1','2']], map['k1', 222, 'k2', 111], map['nested', map['k1', 222, 'k2', 111]], map['nested', array[1, 3]], TO_DATE('2020-01-01'))").collect();
             Thread.sleep(2000);
         } catch (Exception e) {
             exMsg = e.getMessage();

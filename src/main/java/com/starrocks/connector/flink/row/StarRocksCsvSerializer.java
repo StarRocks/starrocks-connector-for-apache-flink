@@ -14,6 +14,11 @@
 
 package com.starrocks.connector.flink.row;
 
+import java.util.List;
+import java.util.Map;
+
+import com.alibaba.fastjson.JSON;
+
 public class StarRocksCsvSerializer implements StarRocksISerializer {
     
     private static final long serialVersionUID = 1L;
@@ -29,7 +34,7 @@ public class StarRocksCsvSerializer implements StarRocksISerializer {
         StringBuilder sb = new StringBuilder();
         int idx = 0;
         for (Object val : values) {
-            sb.append(null == val ? "\\N" : val);
+            sb.append(null == val ? "\\N" : ((val instanceof Map || val instanceof List) ? JSON.toJSONString(val) : val));
             if (idx++ < values.length - 1) {
                 sb.append(columnSeparator);
             }

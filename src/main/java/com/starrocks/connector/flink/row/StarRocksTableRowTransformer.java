@@ -14,19 +14,47 @@
 
 package com.starrocks.connector.flink.row;
 
+import java.io.IOException;
+import java.io.Serializable;
+import java.lang.reflect.Type;
 import java.sql.Date;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.serializer.JSONSerializer;
+import com.alibaba.fastjson.serializer.ObjectSerializer;
+import com.alibaba.fastjson.serializer.SerializeConfig;
+import com.alibaba.fastjson.serializer.SerializeWriter;
 
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.calcite.shaded.com.google.common.collect.Maps;
+import org.apache.flink.shaded.guava18.com.google.common.collect.Lists;
 import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.data.ArrayData;
+import org.apache.flink.table.data.DecimalData;
+import org.apache.flink.table.data.GenericArrayData;
+import org.apache.flink.table.data.GenericMapData;
+import org.apache.flink.table.data.MapData;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.data.TimestampData;
+import org.apache.flink.table.data.binary.BinaryArrayData;
+import org.apache.flink.table.data.binary.BinaryMapData;
+import org.apache.flink.table.data.binary.BinaryStringData;
 import org.apache.flink.table.types.DataType;
+import org.apache.flink.table.types.logical.ArrayType;
 import org.apache.flink.table.types.logical.DecimalType;
 import org.apache.flink.table.types.logical.LogicalType;
+import org.apache.flink.table.types.logical.LogicalTypeRoot;
+import org.apache.flink.table.types.logical.MapType;
+import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.table.types.logical.TimestampType;
 
 public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<RowData> {
@@ -37,7 +65,6 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
     private Function<RowData, RowData> valueTransform;
     private DataType[] dataTypes;
     private final SimpleDateFormat dateFormatter = new SimpleDateFormat("yyyy-MM-dd");
-    private final SimpleDateFormat dateTimeFormatterMs = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
     
     public StarRocksTableRowTransformer(TypeInformation<RowData> rowDataTypeInfo) {
         this.rowDataTypeInfo = rowDataTypeInfo;
@@ -52,6 +79,9 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
     public void setRuntimeContext(RuntimeContext runtimeCtx) {
         final TypeSerializer<RowData> typeSerializer = rowDataTypeInfo.createSerializer(runtimeCtx.getExecutionConfig());
         valueTransform = runtimeCtx.getExecutionConfig().isObjectReuseEnabled() ? typeSerializer::copy : Function.identity();
+        SerializeConfig.getGlobalInstance().put(BinaryStringData.class, new BinaryStringDataSerializer());
+        SerializeConfig.getGlobalInstance().put(DecimalData.class, new DecimalDataSerializer());
+        SerializeConfig.getGlobalInstance().put(TimestampData.class, new TimestampDataSerializer());
     }
 
     @Override
@@ -109,8 +139,124 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
                     value += (bts[bts.length - i - 1] & 0xffL) << (8 * i);
                 }
                 return value;
+            case ARRAY:
+                return convertNestedArray(record.getArray(pos), type);
+            case MAP:
+                return convertNestedMap(record.getMap(pos), type);
+            case ROW:
+                RowType rType = (RowType)type;
+                Map<String, Object> m = Maps.newHashMap();
+                RowData row = record.getRow(pos, rType.getFieldCount());
+                rType.getFields().parallelStream().forEach(f -> m.put(f.getName(), typeConvertion(f.getType(), row, rType.getFieldIndex(f.getName()))));
+                return m;
             default:
                 throw new UnsupportedOperationException("Unsupported type:" + type);
         }
+    }
+
+    private List<Object> convertNestedArray(ArrayData arrData, LogicalType type) {
+        if (arrData instanceof GenericArrayData) {
+            return Lists.newArrayList(((GenericArrayData)arrData).toObjectArray());
+        }
+        if (arrData instanceof BinaryArrayData) {
+            LogicalType lt = ((ArrayType)type).getElementType();
+            List<Object> data = Lists.newArrayList(((BinaryArrayData)arrData).toObjectArray(lt));
+            if (LogicalTypeRoot.ROW.equals(lt.getTypeRoot())) {
+                RowType rType = (RowType)lt;
+                // parse nested row data
+                return data.parallelStream().map(row -> {
+                    Map<String, Object> m = Maps.newHashMap();
+                    rType.getFields().parallelStream().forEach(f -> m.put(f.getName(), typeConvertion(f.getType(), (RowData)row, rType.getFieldIndex(f.getName()))));
+                    return JSON.toJSONString(m);
+                }).collect(Collectors.toList());
+            }
+            if (LogicalTypeRoot.MAP.equals(lt.getTypeRoot())) {
+                // traversal of the nested map
+                return data.parallelStream().map(m -> convertNestedMap((MapData)m, lt)).collect(Collectors.toList());
+            }
+            if (LogicalTypeRoot.DATE.equals(lt.getTypeRoot())) {
+                return data.parallelStream().map(date -> dateFormatter.format(Date.valueOf(LocalDate.ofEpochDay((Integer)date)))).collect(Collectors.toList());
+            }
+            if (LogicalTypeRoot.ARRAY.equals(lt.getTypeRoot())) {
+                // traversal of the nested array
+                return data.parallelStream().map(arr -> convertNestedArray((ArrayData)arr, lt)).collect(Collectors.toList());
+            }
+            return data;
+        }
+        throw new UnsupportedOperationException(String.format("Unsupported array data: %s", arrData.getClass()));
+    }
+
+    private Map<Object, Object> convertNestedMap(MapData mapData, LogicalType type) {
+        if (mapData instanceof GenericMapData) {
+            HashMap<Object, Object> m = Maps.newHashMap();
+            for (Object k : ((GenericArrayData)((GenericMapData)mapData).keyArray()).toObjectArray()) {
+                m.put(k, ((GenericMapData)mapData).get(k));
+            }
+            return m;
+        }
+        if (mapData instanceof BinaryMapData) {
+            Map<Object, Object> result = Maps.newHashMap();
+            LogicalType valType = ((MapType)type).getValueType();
+            Map<?, ?> javaMap = ((BinaryMapData)mapData).toJavaMap(((MapType)type).getKeyType(), valType);
+            for (Map.Entry<?,?> en : javaMap.entrySet()) {
+                if (LogicalTypeRoot.MAP.equals(valType.getTypeRoot())) {
+                    // traversal of the nested map
+                    result.put(en.getKey().toString(), convertNestedMap((MapData)en.getValue(), valType));
+                    continue;
+                }
+                if (LogicalTypeRoot.DATE.equals(valType.getTypeRoot())) {
+                    result.put(en.getKey().toString(), dateFormatter.format(Date.valueOf(LocalDate.ofEpochDay((Integer)en.getValue()))));
+                    continue;
+                }
+                if (LogicalTypeRoot.ARRAY.equals(valType.getTypeRoot())) {
+                    result.put(en.getKey().toString(), convertNestedArray((ArrayData)en.getValue(), valType));
+                    continue;
+                }
+                result.put(en.getKey().toString(), en.getValue());
+            }
+            return result;
+        }
+        throw new UnsupportedOperationException(String.format("Unsupported map data: %s", mapData.getClass()));
+    }
+    
+}
+
+final class BinaryStringDataSerializer implements ObjectSerializer, Serializable {
+    private static final long serialVersionUID = 1L;
+    @Override
+    public void write(JSONSerializer serializer, Object object, Object fieldName, Type fieldType, int features) throws IOException {
+        SerializeWriter out = serializer.getWriter();
+        if (null == object) {
+            serializer.getWriter().writeNull();
+            return;
+        }
+        BinaryStringData strData = (BinaryStringData)object;
+        out.writeString(strData.toString());
+    }
+}
+
+final class DecimalDataSerializer implements ObjectSerializer, Serializable {
+    private static final long serialVersionUID = 1L;
+    @Override
+    public void write(JSONSerializer serializer, Object object, Object fieldName, Type fieldType, int features) throws IOException {
+        SerializeWriter out = serializer.getWriter();
+        if (null == object) {
+            serializer.getWriter().writeNull();
+            return;
+        }
+        out.writeString(((DecimalData)object).toBigDecimal().toPlainString());
+    }
+}
+
+final class TimestampDataSerializer implements ObjectSerializer, Serializable {
+    private static final long serialVersionUID = 1L;
+    @Override
+    public void write(JSONSerializer serializer, Object object, Object fieldName, Type fieldType, int features) throws IOException {
+        SerializeWriter out = serializer.getWriter();
+        if (null == object) {
+            serializer.getWriter().writeNull();
+            return;
+        }
+        out.writeString(((TimestampData)object).toLocalDateTime().toString());
     }
 }

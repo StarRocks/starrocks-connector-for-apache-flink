@@ -34,7 +34,8 @@ public class StarRocksJsonSerializer implements StarRocksISerializer {
         Map<String, Object> rowMap = new HashMap<>(values.length);
         int idx = 0;
         for (String fieldName : fieldNames) {
-            rowMap.put(fieldName, values[idx++]);
+            rowMap.put(fieldName, values[idx] instanceof Map ? JSON.toJSONString(values[idx]) : values[idx]);
+            idx++;
         }
         return JSON.toJSONString(rowMap);
     }
