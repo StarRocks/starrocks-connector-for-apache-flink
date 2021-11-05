@@ -1,9 +1,12 @@
 package com.starrocks.connector.flink.table;
 
 
+import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionOptions;
+import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
 import com.starrocks.connector.flink.exception.HttpException;
 import com.starrocks.connector.flink.exception.StarRocksException;
-import com.starrocks.connector.flink.manager.StarRocksSourceInfoVisitor;
+import com.starrocks.connector.flink.manager.StarRocksFeHttpVisitor;
+import com.starrocks.connector.flink.manager.StarRocksQueryVisitor;
 import com.starrocks.connector.flink.source.ColunmRichInfo;
 import com.starrocks.connector.flink.source.QueryBeXTablets;
 import com.starrocks.connector.flink.source.QueryInfo;
@@ -25,9 +28,9 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.ArrayList;
 
-import java.util.HashSet;
+
 import java.util.List;
-import java.util.Set;
+
 
 
 public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRocksTableInputSplit> implements ResultTypeQueryable<RowData> {
@@ -38,26 +41,50 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
     
     private final long limit;
     private final String filter;
-    private String columns;
+    private StarRocksSourceQueryType queryType;
     private final List<ColunmRichInfo> colunmRichInfos;
+
+    private String columns;
     private SelectColumn[] selectColumns;
 
     private StarRocksSourceDataReader dataReader;
-    private StarRocksSourceInfoVisitor infoVisitor;
+    private StarRocksFeHttpVisitor feHttpVisitor;
 
+    private final StarRocksJdbcConnectionProvider jdbcConnProvider;
+    private final StarRocksQueryVisitor starrocksQueryVisitor;
+    
     private QueryInfo queryInfo;
+    
 
     public StarRocksRowDataInputFormat(StarRocksSourceOptions sourceOptions, List<ColunmRichInfo> colunmRichInfos,
-                                        long limit, String filter, String columns, SelectColumn[] selectColumns) {
+                                        long limit, String filter, String columns, SelectColumn[] selectColumns, StarRocksSourceQueryType queryType) {
 
         this.sourceOptions = sourceOptions;
+
         this.limit = limit;
         this.filter = filter;
         this.columns = columns;
         this.colunmRichInfos = colunmRichInfos;
         this.selectColumns = selectColumns;
+        this.queryType = queryType;
 
-        this.infoVisitor = new StarRocksSourceInfoVisitor(sourceOptions);
+        StarRocksJdbcConnectionOptions jdbcOptions = new StarRocksJdbcConnectionOptions(sourceOptions.getJdbcUrl(), sourceOptions.getUsername(), sourceOptions.getPassword());
+        this.jdbcConnProvider = new StarRocksJdbcConnectionProvider(jdbcOptions);
+        this.starrocksQueryVisitor = new StarRocksQueryVisitor(jdbcConnProvider, sourceOptions.getDatabaseName(), sourceOptions.getTableName());
+
+        this.feHttpVisitor = new StarRocksFeHttpVisitor(sourceOptions);
+
+        if (queryType == null) {
+            queryType = StarRocksSourceQueryType.QueryAllColumns;
+        }
+
+        if (queryType == StarRocksSourceQueryType.QueryAllColumns){
+            List<SelectColumn> nColumns = new ArrayList<>();
+            this.colunmRichInfos.forEach(richInfo -> {
+                nColumns.add(new SelectColumn(richInfo.getColumnName(), richInfo.getColunmIndexInSchema(), true));
+            });
+            this.selectColumns = nColumns.toArray(new SelectColumn[0]);
+        }
     }
 
     @Override
@@ -71,84 +98,55 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
     @Override
     public StarRocksTableInputSplit[] createInputSplits(int i) throws IOException {
 
+        String SQL = genSQL();
+
+        List<StarRocksTableInputSplit> list = new ArrayList<>();
+        if (this.queryType == StarRocksSourceQueryType.QueryCount) {
+            int dataCount = this.starrocksQueryVisitor.getQueryCount(SQL);
+            list.add(new StarRocksTableInputSplit(0, null, null, true, dataCount));
+            return list.toArray(new StarRocksTableInputSplit[0]);
+        }
+            
+
         try {
-            this.queryInfo = infoVisitor.getQueryInfo(genSQL());
+            this.queryInfo = feHttpVisitor.getQueryInfo(SQL);
         } catch (HttpException | StarRocksException e) {
             e.printStackTrace();
             LOG.error(e.getMessage());
         }
-        List<StarRocksTableInputSplit> list = new ArrayList<>();
+        
         for (int x = 0; x < queryInfo.getBeXTablets().size(); x ++) {
-            list.add(new StarRocksTableInputSplit(x, queryInfo, this.selectColumns));
+            list.add(new StarRocksTableInputSplit(x, queryInfo, this.selectColumns, false, 0));
         }
         return list.toArray(new StarRocksTableInputSplit[0]);
     }
 
-    private String genSQL() throws StarRocksException {
+    private String genSQL() {
 
-        if (columns == null) {
-            columns = "*";
-            List<SelectColumn> nColumns = new ArrayList<>();
-            this.colunmRichInfos.forEach(richInfo -> {
-                nColumns.add(new SelectColumn(richInfo.getColumnName(), richInfo.getColunmIndexInSchema(), true));
-            });
-            this.selectColumns = nColumns.toArray(new SelectColumn[0]);
-        } else {
-            if (filter != null) {
-                String tmpFilter = filter.replace("(", "").replace(")","");
-                String[] express = tmpFilter.split(" ");
-
-                Set<String> selectedSet = new HashSet<>();
-                for (int i = 0; i < selectColumns.length; i ++) {
-                    selectedSet.add(selectColumns[i].getColumnName());
-                }
-
-                List<String> expresstionCol = new ArrayList<>();
-                List<SelectColumn> addSelectColumns = new ArrayList<>();
-                for (int i = 0; i < express.length; i ++) {
-                    if (express[i].equals("=") && !selectedSet.contains(express[i - 1])) {
-                        String columnName = express[i - 1];
-                        expresstionCol.add(columnName);
-                        int colunmIndex = -1;
-                        for (int y = 0; y < this.colunmRichInfos.size(); y ++) {
-                            if (this.colunmRichInfos.get(y).getColumnName().equals(columnName)) {
-                                colunmIndex = y;
-                            }
-                        }
-                        if (colunmIndex == -1) {
-                            throw new StarRocksException("could not found column when gen SQL");
-                        }
-                        addSelectColumns.add(new SelectColumn(columnName, colunmIndex, false));
-                    }
-                }
-                SelectColumn[] newSelected = addSelectColumns.toArray(new SelectColumn[0]);
-                SelectColumn[] realSelectColumns = new SelectColumn[selectColumns.length + newSelected.length];
-                System.arraycopy(selectColumns, 0, realSelectColumns, 0, selectColumns.length);
-                System.arraycopy(newSelected, 0, realSelectColumns, selectColumns.length, newSelected.length);
-                this.selectColumns = realSelectColumns;
-                if (expresstionCol.size() > 0) {
-                    if (columns.equals("")) {
-                        columns = String.join(", ", expresstionCol);
-                    } else {
-                        columns = columns + ", " + String.join(", ", expresstionCol);
-                    }
-                }
-            }
-            if (filter == null && columns.equals("")) {
-                columns = "count(*)";
-                throw new RuntimeException("unsupport SQL -> count(*)");
-            }
+        if (queryType == null) {
+            queryType = StarRocksSourceQueryType.QueryAllColumns;
         }
 
-        String querySQL = "select " + columns + " from " + sourceOptions.getDatabaseName() + "." + sourceOptions.getTableName();
+        String SQL = "select";
+        switch (this.queryType) {
+        case QueryCount:
+            SQL = SQL + " count(*) ";
+            break;
+        case QueryAllColumns:
+            SQL = SQL + " * ";
+            break;
+        case QuerySomeColumns:
+            SQL = SQL + " " + columns + " ";
+            break;
+        }
+        SQL = SQL + " from " + sourceOptions.getDatabaseName() + "." + sourceOptions.getTableName();
         if (!(filter == null || filter.equals(""))) {
-            querySQL = querySQL + " where " + filter;
+            SQL = SQL + " where " + filter;
         }
         if (limit > 0) {
             // querySQL = querySQL + " limit " + limit;
         }
-
-        return querySQL;
+        return SQL;
     }
 
     @Override
@@ -160,33 +158,32 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
     @Override
     public void open(StarRocksTableInputSplit starRocksTableInputSplit) {
 
-        QueryBeXTablets queryBeXTablets = starRocksTableInputSplit.getBeXTablets();
-        String beNode[] = queryBeXTablets.getBeNode().split(":");
-        String ip = beNode[0];
-        int port = Integer.parseInt(beNode[1]);
-        
-        try {
-            this.dataReader = new StarRocksSourceDataReader(ip, port, colunmRichInfos, starRocksTableInputSplit.getSelectColumn(), this.sourceOptions);
-        } catch (StarRocksException e) {
-            e.printStackTrace();
-            LOG.error(e.getMessage());
-        }
-
-        try {
-            this.dataReader.openScanner(
-                    queryBeXTablets.getTabletIds(),
-                    starRocksTableInputSplit.getQueryInfo().getQueryPlan().getOpaqued_query_plan(),
-                    this.sourceOptions);
-        } catch (StarRocksException e) {
-            e.printStackTrace();
-            LOG.error(e.getMessage());
-        }
-
-        try {
-            this.dataReader.startToRead();
-        } catch (StarRocksException | IOException e) {
-            e.printStackTrace();
-            LOG.error(e.getMessage());
+        if (starRocksTableInputSplit.isQueryCount()) {
+            StarRocksSourceTrickReader reader = new StarRocksSourceTrickReader(starRocksTableInputSplit.getDataCount());
+            this.dataReader = reader;
+        } else {
+            QueryBeXTablets queryBeXTablets = starRocksTableInputSplit.getBeXTablets();
+            String beNode[] = queryBeXTablets.getBeNode().split(":");
+            String ip = beNode[0];
+            int port = Integer.parseInt(beNode[1]);
+            StarRocksSourceBeReader beReader = null;
+            try {
+                beReader = new StarRocksSourceBeReader(ip, port, colunmRichInfos, starRocksTableInputSplit.getSelectColumn(), this.sourceOptions);
+                this.dataReader = beReader;
+            } catch (StarRocksException e) {
+                e.printStackTrace();
+                LOG.error(e.getMessage());
+            }
+            try {
+                beReader.openScanner(
+                        queryBeXTablets.getTabletIds(),
+                        starRocksTableInputSplit.getQueryInfo().getQueryPlan().getOpaqued_query_plan(),
+                        this.sourceOptions);
+            } catch (StarRocksException e) {
+                e.printStackTrace();
+                LOG.error(e.getMessage());
+            }
+            beReader.startToRead();            
         }
     }
 
@@ -201,12 +198,7 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
             return null;
         }
         List<Object> row = null;
-        try {
-            row = this.dataReader.getNext();
-        } catch (StarRocksException e) {
-            e.getMessage();
-            LOG.error(e.getMessage());
-        } 
+        row = this.dataReader.getNext();
         GenericRowData genericRowData = new GenericRowData(row.size());
         for (int i = 0; i < row.size(); i++) {
             genericRowData.setField(i, row.get(i));
@@ -216,12 +208,7 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
 
     @Override
     public void close() throws IOException {
-        try {
-            this.dataReader.close();
-        } catch (StarRocksException e) {
-            e.printStackTrace();
-            LOG.error(e.getMessage());
-        }
+        this.dataReader.close();
     }
 
     @Override
@@ -242,7 +229,8 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
         private List<ColunmRichInfo> colunmRichInfos;
         private SelectColumn[] selectColumns;
         private String filter;
-        
+        private StarRocksSourceQueryType queryType;
+
         public Builder setSourceOptions(StarRocksSourceOptions sourceOptions) {
             this.sourceOptions = sourceOptions;
             return this;
@@ -267,15 +255,18 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
             this.filter = filter;
             return this;
         }
+        public Builder setQueryType(StarRocksSourceQueryType queryType) {
+            this.queryType = queryType;
+            return this;
+        }
         
-
         public Builder() {}
 
         public StarRocksRowDataInputFormat build() {
             if (this.sourceOptions == null) {
                 throw new NullPointerException("No query supplied");
             }
-            return new StarRocksRowDataInputFormat(this.sourceOptions, this.colunmRichInfos, this.limit, this.filter, this.columns, this.selectColumns);
+            return new StarRocksRowDataInputFormat(this.sourceOptions, this.colunmRichInfos, this.limit, this.filter, this.columns, this.selectColumns, this.queryType);
         }
     }
 }

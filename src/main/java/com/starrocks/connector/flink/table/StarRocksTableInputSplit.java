@@ -11,12 +11,16 @@ public class StarRocksTableInputSplit implements InputSplit {
     private final int splitNumber;
     private final QueryInfo queryInfo;
     private SelectColumn[] selectColumns;
+    private final boolean isQueryCount;
+    private final int dataCount;
 
-    public StarRocksTableInputSplit(int splitNumber, QueryInfo queryInfo, SelectColumn[] selectColumns) {
+    public StarRocksTableInputSplit(int splitNumber, QueryInfo queryInfo, SelectColumn[] selectColumns, boolean isQueryCount, int dataCount) {
         super();
         this.splitNumber = splitNumber;
         this.queryInfo = queryInfo;
         this.selectColumns = selectColumns;        
+        this.isQueryCount = isQueryCount;
+        this.dataCount = dataCount;
     }
     
     @Override
@@ -34,5 +38,13 @@ public class StarRocksTableInputSplit implements InputSplit {
 
     public SelectColumn[] getSelectColumn() {
         return selectColumns;
+    }
+
+    public boolean isQueryCount() {
+        return isQueryCount;
+    }
+
+    public int getDataCount() {
+        return dataCount;
     }
 }

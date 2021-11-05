@@ -3,7 +3,7 @@ package com.starrocks.connector.flink;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.starrocks.connector.flink.manager.StarRocksSourceInfoVisitor;
+import com.starrocks.connector.flink.manager.StarRocksFeHttpVisitor;
 import com.starrocks.connector.flink.source.ColunmRichInfo;
 import com.starrocks.connector.flink.source.QueryInfo;
 import com.starrocks.connector.flink.source.SelectColumn;
@@ -25,7 +25,7 @@ public class StarRocksSourceDataStreamTest {
                 .withProperty("database-name", "cjs_test")
                 .build();
 
-        StarRocksSourceInfoVisitor visitor = new StarRocksSourceInfoVisitor(options);
+        StarRocksFeHttpVisitor visitor = new StarRocksFeHttpVisitor(options);
         QueryInfo queryInfo = visitor.getQueryInfo("select int_1 from cjs_test.flink_type_test");
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         SelectColumn[] selectColumns = new SelectColumn[1];

@@ -22,6 +22,8 @@ public class StarRocksSourceOptions implements Serializable {
 
 
     // required Options
+    public static final ConfigOption<String> JDBC_URL = ConfigOptions.key("jdbc-url")
+            .stringType().noDefaultValue().withDescription("Host of the stream load like: `jdbc:mysql://fe_ip1:query_port,fe_ip2:query_port...`.");
     public static final ConfigOption<String> USERNAME = ConfigOptions.key("username")
             .stringType().noDefaultValue().withDescription("StarRocks user name.");
     public static final ConfigOption<String> PASSWORD = ConfigOptions.key("password")
@@ -87,6 +89,7 @@ public class StarRocksSourceOptions implements Serializable {
                 TABLE_NAME,
                 DATABASE_NAME,
                 SCAN_URL,
+                JDBC_URL,
         };
         int presentCount = 0;
         for (ConfigOption<?> configOption : configOptions) {
@@ -100,6 +103,10 @@ public class StarRocksSourceOptions implements Serializable {
     }
 
     // required Options
+    public String getJdbcUrl() {
+        return tableOptions.get(JDBC_URL);
+    }
+    
     public String getUsername() {
         return tableOptions.get(USERNAME);
     }
