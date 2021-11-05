@@ -27,7 +27,7 @@ public class StarRocksSourceTest {
                     "double_1 DOUBLE,"+
                     "decimal_1 DECIMAL(27,9) \n"+
                 ") WITH (\n" +
-                    "  'connector' = 'starrocks-source',\n" +
+                    "  'connector' = 'starrocks',\n" +
                     
                     "  'source.connect.timeout-ms' = '2000',\n" +
                     "  'scan.params.batch-size' = '4',\n" +
@@ -39,6 +39,7 @@ public class StarRocksSourceTest {
                     "  'source.max-retries' = '3',\n" +
 
                     "  'scan-url' = '172.26.92.152:8634,172.26.92.152:8634,172.26.92.152:8634',\n" +
+                    "  'jdbc-url' = 'jdbc:mysql://172.26.92.152:9632',\n" +
                     "  'username' = 'root',\n" +
                     "  'password' = '',\n" +                
                     "  'database-name' = 'cjs_test',\n" +
@@ -46,22 +47,22 @@ public class StarRocksSourceTest {
                 ")"
                 );
         
-        tEnv.executeSql("SELECT tinyint_1 from flink_type_test where tinyint_1 > 0").print();
+        // tEnv.executeSql("SELECT tinyint_1 from flink_type_test where tinyint_1 > 0").print();
         // tEnv.executeSql("SELECT tinyint_1, int_1 from flink_type_test where tinyint_1 = 100 and int_1 = -2147483648").print();
         // tEnv.executeSql("SELECT tinyint_1, char_1 from flink_type_test where tinyint_1 = 100 and char_1 = 'A'").print();
-        // tEnv.executeSql("SELECT char_1 from flink_type_test where int_1 < 1 and (char_1 = 'A' or varchar_1 = 'B')").print();
         // tEnv.executeSql("SELECT * from flink_type_test where int_1 < 1 and (char_1 = 'A' or varchar_1 = 'B')").print();
         // tEnv.executeSql("SELECT int_1, char_1 from flink_type_test where char_1 = 'A' and int_1 = -2147483648").print();
-        // tEnv.executeSql("SELECT int_1, char_1 from flink_type_test where char_1 = 'A' limit 1").print();
+        // tEnv.executeSql("SELECT tinyint_1, char_1 from flink_type_test where char_1 = 'A' limit 1").print();
         // tEnv.executeSql("SELECT char_1, int_1 from flink_type_test where char_1 = 'A'").print();
         // tEnv.executeSql("SELECT int_1, char_1 from flink_type_test where char_1 = 'A'").print();
         // tEnv.executeSql("SELECT int_1, char_1 from flink_type_test where int_1 = -2147483648").print();
         // tEnv.executeSql("SELECT * from flink_type_test").print();
-
+        // tEnv.executeSql("SELECT * from flink_type_test where tinyint_1 = 100").print();
         // tEnv.executeSql("SELECT int_1 from flink_type_test").print();
         // tEnv.executeSql("SELECT tinyint_1 as ccc from flink_type_test").print();
-
+        tEnv.executeSql("SELECT tinyint_1 from flink_type_test where tinyint_1 = 100").print();
         // ---------------------- unsupport ----------------------
+        // tEnv.executeSql("SELECT count(*) from flink_type_test where tinyint_1 = 100").print();
         // tEnv.executeSql("SELECT count(*) from flink_type_test").print();
 
         

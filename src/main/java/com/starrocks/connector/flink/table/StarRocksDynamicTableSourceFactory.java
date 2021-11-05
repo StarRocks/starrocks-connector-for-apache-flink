@@ -29,7 +29,7 @@ public final class StarRocksDynamicTableSourceFactory implements DynamicTableSou
 
     @Override
     public String factoryIdentifier() {
-        return "starrocks-source";
+        return "starrocks";
     }
 
     @Override
@@ -41,6 +41,7 @@ public final class StarRocksDynamicTableSourceFactory implements DynamicTableSou
         options.add(StarRocksSourceOptions.TABLE_NAME);
         options.add(StarRocksSourceOptions.DATABASE_NAME);
         options.add(StarRocksSourceOptions.SCAN_URL);
+        options.add(StarRocksSourceOptions.JDBC_URL);
         return options;
     }
 

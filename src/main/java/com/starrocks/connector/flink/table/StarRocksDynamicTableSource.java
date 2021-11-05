@@ -27,6 +27,7 @@ public class StarRocksDynamicTableSource implements ScanTableSource, SupportsLim
     private StarRocksRowDataInputFormat.Builder builder = StarRocksRowDataInputFormat.builder();
 
     public StarRocksDynamicTableSource(StarRocksSourceOptions options, TableSchema schema, StarRocksRowDataInputFormat.Builder builder) {
+
         this.options = options;
         this.flinkSchema = schema;
         this.builder = builder;
@@ -49,8 +50,6 @@ public class StarRocksDynamicTableSource implements ScanTableSource, SupportsLim
             colunmRichInfos.add(new ColunmRichInfo(column.getName(), i, column.getType()));
         }
         builder.setColunmRichInfos(colunmRichInfos);
-        
-
         StarRocksRowDataInputFormat format = builder.build();
         return InputFormatProvider.of(format);
     }
@@ -72,8 +71,16 @@ public class StarRocksDynamicTableSource implements ScanTableSource, SupportsLim
 
     @Override
     public void applyProjection(int[][] projectedFields) {
+
         // if columns = "*", this func will not be called, so 'selectColumns' will be null
         this.projectedFields = Arrays.stream(projectedFields).mapToInt(value -> value[0]).toArray();
+        if (this.projectedFields.length == 0 ) {
+            builder.setQueryType(StarRocksSourceQueryType.QueryCount);
+            return;
+        }
+
+        builder.setQueryType(StarRocksSourceQueryType.QuerySomeColumns);
+
         ArrayList<String> columnList = new ArrayList<>();
         ArrayList<SelectColumn> selectColumns = new ArrayList<SelectColumn>(); 
         for (int index : this.projectedFields) {

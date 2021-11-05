@@ -1,6 +1,6 @@
 package com.starrocks.connector.flink.table;
 
-import com.starrocks.connector.flink.exception.StarRocksException;
+
 import com.starrocks.connector.flink.source.ColunmRichInfo;
 import com.starrocks.connector.flink.source.QueryBeXTablets;
 import com.starrocks.connector.flink.source.QueryInfo;
@@ -40,35 +40,35 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<L
     @Override
     public void open(Configuration parameters) throws Exception {
 
-        super.open(parameters);
-        int subTaskId = getRuntimeContext().getIndexOfThisSubtask();
-        this.queryBeXTablets = queryInfo.getBeXTablets().get(subTaskId);
-        String beNode[] = this.queryBeXTablets.getBeNode().split(":");
-        String ip = beNode[0];
-        int port = Integer.parseInt(beNode[1]);
-        this.dataReader = new StarRocksSourceDataReader(ip, port, colunmRichInfos, selectColumns, this.sourceOptions);
-        this.dataReader.openScanner(
-                this.queryBeXTablets.getTabletIds(),
-                this.queryInfo.getQueryPlan().getOpaqued_query_plan(),
-                this.sourceOptions);
+        // super.open(parameters);
+        // int subTaskId = getRuntimeContext().getIndexOfThisSubtask();
+        // this.queryBeXTablets = queryInfo.getBeXTablets().get(subTaskId);
+        // String beNode[] = this.queryBeXTablets.getBeNode().split(":");
+        // String ip = beNode[0];
+        // int port = Integer.parseInt(beNode[1]);
+        // this.dataReader = new StarRocksSourceDataReader(ip, port, colunmRichInfos, selectColumns, this.sourceOptions);
+        // this.dataReader.openScanner(
+        //         this.queryBeXTablets.getTabletIds(),
+        //         this.queryInfo.getQueryPlan().getOpaqued_query_plan(),
+        //         this.sourceOptions);
     }
 
     @Override
     public void run(SourceContext<List<?>> sourceContext) throws Exception {
-        this.dataReader.startToRead();
-        while (this.dataReader.hasNext()) {
-            List<Object> row = this.dataReader.getNext();
-            sourceContext.collect(row);
-        }
+        // this.dataReader.startToRead();
+        // while (this.dataReader.hasNext()) {
+        //     List<Object> row = this.dataReader.getNext();
+        //     sourceContext.collect(row);
+        // }
     }
 
     @Override
     public void cancel() {
-        try {
-            this.dataReader.close();
-        } catch (StarRocksException e) {
-            e.printStackTrace();
-        }
+        // try {
+        //     this.dataReader.close();
+        // } catch (StarRocksException e) {
+        //     e.printStackTrace();
+        // }
     }
 
     @Override

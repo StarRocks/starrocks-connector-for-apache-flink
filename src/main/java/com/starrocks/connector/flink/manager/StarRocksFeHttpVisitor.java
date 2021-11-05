@@ -32,7 +32,7 @@ import java.util.Set;
 
 
 
-public class StarRocksSourceInfoVisitor implements Serializable {
+public class StarRocksFeHttpVisitor implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
@@ -41,7 +41,7 @@ public class StarRocksSourceInfoVisitor implements Serializable {
     private final StarRocksSourceOptions sourceOptions;
 
 
-    public StarRocksSourceInfoVisitor(StarRocksSourceOptions sourceOptions) {
+    public StarRocksFeHttpVisitor(StarRocksSourceOptions sourceOptions) {
 
         this.sourceOptions = sourceOptions;
     }

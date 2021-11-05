@@ -111,11 +111,11 @@ public class StarRocksSourceFlinkRows {
     }
 
 
-    public List<Object> next() throws StarRocksException {
+    public List<Object> next() {
 
         if (!hasNext()) {
             LOG.error("offset larger than flinksRowsCount");
-            throw new StarRocksException("read offset larger than flinksRowsCount");
+            throw new RuntimeException("read offset larger than flinksRowsCount");
         }
         return sourceFlinkRows.get(offsetOfBatchForRead ++).getColumns();
     }
