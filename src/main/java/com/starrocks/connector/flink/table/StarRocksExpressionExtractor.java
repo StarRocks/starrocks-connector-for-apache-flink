@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.expressions.CallExpression;
 import org.apache.flink.table.expressions.Expression;
 import org.apache.flink.table.expressions.ExpressionVisitor;
@@ -13,6 +14,7 @@ import org.apache.flink.table.expressions.TypeLiteralExpression;
 import org.apache.flink.table.expressions.ValueLiteralExpression;
 import org.apache.flink.table.functions.BuiltInFunctionDefinitions;
 import org.apache.flink.table.functions.FunctionDefinition;
+import org.apache.flink.table.types.DataType;
 
 public class StarRocksExpressionExtractor implements ExpressionVisitor<String> {
 
@@ -53,6 +55,9 @@ public class StarRocksExpressionExtractor implements ExpressionVisitor<String> {
 
     @Override
     public String visit(ValueLiteralExpression valueLiteral) {
+        if (valueLiteral.getOutputDataType() == DataTypes.DATE() || valueLiteral.getOutputDataType().toString().equals("DATE NOT NULL")) {
+            return "'" + valueLiteral.toString() + "'";
+        }
         return valueLiteral.toString();
     }
 
