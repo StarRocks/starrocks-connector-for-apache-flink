@@ -12,6 +12,7 @@ import com.starrocks.connector.flink.table.StarRocksSourceOptions;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.types.DataType;
 
 public class StarRocksSourceDataStreamTest {
 
@@ -19,35 +20,37 @@ public class StarRocksSourceDataStreamTest {
 
         StarRocksSourceOptions options = StarRocksSourceOptions.builder()
                 .withProperty("scan-url", "172.26.92.152:8634,172.26.92.152:8634,172.26.92.152:8634")
+                .withProperty("jdbc-url", "jdbc:mysql://172.26.92.152:9632'")
                 .withProperty("username", "root")
                 .withProperty("password", "")
                 .withProperty("table-name", "flink_type_test")
                 .withProperty("database-name", "cjs_test")
+                // .withProperty("source.columns", "tinyint_1")
+                // .withProperty("source.filter", "tinyint_1 = 100")
                 .build();
 
         StarRocksFeHttpVisitor visitor = new StarRocksFeHttpVisitor(options);
-        QueryInfo queryInfo = visitor.getQueryInfo("select int_1 from cjs_test.flink_type_test");
+        QueryInfo queryInfo = visitor.getQueryInfo(options);
+
+        TableSchema tableSchema = TableSchema.builder().
+                                        field("date_1", DataTypes.DATE()).
+                                        field("datetime_1", DataTypes.TIMESTAMP(6)).
+                                        field("char_1", DataTypes.CHAR(20)).
+                                        field("varchar_1", DataTypes.STRING()).
+                                        field("boolean_1", DataTypes.BOOLEAN()).
+                                        field("tinyint_1", DataTypes.TINYINT()).
+                                        field("smallint_1", DataTypes.SMALLINT()).
+                                        field("int_1", DataTypes.INT()).
+                                        field("bigint_1", DataTypes.BIGINT()).
+                                        field("largeint_1", DataTypes.STRING()).
+                                        field("float_1", DataTypes.FLOAT()).
+                                        field("double_1", DataTypes.DOUBLE()).
+                                        field("decimal_1", DataTypes.DECIMAL(27, 9)).
+                                        build();
+
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        SelectColumn[] selectColumns = new SelectColumn[1];
-        selectColumns[0] = new SelectColumn("int_1", 7, true);
-        List<ColunmRichInfo> colunmRichInfos = new ArrayList<>();
-        colunmRichInfos.add(new ColunmRichInfo("", 0, DataTypes.INT()));
-        colunmRichInfos.add(new ColunmRichInfo("", 1, DataTypes.INT()));
-        colunmRichInfos.add(new ColunmRichInfo("", 2, DataTypes.INT()));
-        colunmRichInfos.add(new ColunmRichInfo("", 3, DataTypes.INT()));
-        colunmRichInfos.add(new ColunmRichInfo("", 4, DataTypes.INT()));
-        colunmRichInfos.add(new ColunmRichInfo("", 5, DataTypes.INT()));
-        colunmRichInfos.add(new ColunmRichInfo("", 6, DataTypes.INT()));
-        colunmRichInfos.add(new ColunmRichInfo("int_1", 7, DataTypes.INT()));
         env.setParallelism(queryInfo.getBeXTablets().size());
-        env.addSource(StarRocksSource.source(
-            options, 
-            queryInfo,
-            TableSchema.builder()
-            .field("int_1", DataTypes.INT())
-            .build(),
-            selectColumns, colunmRichInfos
-            )).print();
+        env.addSource(StarRocksSource.source(options, queryInfo, tableSchema)).print();
         env.execute("StarRocks flink source");
     }
 }

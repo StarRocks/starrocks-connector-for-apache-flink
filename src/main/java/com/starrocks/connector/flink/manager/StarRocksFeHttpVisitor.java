@@ -60,6 +60,14 @@ public class StarRocksFeHttpVisitor implements Serializable {
         return new QueryInfo(plan, queryBeXTabletsList);
     }
 
+    public QueryInfo getQueryInfo(StarRocksSourceOptions options) throws IOException, HttpException, StarRocksException {
+
+        String columns = options.getColumns().equals("") ? "*" : options.getColumns();
+        String filter = options.getFilter().equals("") ? "" : " where " + options.getFilter();
+        String SQL = "select " + columns + " from " + options.getDatabaseName() + "." + options.getTableName() + filter;
+        return getQueryInfo(SQL);
+    }
+
     private static Map<String, Set<Long>> transferQueryPlanToBeXTablet(QueryPlan queryPlan) {
 
         Map<String, Set<Long>> beXTablets = new HashMap<>();
