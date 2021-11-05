@@ -105,12 +105,12 @@ public class StarRocksFeHttpVisitor implements Serializable {
             }
         }
         if (200 != requsetCode) {
-            throw new StarRocksException("Request failed with code " + requsetCode);
+            throw new RuntimeException("Request of get queryPlan failed with code " + requsetCode);
         }
         HttpEntity respEntity = response.getEntity();
         if (null == respEntity) {
             LOG.warn("Request failed with empty response.");
-            throw new StarRocksException("Request failed with empty response." + requsetCode);
+            throw new RuntimeException("Request failed with empty response." + requsetCode);
         }
         JSONObject jsonObject = JSONObject.parseObject(EntityUtils.toString(respEntity));
         return JSONObject.toJavaObject(jsonObject, QueryPlan.class);

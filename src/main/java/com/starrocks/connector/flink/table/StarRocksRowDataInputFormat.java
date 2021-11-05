@@ -107,12 +107,11 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
             return list.toArray(new StarRocksTableInputSplit[0]);
         }
             
-
         try {
             this.queryInfo = feHttpVisitor.getQueryInfo(SQL);
         } catch (HttpException | StarRocksException e) {
-            e.printStackTrace();
             LOG.error(e.getMessage());
+            throw new RuntimeException("Faild to get queryInfo from fe");
         }
         
         for (int x = 0; x < queryInfo.getBeXTablets().size(); x ++) {
