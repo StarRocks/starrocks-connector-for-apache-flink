@@ -42,7 +42,7 @@ public class StarRocksSourceOptions implements Serializable {
             .intType().defaultValue(1000).withDescription("Connect timeout");
         
     public static final ConfigOption<Integer> SCAN_BATCH_SIZE = ConfigOptions.key("scan.params.batch-size")
-            .intType().defaultValue(100).withDescription("Batch size");
+            .intType().defaultValue(1000).withDescription("Batch size");
 
     public static final ConfigOption<String> SCAN_PROPERTIES = ConfigOptions.key("scan.params.properties")
             .stringType().noDefaultValue().withDescription("Reserved params for use");
@@ -54,7 +54,7 @@ public class StarRocksSourceOptions implements Serializable {
             .intType().defaultValue(1).withDescription("Max keep alive time min");
     
     public static final ConfigOption<Integer> SCAN_QUERTY_TIMEOUT = ConfigOptions.key("scan.params.query-timeout")
-            .intType().defaultValue(1000).withDescription("Query timeout for a single query");
+            .intType().defaultValue(100).withDescription("Query timeout for a single query");
 
     public static final ConfigOption<Integer> SCAN_MEM_LIMIT = ConfigOptions.key("scan.params.mem-limit")
             .intType().defaultValue(1024).withDescription("Memory limit for a single query");
@@ -62,6 +62,13 @@ public class StarRocksSourceOptions implements Serializable {
     public static final ConfigOption<Integer> SOURCE_MAX_RETRIES = ConfigOptions.key("source.max-retries")
             .intType().defaultValue(1).withDescription("Max request retry times.");
 
+    public static final ConfigOption<String> SOURCE_COLUMNS = ConfigOptions.key("source.columns")
+            .stringType().defaultValue("").withDescription("SQL columns");
+
+    public static final ConfigOption<String> SOURCE_FILTER = ConfigOptions.key("source.filter")
+            .stringType().defaultValue("").withDescription("SQL filter");
+
+    
     
     public static final String SOURCE_PROPERTIES_PREFIX = "scan.params.";
 
@@ -171,6 +178,14 @@ public class StarRocksSourceOptions implements Serializable {
 
     public int getSourceMaxRetries() {
         return tableOptions.get(SOURCE_MAX_RETRIES).intValue();
+    }
+
+    public String getColumns() {
+        return tableOptions.get(SOURCE_COLUMNS);
+    }
+
+    public String getFilter() {
+        return tableOptions.get(SOURCE_FILTER);
     }
 
     public static Builder builder() {
