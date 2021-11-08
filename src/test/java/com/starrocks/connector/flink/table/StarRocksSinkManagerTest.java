@@ -15,7 +15,7 @@
 package com.starrocks.connector.flink.table;
 
 import org.apache.flink.runtime.util.ExecutorThreadFactory;
-import org.apache.flink.shaded.guava18.com.google.common.collect.Lists;
+import org.apache.flink.calcite.shaded.com.google.common.collect.Lists;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;

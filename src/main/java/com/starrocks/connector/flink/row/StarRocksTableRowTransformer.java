@@ -36,7 +36,7 @@ import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.calcite.shaded.com.google.common.collect.Maps;
-import org.apache.flink.shaded.guava18.com.google.common.collect.Lists;
+import org.apache.flink.calcite.shaded.com.google.common.collect.Lists;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.data.ArrayData;
 import org.apache.flink.table.data.DecimalData;

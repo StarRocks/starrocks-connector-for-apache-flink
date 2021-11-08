@@ -45,7 +45,7 @@ import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.calcite.shaded.com.google.common.base.Strings;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.runtime.util.ExecutorThreadFactory;
-import org.apache.flink.shaded.guava18.com.google.common.collect.Lists;
+import org.apache.flink.calcite.shaded.com.google.common.collect.Lists;
 import org.apache.flink.table.api.TableColumn;
 import org.apache.flink.table.api.constraints.UniqueConstraint;
 

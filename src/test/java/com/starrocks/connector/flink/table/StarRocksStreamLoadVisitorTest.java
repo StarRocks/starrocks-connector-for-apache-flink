@@ -16,7 +16,7 @@ package com.starrocks.connector.flink.table;
 
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
-import org.apache.flink.shaded.guava18.com.google.common.collect.Lists;
+import org.apache.flink.calcite.shaded.com.google.common.collect.Lists;
 import org.apache.http.HttpEntity;
 import org.apache.http.entity.ByteArrayEntity;
 import org.junit.Test;
