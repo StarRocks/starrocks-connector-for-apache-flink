@@ -11,7 +11,7 @@ import com.starrocks.connector.flink.source.SelectColumn;
 import com.starrocks.connector.flink.table.StarRocksDynamicSourceFunction;
 import com.starrocks.connector.flink.table.StarRocksSourceOptions;
 
-import org.apache.flink.table.api.DataTypes;
+
 import org.apache.flink.table.api.TableColumn;
 import org.apache.flink.table.api.TableSchema;
 

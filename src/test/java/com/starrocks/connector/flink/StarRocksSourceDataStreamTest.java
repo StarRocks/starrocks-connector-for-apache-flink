@@ -49,8 +49,7 @@ public class StarRocksSourceDataStreamTest {
                                         build();
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        env.setParallelism(queryInfo.getBeXTablets().size());
-        env.addSource(StarRocksSource.source(options, queryInfo, tableSchema)).print();
+        env.setParallelism(queryInfo.getBeXTablets().size()).addSource(StarRocksSource.source(options, queryInfo, tableSchema));
         env.execute("StarRocks flink source");
     }
 }
