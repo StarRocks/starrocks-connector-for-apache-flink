@@ -14,7 +14,7 @@ import org.apache.flink.table.expressions.TypeLiteralExpression;
 import org.apache.flink.table.expressions.ValueLiteralExpression;
 import org.apache.flink.table.functions.BuiltInFunctionDefinitions;
 import org.apache.flink.table.functions.FunctionDefinition;
-import org.apache.flink.table.types.DataType;
+
 
 public class StarRocksExpressionExtractor implements ExpressionVisitor<String> {
 
