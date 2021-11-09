@@ -115,7 +115,7 @@ public class StarRocksFeHttpVisitor implements Serializable {
             }
         }
         if (200 != requsetCode) {
-            throw new RuntimeException("Request of get queryPlan failed with code " + requsetCode);
+            throw new RuntimeException("Request of get queryPlan failed with code " + requsetCode + " " + EntityUtils.toString(response.getEntity(), "UTF-8"));
         }
         HttpEntity respEntity = response.getEntity();
         if (null == respEntity) {
