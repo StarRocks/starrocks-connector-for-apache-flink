@@ -29,6 +29,8 @@ public class StarRocksExpressionExtractor implements ExpressionVisitor<String> {
             FUNC_TO_STR.put(BuiltInFunctionDefinitions.LESS_THAN_OR_EQUAL, "<=");
             FUNC_TO_STR.put(BuiltInFunctionDefinitions.AND, "and");
             FUNC_TO_STR.put(BuiltInFunctionDefinitions.OR, "or");
+            FUNC_TO_STR.put(BuiltInFunctionDefinitions.IS_NULL, "is");
+            FUNC_TO_STR.put(BuiltInFunctionDefinitions.NOT, "");
         }
 
     @Override
@@ -38,8 +40,15 @@ public class StarRocksExpressionExtractor implements ExpressionVisitor<String> {
         if (funcDef.equals(BuiltInFunctionDefinitions.CAST)) {
             return call.getChildren().get(0).accept(this);
         }
-
+    
+        if (funcDef.equals(BuiltInFunctionDefinitions.NOT) && call.getOutputDataType().equals(DataTypes.BOOLEAN())) {
+            return call.getChildren().get(0).toString() + " = false";
+        }
+        if (funcDef.equals(BuiltInFunctionDefinitions.IS_NULL)) {
+            return call.getChildren().get(0).toString() + " is null";
+        }
         if (FUNC_TO_STR.containsKey(funcDef)) {
+            
             List<String> operands = new ArrayList<>();
             for (Expression child : call.getChildren()) {
                 String operand = child.accept(this);

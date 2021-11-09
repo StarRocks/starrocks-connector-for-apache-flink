@@ -110,6 +110,8 @@ public class StarRocksFeHttpVisitor implements Serializable {
             if (200 != requsetCode) {
                 LOG.warn("Request failed with code:{}", requsetCode);
                 continue;
+            } else {
+                break;
             }
         }
         if (200 != requsetCode) {

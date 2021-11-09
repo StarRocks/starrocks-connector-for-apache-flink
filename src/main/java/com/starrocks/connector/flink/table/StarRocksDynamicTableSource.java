@@ -1,5 +1,6 @@
 package com.starrocks.connector.flink.table;
 
+import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.TableColumn;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.connector.ChangelogMode;
@@ -99,6 +100,10 @@ public class StarRocksDynamicTableSource implements ScanTableSource, SupportsLim
         List<String> filters = new ArrayList<>();
         StarRocksExpressionExtractor extractor = new StarRocksExpressionExtractor();
         for (ResolvedExpression expression : filtersExpressions) {
+            if (expression.getOutputDataType().equals(DataTypes.BOOLEAN()) && expression.getChildren().size() == 0) {
+                filters.add(expression.accept(extractor) + " = true");
+                continue;
+            }
             String str = expression.accept(extractor);
             if (str == null) {
                 continue;
