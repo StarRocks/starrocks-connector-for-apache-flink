@@ -209,7 +209,9 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
 
     @Override
     public void close() throws IOException {
-        this.dataReader.close();
+        if (this.dataReader != null) {
+            this.dataReader.close();
+        }
     }
 
     @Override
