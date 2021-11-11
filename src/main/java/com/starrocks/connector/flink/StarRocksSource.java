@@ -28,32 +28,35 @@ public class StarRocksSource {
     public static StarRocksDynamicSourceFunction source(StarRocksSourceOptions sourceOptions, QueryInfo queryInfo, TableSchema flinkSchema) {
         
         List<ColunmRichInfo> colunmRichInfos = new ArrayList<>();
-        List<TableColumn> columns = flinkSchema.getTableColumns();
+        List<TableColumn> flinkColumns = flinkSchema.getTableColumns();
         Map<String, ColunmRichInfo> columnMap = new HashMap<>();
-        for (int i = 0; i < columns.size(); i++) {
-            TableColumn column = columns.get(i);
+        for (int i = 0; i < flinkColumns.size(); i++) {
+            TableColumn column = flinkColumns.get(i);
             ColunmRichInfo colunmRichInfo = new ColunmRichInfo(column.getName(), i, column.getType());
             colunmRichInfos.add(colunmRichInfo);
             columnMap.put(column.getName(), colunmRichInfo);
         }
 
-        List<SelectColumn> selectColumns = new ArrayList<>();
-        String SelectColumnString = sourceOptions.getColumns();
-        if (SelectColumnString.equals("")) {
+
+        List<SelectColumn> selectedColumns = new ArrayList<>();
+        // user selected colums from sourceOptions
+        String selectColumnString = sourceOptions.getColumns();
+        if (selectColumnString.equals("")) {
+            // select *
             for (int i = 0; i < colunmRichInfos.size(); i ++ ) {
-                selectColumns.add(new SelectColumn(colunmRichInfos.get(i).getColumnName(), i, true));
+                selectedColumns.add(new SelectColumn(colunmRichInfos.get(i).getColumnName(), i, true));
             }
         } else {
-            String[] oPcolumns = SelectColumnString.split(",");
+            String[] oPcolumns = selectColumnString.split(",");
             for (int i = 0; i < oPcolumns.length; i ++) {
-                String cName = oPcolumns[i];
+                String cName = oPcolumns[i].trim();
                 if (!columnMap.containsKey(cName)) {
                     throw new RuntimeException("Colunm not found in the table schema");
                 }
                 ColunmRichInfo colunmRichInfo = columnMap.get(cName);
-                selectColumns.add(new SelectColumn(colunmRichInfo.getColumnName(), colunmRichInfo.getColunmIndexInSchema(), true));
+                selectedColumns.add(new SelectColumn(colunmRichInfo.getColumnName(), colunmRichInfo.getColunmIndexInSchema(), true));
             }
         }
-        return new StarRocksDynamicSourceFunction(sourceOptions, queryInfo, flinkSchema, selectColumns.toArray(new SelectColumn[0]), colunmRichInfos);
+        return new StarRocksDynamicSourceFunction(sourceOptions, queryInfo, flinkSchema, selectedColumns.toArray(new SelectColumn[0]), colunmRichInfos);
     }
 }
