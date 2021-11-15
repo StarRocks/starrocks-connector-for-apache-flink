@@ -174,6 +174,7 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
             } catch (StarRocksException e) {
                 e.printStackTrace();
                 LOG.error(e.getMessage());
+                throw new RuntimeException("Faild to create beReader:" + e.getMessage());
             }
             try {
                 beReader.openScanner(
@@ -183,6 +184,7 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
             } catch (StarRocksException e) {
                 e.printStackTrace();
                 LOG.error(e.getMessage());
+                throw new RuntimeException("Faild to open beReader:" + e.getMessage());
             }
             beReader.startToRead();            
         }
