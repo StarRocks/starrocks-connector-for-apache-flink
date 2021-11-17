@@ -113,7 +113,7 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
             this.queryInfo = feHttpVisitor.getQueryInfo(SQL);
         } catch (HttpException | StarRocksException e) {
             LOG.error(e.getMessage());
-            throw new RuntimeException("Faild to get queryInfo from fe");
+            throw new RuntimeException("Failed to get queryInfo from fe");
         }
         
         for (int x = 0; x < queryInfo.getBeXTablets().size(); x ++) {
@@ -174,7 +174,7 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
             } catch (StarRocksException e) {
                 e.printStackTrace();
                 LOG.error(e.getMessage());
-                throw new RuntimeException("Faild to create beReader:" + e.getMessage());
+                throw new RuntimeException("Failed to create beReader:" + e.getMessage());
             }
             try {
                 beReader.openScanner(
@@ -184,7 +184,7 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
             } catch (StarRocksException e) {
                 e.printStackTrace();
                 LOG.error(e.getMessage());
-                throw new RuntimeException("Faild to open beReader:" + e.getMessage());
+                throw new RuntimeException("Failed to open beReader:" + e.getMessage());
             }
             beReader.startToRead();            
         }
