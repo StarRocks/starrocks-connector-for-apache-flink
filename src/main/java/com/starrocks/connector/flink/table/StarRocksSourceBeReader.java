@@ -89,7 +89,7 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
             result = client.open_scanner(params);
             if (!TStatusCode.OK.equals(result.getStatus().getStatus_code())) {
                 throw new StarRocksException(
-                        "Open scanner failed."
+                        "Failed to open scanner."
                         + result.getStatus().getStatus_code()
                         + result.getStatus().getError_msgs()
                 );
@@ -111,7 +111,7 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
             result = client.get_next(params);
             if (!TStatusCode.OK.equals(result.getStatus().getStatus_code())) {
                 throw new RuntimeException(
-                        "Get next failed."
+                        "Failed to get next"
                                 + result.getStatus().getStatus_code()
                                 + result.getStatus().getError_msgs()
                 );
