@@ -49,18 +49,6 @@ public class StarRocksSourceMianTest {
                 ")"
                 );
 
-        // tEnv.executeSql("SELECT * from flink_type_test where tinyint_1 = 100").print();
-        tEnv.executeSql("SELECT decimal_1 from flink_type_test").print();
+        tEnv.executeSql("SELECT * from flink_type_test where char_1 <> 'A'").print();
     }
-
-
-    // public static void main(String[] args) throws Exception {
-
-    //     StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-    //     env.setParallelism(1);
-    //     StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
-    //     tEnv.executeSql("create table duplicate_table_with_null( k1 DATE, k2 TIMESTAMP,k3 char(20),k4 varchar,k5 boolean, v1 tinyint,v2 smallint,v3 int, v4 bigint,v5 string, v6 float,v7 double,v8 decimal(27,9)) with ('connector' = 'starrocks', 'jdbc-url' = 'jdbc:mysql://172.26.92.151:9232' ,'scan-url' = '172.26.92.151:8234', 'username'='root', 'password'='', 'database-name'='test_broker_load1635926631014', 'table-name'='duplicate_table_with_null')");
-    //     tEnv.executeSql("select * from duplicate_table_with_null  where k1<='2020-06-23'").print();
-    // }
-    
 }
