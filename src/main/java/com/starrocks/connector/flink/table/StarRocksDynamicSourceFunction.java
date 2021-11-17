@@ -85,10 +85,6 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<L
                 long newx = Math.round(x);
                 int start = (int)(subTaskId * newx);
                 int end = start + (int)newx;
-
-                System.out.println(start + "---" + end);
-
-
                 List<QueryBeXTablets> curBxTs = new ArrayList<>();
                 if (start >= totalTablets.size()) {
                     return;
@@ -110,10 +106,6 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<L
                     beXTabletsMap.put(curBxT.getBeNode(), tablets);
                 });
                 beXTabletsMap.forEach((beNode, tabletIds) -> {
-                    System.out.println(beNode);
-                    tabletIds.forEach(ccc -> {
-                        System.out.println(subTaskId + "[][]" + ccc);
-                    });
                     QueryBeXTablets queryBeXTablets = new QueryBeXTablets(beNode, tabletIds);
                     StarRocksSourceBeReader beReader = null;
                     try {
