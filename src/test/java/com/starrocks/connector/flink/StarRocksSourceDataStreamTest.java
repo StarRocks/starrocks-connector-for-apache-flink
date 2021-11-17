@@ -1,18 +1,11 @@
 package com.starrocks.connector.flink;
 
-import java.util.ArrayList;
-import java.util.List;
-
-import com.starrocks.connector.flink.manager.StarRocksFeHttpVisitor;
-import com.starrocks.connector.flink.source.ColunmRichInfo;
-import com.starrocks.connector.flink.source.QueryInfo;
-import com.starrocks.connector.flink.source.SelectColumn;
 import com.starrocks.connector.flink.table.StarRocksSourceOptions;
 
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.TableSchema;
-import org.apache.flink.table.types.DataType;
+
 
 public class StarRocksSourceDataStreamTest {
 
@@ -28,9 +21,6 @@ public class StarRocksSourceDataStreamTest {
                 // .withProperty("source.columns", "tinyint_1")
                 // .withProperty("source.filter", "tinyint_1 = 100")
                 .build();
-
-        StarRocksFeHttpVisitor visitor = new StarRocksFeHttpVisitor(options);
-        QueryInfo queryInfo = visitor.getQueryInfo(options);
 
         TableSchema tableSchema = TableSchema.builder().
                                         field("date_1", DataTypes.DATE()).
@@ -49,7 +39,7 @@ public class StarRocksSourceDataStreamTest {
                                         build();
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        env.setParallelism(queryInfo.getBeXTablets().size()).addSource(StarRocksSource.source(options, queryInfo, tableSchema));
+        env.addSource(StarRocksSource.source(options, tableSchema)).print();
         env.execute("StarRocks flink source");
     }
 }

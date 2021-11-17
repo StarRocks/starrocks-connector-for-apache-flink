@@ -1,6 +1,7 @@
 package com.starrocks.connector.flink;
 
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.TableResult;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import org.junit.Before;
 import org.junit.Test;
@@ -13,6 +14,13 @@ public class StarRocksSourceTest {
 
     @Before
     public void createTable() {
+
+        String scanUrl = "172.26.92.152:8634";
+        String jdbcUrl = "172.26.92.152:9632";
+        String tableName = "flink_type_test";
+        String dbName = "flink_source";
+        String username = "root";
+        String pwd = "";
 
         env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);
@@ -44,19 +52,19 @@ public class StarRocksSourceTest {
                     "  'scan.params.mem-limit' = '2048',\n" +
                     "  'source.max-retries' = '3',\n" +
 
-                    "  'scan-url' = '172.26.92.152:8634,172.26.92.152:8634,172.26.92.152:8634',\n" +
-                    "  'jdbc-url' = 'jdbc:mysql://172.26.92.152:9632',\n" +
-                    "  'username' = 'root',\n" +
-                    "  'password' = '',\n" +                
-                    "  'database-name' = 'cjs_test',\n" +
-                    "  'table-name' = 'flink_type_test'\n" +
+                    "  'scan-url' = '"+ scanUrl +"',\n" +
+                    "  'jdbc-url' = 'jdbc:mysql://" + jdbcUrl + "',\n" +
+                    "  'username' = '"+ username +"',\n" +
+                    "  'password' = '"+ pwd +"',\n" +                
+                    "  'database-name' = '" + dbName + "',\n" +
+                    "  'table-name' = '"+ tableName +"'\n" +
                 ")"
                 );
     }
 
     @Test
     public void test_SQL_1() {
-        tEnv.executeSql("SELECT tinyint_1 from flink_type_test where tinyint_1 > 0").print();
+        TableResult result = tEnv.executeSql("SELECT tinyint_1 from flink_type_test where tinyint_1 >= 0");
     }
 
     @Test
@@ -142,5 +150,15 @@ public class StarRocksSourceTest {
     @Test
     public void test_SQL_18() {
         tEnv.executeSql("SELECT -3.141298000 as ccc from flink_type_test").print();
+    }
+
+    @Test
+    public void test_SQL_19() {
+        tEnv.executeSql("SELECT char_1, tinyint_1 from flink_type_test where tinyint_1 <> 100").print();
+    }
+
+    @Test
+    public void test_SQL_20() {
+        tEnv.executeSql("SELECT char_1 from flink_type_test where boolean_1 = true").print();
     }
 }
