@@ -1,8 +1,6 @@
 package com.starrocks.connector.flink.manager;
 
 import com.alibaba.fastjson.JSONObject;
-import com.starrocks.connector.flink.exception.HttpException;
-import com.starrocks.connector.flink.exception.StarRocksException;
 import com.starrocks.connector.flink.source.QueryBeXTablets;
 import com.starrocks.connector.flink.source.QueryInfo;
 import com.starrocks.connector.flink.source.QueryPlan;
@@ -46,7 +44,7 @@ public class StarRocksFeHttpVisitor implements Serializable {
         this.sourceOptions = sourceOptions;
     }
 
-    public QueryInfo getQueryInfo(String SQL) throws IOException, HttpException, StarRocksException {
+    public QueryInfo getQueryInfo(String SQL) throws IOException {
         
         LOG.info("query sql [{}]", SQL);
         String[] httpNodes = sourceOptions.getScanUrl().split(",");
@@ -60,7 +58,7 @@ public class StarRocksFeHttpVisitor implements Serializable {
         return new QueryInfo(plan, queryBeXTabletsList);
     }
 
-    public QueryInfo getQueryInfo(StarRocksSourceOptions options) throws IOException, HttpException, StarRocksException {
+    public QueryInfo getQueryInfo(StarRocksSourceOptions options) throws IOException {
 
         String columns = options.getColumns().equals("") ? "*" : options.getColumns();
         String filter = options.getFilter().equals("") ? "" : " where " + options.getFilter();
@@ -91,7 +89,7 @@ public class StarRocksFeHttpVisitor implements Serializable {
         return beXTablets;
     }
 
-    private static QueryPlan getQueryPlan(String querySQL, String httpNode, StarRocksSourceOptions sourceOptions) throws IOException, HttpException, StarRocksException {
+    private static QueryPlan getQueryPlan(String querySQL, String httpNode, StarRocksSourceOptions sourceOptions) throws IOException {
         
         String url = "http://" + httpNode + "/api/" + sourceOptions.getDatabaseName() + "/" + sourceOptions.getTableName() + "/_query_plan";
         Map<String, Object> bodyMap = new HashMap<>();

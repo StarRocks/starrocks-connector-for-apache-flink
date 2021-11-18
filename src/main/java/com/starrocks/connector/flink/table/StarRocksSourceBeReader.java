@@ -1,6 +1,5 @@
 package com.starrocks.connector.flink.table;
 
-import com.starrocks.connector.flink.exception.StarRocksException;
 import com.starrocks.connector.flink.row.StarRocksSourceFlinkRows;
 import com.starrocks.connector.flink.source.ColunmRichInfo;
 import com.starrocks.connector.flink.source.Const;
@@ -45,7 +44,7 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
 
 
     public StarRocksSourceBeReader(String ip, int port, List<ColunmRichInfo> colunmRichInfos, SelectColumn[] selectColumns, 
-                                        StarRocksSourceOptions sourceOptions) throws StarRocksException {
+                                        StarRocksSourceOptions sourceOptions) {
         this.IP = ip;
         this.PORT = port;
         this.colunmRichInfos = colunmRichInfos;
@@ -56,13 +55,13 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
             socket.open();
         } catch (TTransportException e) {
             socket.close();
-            throw  new StarRocksException(e.getMessage());
+            throw new RuntimeException("Failed to create brpc source" + e.getMessage());
         }
         TProtocol protocol = factory.getProtocol(socket);
         client = new TStarrocksExternalService.Client(protocol);   
     }
 
-    public void openScanner(List<Long> tablets, String opaqued_query_plan, StarRocksSourceOptions sourceOptions) throws StarRocksException {
+    public void openScanner(List<Long> tablets, String opaqued_query_plan, StarRocksSourceOptions sourceOptions) {
 
         TScanOpenParams params = new TScanOpenParams();
 
@@ -88,14 +87,14 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
         try {
             result = client.open_scanner(params);
             if (!TStatusCode.OK.equals(result.getStatus().getStatus_code())) {
-                throw new StarRocksException(
+                throw new RuntimeException(
                         "Failed to open scanner."
                         + result.getStatus().getStatus_code()
                         + result.getStatus().getError_msgs()
                 );
             }
         } catch (TException e) {
-            throw new StarRocksException(e.getMessage());
+            throw new RuntimeException("Failed to open scanner." + e.getMessage());
         }
         this.srSchema = StarRocksSchema.genSchema(result.getSelected_columns());
         this.contextId = result.getContext_id();
@@ -148,7 +147,7 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
         StarRocksSourceFlinkRows flinkRows = null;
         try {
             flinkRows = new StarRocksSourceFlinkRows(result, colunmRichInfos, srSchema, selectColumns).genFlinkRowsFromArrow();
-        } catch (StarRocksException | IOException e) {
+        } catch (IOException e) {
             throw new RuntimeException(e.getMessage());
         } 
         this.readerOffset = flinkRows.getReadRowCount() + this.readerOffset;

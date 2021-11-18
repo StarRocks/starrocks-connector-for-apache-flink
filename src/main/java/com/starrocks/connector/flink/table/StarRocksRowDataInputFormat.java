@@ -3,8 +3,6 @@ package com.starrocks.connector.flink.table;
 
 import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionOptions;
 import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
-import com.starrocks.connector.flink.exception.HttpException;
-import com.starrocks.connector.flink.exception.StarRocksException;
 import com.starrocks.connector.flink.manager.StarRocksFeHttpVisitor;
 import com.starrocks.connector.flink.manager.StarRocksQueryVisitor;
 import com.starrocks.connector.flink.source.ColunmRichInfo;
@@ -108,14 +106,7 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
             list.add(new StarRocksTableInputSplit(0, null, null, true, dataCount));
             return list.toArray(new StarRocksTableInputSplit[0]);
         }
-            
-        try {
-            this.queryInfo = feHttpVisitor.getQueryInfo(SQL);
-        } catch (HttpException | StarRocksException e) {
-            LOG.error(e.getMessage());
-            throw new RuntimeException("Failed to get queryInfo from fe");
-        }
-        
+        this.queryInfo = feHttpVisitor.getQueryInfo(SQL);
         for (int x = 0; x < queryInfo.getBeXTablets().size(); x ++) {
             list.add(new StarRocksTableInputSplit(x, queryInfo, this.selectColumns, false, 0));
         }
@@ -167,25 +158,12 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
             String beNode[] = queryBeXTablets.getBeNode().split(":");
             String ip = beNode[0];
             int port = Integer.parseInt(beNode[1]);
-            StarRocksSourceBeReader beReader = null;
-            try {
-                beReader = new StarRocksSourceBeReader(ip, port, colunmRichInfos, starRocksTableInputSplit.getSelectColumn(), this.sourceOptions);
-                this.dataReader = beReader;
-            } catch (StarRocksException e) {
-                e.printStackTrace();
-                LOG.error(e.getMessage());
-                throw new RuntimeException("Failed to create beReader:" + e.getMessage());
-            }
-            try {
-                beReader.openScanner(
+            StarRocksSourceBeReader beReader = new StarRocksSourceBeReader(ip, port, colunmRichInfos, starRocksTableInputSplit.getSelectColumn(), this.sourceOptions);
+            this.dataReader = beReader;
+            beReader.openScanner(
                         queryBeXTablets.getTabletIds(),
                         starRocksTableInputSplit.getQueryInfo().getQueryPlan().getOpaqued_query_plan(),
                         this.sourceOptions);
-            } catch (StarRocksException e) {
-                e.printStackTrace();
-                LOG.error(e.getMessage());
-                throw new RuntimeException("Failed to open beReader:" + e.getMessage());
-            }
             beReader.startToRead();            
         }
     }

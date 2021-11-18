@@ -1,6 +1,5 @@
 package com.starrocks.connector.flink.row;
 
-import com.starrocks.connector.flink.exception.StarRocksException;
 import com.starrocks.connector.flink.source.ColunmRichInfo;
 import com.starrocks.connector.flink.source.Const;
 import com.starrocks.connector.flink.source.SelectColumn;
@@ -82,7 +81,7 @@ public class StarRocksSourceFlinkRows {
         this.offsetOfBatchForRead = 0;
     }
 
-    public StarRocksSourceFlinkRows genFlinkRowsFromArrow() throws StarRocksException, IOException {
+    public StarRocksSourceFlinkRows genFlinkRowsFromArrow() throws IOException {
 
         this.root = arrowStreamReader.getVectorSchemaRoot();
         while (arrowStreamReader.loadNextBatch()) {
@@ -147,7 +146,7 @@ public class StarRocksSourceFlinkRows {
         sourceFlinkRows.get(rowIndex).put(obj);
     }
 
-    private void genFlinkRows() throws StarRocksException {
+    private void genFlinkRows() {
 
         for (int colIndex = 0; colIndex < this.selectColumns.length; colIndex ++) {
 
@@ -163,10 +162,10 @@ public class StarRocksSourceFlinkRows {
             flinkType = DataUtil.ClearBracket(flinkType);
             starrocksType = DataUtil.ClearBracket(starrocksType);
             if (!Const.DataTypeRelationMap.containsKey(flinkType)) {
-                throw new StarRocksException("flinkType not found" + flinkType);
+                throw new RuntimeException("FlinkType not found" + flinkType);
             }
             if (!Const.DataTypeRelationMap.get(flinkType).contains(starrocksType)) {
-                throw new StarRocksException("Does not support converting " + starrocksType + " to " + flinkType);
+                throw new RuntimeException("Failed to convert " + starrocksType + " to " + flinkType);
             }
 
             switch (flinkType) {

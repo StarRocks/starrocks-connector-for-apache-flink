@@ -1,7 +1,5 @@
 package com.starrocks.connector.flink.table;
 
-import com.starrocks.connector.flink.exception.HttpException;
-import com.starrocks.connector.flink.exception.StarRocksException;
 import com.starrocks.connector.flink.manager.StarRocksFeHttpVisitor;
 import com.starrocks.connector.flink.source.ColunmRichInfo;
 import com.starrocks.connector.flink.source.QueryBeXTablets;
@@ -69,7 +67,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<L
         QueryInfo queryInfo = null;
         try {
             queryInfo = starRocksFeHttpVisitor.getQueryInfo(sourceOptions);
-        } catch (IOException | HttpException | StarRocksException e) {
+        } catch (IOException e) {
             throw new RuntimeException("Failed to get queryInfo:" + e.getMessage());
         
         }
@@ -150,12 +148,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<L
                 });
                 beXTabletsMap.forEach((beNode, tabletIds) -> {
                     QueryBeXTablets queryBeXTablets = new QueryBeXTablets(beNode, tabletIds);
-                    StarRocksSourceBeReader beReader = null;
-                    try {
-                        beReader = genBeReaderFromQueryBeXTablets(queryBeXTablets);
-                    } catch (StarRocksException e) {
-                        throw new RuntimeException("Failed to create beReader:" + e.getMessage());
-                    }
+                    StarRocksSourceBeReader beReader = genBeReaderFromQueryBeXTablets(queryBeXTablets);
                     this.beReaders.add(beReader);
                 });
             }            
@@ -164,7 +157,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<L
         
     }
 
-    private StarRocksSourceBeReader genBeReaderFromQueryBeXTablets(QueryBeXTablets qBeXTablets) throws StarRocksException {
+    private StarRocksSourceBeReader genBeReaderFromQueryBeXTablets(QueryBeXTablets qBeXTablets) {
 
         String beNode[] = qBeXTablets.getBeNode().split(":");
         String ip = beNode[0];
