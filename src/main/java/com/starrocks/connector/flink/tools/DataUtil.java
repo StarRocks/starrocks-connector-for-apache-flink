@@ -1,4 +1,4 @@
-package com.starrocks.connector.flink.util;
+package com.starrocks.connector.flink.tools;
 
 public class DataUtil {
 

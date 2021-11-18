@@ -31,14 +31,13 @@ public class StarRocksSourceMianTest {
                 ") WITH (\n" +
                     "  'connector' = 'starrocks',\n" +
                     
-                    "  'source.connect.timeout-ms' = '2000',\n" +
-                    "  'scan.params.batch-size' = '4',\n" +
+                    "  'scan.connect.timeout-ms' = '2000',\n" +
+                    "  'scan.params.batch-rows' = '4',\n" +
                     "  'scan.params.properties' = '{ \"test_prop\" : \"cccccc\"}',\n" +
                     "  'scan.params.limit' = '10',\n" +
                     "  'scan.params.keep-alive-min' = '2',\n" +
                     "  'scan.params.query-timeout' = '1200',\n" +
-                    "  'scan.params.mem-limit' = '2048',\n" +
-                    "  'source.max-retries' = '3',\n" +
+                    "  'scan.max-retries' = '3',\n" +
 
                     "  'scan-url' = '172.26.92.152:8634,172.26.92.152:8634,172.26.92.152:8634',\n" +
                     "  'jdbc-url' = 'jdbc:mysql://172.26.92.152:9632',\n" +
@@ -49,6 +48,6 @@ public class StarRocksSourceMianTest {
                 ")"
                 );
 
-        tEnv.executeSql("SELECT * from flink_type_test where char_1 <> 'A'").print();
+        tEnv.executeSql("SELECT * from flink_type_test where char_1 = 'A'").print();
     }
 }

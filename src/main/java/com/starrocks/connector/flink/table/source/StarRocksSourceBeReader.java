@@ -110,7 +110,7 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
             result = client.get_next(params);
             if (!TStatusCode.OK.equals(result.getStatus().getStatus_code())) {
                 throw new RuntimeException(
-                        "Failed to get next"
+                        "Failed to get next "
                                 + result.getStatus().getStatus_code()
                                 + result.getStatus().getError_msgs()
                 );

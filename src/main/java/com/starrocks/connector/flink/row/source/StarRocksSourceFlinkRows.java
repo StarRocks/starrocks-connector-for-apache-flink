@@ -5,8 +5,7 @@ import com.starrocks.connector.flink.table.source.struct.Const;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 import com.starrocks.connector.flink.table.source.struct.StarRocksSchema;
 import com.starrocks.connector.flink.thrift.TScanBatchResult;
-import com.starrocks.connector.flink.util.DataUtil;
-
+import com.starrocks.connector.flink.tools.DataUtil;
 
 import org.apache.arrow.memory.RootAllocator;
 

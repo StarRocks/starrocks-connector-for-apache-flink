@@ -11,7 +11,6 @@ import org.apache.flink.table.utils.TableSchemaUtils;
 import java.util.HashSet;
 import java.util.Set;
 
-import com.starrocks.connector.flink.table.source.StarRocksRowDataInputFormat.Builder;
 
 public final class StarRocksDynamicTableSourceFactory implements DynamicTableSourceFactory {
 

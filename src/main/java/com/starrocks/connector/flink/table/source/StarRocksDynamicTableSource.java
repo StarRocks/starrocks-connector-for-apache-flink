@@ -17,7 +17,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
-import com.starrocks.connector.flink.table.source.StarRocksRowDataInputFormat.Builder;
 import com.starrocks.connector.flink.table.source.struct.ColunmRichInfo;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 

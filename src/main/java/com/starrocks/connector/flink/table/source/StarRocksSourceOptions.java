@@ -46,13 +46,13 @@ public class StarRocksSourceOptions implements Serializable {
             .intType().defaultValue(1000).withDescription("Connect timeout");
         
     public static final ConfigOption<Integer> SCAN_BATCH_ROWS = ConfigOptions.key("scan.params.batch-rows")
-            .intType().defaultValue(1000).withDescription("Batch size");
+            .intType().defaultValue(1000).withDescription("Batch rows");
 
     public static final ConfigOption<String> SCAN_PROPERTIES = ConfigOptions.key("scan.params.properties")
             .stringType().noDefaultValue().withDescription("Reserved params for use");
     
-    // public static final ConfigOption<Integer> SCAN_LIMIT = ConfigOptions.key("scan.params.limit")
-    //         .intType().defaultValue(1).withDescription("The query limit, if specified.");
+    public static final ConfigOption<Integer> SCAN_LIMIT = ConfigOptions.key("scan.params.limit")
+            .intType().defaultValue(1).withDescription("The query limit, if specified.");
 
     public static final ConfigOption<Integer> SCAN_KEEP_ALIVE_MIN = ConfigOptions.key("scan.params.keep-alive-min")
             .intType().defaultValue(1).withDescription("Max keep alive time min");
@@ -60,8 +60,8 @@ public class StarRocksSourceOptions implements Serializable {
     public static final ConfigOption<Integer> SCAN_QUERTY_TIMEOUT = ConfigOptions.key("scan.params.query-timeout")
             .intType().defaultValue(100).withDescription("Query timeout for a single query");
 
-    public static final ConfigOption<Integer> SCAN_MEM_LIMIT = ConfigOptions.key("scan.params.mem-limit")
-            .intType().defaultValue(1024).withDescription("Memory limit for a single query");
+    public static final ConfigOption<Integer> SCAN_MEM_LIMIT = ConfigOptions.key("scan.params.mem-limit-byte")
+            .intType().defaultValue(1024*1024*1024).withDescription("Memory limit for a single query");
 
     public static final ConfigOption<Integer> SCAN_MAX_RETRIES = ConfigOptions.key("scan.max-retries")
             .intType().defaultValue(1).withDescription("Max request retry times.");

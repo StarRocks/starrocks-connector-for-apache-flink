@@ -18,8 +18,9 @@ public class StarRocksSourceDataStreamTest {
                 .withProperty("password", "")
                 .withProperty("table-name", "flink_type_test")
                 .withProperty("database-name", "cjs_test")
-                // .withProperty("source.columns", "tinyint_1")
-                // .withProperty("source.filter", "tinyint_1 = 100")
+                .withProperty("scan.params.mem-limit", "1024")
+                .withProperty("scan.columns", "tinyint_1")
+                .withProperty("scan.filter", "tinyint_1 = 100")
                 .build();
 
         TableSchema tableSchema = TableSchema.builder().
