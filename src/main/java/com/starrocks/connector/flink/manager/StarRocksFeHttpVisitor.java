@@ -99,7 +99,7 @@ public class StarRocksFeHttpVisitor implements Serializable {
         String body = new JSONObject(bodyMap).toString();
         CloseableHttpResponse response = null;
         int requsetCode = 0;
-        for (int i = 0; i < sourceOptions.getSourceMaxRetries(); i ++) {
+        for (int i = 0; i < sourceOptions.getScanMaxRetries(); i ++) {
             CloseableHttpClient httpClient = HttpClients.createDefault();
             HttpPost post = new HttpPost(url);
             post.setHeader("Content-Type", "application/json;charset=UTF-8");

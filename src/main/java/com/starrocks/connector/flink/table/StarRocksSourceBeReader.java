@@ -75,7 +75,7 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
         params.setUser(sourceOptions.getUsername());
         params.setPasswd(sourceOptions.getPassword());
 
-        params.setBatch_size(sourceOptions.getBatchSize());
+        params.setBatch_size(sourceOptions.getBatchRows());
         if (sourceOptions.getProperties() != null ) {
             params.setProperties(sourceOptions.getProperties());    
         }

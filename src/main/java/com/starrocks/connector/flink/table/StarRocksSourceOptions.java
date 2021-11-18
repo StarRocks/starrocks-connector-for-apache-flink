@@ -22,33 +22,37 @@ public class StarRocksSourceOptions implements Serializable {
 
 
     // required Options
+    public static final ConfigOption<String> SCAN_URL = ConfigOptions.key("scan-url")
+            .stringType().noDefaultValue().withDescription("Hosts of the fe node like: `fe_ip1:http_port,fe_ip2:http_port...`.");
+
     public static final ConfigOption<String> JDBC_URL = ConfigOptions.key("jdbc-url")
             .stringType().noDefaultValue().withDescription("Host of the stream load like: `jdbc:mysql://fe_ip1:query_port,fe_ip2:query_port...`.");
+
     public static final ConfigOption<String> USERNAME = ConfigOptions.key("username")
             .stringType().noDefaultValue().withDescription("StarRocks user name.");
+
     public static final ConfigOption<String> PASSWORD = ConfigOptions.key("password")
             .stringType().noDefaultValue().withDescription("StarRocks user password.");
 
     public static final ConfigOption<String> DATABASE_NAME = ConfigOptions.key("database-name")
             .stringType().noDefaultValue().withDescription("Database name");
+
     public static final ConfigOption<String> TABLE_NAME = ConfigOptions.key("table-name")
             .stringType().noDefaultValue().withDescription("Table name");
     
-    public static final ConfigOption<String> SCAN_URL = ConfigOptions.key("scan-url")
-            .stringType().noDefaultValue().withDescription("Hosts of the fe node like: `fe_ip1:http_port,fe_ip2:http_port...`.");
-
+    
     // optional Options
-    public static final ConfigOption<Integer> SOURCE_CONNECT_TIMEOUT = ConfigOptions.key("source.connect.timeout-ms")
+    public static final ConfigOption<Integer> SCAN_CONNECT_TIMEOUT = ConfigOptions.key("scan.connect.timeout-ms")
             .intType().defaultValue(1000).withDescription("Connect timeout");
         
-    public static final ConfigOption<Integer> SCAN_BATCH_SIZE = ConfigOptions.key("scan.params.batch-size")
+    public static final ConfigOption<Integer> SCAN_BATCH_ROWS = ConfigOptions.key("scan.params.batch-rows")
             .intType().defaultValue(1000).withDescription("Batch size");
 
     public static final ConfigOption<String> SCAN_PROPERTIES = ConfigOptions.key("scan.params.properties")
             .stringType().noDefaultValue().withDescription("Reserved params for use");
     
-    public static final ConfigOption<Integer> SCAN_LIMIT = ConfigOptions.key("scan.params.limit")
-            .intType().defaultValue(1).withDescription("The query limit, if specified.");
+    // public static final ConfigOption<Integer> SCAN_LIMIT = ConfigOptions.key("scan.params.limit")
+    //         .intType().defaultValue(1).withDescription("The query limit, if specified.");
 
     public static final ConfigOption<Integer> SCAN_KEEP_ALIVE_MIN = ConfigOptions.key("scan.params.keep-alive-min")
             .intType().defaultValue(1).withDescription("Max keep alive time min");
@@ -59,13 +63,13 @@ public class StarRocksSourceOptions implements Serializable {
     public static final ConfigOption<Integer> SCAN_MEM_LIMIT = ConfigOptions.key("scan.params.mem-limit")
             .intType().defaultValue(1024).withDescription("Memory limit for a single query");
 
-    public static final ConfigOption<Integer> SOURCE_MAX_RETRIES = ConfigOptions.key("source.max-retries")
+    public static final ConfigOption<Integer> SCAN_MAX_RETRIES = ConfigOptions.key("scan.max-retries")
             .intType().defaultValue(1).withDescription("Max request retry times.");
 
-    public static final ConfigOption<String> SOURCE_COLUMNS = ConfigOptions.key("source.columns")
+    public static final ConfigOption<String> SCAN_COLUMNS = ConfigOptions.key("scan.columns")
             .stringType().defaultValue("").withDescription("SQL columns");
 
-    public static final ConfigOption<String> SOURCE_FILTER = ConfigOptions.key("source.filter")
+    public static final ConfigOption<String> SCAN_FILTER = ConfigOptions.key("scan.filter")
             .stringType().defaultValue("").withDescription("SQL filter");
 
     
@@ -110,6 +114,10 @@ public class StarRocksSourceOptions implements Serializable {
     }
 
     // required Options
+    public String getScanUrl() {
+        return tableOptions.get(SCAN_URL);
+    }
+
     public String getJdbcUrl() {
         return tableOptions.get(JDBC_URL);
     }
@@ -130,18 +138,14 @@ public class StarRocksSourceOptions implements Serializable {
         return tableOptions.get(TABLE_NAME);
     }
 
-    public String getScanUrl() {
-        return tableOptions.get(SCAN_URL);
-    }
-
 
     // optional Options
     public int getConnectTimeoutMs() { 
-        return tableOptions.get(SOURCE_CONNECT_TIMEOUT).intValue(); 
+        return tableOptions.get(SCAN_CONNECT_TIMEOUT).intValue(); 
     }
 
-    public int getBatchSize() {
-        return tableOptions.get(SCAN_BATCH_SIZE).intValue();
+    public int getBatchRows() {
+        return tableOptions.get(SCAN_BATCH_ROWS).intValue();
     }
 
     public Map<String, String> getProperties() {
@@ -160,9 +164,9 @@ public class StarRocksSourceOptions implements Serializable {
         return (Map<String, String>) newMap;
     }
 
-    public int getLimit() {
-        return tableOptions.get(SCAN_LIMIT).intValue();
-    }
+    // public int getLimit() {
+    //     return tableOptions.get(SCAN_LIMIT).intValue();
+    // }
 
     public int getKeepAliveMin() {
         return tableOptions.get(SCAN_KEEP_ALIVE_MIN).intValue();
@@ -176,16 +180,16 @@ public class StarRocksSourceOptions implements Serializable {
         return tableOptions.get(SCAN_MEM_LIMIT).intValue();
     }
 
-    public int getSourceMaxRetries() {
-        return tableOptions.get(SOURCE_MAX_RETRIES).intValue();
+    public int getScanMaxRetries() {
+        return tableOptions.get(SCAN_MAX_RETRIES).intValue();
     }
 
     public String getColumns() {
-        return tableOptions.get(SOURCE_COLUMNS);
+        return tableOptions.get(SCAN_COLUMNS);
     }
 
     public String getFilter() {
-        return tableOptions.get(SOURCE_FILTER);
+        return tableOptions.get(SCAN_FILTER);
     }
 
     public static Builder builder() {
