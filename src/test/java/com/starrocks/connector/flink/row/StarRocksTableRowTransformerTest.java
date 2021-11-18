@@ -32,8 +32,8 @@ import java.util.Map;
 
 import com.alibaba.fastjson.JSON;
 import com.starrocks.connector.flink.StarRocksSinkBaseTest;
-import com.starrocks.connector.flink.row.StarRocksSerializerFactory;
-import com.starrocks.connector.flink.row.StarRocksTableRowTransformer;
+import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
+import com.starrocks.connector.flink.row.sink.StarRocksTableRowTransformer;
 
 import org.apache.flink.table.data.DecimalData;
 import org.apache.flink.table.data.GenericRowData;

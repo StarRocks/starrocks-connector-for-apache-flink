@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package com.starrocks.connector.flink.table;
+package com.starrocks.connector.flink.table.sink;
 
 import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ListStateDescriptor;
@@ -43,9 +43,9 @@ import java.util.List;
 import java.util.Map;
 
 import com.starrocks.connector.flink.manager.StarRocksSinkManager;
-import com.starrocks.connector.flink.row.StarRocksIRowTransformer;
-import com.starrocks.connector.flink.row.StarRocksISerializer;
-import com.starrocks.connector.flink.row.StarRocksSerializerFactory;
+import com.starrocks.connector.flink.row.sink.StarRocksIRowTransformer;
+import com.starrocks.connector.flink.row.sink.StarRocksISerializer;
+import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
 
 public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> implements CheckpointedFunction {
 

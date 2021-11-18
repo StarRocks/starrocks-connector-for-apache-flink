@@ -31,9 +31,9 @@ import java.util.stream.Collectors;
 
 import com.alibaba.fastjson.JSON;
 import com.starrocks.connector.flink.manager.StarRocksQueryVisitor;
-import com.starrocks.connector.flink.row.StarRocksDelimiterParser;
-import com.starrocks.connector.flink.table.StarRocksSinkOptions;
-import com.starrocks.connector.flink.table.StarRocksSinkSemantic;
+import com.starrocks.connector.flink.row.sink.StarRocksDelimiterParser;
+import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
+import com.starrocks.connector.flink.table.sink.StarRocksSinkSemantic;
 
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.TableSchema;
