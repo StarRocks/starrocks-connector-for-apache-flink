@@ -25,6 +25,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import com.starrocks.connector.flink.StarRocksSinkBaseTest;
+import com.starrocks.connector.flink.row.sink.StarRocksISerializer;
+import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
 
 
 public class StarRocksCsvSerializerTest extends StarRocksSinkBaseTest {

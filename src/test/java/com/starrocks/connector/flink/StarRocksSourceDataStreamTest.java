@@ -1,6 +1,6 @@
 package com.starrocks.connector.flink;
 
-import com.starrocks.connector.flink.table.StarRocksSourceOptions;
+import com.starrocks.connector.flink.table.source.StarRocksSourceOptions;
 
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.DataTypes;

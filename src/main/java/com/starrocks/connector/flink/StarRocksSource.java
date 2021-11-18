@@ -1,7 +1,7 @@
 package com.starrocks.connector.flink;
 
-import com.starrocks.connector.flink.table.StarRocksDynamicSourceFunction;
-import com.starrocks.connector.flink.table.StarRocksSourceOptions;
+import com.starrocks.connector.flink.table.source.StarRocksDynamicSourceFunction;
+import com.starrocks.connector.flink.table.source.StarRocksSourceOptions;
 
 import org.apache.flink.table.api.TableSchema;
 
