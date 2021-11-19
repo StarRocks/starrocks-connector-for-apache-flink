@@ -58,6 +58,8 @@ public final class StarRocksDynamicTableSourceFactory implements DynamicTableSou
         options.add(StarRocksSourceOptions.SCAN_QUERTY_TIMEOUT);
         options.add(StarRocksSourceOptions.SCAN_MEM_LIMIT);
         options.add(StarRocksSourceOptions.SCAN_MAX_RETRIES);
+        options.add(StarRocksSourceOptions.SCAN_BE_PORT_FORWARDING);
+        options.add(StarRocksSourceOptions.SCAN_BE_PORT_FORWARDING_LIST);
         return options;
     }
 }
