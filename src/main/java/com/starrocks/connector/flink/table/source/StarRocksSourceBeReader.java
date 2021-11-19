@@ -1,5 +1,6 @@
 package com.starrocks.connector.flink.table.source;
 
+import com.alibaba.fastjson.JSONObject;
 import com.starrocks.connector.flink.row.source.StarRocksSourceFlinkRows;
 import com.starrocks.connector.flink.table.source.struct.ColunmRichInfo;
 import com.starrocks.connector.flink.table.source.struct.Const;
@@ -21,9 +22,12 @@ import org.apache.thrift.transport.TTransportException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 
 public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Serializable {
@@ -43,8 +47,25 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
     private List<Object> curData;
 
 
-    public StarRocksSourceBeReader(String ip, int port, List<ColunmRichInfo> colunmRichInfos, SelectColumn[] selectColumns, 
+    public StarRocksSourceBeReader(String beNodeInfo, List<ColunmRichInfo> colunmRichInfos, SelectColumn[] selectColumns, 
                                         StarRocksSourceOptions sourceOptions) {
+
+        if (sourceOptions.getBeHostMappingList().length() > 0) {
+            String list = sourceOptions.getBeHostMappingList();
+            Map<String, String> mappingMap = new HashMap<>();
+            String beHostMappingInfos[] = list.split(";");
+            for (String beHostMappingInfo : beHostMappingInfos) {
+                String mapping[] = beHostMappingInfo.split(",");
+                mappingMap.put(mapping[1].trim(), mapping[0].trim());
+            }
+            if (!mappingMap.containsKey(beNodeInfo)) {
+                throw new RuntimeException("Not find be node info from the be port forward list");    
+            }
+            beNodeInfo = mappingMap.get(beNodeInfo);
+        }
+        String beNode[] = beNodeInfo.split(":");
+        String ip = beNode[0].trim();
+        int port = Integer.parseInt(beNode[1].trim());
         this.IP = ip;
         this.PORT = port;
         this.colunmRichInfos = colunmRichInfos;
@@ -55,7 +76,7 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
             socket.open();
         } catch (TTransportException e) {
             socket.close();
-            throw new RuntimeException("Failed to create brpc source" + e.getMessage());
+            throw new RuntimeException("Failed to create brpc source:" + e.getMessage());
         }
         TProtocol protocol = factory.getProtocol(socket);
         client = new TStarrocksExternalService.Client(protocol);   

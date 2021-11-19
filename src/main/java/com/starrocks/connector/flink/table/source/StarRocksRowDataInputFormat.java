@@ -155,10 +155,7 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
             this.dataReader = reader;
         } else {
             QueryBeXTablets queryBeXTablets = starRocksTableInputSplit.getBeXTablets();
-            String beNode[] = queryBeXTablets.getBeNode().split(":");
-            String ip = beNode[0];
-            int port = Integer.parseInt(beNode[1]);
-            StarRocksSourceBeReader beReader = new StarRocksSourceBeReader(ip, port, colunmRichInfos, starRocksTableInputSplit.getSelectColumn(), this.sourceOptions);
+            StarRocksSourceBeReader beReader = new StarRocksSourceBeReader(queryBeXTablets.getBeNode(), colunmRichInfos, starRocksTableInputSplit.getSelectColumn(), this.sourceOptions);
             this.dataReader = beReader;
             beReader.openScanner(
                         queryBeXTablets.getTabletIds(),

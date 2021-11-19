@@ -72,7 +72,8 @@ public class StarRocksSourceOptions implements Serializable {
     public static final ConfigOption<String> SCAN_FILTER = ConfigOptions.key("scan.filter")
             .stringType().defaultValue("").withDescription("SQL filter");
 
-    
+    public static final ConfigOption<String> SCAN_BE_HOST_MAPPING_LIST = ConfigOptions.key("scan.be-host-mapping-list")
+            .stringType().defaultValue("").withDescription("List of be host mapping");
     
     public static final String SOURCE_PROPERTIES_PREFIX = "scan.params.";
 
@@ -190,6 +191,10 @@ public class StarRocksSourceOptions implements Serializable {
 
     public String getFilter() {
         return tableOptions.get(SCAN_FILTER);
+    }
+
+    public String getBeHostMappingList() {
+        return tableOptions.get(SCAN_BE_HOST_MAPPING_LIST);
     }
 
     public static Builder builder() {

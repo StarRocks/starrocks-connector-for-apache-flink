@@ -26,7 +26,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<L
     private final StarRocksSourceOptions sourceOptions;
     private final QueryInfo queryInfo;
     private final SelectColumn[] selectColumns;
-    private List<StarRocksSourceBeReader> beReaders;
+    private List<StarRocksSourceBeReader> beReaderList;
     private final List<ColunmRichInfo> colunmRichInfos;
     
 
@@ -75,7 +75,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<L
         this.queryInfo = queryInfo;
         this.selectColumns = selectedColumns.toArray(new SelectColumn[0]);
         this.colunmRichInfos = colunmRichInfos;     
-        this.beReaders = new ArrayList<>();
+        this.beReaderList = new ArrayList<>();
     }
 
     @Override
@@ -85,28 +85,30 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<L
 
         int subTaskCount = getRuntimeContext().getNumberOfParallelSubtasks();
         int subTaskId = getRuntimeContext().getIndexOfThisSubtask();
+        this.beReaderList = generateBeReaders(subTaskCount, subTaskId, queryInfo);
+    }
+
+    public List<StarRocksSourceBeReader> generateBeReaders(int subTaskCount, int subTaskId, QueryInfo queryInfo) {
+        
+        List<StarRocksSourceBeReader> curBeReaders = new ArrayList<>();
         int queryInfoBeXTabletsListCount = queryInfo.getBeXTablets().size();
 
         if (subTaskCount == queryInfoBeXTabletsListCount) {
             QueryBeXTablets queryBeXTablets = queryInfo.getBeXTablets().get(subTaskId);
             StarRocksSourceBeReader beReader = genBeReaderFromQueryBeXTablets(queryBeXTablets);
-            this.beReaders.add(beReader);
-            return;
-        }
-
-        if (subTaskCount < queryInfoBeXTabletsListCount) {
+            curBeReaders.add(beReader);
+            return curBeReaders;
+        } else if (subTaskCount < queryInfoBeXTabletsListCount) {
             for (int i = 0; i < queryInfoBeXTabletsListCount; i ++) {
                 if (i%subTaskCount == subTaskId) {        
                     QueryBeXTablets queryBeXTablets = queryInfo.getBeXTablets().get(i);
                     StarRocksSourceBeReader beReader = genBeReaderFromQueryBeXTablets(queryBeXTablets);
-                    this.beReaders.add(beReader);
+                    curBeReaders.add(beReader);
                 }
             }
-            return;
-        }
-
-        if (subTaskCount > queryInfoBeXTabletsListCount) {
-
+            return curBeReaders;
+        } else { // subTaskCount > queryInfoBeXTabletsListCount
+            
             List<QueryBeXTablets> totalTablets = new ArrayList<>();
             queryInfo.getBeXTablets().forEach(beXTablets -> {
                 beXTablets.getTabletIds().forEach(tabletId -> {
@@ -114,12 +116,11 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<L
                     totalTablets.add(beXOnlyOneTablets);
                 });
             });
-
             double x = (double)totalTablets.size()/subTaskCount;
             if (x <= 1) {
                 if (subTaskId < totalTablets.size()) {
                     StarRocksSourceBeReader beReader = genBeReaderFromQueryBeXTablets(totalTablets.get(subTaskId));
-                    this.beReaders.add(beReader);
+                    curBeReaders.add(beReader);
                 }
             } 
             if (x > 1) {
@@ -128,7 +129,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<L
                 int end = start + (int)newx;
                 List<QueryBeXTablets> curBxTs = new ArrayList<>();
                 if (start >= totalTablets.size()) {
-                    return;
+                    return curBeReaders;
                 }
                 if (end >= totalTablets.size()) {
                     end = totalTablets.size();
@@ -149,21 +150,16 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<L
                 beXTabletsMap.forEach((beNode, tabletIds) -> {
                     QueryBeXTablets queryBeXTablets = new QueryBeXTablets(beNode, tabletIds);
                     StarRocksSourceBeReader beReader = genBeReaderFromQueryBeXTablets(queryBeXTablets);
-                    this.beReaders.add(beReader);
+                    curBeReaders.add(beReader);
                 });
             }            
-            return;
+            return curBeReaders;
         }
-        
     }
 
     private StarRocksSourceBeReader genBeReaderFromQueryBeXTablets(QueryBeXTablets qBeXTablets) {
 
-        String beNode[] = qBeXTablets.getBeNode().split(":");
-        String ip = beNode[0];
-        int port = Integer.parseInt(beNode[1]);
-        StarRocksSourceBeReader berReader = null;
-        berReader = new StarRocksSourceBeReader(ip, port, colunmRichInfos, selectColumns, this.sourceOptions);
+        StarRocksSourceBeReader berReader = new StarRocksSourceBeReader(qBeXTablets.getBeNode(), colunmRichInfos, selectColumns, this.sourceOptions);
         berReader.openScanner(qBeXTablets.getTabletIds(), 
             this.queryInfo.getQueryPlan().getOpaqued_query_plan(), this.sourceOptions);
         return berReader;
@@ -172,7 +168,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<L
     @Override
     public void run(SourceContext<List<?>> sourceContext) {
 
-        this.beReaders.forEach(beReader -> {
+        this.beReaderList.forEach(beReader -> {
             beReader.startToRead();
             while (beReader.hasNext()) {
                 List<Object> row = beReader.getNext();
@@ -183,7 +179,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<L
 
     @Override
     public void cancel() {
-        this.beReaders.forEach(beReader -> {
+        this.beReaderList.forEach(beReader -> {
             if (beReader != null) {
                 beReader.close();
             }
