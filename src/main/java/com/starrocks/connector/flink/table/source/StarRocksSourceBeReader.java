@@ -25,6 +25,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -51,16 +52,16 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
 
         if (sourceOptions.getBeHostMappingList().length() > 0) {
             String list = sourceOptions.getBeHostMappingList();
-            Map<String, Object> forwardMap = null;
-            try {
-                forwardMap = JSONObject.parseObject(list);                
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to convert be forward list json to map:" + e.getMessage());
+            Map<String, String> mappingMap = new HashMap<>();
+            String beHostMappingInfos[] = list.split(";");
+            for (String beHostMappingInfo : beHostMappingInfos) {
+                String mapping[] = beHostMappingInfo.split(",");
+                mappingMap.put(mapping[1], mapping[0]);
             }
-            if (!forwardMap.containsKey(beNodeInfo)) {
+            if (!mappingMap.containsKey(beNodeInfo)) {
                 throw new RuntimeException("Not find be node info from the be port forward list");    
             }
-            beNodeInfo = (String)forwardMap.get(beNodeInfo);
+            beNodeInfo = mappingMap.get(beNodeInfo);
         }
         String beNode[] = beNodeInfo.split(":");
         String ip = beNode[0];
