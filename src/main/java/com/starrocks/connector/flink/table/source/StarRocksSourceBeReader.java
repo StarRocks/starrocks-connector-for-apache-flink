@@ -49,8 +49,8 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
     public StarRocksSourceBeReader(String beNodeInfo, List<ColunmRichInfo> colunmRichInfos, SelectColumn[] selectColumns, 
                                         StarRocksSourceOptions sourceOptions) {
 
-        if (sourceOptions.getBeForwarding()) {
-            String list = sourceOptions.getBeForwardingList();
+        if (sourceOptions.getBePortMappingList().length() > 0) {
+            String list = sourceOptions.getBePortMappingList();
             Map<String, Object> forwardMap = null;
             try {
                 forwardMap = JSONObject.parseObject(list);                

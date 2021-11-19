@@ -72,11 +72,8 @@ public class StarRocksSourceOptions implements Serializable {
     public static final ConfigOption<String> SCAN_FILTER = ConfigOptions.key("scan.filter")
             .stringType().defaultValue("").withDescription("SQL filter");
 
-    public static final ConfigOption<Boolean> SCAN_BE_PORT_FORWARDING = ConfigOptions.key("scan.be-port-forwarding")
-            .booleanType().defaultValue(false).withDescription("Determines whether port forwarding is enabled for be");
-
-    public static final ConfigOption<String> SCAN_BE_PORT_FORWARDING_LIST = ConfigOptions.key("scan.be-port-forwarding-list")
-            .stringType().defaultValue("{}").withDescription("List of be port forwarding");
+    public static final ConfigOption<String> SCAN_BE_PORT_MAPPING_LIST = ConfigOptions.key("scan.be-port-mapping-list")
+            .stringType().defaultValue("").withDescription("List of be port mapping");
     
     public static final String SOURCE_PROPERTIES_PREFIX = "scan.params.";
 
@@ -196,12 +193,8 @@ public class StarRocksSourceOptions implements Serializable {
         return tableOptions.get(SCAN_FILTER);
     }
 
-    public boolean getBeForwarding() {
-        return tableOptions.get(SCAN_BE_PORT_FORWARDING);
-    }
-
-    public String getBeForwardingList() {
-        return tableOptions.get(SCAN_BE_PORT_FORWARDING_LIST);
+    public String getBePortMappingList() {
+        return tableOptions.get(SCAN_BE_PORT_MAPPING_LIST);
     }
 
     public static Builder builder() {
