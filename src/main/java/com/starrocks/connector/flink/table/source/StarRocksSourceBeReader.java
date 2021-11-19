@@ -56,7 +56,7 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
             String beHostMappingInfos[] = list.split(";");
             for (String beHostMappingInfo : beHostMappingInfos) {
                 String mapping[] = beHostMappingInfo.split(",");
-                mappingMap.put(mapping[1], mapping[0]);
+                mappingMap.put(mapping[1].trim(), mapping[0].trim());
             }
             if (!mappingMap.containsKey(beNodeInfo)) {
                 throw new RuntimeException("Not find be node info from the be port forward list");    
@@ -64,8 +64,8 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
             beNodeInfo = mappingMap.get(beNodeInfo);
         }
         String beNode[] = beNodeInfo.split(":");
-        String ip = beNode[0];
-        int port = Integer.parseInt(beNode[1]);
+        String ip = beNode[0].trim();
+        int port = Integer.parseInt(beNode[1].trim());
         this.IP = ip;
         this.PORT = port;
         this.colunmRichInfos = colunmRichInfos;
