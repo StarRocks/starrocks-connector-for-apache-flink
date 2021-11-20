@@ -1,6 +1,5 @@
 package com.starrocks.connector.flink.table.source;
 
-import com.alibaba.fastjson.JSONObject;
 import com.starrocks.connector.flink.row.source.StarRocksSourceFlinkRows;
 import com.starrocks.connector.flink.table.source.struct.ColunmRichInfo;
 import com.starrocks.connector.flink.table.source.struct.Const;
