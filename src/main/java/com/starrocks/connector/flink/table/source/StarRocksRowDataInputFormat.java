@@ -84,7 +84,6 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
             });
             this.selectColumns = nColumns.toArray(new SelectColumn[0]);
         }
-        // validateTableStructure(this.colunmRichInfos);
     }
 
     @Override
@@ -194,26 +193,6 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
     @Override
     public TypeInformation<RowData> getProducedType() {
         return null;
-    }
-
-    private void validateTableStructure(List<ColunmRichInfo> colunmRichInfos) {
-        if (null == colunmRichInfos) {
-            return;
-        }
-        List<Map<String, Object>> rows = starrocksQueryVisitor.getTableColumnsMetaData();
-        if (null == rows) {
-            throw new IllegalArgumentException("Couldn't get the sink table's column info.");
-        }
-        // validate primary keys
-        if (colunmRichInfos.size() != rows.size()) {
-            throw new IllegalArgumentException("Fields count mismatch.");
-        }
-        for (int i = 0; i < rows.size(); i++) {
-            String starrocksField = rows.get(i).get("COLUMN_NAME").toString().toLowerCase();
-            String starrocksType = rows.get(i).get("DATA_TYPE").toString().toLowerCase();
-            // TODO:
-            // validateTableStructure
-        }
     }
 
     /** Builder for {@link StarRocksRowDataInputFormat}. */
