@@ -136,7 +136,7 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
             SQL = SQL + " where " + filter;
         }
         if (limit > 0) {
-            // querySQL = querySQL + " limit " + limit;
+            SQL = SQL + " limit " + limit;
         }
         return SQL;
     }
