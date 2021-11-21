@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package com.starrocks.connector.flink;
+package com.starrocks.connector.flink.it.sink;
 
 import static org.junit.Assert.assertEquals;
 

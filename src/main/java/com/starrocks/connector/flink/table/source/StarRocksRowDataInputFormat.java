@@ -160,7 +160,7 @@ public class StarRocksRowDataInputFormat extends RichInputFormat<RowData, StarRo
                         queryBeXTablets.getTabletIds(),
                         starRocksTableInputSplit.getQueryInfo().getQueryPlan().getOpaqued_query_plan(),
                         this.sourceOptions);
-            beReader.startToRead();            
+            beReader.startToRead();
         }
     }
 

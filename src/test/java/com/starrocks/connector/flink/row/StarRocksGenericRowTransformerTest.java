@@ -28,7 +28,7 @@ import java.math.BigDecimal;
 import java.util.Map;
 
 import com.alibaba.fastjson.JSON;
-import com.starrocks.connector.flink.StarRocksSinkBaseTest;
+import com.starrocks.connector.flink.it.sink.StarRocksSinkBaseTest;
 import com.starrocks.connector.flink.row.sink.StarRocksGenericRowTransformer;
 import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
 
