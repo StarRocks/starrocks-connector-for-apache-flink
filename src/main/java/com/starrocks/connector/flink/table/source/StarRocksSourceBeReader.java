@@ -48,7 +48,7 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
 
     public StarRocksSourceBeReader(String beNodeInfo, List<ColunmRichInfo> colunmRichInfos, SelectColumn[] selectColumns, 
                                         StarRocksSourceOptions sourceOptions) {
-
+        
         if (sourceOptions.getBeHostMappingList().length() > 0) {
             String list = sourceOptions.getBeHostMappingList();
             Map<String, String> mappingMap = new HashMap<>();
@@ -58,9 +58,12 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
                 mappingMap.put(mapping[1].trim(), mapping[0].trim());
             }
             if (!mappingMap.containsKey(beNodeInfo)) {
-                throw new RuntimeException("Not find be node info from the be port forward list");    
+                throw new RuntimeException("Not find be node info from the be port mappping list");
             }
             beNodeInfo = mappingMap.get(beNodeInfo);
+            LOG.info("query data from be by using be-hostname");
+        } else {
+            LOG.info("query data from be by using be-ip");
         }
         String beNode[] = beNodeInfo.split(":");
         String ip = beNode[0].trim();
