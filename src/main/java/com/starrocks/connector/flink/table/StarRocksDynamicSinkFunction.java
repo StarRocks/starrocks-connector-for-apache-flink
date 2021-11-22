@@ -93,12 +93,7 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
     public synchronized void invoke(T value, Context context) throws Exception {
         long start = System.nanoTime();
         if (StarRocksSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
-            // flush the batch saved at last checkpoint
-            for (Tuple2<String, List<byte[]>> state : checkpointedState.get()) {
-                sinkManager.setBufferedBatchList(state.f1);
-                sinkManager.flush(state.f0, true);
-            }
-            checkpointedState.clear();
+            flushPreviousState();
         }
         if (null == serializer) {
             // raw data sink
@@ -161,8 +156,8 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
     @Override
     public synchronized void snapshotState(FunctionSnapshotContext context) throws Exception {
         if (StarRocksSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
+            flushPreviousState();
             // save state
-            checkpointedState.clear();
             checkpointedState.add(new Tuple2<>(sinkManager.createBatchLabel(), new ArrayList<>(sinkManager.getBufferedBatchList())));
             return;
         }
@@ -170,8 +165,20 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
     }
 
     @Override
-    public void close() throws Exception {
+    public synchronized void close() throws Exception {
+        if (StarRocksSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
+            flushPreviousState();
+        }
         sinkManager.close();
         super.close();
+    }
+
+    private void flushPreviousState() throws Exception {
+        // flush the batch saved at the previous checkpoint
+        for (Tuple2<String, List<byte[]>> state : checkpointedState.get()) {
+            sinkManager.setBufferedBatchList(state.f1);
+            sinkManager.flush(state.f0, true);
+        }
+        checkpointedState.clear();
     }
 }
