@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package com.starrocks.connector.flink.table;
+package com.starrocks.connector.flink.table.sink;
 
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
@@ -28,7 +28,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.starrocks.connector.flink.StarRocksSinkBaseTest;
+import com.starrocks.connector.flink.it.sink.StarRocksSinkBaseTest;
 import com.starrocks.connector.flink.manager.StarRocksStreamLoadVisitor;
 
 public class StarRocksStreamLoadVisitorTest extends StarRocksSinkBaseTest {

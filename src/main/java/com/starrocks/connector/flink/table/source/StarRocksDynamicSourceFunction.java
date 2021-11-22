@@ -16,7 +16,6 @@ import org.apache.flink.table.api.TableSchema;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,8 +25,8 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<L
     private final StarRocksSourceOptions sourceOptions;
     private final QueryInfo queryInfo;
     private final SelectColumn[] selectColumns;
-    private List<StarRocksSourceBeReader> beReaderList;
     private final List<ColunmRichInfo> colunmRichInfos;
+    private List<StarRocksSourceBeReader> beReaderList;
     
 
     public StarRocksDynamicSourceFunction(StarRocksSourceOptions sourceOptions, TableSchema flinkSchema) {
@@ -82,87 +81,13 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<L
     public void open(Configuration parameters) throws Exception {
 
         super.open(parameters);
-
-        int subTaskCount = getRuntimeContext().getNumberOfParallelSubtasks();
+        List<List<QueryBeXTablets>> lists = StarRocksDataSplitForParallelism.splitQueryBeXTablets(getRuntimeContext().getNumberOfParallelSubtasks(), queryInfo);
         int subTaskId = getRuntimeContext().getIndexOfThisSubtask();
-        this.beReaderList = generateBeReaders(subTaskCount, subTaskId, queryInfo);
-    }
-
-    public List<StarRocksSourceBeReader> generateBeReaders(int subTaskCount, int subTaskId, QueryInfo queryInfo) {
-        
-        List<StarRocksSourceBeReader> curBeReaders = new ArrayList<>();
-        int queryInfoBeXTabletsListCount = queryInfo.getBeXTablets().size();
-
-        if (subTaskCount == queryInfoBeXTabletsListCount) {
-            QueryBeXTablets queryBeXTablets = queryInfo.getBeXTablets().get(subTaskId);
-            StarRocksSourceBeReader beReader = genBeReaderFromQueryBeXTablets(queryBeXTablets);
-            curBeReaders.add(beReader);
-            return curBeReaders;
-        } else if (subTaskCount < queryInfoBeXTabletsListCount) {
-            for (int i = 0; i < queryInfoBeXTabletsListCount; i ++) {
-                if (i%subTaskCount == subTaskId) {        
-                    QueryBeXTablets queryBeXTablets = queryInfo.getBeXTablets().get(i);
-                    StarRocksSourceBeReader beReader = genBeReaderFromQueryBeXTablets(queryBeXTablets);
-                    curBeReaders.add(beReader);
-                }
-            }
-            return curBeReaders;
-        } else { // subTaskCount > queryInfoBeXTabletsListCount
-            
-            List<QueryBeXTablets> totalTablets = new ArrayList<>();
-            queryInfo.getBeXTablets().forEach(beXTablets -> {
-                beXTablets.getTabletIds().forEach(tabletId -> {
-                    QueryBeXTablets beXOnlyOneTablets = new QueryBeXTablets(beXTablets.getBeNode(), Arrays.asList(tabletId));
-                    totalTablets.add(beXOnlyOneTablets);
-                });
-            });
-            double x = (double)totalTablets.size()/subTaskCount;
-            if (x <= 1) {
-                if (subTaskId < totalTablets.size()) {
-                    StarRocksSourceBeReader beReader = genBeReaderFromQueryBeXTablets(totalTablets.get(subTaskId));
-                    curBeReaders.add(beReader);
-                }
-            } 
-            if (x > 1) {
-                long newx = Math.round(x);
-                int start = (int)(subTaskId * newx);
-                int end = start + (int)newx;
-                List<QueryBeXTablets> curBxTs = new ArrayList<>();
-                if (start >= totalTablets.size()) {
-                    return curBeReaders;
-                }
-                if (end >= totalTablets.size()) {
-                    end = totalTablets.size();
-                }
-                
-                curBxTs = totalTablets.subList(start, end);
-                Map<String, List<Long>> beXTabletsMap = new HashMap<>();
-                curBxTs.forEach(curBxT -> {
-                    List<Long> tablets = new ArrayList<>(); 
-                    if (beXTabletsMap.containsKey(curBxT.getBeNode())) {
-                        tablets = beXTabletsMap.get(curBxT.getBeNode());
-                    } else {
-                        tablets = new ArrayList<>();
-                    }
-                    tablets.add(curBxT.getTabletIds().get(0));
-                    beXTabletsMap.put(curBxT.getBeNode(), tablets);
-                });
-                beXTabletsMap.forEach((beNode, tabletIds) -> {
-                    QueryBeXTablets queryBeXTablets = new QueryBeXTablets(beNode, tabletIds);
-                    StarRocksSourceBeReader beReader = genBeReaderFromQueryBeXTablets(queryBeXTablets);
-                    curBeReaders.add(beReader);
-                });
-            }            
-            return curBeReaders;
-        }
-    }
-
-    private StarRocksSourceBeReader genBeReaderFromQueryBeXTablets(QueryBeXTablets qBeXTablets) {
-
-        StarRocksSourceBeReader berReader = new StarRocksSourceBeReader(qBeXTablets.getBeNode(), colunmRichInfos, selectColumns, this.sourceOptions);
-        berReader.openScanner(qBeXTablets.getTabletIds(), 
-            this.queryInfo.getQueryPlan().getOpaqued_query_plan(), this.sourceOptions);
-        return berReader;
+        lists.get(subTaskId).forEach(beXTablets -> {
+            StarRocksSourceBeReader beReader = StarRocksDataSplitForParallelism.genBeReaderFromQueryBeXTablets(beXTablets, queryInfo, colunmRichInfos, selectColumns, sourceOptions);
+            beReader.openScanner(beXTablets.getTabletIds(), queryInfo.getQueryPlan().getOpaqued_query_plan(), sourceOptions);
+            this.beReaderList.add(beReader);
+        });
     }
 
     @Override

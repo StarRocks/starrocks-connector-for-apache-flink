@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package com.starrocks.connector.flink.table;
+package com.starrocks.connector.flink.table.sink;
 
 import org.apache.flink.runtime.util.ExecutorThreadFactory;
 import org.apache.flink.calcite.shaded.com.google.common.collect.Lists;
@@ -27,7 +27,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import com.starrocks.connector.flink.StarRocksSinkBaseTest;
+import com.starrocks.connector.flink.it.sink.StarRocksSinkBaseTest;
 import com.starrocks.connector.flink.manager.StarRocksSinkManager;
 
 import mockit.Expectations;
