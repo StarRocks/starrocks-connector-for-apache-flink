@@ -63,14 +63,14 @@ public class StarRocksSinkOptions implements Serializable {
         .stringType().defaultValue(StarRocksSinkSemantic.AT_LEAST_ONCE.getName()).withDescription("Fault tolerance guarantee. `at-least-once` or `exactly-once`");
     public static final ConfigOption<Long> SINK_BATCH_MAX_SIZE = ConfigOptions.key("sink.buffer-flush.max-bytes")
         .longType().defaultValue(90L * MEGA_BYTES_SCALE).withDescription("Max data bytes of the flush.");
-    public static final ConfigOption<Long> SINK_BATCH_FLUSH_INTERVAL = ConfigOptions.key("sink.buffer-flush.interval-ms")
-        .longType().defaultValue(300000L).withDescription("Flush interval of the row batch in millisecond.");
-    public static final ConfigOption<Long> SINK_BATCH_OFFER_TIMEOUT = ConfigOptions.key("sink.buffer-offer.timeout-ms")
-        .longType().defaultValue(300000L).withDescription("Offer batch timeout in millisecond.");
-    public static final ConfigOption<Integer> SINK_MAX_RETRIES = ConfigOptions.key("sink.max-retries")
-        .intType().defaultValue(1).withDescription("Max flushing retry times of the row batch.");
     public static final ConfigOption<Long> SINK_BATCH_MAX_ROWS = ConfigOptions.key("sink.buffer-flush.max-rows")
         .longType().defaultValue(500000L).withDescription("Max row count of the flush.");
+    public static final ConfigOption<Long> SINK_BATCH_FLUSH_INTERVAL = ConfigOptions.key("sink.buffer-flush.interval-ms")
+        .longType().defaultValue(300000L).withDescription("Flush interval of the row batch in millisecond.");
+    public static final ConfigOption<Integer> SINK_MAX_RETRIES = ConfigOptions.key("sink.max-retries")
+        .intType().defaultValue(1).withDescription("Max flushing retry times of the row batch.");
+    public static final ConfigOption<Long> SINK_BATCH_OFFER_TIMEOUT = ConfigOptions.key("sink.buffer-offer.timeout-ms")
+        .longType().defaultValue(300000L).withDescription("Offer batch timeout in millisecond.");
 
     // Sink semantic
     private static final Set<String> SINK_SEMANTIC_ENUMS = Arrays.stream(StarRocksSinkSemantic.values()).map(s -> s.getName()).collect(Collectors.toSet());
