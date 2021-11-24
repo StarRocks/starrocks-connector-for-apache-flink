@@ -105,7 +105,12 @@ public class StarRocksSourceFlinkRows {
     }
 
     public boolean hasNext() {
-        return offsetOfBatchForRead < flinksRowsCount;
+        
+        if (offsetOfBatchForRead < flinksRowsCount) {
+            return true;
+        }
+        this.close();
+        return false;
     }
 
 
