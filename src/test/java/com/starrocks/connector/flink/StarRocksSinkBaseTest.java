@@ -146,9 +146,7 @@ public abstract class StarRocksSinkBaseTest {
                         in.close();
                         socket.close();
                     }
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
+                } catch (Exception e) {}
                 
             }
         }).start();
