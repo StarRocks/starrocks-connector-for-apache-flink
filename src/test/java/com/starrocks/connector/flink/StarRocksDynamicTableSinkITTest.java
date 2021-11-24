@@ -125,6 +125,7 @@ public class StarRocksDynamicTableSinkITTest extends StarRocksSinkBaseTest {
             "'sink.buffer-flush.max-rows' = '" + OPTIONS.getSinkMaxRows() + "'," +
             "'sink.buffer-flush.max-bytes' = '" + OPTIONS.getSinkMaxBytes() + "'," +
             "'sink.buffer-flush.interval-ms' = '" + OPTIONS.getSinkMaxFlushInterval() + "'," +
+            "'sink.buffer-offer.timeout-ms' = '" + OPTIONS.getSinkOfferTimeout() + "'," +
             // "'sink.properties.format' = 'json'," +
             // "'sink.properties.strip_outer_array' = 'true'," +
             "'sink.properties.column_separator' = '\\x01'," +

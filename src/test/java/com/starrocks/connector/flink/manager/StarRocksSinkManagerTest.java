@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package com.starrocks.connector.flink.table;
+package com.starrocks.connector.flink.manager;
 
 import org.apache.flink.runtime.util.ExecutorThreadFactory;
 import org.apache.flink.calcite.shaded.com.google.common.collect.Lists;
@@ -205,5 +205,63 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
             exMsg = e.getMessage();
         }
         assertTrue(0 < exMsg.length());
+    }
+
+    @Test
+    public void testBufferOffer() {
+        mockTableStructure();
+        mockSuccessResponse();
+        String exMsg = "";
+        try {
+            // flush cost more than offer timeout
+            StarRocksSinkManager mgr = mockStarRocksSinkManager(OPTIONS.getSinkOfferTimeout() + 100L);
+            mgr.startAsyncFlushing();
+            mgr.writeRecord("");
+            mgr.flush(mgr.createBatchLabel(), true);
+            mgr.writeRecord("");
+            mgr.flush(mgr.createBatchLabel(), true);
+            mgr.close();
+        } catch (Exception e) {
+            exMsg = e.getMessage();
+        }
+        assertTrue(0 < exMsg.length());
+        assertTrue(exMsg.startsWith("Timeout while offering data to flushQueue"));
+
+        exMsg = "";
+        try {
+            // flush cost less than offer timeout
+            StarRocksSinkManager mgr = mockStarRocksSinkManager(OPTIONS.getSinkOfferTimeout() - 100L);
+            mgr.startAsyncFlushing();
+            mgr.writeRecord("");
+            mgr.flush(mgr.createBatchLabel(), true);
+            mgr.writeRecord("");
+            mgr.flush(mgr.createBatchLabel(), true);
+            mgr.close();
+        } catch (Exception e) {
+            exMsg = e.getMessage();
+        }
+        assertEquals(0, exMsg.length());
+    }
+
+    private StarRocksSinkManager mockStarRocksSinkManager(final long mockFlushCostMs) {
+        return new StarRocksSinkManager(OPTIONS, TABLE_SCHEMA) {
+            @Override
+            public void startAsyncFlushing() {
+                Thread flushThread = new Thread(() -> {
+                    while (true) {
+                        try {
+                            // do not take buffer from flushQueue, mock
+                            TimeUnit.MILLISECONDS.sleep(mockFlushCostMs);
+                            flushQueue.take();
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                });
+                flushThread.setName("starrocks-flush");
+                flushThread.setDaemon(true);
+                flushThread.start();
+            }
+        };
     }
 }

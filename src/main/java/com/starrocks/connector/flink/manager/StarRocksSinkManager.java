@@ -60,7 +60,7 @@ public class StarRocksSinkManager implements Serializable {
     private final StarRocksStreamLoadVisitor starrocksStreamLoadVisitor;
     private final StarRocksSinkOptions sinkOptions;
     private final Map<String, List<LogicalTypeRoot>> typesMap;
-    private final LinkedBlockingDeque<Tuple3<String, Long, ArrayList<byte[]>>> flushQueue = new LinkedBlockingDeque<>(1);
+    final LinkedBlockingDeque<Tuple3<String, Long, ArrayList<byte[]>>> flushQueue = new LinkedBlockingDeque<>(1);
 
     private transient Counter totalFlushBytes;
     private transient Counter totalFlushRows;
@@ -74,8 +74,8 @@ public class StarRocksSinkManager implements Serializable {
     private final ArrayList<byte[]> buffer = new ArrayList<>();
     private int batchCount = 0;
     private long batchSize = 0;
-    private volatile boolean closed = false;
-    private volatile Exception flushException;
+    volatile boolean closed = false;
+    private volatile Throwable flushException;
 
     private ScheduledExecutorService scheduler;
     private ScheduledFuture<?> scheduledFuture;
@@ -113,17 +113,26 @@ public class StarRocksSinkManager implements Serializable {
 
     public void startAsyncFlushing() {
         // start flush thread
-        Thread flushThread = new Thread(new Runnable(){
-            public void run() {
-                while(true) {
-                    try {
-                        asyncFlush();
-                    } catch (Exception e) {
-                        flushException = e;
+        Thread flushThread = new Thread(() -> {
+            while (true) {
+                try {
+                    boolean closedTemp = closed;
+                    asyncFlush();
+                    if (closedTemp) {
+                        LOG.info("StarRocks flush thread exit.");
+                        break;
                     }
+                } catch (Exception e) {
+                    flushException = e;
                 }
-            }   
+            }
         });
+
+        flushThread.setUncaughtExceptionHandler((t, e) -> {
+            LOG.error("Uncaught exception occurred : " + e.getMessage(), e);
+            flushException = e;
+        });
+        flushThread.setName("starrocks-flush");
         flushThread.setDaemon(true);
         flushThread.start();
     }
@@ -187,7 +196,7 @@ public class StarRocksSinkManager implements Serializable {
             }
             return;
         }
-        flushQueue.put(new Tuple3<>(label, batchSize,  new ArrayList<>(buffer)));
+        offer(new Tuple3<>(label, batchSize,  new ArrayList<>(buffer)));
         if (waitUtilDone) {
             // wait the last flush
             waitAsyncFlushingDone();
@@ -238,12 +247,20 @@ public class StarRocksSinkManager implements Serializable {
 
     private void waitAsyncFlushingDone() throws InterruptedException {
         // wait for previous flushings
-        flushQueue.put(new Tuple3<>("", 0l, null));
-        flushQueue.put(new Tuple3<>("", 0l, null));
+        offer(new Tuple3<>("", 0L, null));
+        offer(new Tuple3<>("", 0L, null));
         checkFlushException();
     }
 
-    private void asyncFlush() throws Exception {
+    private void offer(Tuple3<String, Long, ArrayList<byte[]>> tuple3) throws InterruptedException{
+        if (!flushQueue.offer(tuple3, sinkOptions.getSinkOfferTimeout(), TimeUnit.MILLISECONDS)) {
+            throw new RuntimeException(
+                "Timeout while offering data to flushQueue, exceed " + sinkOptions.getSinkOfferTimeout() + " ms, see " +
+                    StarRocksSinkOptions.SINK_BATCH_OFFER_TIMEOUT.key());
+        }
+    }
+
+    public void asyncFlush() throws Exception {
         Tuple3<String, Long, ArrayList<byte[]>> flushData = flushQueue.take();
         if (Strings.isNullOrEmpty(flushData.f0)) {
             return;
@@ -284,8 +301,8 @@ public class StarRocksSinkManager implements Serializable {
     private void checkFlushException() {
         if (flushException != null) {
             StackTraceElement[] stack = Thread.currentThread().getStackTrace();
-            for(int i = 0; i < stack.length; i++){
-                LOG.info(stack[i].getClassName()+"."+stack[i].getMethodName()+" line:"+stack[i].getLineNumber());
+            for (int i = 0; i < stack.length; i++) {
+                LOG.info(stack[i].getClassName() + "." + stack[i].getMethodName() + " line:" + stack[i].getLineNumber());
             }
             throw new RuntimeException("Writing records to StarRocks failed.", flushException);
         }
