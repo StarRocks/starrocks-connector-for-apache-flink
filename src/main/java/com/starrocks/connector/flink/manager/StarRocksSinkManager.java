@@ -74,7 +74,7 @@ public class StarRocksSinkManager implements Serializable {
     private final ArrayList<byte[]> buffer = new ArrayList<>();
     private int batchCount = 0;
     private long batchSize = 0;
-    volatile boolean closed = false;
+    private volatile boolean closed = false;
     private volatile Throwable flushException;
 
     private ScheduledExecutorService scheduler;
