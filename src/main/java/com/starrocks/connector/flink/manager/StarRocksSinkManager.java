@@ -261,8 +261,8 @@ public class StarRocksSinkManager implements Serializable {
     }
 
     public void asyncFlush() throws Exception {
-        Tuple3<String, Long, ArrayList<byte[]>> flushData = flushQueue.take();
-        if (Strings.isNullOrEmpty(flushData.f0)) {
+        Tuple3<String, Long, ArrayList<byte[]>> flushData = flushQueue.poll(3L, TimeUnit.SECONDS);
+        if (flushData == null || Strings.isNullOrEmpty(flushData.f0)) {
             return;
         }
         stopScheduler();
