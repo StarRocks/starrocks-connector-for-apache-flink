@@ -16,6 +16,9 @@ package com.starrocks.connector.flink.table;
 
 import org.apache.flink.runtime.util.ExecutorThreadFactory;
 import org.apache.flink.calcite.shaded.com.google.common.collect.Lists;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.TableSchema.Builder;
+
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -77,6 +80,18 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
             exMsg = e.getMessage();
         }
         assertTrue(exMsg.length() > 0);
+
+
+        Builder schemaBuilder = createTableSchemaBuilder();
+        schemaBuilder.field("v6", DataTypes.VARCHAR(20));
+        try {
+            new StarRocksSinkManager(OPTIONS, schemaBuilder.build());
+        } catch (Exception e) {
+            exMsg = e.getMessage();
+        }
+        assertEquals("Fields count of test_tbl mismatch. \n"
+                + "flinkSchema[8]:k1,k2,v1,v2,v3,v4,v5,v6\n"
+                + " realTab[7]:k1,k2,v1,v2,v3,v4,v5",exMsg);
     }
 
     @Test

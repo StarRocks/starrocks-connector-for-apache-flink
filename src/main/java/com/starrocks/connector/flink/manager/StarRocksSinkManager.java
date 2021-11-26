@@ -14,11 +14,13 @@
 
 package com.starrocks.connector.flink.manager;
 
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.types.logical.LogicalTypeRoot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 import java.io.IOException;
 import java.io.Serializable;
@@ -52,7 +54,7 @@ import org.apache.flink.table.api.constraints.UniqueConstraint;
 public class StarRocksSinkManager implements Serializable {
 
     private static final long serialVersionUID = 1L;
-    
+
     private static final Logger LOG = LoggerFactory.getLogger(StarRocksSinkManager.class);
 
     private final StarRocksJdbcConnectionProvider jdbcConnProvider;
@@ -122,7 +124,7 @@ public class StarRocksSinkManager implements Serializable {
                         flushException = e;
                     }
                 }
-            }   
+            }
         });
         flushThread.setDaemon(true);
         flushThread.start();
@@ -196,7 +198,7 @@ public class StarRocksSinkManager implements Serializable {
         batchCount = 0;
         batchSize = 0;
     }
-    
+
     public synchronized void close() {
         if (!closed) {
             closed = true;
@@ -290,14 +292,14 @@ public class StarRocksSinkManager implements Serializable {
             throw new RuntimeException("Writing records to StarRocks failed.", flushException);
         }
     }
-    
+
     private void validateTableStructure(TableSchema flinkSchema) {
         if (null == flinkSchema) {
             return;
         }
         Optional<UniqueConstraint> constraint = flinkSchema.getPrimaryKey();
         List<Map<String, Object>> rows = starrocksQueryVisitor.getTableColumnsMetaData();
-        if (null == rows) {
+        if (CollectionUtils.isEmpty(rows)) {
             throw new IllegalArgumentException("Couldn't get the sink table's column info.");
         }
         // validate primary keys
@@ -324,7 +326,11 @@ public class StarRocksSinkManager implements Serializable {
             return;
         }
         if (flinkSchema.getFieldCount() != rows.size()) {
-            throw new IllegalArgumentException("Fields count mismatch.");
+            throw new IllegalArgumentException("Fields count of "+this.sinkOptions.getTableName()+" mismatch. \nflinkSchema["
+                    +flinkSchema.getFieldNames().length+"]:"
+                    +Arrays.asList( flinkSchema.getFieldNames()).stream().collect(Collectors.joining(","))
+                    +"\n realTab["+rows.size()+"]:"
+                    +rows.stream().map((r)-> String.valueOf(r.get("COLUMN_NAME"))).collect(Collectors.joining(",")));
         }
         List<TableColumn> flinkCols = flinkSchema.getTableColumns();
         for (int i = 0; i < rows.size(); i++) {

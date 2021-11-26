@@ -37,6 +37,8 @@ import com.starrocks.connector.flink.table.StarRocksSinkSemantic;
 
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.api.TableSchema.Builder;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -96,14 +98,7 @@ public abstract class StarRocksSinkBaseTest {
 
     @Before
     public void initializeTableSchema() {
-        TableSchema.Builder builder = TableSchema.builder()
-            .field("k1", DataTypes.TINYINT())
-            .field("k2", DataTypes.VARCHAR(16))
-            .field("v1", DataTypes.TIMESTAMP())
-            .field("v2", DataTypes.DATE())
-            .field("v3", DataTypes.DECIMAL(10, 2))
-            .field("v4", DataTypes.SMALLINT())
-            .field("v5", DataTypes.CHAR(2));
+        TableSchema.Builder builder = createTableSchemaBuilder();
         STARROCKS_TABLE_META = new HashMap<String, String>(){{
             put("k1", "tinyint");
             put("k2", "varchar");
@@ -114,6 +109,17 @@ public abstract class StarRocksSinkBaseTest {
             put("v5", "char");
         }};
         TABLE_SCHEMA = builder.build();
+    }
+
+    protected Builder createTableSchemaBuilder() {
+        return TableSchema.builder()
+            .field("k1", DataTypes.TINYINT())
+            .field("k2", DataTypes.VARCHAR(16))
+            .field("v1", DataTypes.TIMESTAMP())
+            .field("v2", DataTypes.DATE())
+            .field("v3", DataTypes.DECIMAL(10, 2))
+            .field("v4", DataTypes.SMALLINT())
+            .field("v5", DataTypes.CHAR(2));
     }
 
     @Before
@@ -131,7 +137,7 @@ public abstract class StarRocksSinkBaseTest {
                         new String(b, 0, len);
                         Thread.sleep(100);
                         String res = "HTTP/1.1 200 OK\r\n" +
-                                    "\r\n" + 
+                                    "\r\n" +
                                     mockResonse;
                         OutputStream out = socket.getOutputStream();
                         if (0 == len) {
@@ -145,7 +151,7 @@ public abstract class StarRocksSinkBaseTest {
                         socket.close();
                     }
                 } catch (Exception e) {}
-                
+
             }
         }).start();
     }
@@ -207,7 +213,7 @@ public abstract class StarRocksSinkBaseTest {
             }
             return bos.array();
         }
-       
+
         if (StarRocksSinkOptions.StreamLoadFormat.JSON.equals(OPTIONS.getStreamLoadFormat())) {
             ByteBuffer bos = ByteBuffer.allocate(totalBytes + (rows.isEmpty() ? 2 : rows.size() + 1));
             bos.put("[".getBytes(StandardCharsets.UTF_8));
