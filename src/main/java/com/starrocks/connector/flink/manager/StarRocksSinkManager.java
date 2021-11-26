@@ -326,7 +326,7 @@ public class StarRocksSinkManager implements Serializable {
             return;
         }
         if (flinkSchema.getFieldCount() != rows.size()) {
-            throw new IllegalArgumentException(this.sinkOptions.getTableName()+" of Fields count mismatch. \nflinkSchema["
+            throw new IllegalArgumentException("Fields count of "+this.sinkOptions.getTableName()+" mismatch. \nflinkSchema["
                     +flinkSchema.getFieldNames().length+"]:"
                     +Arrays.asList( flinkSchema.getFieldNames()).stream().collect(Collectors.joining(","))
                     +"\n realTab["+rows.size()+"]:"
