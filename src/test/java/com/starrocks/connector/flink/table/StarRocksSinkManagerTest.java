@@ -89,7 +89,7 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
         } catch (Exception e) {
             exMsg = e.getMessage();
         }
-        assertEquals("test_tbl of Fields count mismatch. \n"
+        assertEquals("Fields count of test_tbl mismatch. \n"
                 + "flinkSchema[8]:k1,k2,v1,v2,v3,v4,v5,v6\n"
                 + " realTab[7]:k1,k2,v1,v2,v3,v4,v5",exMsg);
     }
