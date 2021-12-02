@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.flink.manager;
 
-import org.apache.commons.collections.CollectionUtils;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.types.logical.LogicalTypeRoot;
 import org.slf4j.Logger;
@@ -299,7 +298,7 @@ public class StarRocksSinkManager implements Serializable {
         }
         Optional<UniqueConstraint> constraint = flinkSchema.getPrimaryKey();
         List<Map<String, Object>> rows = starrocksQueryVisitor.getTableColumnsMetaData();
-        if (CollectionUtils.isEmpty(rows)) {
+        if (rows == null || rows.isEmpty()) {
             throw new IllegalArgumentException("Couldn't get the sink table's column info.");
         }
         // validate primary keys
