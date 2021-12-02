@@ -221,6 +221,7 @@ public class StarRocksSinkManager implements Serializable {
             }
             if (flushException != null) {
                 offerEOF();
+                checkFlushException();
                 return;
             }
             try {
