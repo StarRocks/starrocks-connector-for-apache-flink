@@ -14,8 +14,6 @@
 
 package com.starrocks.connector.flink;
 
-import static org.junit.Assert.assertEquals;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -39,7 +37,6 @@ import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.TableSchema;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Test;
 
 import mockit.Mocked;
 import mockit.Expectations;
@@ -62,7 +59,7 @@ public abstract class StarRocksSinkBaseTest {
     protected final String SINK_MAX_BYTES = "74002019";
     protected final String SINK_MAX_ROWS = "1002000";
     protected final String SINK_MAX_RETRIES = "2";
-    protected final String SINK_OFFER_TIMEOUT = "200";
+    protected final String SINK_OFFER_TIMEOUT = "3000";
     protected final Map<String, String> SINK_PROPS = new HashMap<String, String>(){{
         put("filter-ratio", "0");
     }};

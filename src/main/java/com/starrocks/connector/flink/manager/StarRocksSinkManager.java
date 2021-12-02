@@ -70,11 +70,13 @@ public class StarRocksSinkManager implements Serializable {
     private static final String COUNTER_TOTAL_FLUSH_ROWS = "totalFlushRows";
     private static final String COUNTER_TOTAL_FLUSH_COST_TIME_WITHOUT_RETRIES = "totalFlushTimeNsWithoutRetries";
     private static final String COUNTER_TOTAL_FLUSH_COST_TIME = "totalFlushTimeNs";
+    static final String EOF = "EOF";
 
     private final ArrayList<byte[]> buffer = new ArrayList<>();
     private int batchCount = 0;
     private long batchSize = 0;
-    private volatile boolean closed = false;
+    volatile boolean closed = false;
+    volatile boolean flushThreadAlive = false;
     private volatile Throwable flushException;
 
     private ScheduledExecutorService scheduler;
@@ -116,10 +118,9 @@ public class StarRocksSinkManager implements Serializable {
         Thread flushThread = new Thread(() -> {
             while (true) {
                 try {
-                    boolean closedTemp = closed;
-                    asyncFlush();
-                    if (closedTemp) {
-                        LOG.info("StarRocks flush thread exit.");
+                    if (!asyncFlush()) {
+                        LOG.info("StarRocks flush thread is about to exit.");
+                        flushThreadAlive = false;
                         break;
                     }
                 } catch (Exception e) {
@@ -129,12 +130,14 @@ public class StarRocksSinkManager implements Serializable {
         });
 
         flushThread.setUncaughtExceptionHandler((t, e) -> {
-            LOG.error("Uncaught exception occurred : " + e.getMessage(), e);
+            LOG.error("StarRocks flush thread uncaught exception occurred: " + e.getMessage(), e);
             flushException = e;
+            flushThreadAlive = false;
         });
         flushThread.setName("starrocks-flush");
         flushThread.setDaemon(true);
         flushThread.start();
+        flushThreadAlive = true;
     }
 
     public void startScheduler() throws IOException {
@@ -205,7 +208,7 @@ public class StarRocksSinkManager implements Serializable {
         batchCount = 0;
         batchSize = 0;
     }
-    
+
     public synchronized void close() {
         if (!closed) {
             closed = true;
@@ -214,12 +217,18 @@ public class StarRocksSinkManager implements Serializable {
                 scheduledFuture.cancel(false);
                 this.scheduler.shutdown();
             }
+            if (flushException != null) {
+                offerEOF();
+                return;
+            }
             try {
                 String label = createBatchLabel();
                 if (batchCount > 0) LOG.info(String.format("StarRocks Sink is about to close: label[%s].", label));
                 flush(label, true);
             } catch (Exception e) {
                 throw new RuntimeException("Writing records to StarRocks failed.", e);
+            } finally {
+              offerEOF();
             }
         }
         checkFlushException();
@@ -245,25 +254,16 @@ public class StarRocksSinkManager implements Serializable {
         }
     }
 
-    private void waitAsyncFlushingDone() throws InterruptedException {
-        // wait for previous flushings
-        offer(new Tuple3<>("", 0L, null));
-        offer(new Tuple3<>("", 0L, null));
-        checkFlushException();
-    }
-
-    private void offer(Tuple3<String, Long, ArrayList<byte[]>> tuple3) throws InterruptedException{
-        if (!flushQueue.offer(tuple3, sinkOptions.getSinkOfferTimeout(), TimeUnit.MILLISECONDS)) {
-            throw new RuntimeException(
-                "Timeout while offering data to flushQueue, exceed " + sinkOptions.getSinkOfferTimeout() + " ms, see " +
-                    StarRocksSinkOptions.SINK_BATCH_OFFER_TIMEOUT.key());
-        }
-    }
-
-    public void asyncFlush() throws Exception {
+    /**
+     * Return false if met eof and flush thread will exit.
+     */
+    public boolean asyncFlush() throws Exception {
         Tuple3<String, Long, ArrayList<byte[]>> flushData = flushQueue.poll(3L, TimeUnit.SECONDS);
         if (flushData == null || Strings.isNullOrEmpty(flushData.f0)) {
-            return;
+            return true;
+        }
+        if (EOF.equals(flushData.f0)) {
+            return false;
         }
         stopScheduler();
         LOG.info(String.format("Async stream load: rows[%d] bytes[%d] label[%s].", flushData.f2.size(), flushData.f1, flushData.f0));
@@ -295,6 +295,35 @@ public class StarRocksSinkManager implements Serializable {
                     throw new IOException("Unable to flush, interrupted while doing another attempt", e);
                 }
             }
+        }
+        return true;
+    }
+
+    private void waitAsyncFlushingDone() throws InterruptedException {
+        // wait for previous flushings
+        offer(new Tuple3<>("", 0L, null));
+        offer(new Tuple3<>("", 0L, null));
+        checkFlushException();
+    }
+
+    private void offer(Tuple3<String, Long, ArrayList<byte[]>> tuple3) throws InterruptedException{
+        if (!flushThreadAlive) {
+            LOG.info(String.format("Flush thread already exit, ignore offer request for label[%s]", tuple3.f0));
+            return;
+        }
+
+        if (!flushQueue.offer(tuple3, sinkOptions.getSinkOfferTimeout(), TimeUnit.MILLISECONDS)) {
+            throw new RuntimeException(
+                "Timeout while offering data to flushQueue, exceed " + sinkOptions.getSinkOfferTimeout() + " ms, see " +
+                    StarRocksSinkOptions.SINK_BATCH_OFFER_TIMEOUT.key());
+        }
+    }
+
+    private void offerEOF() {
+        try {
+            offer(new Tuple3<>(EOF, 0L, null));
+        } catch (Exception e) {
+            LOG.warn("Writing EOF failed.", e);
         }
     }
 
