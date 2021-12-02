@@ -308,7 +308,7 @@ public class StarRocksSinkManager implements Serializable {
         checkFlushException();
     }
 
-    private void offer(Tuple3<String, Long, ArrayList<byte[]>> tuple3) throws InterruptedException{
+    void offer(Tuple3<String, Long, ArrayList<byte[]>> tuple3) throws InterruptedException{
         if (!flushThreadAlive) {
             LOG.info(String.format("Flush thread already exit, ignore offer request for label[%s]", tuple3.f0));
             return;

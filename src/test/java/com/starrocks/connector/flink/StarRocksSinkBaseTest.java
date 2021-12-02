@@ -61,7 +61,6 @@ public abstract class StarRocksSinkBaseTest {
     protected final String SINK_MAX_BYTES = "74002019";
     protected final String SINK_MAX_ROWS = "1002000";
     protected final String SINK_MAX_RETRIES = "2";
-    protected final String SINK_OFFER_TIMEOUT = "3000";
     protected final Map<String, String> SINK_PROPS = new HashMap<String, String>(){{
         put("filter-ratio", "0");
     }};
@@ -88,8 +87,7 @@ public abstract class StarRocksSinkBaseTest {
             .withProperty("sink.buffer-flush.max-bytes", SINK_MAX_BYTES)
             .withProperty("sink.buffer-flush.max-rows", SINK_MAX_ROWS)
             .withProperty("sink.max-retries", SINK_MAX_RETRIES)
-            .withProperty("sink.connect.timeout-ms", "2000")
-            .withProperty("sink.buffer-offer.timeout-ms", SINK_OFFER_TIMEOUT);
+            .withProperty("sink.connect.timeout-ms", "2000");
         SINK_PROPS.keySet().stream().forEach(k -> builder.withProperty("sink.properties." + k, SINK_PROPS.get(k)));
         OPTIONS = builder.build();
         OPTIONS_BUILDER = builder;

@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.flink.manager;
 
+import com.starrocks.connector.flink.table.StarRocksSinkOptions;
 import java.util.ArrayList;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.calcite.shaded.com.google.common.base.Strings;
@@ -250,9 +251,10 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
         mockTableStructure();
         mockSuccessResponse();
         String exMsg = "";
+        long offerTimeoutMs = 500L;
 
         // flush cost more than offer timeout
-        StarRocksSinkManager mgr = mockStarRocksSinkManager(OPTIONS.getSinkOfferTimeout() + 100L);
+        StarRocksSinkManager mgr = mockStarRocksSinkManager(offerTimeoutMs, offerTimeoutMs + 100L);
         try {
             mgr.startAsyncFlushing();
             mgr.writeRecord("");
@@ -268,7 +270,7 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
 
         exMsg = "";
         // flush cost less than offer timeout
-        mgr = mockStarRocksSinkManager(OPTIONS.getSinkOfferTimeout() - 100L);
+        mgr = mockStarRocksSinkManager(offerTimeoutMs, offerTimeoutMs - 100L);
         try {
             mgr.startAsyncFlushing();
             mgr.writeRecord("");
@@ -285,8 +287,9 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
         assertFalse(mgr.flushThreadAlive);
     }
 
-    private StarRocksSinkManager mockStarRocksSinkManager(final long mockFlushCostMs) {
+    private StarRocksSinkManager mockStarRocksSinkManager(final long offerTimeoutMs, final long mockFlushCostMs) {
         return new StarRocksSinkManager(OPTIONS, TABLE_SCHEMA) {
+
             @Override
             public boolean asyncFlush() throws Exception {
                 Tuple3<String, Long, ArrayList<byte[]>> flushData = flushQueue.poll(10L, TimeUnit.MILLISECONDS);
@@ -298,6 +301,19 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
                 }
                 TimeUnit.MILLISECONDS.sleep(mockFlushCostMs);
                 return true;
+            }
+
+            @Override
+            void offer(Tuple3<String, Long, ArrayList<byte[]>> tuple3) throws InterruptedException {
+                if (!flushThreadAlive) {
+                    return;
+                }
+
+                if (!flushQueue.offer(tuple3, offerTimeoutMs, TimeUnit.MILLISECONDS)) {
+                    throw new RuntimeException(
+                        "Timeout while offering data to flushQueue, exceed " + offerTimeoutMs + " ms, see " +
+                            StarRocksSinkOptions.SINK_BATCH_OFFER_TIMEOUT.key());
+                }
             }
         };
     }
