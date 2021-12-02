@@ -12,9 +12,12 @@
  * limitations under the License.
  */
 
-package com.starrocks.connector.flink.table;
+package com.starrocks.connector.flink.manager;
 
-import org.apache.flink.runtime.util.ExecutorThreadFactory;
+import com.starrocks.connector.flink.table.StarRocksSinkOptions;
+import java.util.ArrayList;
+import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.calcite.shaded.com.google.common.base.Strings;
 import org.apache.flink.calcite.shaded.com.google.common.collect.Lists;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.TableSchema.Builder;
@@ -22,16 +25,15 @@ import org.apache.flink.table.api.TableSchema.Builder;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import com.starrocks.connector.flink.StarRocksSinkBaseTest;
-import com.starrocks.connector.flink.manager.StarRocksSinkManager;
 
 import mockit.Expectations;
 
@@ -220,5 +222,99 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
             exMsg = e.getMessage();
         }
         assertTrue(0 < exMsg.length());
+    }
+
+    @Test
+    public void testClose() throws InterruptedException {
+        mockTableStructure();
+        mockSuccessResponse();
+        String exMsg = "";
+
+        // test close
+        StarRocksSinkManager mgr = new StarRocksSinkManager(OPTIONS, TABLE_SCHEMA);
+        try {
+            mgr.startAsyncFlushing();
+            mgr.writeRecord("");
+            mgr.flush(mgr.createBatchLabel(), true);
+            mgr.close();
+        } catch (Exception e) {
+            exMsg = e.getMessage();
+        }
+        assertEquals(0, exMsg.length());
+        assertTrue(mgr.closed);
+        TimeUnit.MILLISECONDS.sleep(100L); // wait flush thread exit
+        assertFalse(mgr.flushThreadAlive);
+    }
+
+    @Test
+    public void testOffer() throws InterruptedException {
+        mockTableStructure();
+        mockSuccessResponse();
+        String exMsg = "";
+        long offerTimeoutMs = 500L;
+
+        // flush cost more than offer timeout
+        StarRocksSinkManager mgr = mockStarRocksSinkManager(offerTimeoutMs, offerTimeoutMs + 100L);
+        try {
+            mgr.startAsyncFlushing();
+            mgr.writeRecord("");
+            mgr.flush(mgr.createBatchLabel(), true);
+            mgr.writeRecord("");
+            mgr.flush(mgr.createBatchLabel(), true);
+        } catch (Exception e) {
+            exMsg = e.getMessage();
+            e.printStackTrace();
+        }
+        assertTrue(0 < exMsg.length());
+        assertTrue(exMsg.startsWith("Timeout while offering data to flushQueue"));
+
+        exMsg = "";
+        // flush cost less than offer timeout
+        mgr = mockStarRocksSinkManager(offerTimeoutMs, offerTimeoutMs - 100L);
+        try {
+            mgr.startAsyncFlushing();
+            mgr.writeRecord("");
+            mgr.flush(mgr.createBatchLabel(), true);
+            mgr.writeRecord("");
+            mgr.flush(mgr.createBatchLabel(), true);
+            mgr.close();
+        } catch (Exception e) {
+            exMsg = e.getMessage();
+        }
+        assertEquals(0, exMsg.length());
+        assertTrue(mgr.closed);
+        TimeUnit.MILLISECONDS.sleep(100L); // wait flush thread exit
+        assertFalse(mgr.flushThreadAlive);
+    }
+
+    private StarRocksSinkManager mockStarRocksSinkManager(final long offerTimeoutMs, final long mockFlushCostMs) {
+        return new StarRocksSinkManager(OPTIONS, TABLE_SCHEMA) {
+
+            @Override
+            public boolean asyncFlush() throws Exception {
+                Tuple3<String, Long, ArrayList<byte[]>> flushData = flushQueue.poll(10L, TimeUnit.MILLISECONDS);
+                if (flushData == null || Strings.isNullOrEmpty(flushData.f0)) {
+                    return true;
+                }
+                if (EOF.equals(flushData.f0)) {
+                    return false;
+                }
+                TimeUnit.MILLISECONDS.sleep(mockFlushCostMs);
+                return true;
+            }
+
+            @Override
+            void offer(Tuple3<String, Long, ArrayList<byte[]>> tuple3) throws InterruptedException {
+                if (!flushThreadAlive) {
+                    return;
+                }
+
+                if (!flushQueue.offer(tuple3, offerTimeoutMs, TimeUnit.MILLISECONDS)) {
+                    throw new RuntimeException(
+                        "Timeout while offering data to flushQueue, exceed " + offerTimeoutMs + " ms, see " +
+                            StarRocksSinkOptions.SINK_BATCH_OFFER_TIMEOUT.key());
+                }
+            }
+        };
     }
 }

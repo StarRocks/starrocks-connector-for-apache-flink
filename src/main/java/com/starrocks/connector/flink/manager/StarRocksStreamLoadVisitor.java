@@ -108,7 +108,7 @@ public class StarRocksStreamLoadVisitor implements Serializable {
         try {  
             URL url = new URL(host);
             HttpURLConnection co =  (HttpURLConnection) url.openConnection();
-            co.setConnectTimeout(sinkOptions.getConnectTimout());
+            co.setConnectTimeout(sinkOptions.getConnectTimeout());
             co.connect();
             co.disconnect();
             return true;

@@ -14,8 +14,6 @@
 
 package com.starrocks.connector.flink;
 
-import static org.junit.Assert.assertEquals;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -41,7 +39,6 @@ import org.apache.flink.table.api.TableSchema.Builder;
 
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Test;
 
 import mockit.Mocked;
 import mockit.Expectations;

@@ -69,7 +69,9 @@ public class StarRocksSinkOptions implements Serializable {
         .longType().defaultValue(300000L).withDescription("Flush interval of the row batch in millisecond.");
     public static final ConfigOption<Integer> SINK_MAX_RETRIES = ConfigOptions.key("sink.max-retries")
         .intType().defaultValue(1).withDescription("Max flushing retry times of the row batch.");
-    
+    public static final ConfigOption<Long> SINK_BATCH_OFFER_TIMEOUT = ConfigOptions.key("sink.buffer-offer.timeout-ms")
+        .longType().defaultValue(600000L).withDescription("Offer to flushQueue timeout in millisecond.");
+
     // Sink semantic
     private static final Set<String> SINK_SEMANTIC_ENUMS = Arrays.stream(StarRocksSinkSemantic.values()).map(s -> s.getName()).collect(Collectors.toSet());
     // wild stream load properties' prefix
@@ -135,7 +137,7 @@ public class StarRocksSinkOptions implements Serializable {
         return tableOptions.get(SINK_BATCH_MAX_SIZE).longValue();
     }
 
-    public int getConnectTimout() {
+    public int getConnectTimeout() {
         int connectTimeout = tableOptions.get(SINK_CONNECT_TIMEOUT).intValue();
         if (connectTimeout < 100) {
             return 100;
@@ -144,6 +146,10 @@ public class StarRocksSinkOptions implements Serializable {
             return 60000;
         }
         return connectTimeout;
+    }
+
+    public long getSinkOfferTimeout() {
+        return tableOptions.get(SINK_BATCH_OFFER_TIMEOUT).longValue();
     }
 
     public static Builder builder() {
@@ -230,6 +236,13 @@ public class StarRocksSinkOptions implements Serializable {
                 throw new ValidationException(
                     String.format("Unsupported value '%d' for '%s'. Supported value range: [%d, %d].",
                         val, SINK_BATCH_MAX_SIZE.key(), 64 * MEGA_BYTES_SCALE, 10 * GIGA_BYTES_SCALE));
+            }
+        });
+        tableOptions.getOptional(SINK_BATCH_OFFER_TIMEOUT).ifPresent(val -> {
+            if (val.longValue() < 300000 || val.longValue() > Long.MAX_VALUE) {
+                throw new ValidationException(
+                    String.format("Unsupported value '%d' for '%s'. Supported value range: [300000, Long.MAX_VALUE].",
+                        val, SINK_BATCH_OFFER_TIMEOUT.key()));
             }
         });
     }
