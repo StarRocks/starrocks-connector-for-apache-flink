@@ -63,7 +63,7 @@ public class StarRocksStreamLoadVisitor implements Serializable {
         this.sinkOptions = sinkOptions;
     }
 
-    public void doStreamLoad(Tuple3<String, Long, ArrayList<byte[]>> labeledRows) throws IOException {
+    public Map<String, Object> doStreamLoad(Tuple3<String, Long, ArrayList<byte[]>> labeledRows) throws IOException {
         String host = getAvailableHost();
         if (null == host) {
             throw new IOException("None of the hosts in `load_url` could be connected.");
@@ -88,6 +88,7 @@ public class StarRocksStreamLoadVisitor implements Serializable {
             LOG.error(String.format("Stream Load response: \n%s\n", JSON.toJSONString(loadResult)));
             throw new StarRocksStreamLoadFailedException(String.format("Failed to flush data to StarRocks, Error response: \n%s\n", JSON.toJSONString(loadResult)), loadResult);
         }
+        return loadResult;
     }
 
     private String getAvailableHost() {

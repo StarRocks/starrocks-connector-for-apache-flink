@@ -71,6 +71,8 @@ public class StarRocksSinkOptions implements Serializable {
         .intType().defaultValue(1).withDescription("Max flushing retry times of the row batch.");
     public static final ConfigOption<Long> SINK_BATCH_OFFER_TIMEOUT = ConfigOptions.key("sink.buffer-offer.timeout-ms")
         .longType().defaultValue(600000L).withDescription("Offer to flushQueue timeout in millisecond.");
+    public static final ConfigOption<Integer> SINK_METRIC_HISTOGRAM_WINDOW_SIZE = ConfigOptions.key("sink.metric.histogram-window-size")
+        .intType().defaultValue(100).withDescription("Window size of histogram metrics.");
 
     // Sink semantic
     private static final Set<String> SINK_SEMANTIC_ENUMS = Arrays.stream(StarRocksSinkSemantic.values()).map(s -> s.getName()).collect(Collectors.toSet());
@@ -150,6 +152,10 @@ public class StarRocksSinkOptions implements Serializable {
 
     public long getSinkOfferTimeout() {
         return tableOptions.get(SINK_BATCH_OFFER_TIMEOUT).longValue();
+    }
+
+    public int getSinkHistogramWindowSize() {
+        return tableOptions.get(SINK_METRIC_HISTOGRAM_WINDOW_SIZE);
     }
 
     public static Builder builder() {
