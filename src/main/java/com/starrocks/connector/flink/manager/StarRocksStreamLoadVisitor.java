@@ -26,6 +26,7 @@ import com.starrocks.connector.flink.row.StarRocksDelimiterParser;
 import com.starrocks.connector.flink.row.StarRocksSinkOP;
 import com.starrocks.connector.flink.table.StarRocksSinkOptions;
 
+import java.util.HashMap;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.http.HttpEntity;
@@ -89,18 +90,17 @@ public class StarRocksStreamLoadVisitor implements Serializable {
         }
         if (loadResult.get(keyStatus).equals("Fail")) {
             LOG.error(String.format("Stream Load response: \n%s\n", JSON.toJSONString(loadResult)));
-            String errorLog = "";
+            Map<String, String> logMap = new HashMap<>();
             if (loadResult.containsKey("ErrorURL")) {
-                errorLog = loadErrorLog((String) loadResult.get("ErrorURL"));
-                LOG.error("Stream Load error log: {}", errorLog);
+                logMap.put("streamLoadErrorLog", getErrorLog((String) loadResult.get("ErrorURL")));
             }
             throw new StarRocksStreamLoadFailedException(String.format("Failed to flush data to StarRocks, Error " +
-                "response: \n%s\n%s\n", JSON.toJSONString(loadResult), errorLog), loadResult);
+                "response: \n%s\n%s\n", JSON.toJSONString(loadResult), JSON.toJSONString(logMap)), loadResult);
         }
         return loadResult;
     }
 
-    public String loadErrorLog(String errorUrl) {
+    public String getErrorLog(String errorUrl) {
         if (errorUrl == null || errorUrl.isEmpty() || !errorUrl.startsWith("http")) {
             return null;
         }
@@ -118,8 +118,8 @@ public class StarRocksStreamLoadVisitor implements Serializable {
                 return errorLog;
             }
         } catch (Exception e) {
-            LOG.warn("Load error log failed.", e);
-            return null;
+            LOG.warn("Failed to get error log.", e);
+            return "Failed to get error log: " + e.getMessage();
         }
     }
 
