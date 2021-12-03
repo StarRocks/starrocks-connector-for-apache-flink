@@ -328,7 +328,9 @@ public class StarRocksSinkManager implements Serializable {
                 startScheduler();
                 break;
             } catch (Exception e) {
-                totalFlushErrorCount.inc();
+                if (totalFlushErrorCount != null) {
+                    totalFlushErrorCount.inc();
+                }
                 LOG.warn("Failed to flush batch data to StarRocks, retry times = {}", i, e);
                 if (i >= sinkOptions.getSinkMaxRetries()) {
                     throw new IOException(e);
@@ -363,7 +365,9 @@ public class StarRocksSinkManager implements Serializable {
                 "Timeout while offering data to flushQueue, exceed " + sinkOptions.getSinkOfferTimeout() + " ms, see " +
                     StarRocksSinkOptions.SINK_BATCH_OFFER_TIMEOUT.key());
         }
-        offerTimeMs.update(System.currentTimeMillis() - start);
+        if (offerTimeMs != null) {
+            offerTimeMs.update(System.currentTimeMillis() - start);
+        }
     }
 
     private void offerEOF() {
