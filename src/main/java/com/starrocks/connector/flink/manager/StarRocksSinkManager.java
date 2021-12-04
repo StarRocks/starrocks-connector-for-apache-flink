@@ -333,7 +333,7 @@ public class StarRocksSinkManager implements Serializable {
                 }
                 LOG.warn("Failed to flush batch data to StarRocks, retry times = {}", i, e);
                 if (i >= sinkOptions.getSinkMaxRetries()) {
-                    throw new IOException(e);
+                    throw e;
                 }
                 try {
                     Thread.sleep(1000l * (i + 1));

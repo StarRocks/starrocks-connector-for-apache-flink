@@ -26,11 +26,13 @@ import com.starrocks.connector.flink.row.StarRocksDelimiterParser;
 import com.starrocks.connector.flink.row.StarRocksSinkOP;
 import com.starrocks.connector.flink.table.StarRocksSinkOptions;
 
+import java.util.HashMap;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
@@ -47,12 +49,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
- 
+
 public class StarRocksStreamLoadVisitor implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
     private static final Logger LOG = LoggerFactory.getLogger(StarRocksStreamLoadVisitor.class);
+
+    private static final int ERROR_LOG_MAX_LENGTH = 3000;
 
     private final StarRocksSinkOptions sinkOptions;
     private final String[] fieldNames;
@@ -86,9 +90,37 @@ public class StarRocksStreamLoadVisitor implements Serializable {
         }
         if (loadResult.get(keyStatus).equals("Fail")) {
             LOG.error(String.format("Stream Load response: \n%s\n", JSON.toJSONString(loadResult)));
-            throw new StarRocksStreamLoadFailedException(String.format("Failed to flush data to StarRocks, Error response: \n%s\n", JSON.toJSONString(loadResult)), loadResult);
+            Map<String, String> logMap = new HashMap<>();
+            if (loadResult.containsKey("ErrorURL")) {
+                logMap.put("streamLoadErrorLog", getErrorLog((String) loadResult.get("ErrorURL")));
+            }
+            throw new StarRocksStreamLoadFailedException(String.format("Failed to flush data to StarRocks, Error " +
+                "response: \n%s\n%s\n", JSON.toJSONString(loadResult), JSON.toJSONString(logMap)), loadResult);
         }
         return loadResult;
+    }
+
+    public String getErrorLog(String errorUrl) {
+        if (errorUrl == null || errorUrl.isEmpty() || !errorUrl.startsWith("http")) {
+            return null;
+        }
+        try (CloseableHttpClient httpclient = HttpClients.createDefault()) {
+            HttpGet httpGet = new HttpGet(errorUrl);
+            try (CloseableHttpResponse resp = httpclient.execute(httpGet)) {
+                HttpEntity respEntity = getHttpEntity(resp);
+                if (respEntity == null) {
+                    return null;
+                }
+                String errorLog = EntityUtils.toString(respEntity);
+                if (errorLog != null && errorLog.length() > ERROR_LOG_MAX_LENGTH) {
+                    errorLog = errorLog.substring(0, ERROR_LOG_MAX_LENGTH);
+                }
+                return errorLog;
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to get error log.", e);
+            return "Failed to get error log: " + e.getMessage();
+        }
     }
 
     private String getAvailableHost() {
@@ -106,7 +138,7 @@ public class StarRocksStreamLoadVisitor implements Serializable {
     }
 
     private boolean tryHttpConnection(String host) {
-        try {  
+        try {
             URL url = new URL(host);
             HttpURLConnection co =  (HttpURLConnection) url.openConnection();
             co.setConnectTimeout(sinkOptions.getConnectTimeout());
@@ -129,7 +161,7 @@ public class StarRocksStreamLoadVisitor implements Serializable {
             }
             return bos.array();
         }
-       
+
         if (StarRocksSinkOptions.StreamLoadFormat.JSON.equals(sinkOptions.getStreamLoadFormat())) {
             ByteBuffer bos = ByteBuffer.allocate(totalBytes + (rows.isEmpty() ? 2 : rows.size() + 1));
             bos.put("[".getBytes(StandardCharsets.UTF_8));
@@ -178,25 +210,31 @@ public class StarRocksStreamLoadVisitor implements Serializable {
             httpPut.setEntity(new ByteArrayEntity(data));
             httpPut.setConfig(RequestConfig.custom().setRedirectsEnabled(true).build());
             try (CloseableHttpResponse resp = httpclient.execute(httpPut)) {
-                int code = resp.getStatusLine().getStatusCode();
-                if (200 != code) {
-                    LOG.warn("Request failed with code:{}", code);
+                HttpEntity respEntity = getHttpEntity(resp);
+                if (respEntity == null)
                     return null;
-                }
-                HttpEntity respEntity = resp.getEntity();
-                if (null == respEntity) {
-                    LOG.warn("Request failed with empty response.");
-                    return null;
-                }
                 return (Map<String, Object>)JSON.parse(EntityUtils.toString(respEntity));
             }
         }
     }
-    
+
     private String getBasicAuthHeader(String username, String password) {
         String auth = username + ":" + password;
         byte[] encodedAuth = Base64.encodeBase64(auth.getBytes(StandardCharsets.UTF_8));
         return new StringBuilder("Basic ").append(new String(encodedAuth)).toString();
     }
 
+    private HttpEntity getHttpEntity(CloseableHttpResponse resp) {
+        int code = resp.getStatusLine().getStatusCode();
+        if (200 != code) {
+            LOG.warn("Request failed with code:{}", code);
+            return null;
+        }
+        HttpEntity respEntity = resp.getEntity();
+        if (null == respEntity) {
+            LOG.warn("Request failed with empty response.");
+            return null;
+        }
+        return respEntity;
+    }
 }
