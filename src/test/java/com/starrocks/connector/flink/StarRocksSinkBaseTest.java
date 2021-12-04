@@ -50,8 +50,8 @@ public abstract class StarRocksSinkBaseTest {
 
     protected final int AVAILABLE_QUERY_PORT = 53328;
     protected final String JDBC_URL = "jdbc:mysql://127.0.0.1:53316,127.0.0.1:" + AVAILABLE_QUERY_PORT;
-    protected final int AVAILABLE_HTTP_PORT = 29591;
-    protected final String LOAD_URL = "127.0.0.1:28591;127.0.0.1:" + AVAILABLE_HTTP_PORT;
+    protected int AVAILABLE_HTTP_PORT = 29591;
+    protected String LOAD_URL;
     protected final String DATABASE = "test";
     protected final String TABLE = "test_tbl";
     protected final String USERNAME = "root";
@@ -72,26 +72,6 @@ public abstract class StarRocksSinkBaseTest {
     protected Map<String, String> STARROCKS_TABLE_META;
     protected String mockResonse = "";
     private ServerSocket serverSocket;
-
-    @Before
-    public void initializeOptions() {
-        StarRocksSinkOptions.Builder builder = StarRocksSinkOptions.builder()
-            .withProperty("jdbc-url", JDBC_URL)
-            .withProperty("load-url", LOAD_URL)
-            .withProperty("database-name", DATABASE)
-            .withProperty("table-name", TABLE)
-            .withProperty("username", USERNAME)
-            .withProperty("password", PASSWORD)
-            .withProperty("sink.semantic", SINK_SEMANTIC.getName())
-            .withProperty("sink.buffer-flush.interval-ms", SINK_MAX_INTERVAL)
-            .withProperty("sink.buffer-flush.max-bytes", SINK_MAX_BYTES)
-            .withProperty("sink.buffer-flush.max-rows", SINK_MAX_ROWS)
-            .withProperty("sink.max-retries", SINK_MAX_RETRIES)
-            .withProperty("sink.connect.timeout-ms", "2000");
-        SINK_PROPS.keySet().stream().forEach(k -> builder.withProperty("sink.properties." + k, SINK_PROPS.get(k)));
-        OPTIONS = builder.build();
-        OPTIONS_BUILDER = builder;
-    }
 
     @Before
     public void initializeTableSchema() {
@@ -121,31 +101,32 @@ public abstract class StarRocksSinkBaseTest {
 
     @Before
     public void createHttpServer() throws IOException {
-        serverSocket = new ServerSocket(AVAILABLE_HTTP_PORT);
+        tryBindingServerSocket();
         new Thread(new Runnable(){
             @Override
             public void run() {
                 try {
                     while (true) {
-                        Socket socket = serverSocket.accept();
-                        InputStream in = socket.getInputStream();
-                        byte[] b = new byte[in.available()];
-                        int len = in.read(b);
-                        new String(b, 0, len);
-                        Thread.sleep(100);
-                        String res = "HTTP/1.1 200 OK\r\n" +
-                                    "\r\n" +
-                                    mockResonse;
-                        OutputStream out = socket.getOutputStream();
-                        if (0 == len) {
-                            out.write("".getBytes());
-                        } else {
-                            out.write(res.getBytes());
+                        try (Socket socket = serverSocket.accept()) {
+                            InputStream in = socket.getInputStream();
+                            byte[] b = new byte[in.available()];
+                            int len = in.read(b);
+                            new String(b, 0, len);
+                            Thread.sleep(100);
+                            String res = "HTTP/1.1 200 OK\r\n" +
+                                        "\r\n" +
+                                        mockResonse;
+                            OutputStream out = socket.getOutputStream();
+                            if (0 == len) {
+                                out.write("".getBytes());
+                            } else {
+                                out.write(res.getBytes());
+                            }
+                            out.flush();
+                            out.close();
+                            in.close();
+                            socket.close();
                         }
-                        out.flush();
-                        out.close();
-                        in.close();
-                        socket.close();
                     }
                 } catch (Exception e) {}
 
@@ -159,6 +140,37 @@ public abstract class StarRocksSinkBaseTest {
             serverSocket.close();
         }
         serverSocket = null;
+    }
+
+    private void tryBindingServerSocket() {
+        int maxTryingPorts = 100;
+        for (int i = 0; i < maxTryingPorts; i++) {
+            try {
+                int port = AVAILABLE_HTTP_PORT + i;
+                serverSocket = new ServerSocket(port);
+                LOAD_URL = "127.0.0.1:1;127.0.0.1:" + port;
+                initializeOptions();
+            } catch (IOException e) {}
+        }
+    }
+
+    private void initializeOptions() {
+        StarRocksSinkOptions.Builder builder = StarRocksSinkOptions.builder()
+            .withProperty("jdbc-url", JDBC_URL)
+            .withProperty("load-url", LOAD_URL)
+            .withProperty("database-name", DATABASE)
+            .withProperty("table-name", TABLE)
+            .withProperty("username", USERNAME)
+            .withProperty("password", PASSWORD)
+            .withProperty("sink.semantic", SINK_SEMANTIC.getName())
+            .withProperty("sink.buffer-flush.interval-ms", SINK_MAX_INTERVAL)
+            .withProperty("sink.buffer-flush.max-bytes", SINK_MAX_BYTES)
+            .withProperty("sink.buffer-flush.max-rows", SINK_MAX_ROWS)
+            .withProperty("sink.max-retries", SINK_MAX_RETRIES)
+            .withProperty("sink.connect.timeout-ms", "2000");
+        SINK_PROPS.keySet().stream().forEach(k -> builder.withProperty("sink.properties." + k, SINK_PROPS.get(k)));
+        OPTIONS = builder.build();
+        OPTIONS_BUILDER = builder;
     }
 
     protected void mockTableStructure() {
@@ -228,4 +240,5 @@ public abstract class StarRocksSinkBaseTest {
         }
         throw new RuntimeException("Failed to join rows data, unsupported `format` from stream load properties:");
     }
+    
 }
