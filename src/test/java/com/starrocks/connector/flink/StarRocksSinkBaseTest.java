@@ -240,4 +240,5 @@ public abstract class StarRocksSinkBaseTest {
         }
         throw new RuntimeException("Failed to join rows data, unsupported `format` from stream load properties:");
     }
+    
 }
