@@ -47,7 +47,7 @@ public class StarRocksDynamicTableSink implements DynamicTableSink {
             flinkSchema,
             new StarRocksTableRowTransformer(rowDataTypeInfo)
         );
-        return SinkFunctionProvider.of(starrocksSinkFunction);
+        return SinkFunctionProvider.of(starrocksSinkFunction, sinkOptions.getSinkParallelism());
     }
  
     @Override
