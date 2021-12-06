@@ -20,7 +20,6 @@ import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.table.api.ValidationException;
-import org.apache.flink.table.factories.FactoryUtil;
 
 import java.io.Serializable;
 import java.util.Arrays;
@@ -74,8 +73,6 @@ public class StarRocksSinkOptions implements Serializable {
         .longType().defaultValue(600000L).withDescription("Offer to flushQueue timeout in millisecond.");
     public static final ConfigOption<Integer> SINK_METRIC_HISTOGRAM_WINDOW_SIZE = ConfigOptions.key("sink.metric.histogram-window-size")
         .intType().defaultValue(100).withDescription("Window size of histogram metrics.");
-
-    public static final ConfigOption<Integer> SINK_PARALLELISM = FactoryUtil.SINK_PARALLELISM;
 
     // Sink semantic
     private static final Set<String> SINK_SEMANTIC_ENUMS = Arrays.stream(StarRocksSinkSemantic.values()).map(s -> s.getName()).collect(Collectors.toSet());
@@ -159,10 +156,6 @@ public class StarRocksSinkOptions implements Serializable {
 
     public int getSinkHistogramWindowSize() {
         return tableOptions.get(SINK_METRIC_HISTOGRAM_WINDOW_SIZE);
-    }
-
-    public Integer getSinkParallelism() {
-        return tableOptions.getOptional(SINK_PARALLELISM).orElse(null);
     }
 
     public static Builder builder() {

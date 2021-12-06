@@ -39,7 +39,6 @@ fromElements(new String[]{
             .withProperty("database-name", "xxx")
             .withProperty("sink.properties.format", "json")
             .withProperty("sink.properties.strip_outer_array", "true")
-            .withProperty("sink.parallelism", "1")
             .build()
     )
 );
@@ -75,7 +74,6 @@ fromElements(
             .withProperty("database-name", "xxx")
             .withProperty("sink.properties.format", "json")
             .withProperty("sink.properties.strip_outer_array", "true")
-            .withProperty("sink.parallelism", "1")
             .build(),
         // set the slots with streamRowData
         (slots, streamRowData) -> {
@@ -109,7 +107,6 @@ tEnv.executeSql(
         "'sink.buffer-flush.interval-ms' = '300000'," +
         "'sink.properties.column_separator' = '\\x01'," +
         "'sink.properties.row_delimiter' = '\\x02'," +
-        "'sink.parallelism' = '1'," +
         "'sink.max-retries' = '3'," +
         "'sink.properties.*' = 'xxx'" + // stream load properties like `'sink.properties.columns' = 'k1, v1'`
     ")"
@@ -132,7 +129,6 @@ tEnv.executeSql(
 | sink.buffer-flush.max-rows | NO | 500000 | String | the max batching rows, range: `[64,000, 5000,000]`. |
 | sink.buffer-flush.interval-ms | NO | 300000 | String | the flushing time interval, range: `[1000ms, 3600000ms]`. |
 | sink.max-retries | NO | 1 | String | max retry times of the stream load request, range: `[0, 10]`. |
-| sink.parallelism | NO | NULL | String | Specify the parallelism of the sink individually. Remove it if you want to follow the global parallelism settings. |
 | sink.connect.timeout-ms | NO | 1000 | String | Timeout in millisecond for connecting to the `load-url`, range: `[100, 60000]`. |
 | sink.properties.* | NO | NONE | String | the stream load properties like `'sink.properties.columns' = 'k1, v1'`. |
 

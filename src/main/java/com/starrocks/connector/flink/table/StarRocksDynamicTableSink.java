@@ -37,17 +37,17 @@ public class StarRocksDynamicTableSink implements DynamicTableSink {
     public ChangelogMode getChangelogMode(ChangelogMode requestedMode) {
         return requestedMode;
     }
-
+    
     @Override
     @SuppressWarnings("unchecked")
     public SinkRuntimeProvider getSinkRuntimeProvider(Context context) {
-        final TypeInformation<RowData> rowDataTypeInfo = context.createTypeInformation(flinkSchema.toRowDataType());
+        final TypeInformation<RowData> rowDataTypeInfo = (TypeInformation<RowData>)context.createTypeInformation(flinkSchema.toRowDataType());
         StarRocksDynamicSinkFunction<RowData> starrocksSinkFunction = new StarRocksDynamicSinkFunction<>(
             sinkOptions,
             flinkSchema,
             new StarRocksTableRowTransformer(rowDataTypeInfo)
         );
-        return SinkFunctionProvider.of(starrocksSinkFunction, sinkOptions.getSinkParallelism());
+        return SinkFunctionProvider.of(starrocksSinkFunction);
     }
  
     @Override

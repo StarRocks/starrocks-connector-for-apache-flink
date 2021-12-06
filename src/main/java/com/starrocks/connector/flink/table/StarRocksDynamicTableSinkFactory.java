@@ -63,7 +63,6 @@ public class StarRocksDynamicTableSinkFactory implements DynamicTableSinkFactory
         optionalOptions.add(StarRocksSinkOptions.SINK_MAX_RETRIES);
         optionalOptions.add(StarRocksSinkOptions.SINK_SEMANTIC);
         optionalOptions.add(StarRocksSinkOptions.SINK_BATCH_OFFER_TIMEOUT);
-        optionalOptions.add(StarRocksSinkOptions.SINK_PARALLELISM);
         return optionalOptions;
     }
 }
