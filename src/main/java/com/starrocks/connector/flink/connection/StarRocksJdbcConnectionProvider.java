@@ -62,14 +62,22 @@ public class StarRocksJdbcConnectionProvider implements StarRocksJdbcConnectionI
 
     @Override
     public Connection reestablishConnection() throws SQLException, ClassNotFoundException {
+        close();
+        connection = getConnection();
+        return connection;
+    }
+
+    @Override
+    public void close() {
+        if (connection == null) {
+            return;
+        }
         try {
             connection.close();
         } catch (SQLException e) {
-            LOG.info("JDBC connection close failed.", e);
+            LOG.error("JDBC connection close failed.", e);
         } finally {
             connection = null;
         }
-        connection = getConnection();
-        return connection;
     }
 }

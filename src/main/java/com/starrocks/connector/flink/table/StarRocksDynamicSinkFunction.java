@@ -166,11 +166,11 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
 
     @Override
     public synchronized void close() throws Exception {
+        super.close();
         if (StarRocksSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
             flushPreviousState();
         }
         sinkManager.close();
-        super.close();
     }
 
     private void flushPreviousState() throws Exception {

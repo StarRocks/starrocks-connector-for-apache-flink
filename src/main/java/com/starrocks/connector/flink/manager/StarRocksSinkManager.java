@@ -253,10 +253,14 @@ public class StarRocksSinkManager implements Serializable {
         if (!closed) {
             closed = true;
 
-            if (this.scheduledFuture != null) {
+            if (scheduledFuture != null) {
                 scheduledFuture.cancel(false);
-                this.scheduler.shutdown();
+                scheduler.shutdown();
             }
+            if (jdbcConnProvider != null) {
+                jdbcConnProvider.close();
+            }
+
             if (flushException != null) {
                 offerEOF();
                 checkFlushException();
