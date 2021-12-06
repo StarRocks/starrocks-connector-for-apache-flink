@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-### Intgerate with your existing project
+### Intgerate into your existing project
 
 ```xml
 <dependency>
@@ -17,7 +17,7 @@
 </dependency>
 ```
 
-Click [here](https://search.maven.org/search?q=g:com.starrocks) to get the latest version.
+Click [HERE](https://search.maven.org/search?q=g:com.starrocks) to get the latest version.
 
 ### Start using like
 
@@ -92,7 +92,6 @@ fromElements(
 ```java
 
 // create a table with `structure` and `properties`
-// Needed: Add `com.starrocks.connector.flink.table.StarRocksDynamicTableSinkFactory` to: `src/main/resources/META-INF/services/org.apache.flink.table.factories.Factory`
 tEnv.executeSql(
     "CREATE TABLE USER_RESULT(" +
         "name VARCHAR," +
@@ -148,4 +147,5 @@ tEnv.executeSql(
 
 ### Notes
 
-`Flush` was triggered(`at-least-once`) when: `cachedRows >= ${sink.buffer-flush.max-rows} || cachedBytes >= ${sink.buffer-flush.max-bytes} || idleTime >= ${sink.buffer-flush.interval-ms}`
+1. `Flush` action was triggered `at-least-once` when: `cachedRows >= ${sink.buffer-flush.max-rows} || cachedBytes >= ${sink.buffer-flush.max-bytes} || idleTime >= ${sink.buffer-flush.interval-ms}`
+2. `sink.buffer-flush.{max-rows|max-bytes|interval-ms}` becomes invalid when it comes with the `exactly-once` semantic.
