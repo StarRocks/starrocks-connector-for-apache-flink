@@ -40,3 +40,4 @@ jobs:
           files: |
             ${{ steps.p1.outputs.jar }}
             ${{ steps.p2.outputs.jar }}
+            ${{ steps.p3.outputs.jar }}

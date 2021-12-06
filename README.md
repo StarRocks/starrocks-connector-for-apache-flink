@@ -8,8 +8,10 @@
 <dependency>
     <groupId>com.starrocks</groupId>
     <artifactId>flink-connector-starrocks</artifactId>
-    <!-- for flink-1.11, flink-1.12 -->
+    <!-- for flink-1.11 -->
     <version>x.x.x_flink-1.11</version>
+    <!-- for flink-1.12 -->
+    <version>x.x.x_flink-1.12</version>
     <!-- for flink-1.13 -->
     <version>x.x.x_flink-1.13</version>
 </dependency>
@@ -37,6 +39,7 @@ fromElements(new String[]{
             .withProperty("database-name", "xxx")
             .withProperty("sink.properties.format", "json")
             .withProperty("sink.properties.strip_outer_array", "true")
+            .withProperty("sink.parallelism", "1")
             .build()
     )
 );
@@ -70,8 +73,9 @@ fromElements(
             .withProperty("password", "xxx")
             .withProperty("table-name", "xxx")
             .withProperty("database-name", "xxx")
-            .withProperty("sink.properties.column_separator", "\\x01")
-            .withProperty("sink.properties.row_delimiter", "\\x02")
+            .withProperty("sink.properties.format", "json")
+            .withProperty("sink.properties.strip_outer_array", "true")
+            .withProperty("sink.parallelism", "1")
             .build(),
         // set the slots with streamRowData
         (slots, streamRowData) -> {
@@ -106,7 +110,8 @@ tEnv.executeSql(
         "'sink.buffer-flush.interval-ms' = '300000'," +
         "'sink.properties.column_separator' = '\\x01'," +
         "'sink.properties.row_delimiter' = '\\x02'," +
-        "'sink.max-retries' = '3'" +
+        "'sink.parallelism' = '1'," +
+        "'sink.max-retries' = '3'," +
         "'sink.properties.*' = 'xxx'" + // stream load properties like `'sink.properties.columns' = 'k1, v1'`
     ")"
 );
@@ -128,8 +133,18 @@ tEnv.executeSql(
 | sink.buffer-flush.max-rows | NO | 500000 | String | the max batching rows, range: `[64,000, 5000,000]`. |
 | sink.buffer-flush.interval-ms | NO | 300000 | String | the flushing time interval, range: `[1000ms, 3600000ms]`. |
 | sink.max-retries | NO | 1 | String | max retry times of the stream load request, range: `[0, 10]`. |
+| sink.parallelism | NO | NULL | String | Specify the parallelism of the sink individually. Remove it if you want to follow the global parallelism settings. |
 | sink.connect.timeout-ms | NO | 1000 | String | Timeout in millisecond for connecting to the `load-url`, range: `[100, 60000]`. |
 | sink.properties.* | NO | NONE | String | the stream load properties like `'sink.properties.columns' = 'k1, v1'`. |
+
+## Metrics
+
+| Name | Type | Description |
+|  :-: | :-:  | :-:  |
+| totalFlushBytes | counter | successfully flushed bytes. |
+| totalFlushRows | counter | successfully flushed rows. |
+| totalFlushSucceededTimes | counter | number of times that the data-batch been successfully flushed. |
+| totalFlushFailedTimes | counter | number of times that the flushing been failed. |
 
 ### Notes
 
