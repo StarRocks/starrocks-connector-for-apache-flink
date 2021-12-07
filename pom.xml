@@ -17,7 +17,7 @@ limitations under the License.
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <name>flink-connector-starrocks</name>
     <description>Flink connector for starrocks.</description>
-    <url>hhttps://github.com/StarRocks/flink-connector-starrocks</url>
+    <url>https://github.com/StarRocks/flink-connector-starrocks</url>
 
     <licenses>
         <license>
@@ -26,8 +26,8 @@ limitations under the License.
         </license>
     </licenses>
     <scm>
-        <url>hhttps://github.com/StarRocks/flink-connector-starrocks</url>
-        <connection>hhttps://github.com/StarRocks/flink-connector-starrocks.git</connection>
+        <url>https://github.com/StarRocks/flink-connector-starrocks</url>
+        <connection>https://github.com/StarRocks/flink-connector-starrocks.git</connection>
     </scm>
     <developers>
         <developer>
