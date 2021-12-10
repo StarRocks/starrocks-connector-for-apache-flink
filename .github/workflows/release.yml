@@ -14,25 +14,45 @@ jobs:
         with:
           fetch-depth: 0
       - run: git checkout flink-1.13 && git pull origin flink-1.13
-      - name: Pacakge flink-1.13
+      - name: Pacakge flink-1.13_2.11
         uses: xlui/action-maven-cli@jdk8
         with:
-          lifecycle: 'clean validate package -Dmaven.test.skip=true'
+          lifecycle: 'clean validate package -Dmaven.test.skip=true -Pscala-2.11'
       - id: p1
         run: find target/ -name "flink-connector*.jar" | grep -i "[0-9].jar" | xargs -i cp {} ./ && echo ::set-output name=jar::$(ls -t flink-connector*.jar | head -n 1)
-      - run: git checkout flink-1.12 && git pull origin flink-1.12
-      - name: Pacakge flink-1.12
+      - name: Pacakge flink-1.13_2.12
         uses: xlui/action-maven-cli@jdk8
         with:
-          lifecycle: 'clean validate package -Dmaven.test.skip=true'
+          lifecycle: 'clean validate package -Dmaven.test.skip=true -Pscala-2.12'
       - id: p2
         run: find target/ -name "flink-connector*.jar" | grep -i "[0-9].jar" | xargs -i cp {} ./ && echo ::set-output name=jar::$(ls -t flink-connector*.jar | head -n 1)
-      - run: git checkout flink-1.11 && git pull origin flink-1.11
-      - name: Pacakge flink-1.11
+
+      - run: git checkout flink-1.12 && git pull origin flink-1.12
+      - name: Pacakge flink-1.12_2.11
         uses: xlui/action-maven-cli@jdk8
         with:
-          lifecycle: 'clean validate package -Dmaven.test.skip=true'
+          lifecycle: 'clean validate package -Dmaven.test.skip=true -Pscala-2.11'
       - id: p3
+        run: find target/ -name "flink-connector*.jar" | grep -i "[0-9].jar" | xargs -i cp {} ./ && echo ::set-output name=jar::$(ls -t flink-connector*.jar | head -n 1)
+      - name: Pacakge flink-1.12_2.12
+        uses: xlui/action-maven-cli@jdk8
+        with:
+          lifecycle: 'clean validate package -Dmaven.test.skip=true -Pscala-2.12'
+      - id: p4
+        run: find target/ -name "flink-connector*.jar" | grep -i "[0-9].jar" | xargs -i cp {} ./ && echo ::set-output name=jar::$(ls -t flink-connector*.jar | head -n 1)
+
+      - run: git checkout flink-1.11 && git pull origin flink-1.11
+      - name: Pacakge flink-1.11_2.11
+        uses: xlui/action-maven-cli@jdk8
+        with:
+          lifecycle: 'clean validate package -Dmaven.test.skip=true -Pscala-2.11'
+      - id: p5
+        run: find target/ -name "flink-connector*.jar" | grep -i "[0-9].jar" | xargs -i cp {} ./ && echo ::set-output name=jar::$(ls -t flink-connector*.jar | head -n 1)
+      - name: Pacakge flink-1.11_2.12
+        uses: xlui/action-maven-cli@jdk8
+        with:
+          lifecycle: 'clean validate package -Dmaven.test.skip=true -Pscala-2.12'
+      - id: p6
         run: find target/ -name "flink-connector*.jar" | grep -i "[0-9].jar" | xargs -i cp {} ./ && echo ::set-output name=jar::$(ls -t flink-connector*.jar | head -n 1)
       - name: Release
         uses: softprops/action-gh-release@v1
@@ -41,3 +61,6 @@ jobs:
             ${{ steps.p1.outputs.jar }}
             ${{ steps.p2.outputs.jar }}
             ${{ steps.p3.outputs.jar }}
+            ${{ steps.p4.outputs.jar }}
+            ${{ steps.p5.outputs.jar }}
+            ${{ steps.p6.outputs.jar }}
