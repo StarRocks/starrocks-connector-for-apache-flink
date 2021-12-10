@@ -43,7 +43,7 @@ limitations under the License.
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.starrocks</groupId>
     <artifactId>flink-connector-starrocks</artifactId>
-    <version>1.1.13_flink-1.11</version>
+    <version>1.1.13_flink-1.11_${scala.version}</version>
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
@@ -51,8 +51,24 @@ limitations under the License.
         <maven-enforcer-plugin.version>3.0.0-M3</maven-enforcer-plugin.version>
         <maven-surefire-plugin.version>3.0.0-M4</maven-surefire-plugin.version>
         <flink.version>1.11.0</flink.version>
-        <scala.version>2.11</scala.version>
     </properties>
+    <profiles>
+        <profile>
+            <id>scala-2.11</id>
+            <properties>
+                <scala.version>2.11</scala.version>
+            </properties>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+        </profile>  
+        <profile>
+            <id>scala-2.12</id>
+            <properties>
+                <scala.version>2.12</scala.version>
+            </properties>
+        </profile>  
+    </profiles> 
     <dependencies>
         <!-- Table ecosystem -->
         <dependency>
