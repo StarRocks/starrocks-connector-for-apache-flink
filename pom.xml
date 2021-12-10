@@ -17,7 +17,7 @@ limitations under the License.
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <name>flink-connector-starrocks</name>
     <description>Flink connector for starrocks.</description>
-    <url>hhttps://github.com/StarRocks/flink-connector-starrocks</url>
+    <url>https://github.com/StarRocks/flink-connector-starrocks</url>
 
     <licenses>
         <license>
@@ -26,8 +26,8 @@ limitations under the License.
         </license>
     </licenses>
     <scm>
-        <url>hhttps://github.com/StarRocks/flink-connector-starrocks</url>
-        <connection>hhttps://github.com/StarRocks/flink-connector-starrocks.git</connection>
+        <url>https://github.com/StarRocks/flink-connector-starrocks</url>
+        <connection>https://github.com/StarRocks/flink-connector-starrocks.git</connection>
     </scm>
     <developers>
         <developer>
@@ -43,7 +43,7 @@ limitations under the License.
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.starrocks</groupId>
     <artifactId>flink-connector-starrocks</artifactId>
-    <version>1.1.12_flink-1.13</version>
+    <version>1.1.13_flink-1.13_${scala.version}</version>
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
@@ -51,8 +51,24 @@ limitations under the License.
         <maven-enforcer-plugin.version>3.0.0-M3</maven-enforcer-plugin.version>
         <maven-surefire-plugin.version>3.0.0-M4</maven-surefire-plugin.version>
         <flink.version>1.13.0</flink.version>
-        <scala.version>2.11</scala.version>
     </properties>
+    <profiles>
+        <profile>
+            <id>scala-2.11</id>
+            <properties>
+                <scala.version>2.11</scala.version>
+            </properties>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+        </profile>  
+        <profile>
+            <id>scala-2.12</id>
+            <properties>
+                <scala.version>2.12</scala.version>
+            </properties>
+        </profile>  
+    </profiles> 
     <dependencies>
         <!-- Table ecosystem -->
         <dependency>
@@ -155,27 +171,6 @@ limitations under the License.
                     <!-- Set maven to use independent class loading to avoid unit test failure due to the early shutdown of the JVM -->
                     <useSystemClassLoader>false</useSystemClassLoader>
                 </configuration>
-            </plugin>
-            <plugin>
-                <groupId>net.alchim31.maven</groupId>
-                <artifactId>scala-maven-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>scala-compile-first</id>
-                        <phase>process-resources</phase>
-                        <goals>
-                            <goal>add-source</goal>
-                            <goal>compile</goal>
-                        </goals>
-                    </execution>
-                    <execution>
-                        <id>scala-test-compile</id>
-                        <phase>process-test-resources</phase>
-                        <goals>
-                            <goal>testCompile</goal>
-                        </goals>
-                    </execution>
-                </executions>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
