@@ -28,3 +28,14 @@ buildNumber.properties
 .vscode/
 
 .target
+
+#
+# thrift
+#
+thrift/
+src/main/java/com/starrocks/connector/flink/thrift/*
+
+#
+# other
+#
+src/test/java/com/starrocks/connector/flink/tmp/
