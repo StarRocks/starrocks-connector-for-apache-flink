@@ -60,7 +60,7 @@ public class StarRocksStreamLoadVisitor implements Serializable {
 
     private final StarRocksSinkOptions sinkOptions;
     private final String[] fieldNames;
-    private int pos;
+    private long pos;
 
     public StarRocksStreamLoadVisitor(StarRocksSinkOptions sinkOptions, String[] fieldNames) {
         this.fieldNames = fieldNames;
@@ -125,11 +125,9 @@ public class StarRocksStreamLoadVisitor implements Serializable {
 
     private String getAvailableHost() {
         List<String> hostList = sinkOptions.getLoadUrlList();
-        if (pos >= hostList.size()) {
-            pos = 0;
-        }
-        for (; pos < hostList.size(); pos++) {
-            String host = new StringBuilder("http://").append(hostList.get(pos)).toString();
+        long tmp = pos + hostList.size();
+        for (; pos < tmp; pos++) {
+            String host = new StringBuilder("http://").append(hostList.get((int) (pos % hostList.size()))).toString();
             if (tryHttpConnection(host)) {
                 return host;
             }
