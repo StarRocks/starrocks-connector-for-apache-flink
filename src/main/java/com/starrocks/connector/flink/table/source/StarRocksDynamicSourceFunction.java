@@ -12,18 +12,14 @@ import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.streaming.api.functions.source.RichParallelSourceFunction;
-import org.apache.flink.table.api.TableColumn;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.data.RowData;
 
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<RowData> implements ResultTypeQueryable<RowData> {
 
@@ -43,10 +39,8 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
         
         // StarRocksSourceCommonFunc.validateTableStructure(sourceOptions, flinkSchema);
         this.sourceOptions = sourceOptions;
-        Map<String, ColunmRichInfo> columnMap = genColumnMap(flinkSchema);
-        this.colunmRichInfos = columnMap.values().stream().collect(Collectors.toList()).
-                                stream().sorted(Comparator.comparing(ColunmRichInfo::getColunmIndexInSchema)).collect(Collectors.toList());
-        
+        Map<String, ColunmRichInfo> columnMap = StarRocksSourceCommonFunc.genColumnMap(flinkSchema);
+        this.colunmRichInfos = StarRocksSourceCommonFunc.genColunmRichInfo(columnMap);
         String SQL = genSQL(sourceOptions);
         if (this.sourceOptions.getColumns().trim().equals("count(*)")) {
             this.queryType = StarRocksSourceQueryType.QueryCount;
@@ -54,7 +48,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
             this.selectColumns = null;
         } else {
             this.queryInfo = getQueryInfo(SQL);
-            this.selectColumns = genSelectedColumns(columnMap).toArray(new SelectColumn[0]);
+            this.selectColumns = StarRocksSourceCommonFunc.genSelectedColumns(columnMap, sourceOptions, colunmRichInfos);
         }
         this.dataReaderList = new ArrayList<>();
     }
@@ -64,12 +58,11 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
         
         // StarRocksSourceCommonFunc.validateTableStructure(sourceOptions, flinkSchema);
         this.sourceOptions = sourceOptions;
-        Map<String, ColunmRichInfo> columnMap = genColumnMap(flinkSchema);
-        this.colunmRichInfos = columnMap.values().stream().collect(Collectors.toList()).
-                                stream().sorted(Comparator.comparing(ColunmRichInfo::getColunmIndexInSchema)).collect(Collectors.toList());
+        Map<String, ColunmRichInfo> columnMap = StarRocksSourceCommonFunc.genColumnMap(flinkSchema);
+        this.colunmRichInfos = StarRocksSourceCommonFunc.genColunmRichInfo(columnMap);
         if (queryType == null) {
             queryType = StarRocksSourceQueryType.QueryAllColumns;
-            this.selectColumns = genSelectedColumns(columnMap).toArray(new SelectColumn[0]);
+            this.selectColumns = StarRocksSourceCommonFunc.genSelectedColumns(columnMap, sourceOptions, colunmRichInfos);
         } else {
             this.selectColumns = selectColumns;
         }
@@ -113,41 +106,6 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
             // (not support) SQL = SQL + " limit " + limit;
         }
         return SQL;
-    }
-
-    private List<SelectColumn> genSelectedColumns(Map<String, ColunmRichInfo> columnMap) {
-        List<SelectColumn> selectedColumns = new ArrayList<>();
-        // user selected colums from sourceOptions
-        String selectColumnString = sourceOptions.getColumns();
-        if (selectColumnString.equals("")) {
-            // select *
-            for (int i = 0; i < colunmRichInfos.size(); i ++ ) {
-                selectedColumns.add(new SelectColumn(colunmRichInfos.get(i).getColumnName(), i));
-            }
-        } else {
-            String[] oPcolumns = selectColumnString.split(",");
-            for (int i = 0; i < oPcolumns.length; i ++) {
-                String cName = oPcolumns[i].trim();
-                if (!columnMap.containsKey(cName)) {
-                    throw new RuntimeException("Colunm not found in the table schema");
-                }
-                ColunmRichInfo colunmRichInfo = columnMap.get(cName);
-                selectedColumns.add(new SelectColumn(colunmRichInfo.getColumnName(), colunmRichInfo.getColunmIndexInSchema()));
-            }
-        }
-        return selectedColumns;
-    }
-
-    private Map<String, ColunmRichInfo> genColumnMap(TableSchema flinkSchema) {
-
-        Map<String, ColunmRichInfo> columnMap = new HashMap<>();
-        List<TableColumn> flinkColumns = flinkSchema.getTableColumns();
-        for (int i = 0; i < flinkColumns.size(); i++) {
-            TableColumn column = flinkColumns.get(i);
-            ColunmRichInfo colunmRichInfo = new ColunmRichInfo(column.getName(), i, column.getType());
-            columnMap.put(column.getName(), colunmRichInfo);
-        }
-        return columnMap;
     }
 
     private QueryInfo getQueryInfo(String SQL) {

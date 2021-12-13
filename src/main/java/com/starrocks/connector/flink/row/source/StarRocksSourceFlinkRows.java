@@ -122,7 +122,7 @@ public class StarRocksSourceFlinkRows {
         return flinksRowsCount;
     }
 
-    public void close() {
+    private void close() {
         try {
             if (arrowStreamReader != null) {
                 arrowStreamReader.close();

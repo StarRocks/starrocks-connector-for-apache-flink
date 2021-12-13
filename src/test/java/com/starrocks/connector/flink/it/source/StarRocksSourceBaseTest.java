@@ -65,8 +65,6 @@ public abstract class StarRocksSourceBaseTest {
                 .withProperty("password", PASSWORD)
                 .withProperty("table-name", DATABASE)
                 .withProperty("database-name", TABLE)
-                .withProperty("scan.columns", "count(*)")
-                .withProperty("scan.filter", "tinyint_1 = -128")
                 .build();
         OPTIONS = options;
     }

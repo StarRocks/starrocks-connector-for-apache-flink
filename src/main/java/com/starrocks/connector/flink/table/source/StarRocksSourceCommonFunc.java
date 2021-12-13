@@ -2,17 +2,20 @@ package com.starrocks.connector.flink.table.source;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
+import java.util.stream.Collectors;
 
 import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionOptions;
 import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
 import com.starrocks.connector.flink.manager.StarRocksQueryVisitor;
+import com.starrocks.connector.flink.table.source.struct.ColunmRichInfo;
 import com.starrocks.connector.flink.table.source.struct.Const;
 import com.starrocks.connector.flink.table.source.struct.QueryBeXTablets;
 import com.starrocks.connector.flink.table.source.struct.QueryInfo;
+import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 import com.starrocks.connector.flink.tools.DataUtil;
 
 import org.apache.flink.table.api.TableColumn;
@@ -137,4 +140,45 @@ public class StarRocksSourceCommonFunc {
         return starrocksQueryVisitor.getQueryCount(SQL);
     }
 
+
+    public static Map<String, ColunmRichInfo> genColumnMap(TableSchema flinkSchema) {
+
+        Map<String, ColunmRichInfo> columnMap = new HashMap<>();
+        List<TableColumn> flinkColumns = flinkSchema.getTableColumns();
+        for (int i = 0; i < flinkColumns.size(); i++) {
+            TableColumn column = flinkColumns.get(i);
+            ColunmRichInfo colunmRichInfo = new ColunmRichInfo(column.getName(), i, column.getType());
+            columnMap.put(column.getName(), colunmRichInfo);
+        }
+        return columnMap;
+    }
+
+    public static List<ColunmRichInfo> genColunmRichInfo(Map<String, ColunmRichInfo> columnMap) {
+        
+        return columnMap.values().stream().collect(Collectors.toList())
+                .stream().sorted(Comparator.comparing(ColunmRichInfo::getColunmIndexInSchema)).collect(Collectors.toList());
+    }
+
+    public static SelectColumn[] genSelectedColumns(Map<String, ColunmRichInfo> columnMap, StarRocksSourceOptions sourceOptions, List<ColunmRichInfo> colunmRichInfos) {
+        List<SelectColumn> selectedColumns = new ArrayList<>();
+        // user selected colums from sourceOptions
+        String selectColumnString = sourceOptions.getColumns();
+        if (selectColumnString.equals("")) {
+            // select *
+            for (int i = 0; i < colunmRichInfos.size(); i ++ ) {
+                selectedColumns.add(new SelectColumn(colunmRichInfos.get(i).getColumnName(), i));
+            }
+        } else {
+            String[] oPcolumns = selectColumnString.split(",");
+            for (int i = 0; i < oPcolumns.length; i ++) {
+                String cName = oPcolumns[i].trim();
+                if (!columnMap.containsKey(cName)) {
+                    throw new RuntimeException("Colunm not found in the table schema");
+                }
+                ColunmRichInfo colunmRichInfo = columnMap.get(cName);
+                selectedColumns.add(new SelectColumn(colunmRichInfo.getColumnName(), colunmRichInfo.getColunmIndexInSchema()));
+            }
+        }
+        return selectedColumns.toArray(new SelectColumn[0]);
+    }
 }
