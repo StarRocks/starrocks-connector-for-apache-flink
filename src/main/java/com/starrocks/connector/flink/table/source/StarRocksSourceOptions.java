@@ -18,7 +18,7 @@ public class StarRocksSourceOptions implements Serializable {
 
     private final ReadableConfig tableOptions;
     private final Map<String, String> tableOptionsMap;
-    private final Map<String, String> tableSQLProps = new HashMap<>();
+    private final Map<String, String> beScanProps = new HashMap<>();
 
 
     // required Options
@@ -75,6 +75,20 @@ public class StarRocksSourceOptions implements Serializable {
     public static final ConfigOption<String> SCAN_BE_HOST_MAPPING_LIST = ConfigOptions.key("scan.be-host-mapping-list")
             .stringType().defaultValue("").withDescription("List of be host mapping");
     
+    // lookup Options
+    public static final ConfigOption<Long> LOOKUP_CACHE_MAX_ROWS = ConfigOptions.key("lookup.cache.max-rows")
+            .longType().defaultValue(-1L).withDescription(
+                            "the max number of rows of lookup cache, over this value, the oldest rows will "
+                                    + "be eliminated. \"cache.max-rows\" and \"cache.ttl\" options must all be specified if any of them is "
+                                    + "specified. Cache is not enabled as default.");
+
+    public static final ConfigOption<Long> LOOKUP_CACHE_TTL_MS = ConfigOptions.key("lookup.cache.ttl-ms")
+            .longType().defaultValue(-1L).withDescription("the cache time to live.");
+
+    public static final ConfigOption<Integer> LOOKUP_MAX_RETRIES = ConfigOptions.key("lookup.max-retries")
+            .intType().defaultValue(1).withDescription("the max retry times if lookup database failed.");
+
+
     public static final String SOURCE_PROPERTIES_PREFIX = "scan.params.";
 
     public StarRocksSourceOptions(ReadableConfig options, Map<String, String> optionsMap) {
@@ -90,7 +104,7 @@ public class StarRocksSourceOptions implements Serializable {
                 .forEach(key -> {
                     final String value = tableOptionsMap.get(key);
                     final String subKey = key.substring((SOURCE_PROPERTIES_PREFIX).length()).toLowerCase();
-                    tableSQLProps.put(subKey, value);
+                    beScanProps.put(subKey, value);
                 });
     }
 
@@ -195,6 +209,18 @@ public class StarRocksSourceOptions implements Serializable {
 
     public String getBeHostMappingList() {
         return tableOptions.get(SCAN_BE_HOST_MAPPING_LIST);
+    }
+
+    public long getLookupCacheMaxRows() {
+        return tableOptions.get(LOOKUP_CACHE_MAX_ROWS).longValue();
+    }
+
+    public long getLookupCacheTTL() {
+        return tableOptions.get(LOOKUP_CACHE_TTL_MS).longValue();
+    }
+
+    public int getLookupMaxRetries() {
+        return tableOptions.get(LOOKUP_MAX_RETRIES).intValue();
     }
 
     public static Builder builder() {

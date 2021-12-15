@@ -1,6 +1,5 @@
 package com.starrocks.connector.flink.table.source;
 
-import com.starrocks.connector.flink.manager.StarRocksQueryPlanVisitor;
 import com.starrocks.connector.flink.table.source.struct.ColunmRichInfo;
 import com.starrocks.connector.flink.table.source.struct.QueryBeXTablets;
 import com.starrocks.connector.flink.table.source.struct.QueryInfo;
@@ -15,8 +14,6 @@ import org.apache.flink.streaming.api.functions.source.RichParallelSourceFunctio
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.data.RowData;
 
-
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -47,7 +44,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
             this.dataCount = StarRocksSourceCommonFunc.getQueryCount(this.sourceOptions, SQL);
             this.selectColumns = null;
         } else {
-            this.queryInfo = getQueryInfo(SQL);
+            this.queryInfo = StarRocksSourceCommonFunc.getQueryInfo(this.sourceOptions, SQL);
             this.selectColumns = StarRocksSourceCommonFunc.genSelectedColumns(columnMap, sourceOptions, colunmRichInfos);
         }
         this.dataReaderList = new ArrayList<>();
@@ -70,7 +67,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
         if (queryType == StarRocksSourceQueryType.QueryCount) {
             this.dataCount = StarRocksSourceCommonFunc.getQueryCount(this.sourceOptions, SQL);
         } else {
-            this.queryInfo = getQueryInfo(SQL);
+            this.queryInfo = StarRocksSourceCommonFunc.getQueryInfo(this.sourceOptions, SQL);
         }
         this.queryType = queryType;
         this.dataReaderList = new ArrayList<>();
@@ -108,17 +105,6 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
         return SQL;
     }
 
-    private QueryInfo getQueryInfo(String SQL) {
-
-        StarRocksQueryPlanVisitor starRocksQueryPlanVisitor = new StarRocksQueryPlanVisitor(sourceOptions);
-        QueryInfo queryInfo = null;
-        try {
-            queryInfo = starRocksQueryPlanVisitor.getQueryInfo(SQL);
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to get queryInfo:" + e.getMessage());
-        }
-        return queryInfo;
-    }
 
     @Override
     public void open(Configuration parameters) throws Exception {

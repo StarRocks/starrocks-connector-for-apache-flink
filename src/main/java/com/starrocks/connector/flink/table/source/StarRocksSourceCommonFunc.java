@@ -1,5 +1,6 @@
 package com.starrocks.connector.flink.table.source;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -10,6 +11,7 @@ import java.util.stream.Collectors;
 
 import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionOptions;
 import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
+import com.starrocks.connector.flink.manager.StarRocksQueryPlanVisitor;
 import com.starrocks.connector.flink.manager.StarRocksQueryVisitor;
 import com.starrocks.connector.flink.table.source.struct.ColunmRichInfo;
 import com.starrocks.connector.flink.table.source.struct.Const;
@@ -180,5 +182,17 @@ public class StarRocksSourceCommonFunc {
             }
         }
         return selectedColumns.toArray(new SelectColumn[0]);
+    }
+
+    public static QueryInfo getQueryInfo(StarRocksSourceOptions sourceOptions, String SQL) {
+
+        StarRocksQueryPlanVisitor starRocksQueryPlanVisitor = new StarRocksQueryPlanVisitor(sourceOptions);
+        QueryInfo queryInfo = null;
+        try {
+            queryInfo = starRocksQueryPlanVisitor.getQueryInfo(SQL);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to get queryInfo:" + e.getMessage());
+        }
+        return queryInfo;
     }
 }
