@@ -14,11 +14,9 @@ import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
 import com.starrocks.connector.flink.manager.StarRocksQueryPlanVisitor;
 import com.starrocks.connector.flink.manager.StarRocksQueryVisitor;
 import com.starrocks.connector.flink.table.source.struct.ColunmRichInfo;
-import com.starrocks.connector.flink.table.source.struct.Const;
 import com.starrocks.connector.flink.table.source.struct.QueryBeXTablets;
 import com.starrocks.connector.flink.table.source.struct.QueryInfo;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
-import com.starrocks.connector.flink.tools.DataUtil;
 
 import org.apache.flink.table.api.TableColumn;
 import org.apache.flink.table.api.TableSchema;
@@ -117,23 +115,6 @@ public class StarRocksSourceCommonFunc {
         List<TableColumn> flinkCols = flinkSchema.getTableColumns();
         if (flinkCols.size() != rows.size()) {
             throw new RuntimeException("Flink columns size not equal StarRocks columns");
-        }
-        for (int i = 0; i < rows.size(); i++) {
-            String starrocksField = rows.get(i).get("COLUMN_NAME").toString();
-            String starrocksType = rows.get(i).get("DATA_TYPE").toString().toUpperCase();
-            String flinkField = flinkCols.get(i).getName();
-            String flinkType = flinkCols.get(i).getType().toString();
-            flinkType = DataUtil.ClearBracket(flinkType);
-            starrocksType = DataUtil.ClearBracket(starrocksType);
-            if (!starrocksField.equals(flinkField)) {
-                throw new RuntimeException("Flink column name [" + flinkField + "] not equal StarRocks column name [" + starrocksField + "] at index " + i);
-            }
-            if (!Const.DataTypeRelationMap.containsKey(flinkType)) {
-                throw new RuntimeException("FlinkType not found -> " + flinkType);
-            }
-            if (!Const.DataTypeRelationMap.get(flinkType).contains(starrocksType)) {
-                throw new RuntimeException("Failed to convert " + starrocksType + " to " + flinkType);
-            }
         }
     }
 

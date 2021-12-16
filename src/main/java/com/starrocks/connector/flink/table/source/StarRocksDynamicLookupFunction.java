@@ -1,7 +1,5 @@
 package com.starrocks.connector.flink.table.source;
 
-import java.text.DateFormat;
-import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -11,11 +9,11 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import com.starrocks.connector.flink.table.source.struct.ColunmRichInfo;
-import com.starrocks.connector.flink.table.source.struct.Const;
+
 import com.starrocks.connector.flink.table.source.struct.QueryBeXTablets;
 import com.starrocks.connector.flink.table.source.struct.QueryInfo;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
-import com.starrocks.connector.flink.tools.DataUtil;
+
 
 import org.apache.flink.table.data.DecimalData;
 import org.apache.flink.table.data.RowData;
@@ -23,6 +21,7 @@ import org.apache.flink.table.data.TimestampData;
 import org.apache.flink.table.data.binary.BinaryStringData;
 import org.apache.flink.table.functions.FunctionContext;
 import org.apache.flink.table.functions.TableFunction;
+import org.apache.flink.table.types.logical.LogicalTypeRoot;
 import org.apache.flink.types.Row;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -130,53 +129,56 @@ public class StarRocksDynamicLookupFunction extends TableFunction<RowData> {
     }
 
     private void getFieldValue(Object obj, ColunmRichInfo colunmRichInfo) {
-        String dataType = DataUtil.ClearBracket(colunmRichInfo.getDataType().toString());
+
+        LogicalTypeRoot flinkTypeRoot = colunmRichInfo.getDataType().getLogicalType().getTypeRoot();
         String filter = "";
-        switch (dataType) {
-            case Const.DATA_TYPE_FLINK_DATE:
+
+        if (flinkTypeRoot == LogicalTypeRoot.DATE) {
             Calendar c = Calendar.getInstance();
             c.setTime(new Date(0L));
             c.add(Calendar.DATE, (int)obj);
             Date d = c.getTime();
             SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
             filter = colunmRichInfo.getColumnName() + " = '" + sdf.format(d).toString() + "'";
-            break;
-            case Const.DATA_TYPE_FLINK_TIMESTAMP:
+        }
+        if (flinkTypeRoot == LogicalTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE ||
+            flinkTypeRoot == LogicalTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE || 
+            flinkTypeRoot == LogicalTypeRoot.TIMESTAMP_WITH_TIME_ZONE) {
+            
             DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSS");
             String strDateTime = dtf.format(((TimestampData)obj).toLocalDateTime());
             filter = colunmRichInfo.getColumnName() + " = '" + strDateTime + "'";
-            break;
-            case Const.DATA_TYPE_FLINK_CHAR:
-            case Const.DATA_TYPE_FLINK_STRING:
-            filter = colunmRichInfo.getColumnName() + " = '" + ((BinaryStringData)obj).toString() + "'";
-            break;
-            case Const.DATA_TYPE_FLINK_BOOLEAN:
-            filter = colunmRichInfo.getColumnName() + " = " + (boolean) obj;
-            break;
-            case Const.DATA_TYPE_FLINK_TINYINT:
-            filter = colunmRichInfo.getColumnName() + " = " + (byte) obj;
-            break;
-            case Const.DATA_TYPE_FLINK_SMALLINT:
-            filter = colunmRichInfo.getColumnName() + " = " + (short) obj;
-            break;
-            case Const.DATA_TYPE_FLINK_INT:
-            filter = colunmRichInfo.getColumnName() + " = " + (int) obj;
-            break;
-            case Const.DATA_TYPE_FLINK_BIGINT:
-            filter = colunmRichInfo.getColumnName() + " = " + (long) obj;
-            break;
-            case Const.DATA_TYPE_FLINK_FLOAT:
-            filter = colunmRichInfo.getColumnName() + " = " + (float) obj;
-            break;
-            case Const.DATA_TYPE_FLINK_DOUBLE:
-            filter = colunmRichInfo.getColumnName() + " = " + (double) obj;
-            break;
-            case Const.DATA_TYPE_FLINK_DECIMAL:
-            filter = colunmRichInfo.getColumnName() + " = " + (DecimalData) obj;
-            break;
-            default:
-            throw new RuntimeException("Faild to find flink type when convert data value, dataType -> [" + dataType + "]");
         }
+        if (flinkTypeRoot == LogicalTypeRoot.CHAR ||
+            flinkTypeRoot == LogicalTypeRoot.VARCHAR) {
+
+            filter = colunmRichInfo.getColumnName() + " = '" + ((BinaryStringData)obj).toString() + "'";
+        }
+        if (flinkTypeRoot == LogicalTypeRoot.BOOLEAN) {
+            filter = colunmRichInfo.getColumnName() + " = " + (boolean) obj;
+        }
+        if (flinkTypeRoot == LogicalTypeRoot.TINYINT) {
+            filter = colunmRichInfo.getColumnName() + " = " + (byte) obj;
+        }
+        if (flinkTypeRoot == LogicalTypeRoot.SMALLINT) {
+            filter = colunmRichInfo.getColumnName() + " = " + (short) obj;
+        }
+        if (flinkTypeRoot == LogicalTypeRoot.INTEGER) {
+            filter = colunmRichInfo.getColumnName() + " = " + (int) obj;
+        }
+        if (flinkTypeRoot == LogicalTypeRoot.BIGINT) {
+            filter = colunmRichInfo.getColumnName() + " = " + (long) obj;
+        }
+        if (flinkTypeRoot == LogicalTypeRoot.FLOAT) {
+            filter = colunmRichInfo.getColumnName() + " = " + (float) obj;
+        }
+        if (flinkTypeRoot == LogicalTypeRoot.DOUBLE) {
+            filter = colunmRichInfo.getColumnName() + " = " + (double) obj;
+        }
+        if (flinkTypeRoot == LogicalTypeRoot.DECIMAL) {
+            filter = colunmRichInfo.getColumnName() + " = " + (DecimalData) obj;
+        }
+
         if (!filter.equals("")) {
             filterList.add(filter);
         }

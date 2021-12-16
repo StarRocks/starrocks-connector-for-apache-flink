@@ -4,26 +4,11 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.apache.flink.table.types.logical.LogicalTypeRoot;
+
 public class Const {
+
     public static String DEFAULT_CLUSTER_NAME = "default_cluster";
-
-    // Flink
-    public static final String DATA_TYPE_FLINK_DATE = "DATE";
-    public static final String DATA_TYPE_FLINK_TIMESTAMP = "TIMESTAMP";
-
-    public static final String DATA_TYPE_FLINK_STRING = "STRING";
-    public static final String DATA_TYPE_FLINK_CHAR = "CHAR";
-
-    public static final String DATA_TYPE_FLINK_BOOLEAN = "BOOLEAN";
-
-    public static final String DATA_TYPE_FLINK_TINYINT = "TINYINT";
-    public static final String DATA_TYPE_FLINK_SMALLINT = "SMALLINT";
-    public static final String DATA_TYPE_FLINK_INT = "INT";
-    public static final String DATA_TYPE_FLINK_BIGINT = "BIGINT";
-
-    public static final String DATA_TYPE_FLINK_FLOAT = "FLOAT";
-    public static final String DATA_TYPE_FLINK_DOUBLE = "DOUBLE";
-    public static final String DATA_TYPE_FLINK_DECIMAL = "DECIMAL";
 
     // StarRocks
     public static final String DATA_TYPE_STARROCKS_DATE = "DATE";
@@ -44,58 +29,70 @@ public class Const {
     public static final String DATA_TYPE_STARROCKS_DOUBLE = "DOUBLE";
     public static final String DATA_TYPE_STARROCKS_DECIMAL = "DECIMAL";
     public static final String DATA_TYPE_STARROCKS_DECIMALV2 = "DECIMALV2";
+    public static final String DATA_TYPE_STARROCKS_DECIMAL32 = "DECIMAL32";
+    public static final String DATA_TYPE_STARROCKS_DECIMAL64 = "DECIMAL64";
     public static final String DATA_TYPE_STARROCKS_DECIMAL128 = "DECIMAL128";
+    
 
-    public static HashMap<String, Set<String>> DataTypeRelationMap = new HashMap<String, Set<String>>() {{
-            put(DATA_TYPE_FLINK_DATE, new HashSet<String>(){{
+    public static HashMap<LogicalTypeRoot, Set<String>> DataTypeRelationMap = new HashMap<LogicalTypeRoot, Set<String>>() {{
+            put(LogicalTypeRoot.DATE, new HashSet<String>(){{
                     add(DATA_TYPE_STARROCKS_DATE);
                 }
             });
-            put(DATA_TYPE_FLINK_TIMESTAMP, new HashSet<String>(){{
+            put(LogicalTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE, new HashSet<String>(){{
                 add(DATA_TYPE_STARROCKS_DATETIME);
                 }
             });
-            put(DATA_TYPE_FLINK_STRING, new HashSet<String>(){{
+            put(LogicalTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE, new HashSet<String>(){{
+                add(DATA_TYPE_STARROCKS_DATETIME);
+                }
+            });
+            put(LogicalTypeRoot.TIMESTAMP_WITH_TIME_ZONE, new HashSet<String>(){{
+                add(DATA_TYPE_STARROCKS_DATETIME);
+                }
+            });
+            put(LogicalTypeRoot.CHAR, new HashSet<String>(){{
                 add(DATA_TYPE_STARROCKS_CHAR);
+                }
+            });
+            put(LogicalTypeRoot.VARCHAR, new HashSet<String>(){{
                 add(DATA_TYPE_STARROCKS_VARCHAR);
                 add(DATA_TYPE_STARROCKS_LARGEINT);
                 }
             });
-            put(DATA_TYPE_FLINK_CHAR, new HashSet<String>(){{
-                add(DATA_TYPE_STARROCKS_CHAR);
-                }
-            });
-            put(DATA_TYPE_FLINK_BOOLEAN, new HashSet<String>(){{
+            put(LogicalTypeRoot.BOOLEAN, new HashSet<String>(){{
                 add(DATA_TYPE_STARROCKS_BOOLEAN);
                 }
             });
-            put(DATA_TYPE_FLINK_TINYINT, new HashSet<String>(){{
+            put(LogicalTypeRoot.TINYINT, new HashSet<String>(){{
                 add(DATA_TYPE_STARROCKS_TINYINT);
                 }
             });
-            put(DATA_TYPE_FLINK_SMALLINT, new HashSet<String>(){{
+            put(LogicalTypeRoot.SMALLINT, new HashSet<String>(){{
                 add(DATA_TYPE_STARROCKS_SMALLINT);
                 }
             });
-            put(DATA_TYPE_FLINK_INT, new HashSet<String>(){{
+            put(LogicalTypeRoot.INTEGER, new HashSet<String>(){{
                 add(DATA_TYPE_STARROCKS_INT);
                 }
             });
-            put(DATA_TYPE_FLINK_BIGINT, new HashSet<String>(){{
+            put(LogicalTypeRoot.BIGINT, new HashSet<String>(){{
                 add(DATA_TYPE_STARROCKS_BIGINT);
                 }
             });
-            put(DATA_TYPE_FLINK_FLOAT, new HashSet<String>(){{
-                add(DATA_TYPE_FLINK_FLOAT);
+            put(LogicalTypeRoot.FLOAT, new HashSet<String>(){{
+                add(DATA_TYPE_STARROCKS_FLOAT);
                 }
             });
-            put(DATA_TYPE_FLINK_DOUBLE, new HashSet<String>(){{
+            put(LogicalTypeRoot.DOUBLE, new HashSet<String>(){{
                 add(DATA_TYPE_STARROCKS_DOUBLE);
                 }
             });
-            put(DATA_TYPE_FLINK_DECIMAL, new HashSet<String>(){{
+            put(LogicalTypeRoot.DECIMAL, new HashSet<String>(){{
                 add(DATA_TYPE_STARROCKS_DECIMAL);
                 add(DATA_TYPE_STARROCKS_DECIMALV2);
+                add(DATA_TYPE_STARROCKS_DECIMAL32);
+                add(DATA_TYPE_STARROCKS_DECIMAL64);
                 add(DATA_TYPE_STARROCKS_DECIMAL128);
                 }
             });
