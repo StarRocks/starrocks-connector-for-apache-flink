@@ -48,6 +48,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.Objects;
 
 
 public class StarRocksStreamLoadVisitor implements Serializable {
@@ -89,6 +90,12 @@ public class StarRocksStreamLoadVisitor implements Serializable {
             LOG.debug(String.format("Stream Load response: \n%s\n", JSON.toJSONString(loadResult)));
         }
         if (loadResult.get(keyStatus).equals("Fail")) {
+            // all partitions have no load data.
+            // Consider compatibility, it can be controlled via StarRocksSinkOptions
+            if (Objects.equals(loadResult.get("NumberTotalRows"), loadResult.get("NumberUnselectedRows"))) {
+                return loadResult;
+            }
+
             LOG.error(String.format("Stream Load response: \n%s\n", JSON.toJSONString(loadResult)));
             Map<String, String> logMap = new HashMap<>();
             if (loadResult.containsKey("ErrorURL")) {
