@@ -109,6 +109,8 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
 
         if (value instanceof RowData && RowKind.UPDATE_BEFORE.equals(((RowData)value).getRowKind())) {
             // write UPDATE_BEFORE is not necessary
+            // In a table under the primary key model, it is possible to have a data whose UPDATE_BEFORE and UPDATE_AFTER
+            // are not in the same batch, and this data will not be found when queried from StarRocks between the two batches.
             return;
         }
 
