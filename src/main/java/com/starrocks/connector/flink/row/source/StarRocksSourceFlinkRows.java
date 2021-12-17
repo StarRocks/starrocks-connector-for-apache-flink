@@ -44,9 +44,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
 
-
-
-
 public class StarRocksSourceFlinkRows {
 
     private static Logger LOG = LoggerFactory.getLogger(StarRocksSourceFlinkRows.class);
@@ -153,8 +150,9 @@ public class StarRocksSourceFlinkRows {
             FieldVector columnVector = fieldVectors.get(colIndex);
             Types.MinorType beShowDataType = columnVector.getMinorType();
             String starrocksType = starRocksSchema.get(colIndex).getType();
-            LogicalTypeRoot flinkTypeRoot = colunmRichInfos.get(this.selectColumns[colIndex].getColumnIndexInFlinkTable())
-                                                           .getDataType().getLogicalType().getTypeRoot();
+            ColunmRichInfo richInfo = colunmRichInfos.get(this.selectColumns[colIndex].getColumnIndexInFlinkTable());
+            boolean nullable = richInfo.getDataType().getLogicalType().isNullable();
+            LogicalTypeRoot flinkTypeRoot = richInfo.getDataType().getLogicalType().getTypeRoot();
             // starrocksType -> flinkType
             starrocksType = DataUtil.ClearBracket(starrocksType);
             if (!Const.DataTypeRelationMap.containsKey(flinkTypeRoot)) {
@@ -171,159 +169,162 @@ public class StarRocksSourceFlinkRows {
                 );
             }
             if (flinkTypeRoot == LogicalTypeRoot.DATE) {
-                transToFlinkDate(starrocksType, beShowDataType, columnVector, colIndex);
+                transToFlinkDate(starrocksType, beShowDataType, columnVector, colIndex, nullable);
             }
             if (flinkTypeRoot == LogicalTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE ||
                 flinkTypeRoot == LogicalTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE || 
                 flinkTypeRoot == LogicalTypeRoot.TIMESTAMP_WITH_TIME_ZONE) {
-                transToFlinkTimestamp(starrocksType, beShowDataType, columnVector, colIndex);
+                transToFlinkTimestamp(starrocksType, beShowDataType, columnVector, colIndex, nullable);
             }
             if (flinkTypeRoot == LogicalTypeRoot.CHAR ||
                 flinkTypeRoot == LogicalTypeRoot.VARCHAR) {
-                transToFlinkChar(starrocksType, beShowDataType, columnVector, colIndex);
+                transToFlinkChar(starrocksType, beShowDataType, columnVector, colIndex, nullable);
             }
             if (flinkTypeRoot == LogicalTypeRoot.BOOLEAN) {
-                transToFlinkBoolean(starrocksType, beShowDataType, columnVector, colIndex);
+                transToFlinkBoolean(starrocksType, beShowDataType, columnVector, colIndex, nullable);
             }
             if (flinkTypeRoot == LogicalTypeRoot.TINYINT) {
-                transToFlinkTinyInt(starrocksType, beShowDataType, columnVector, colIndex);
+                transToFlinkTinyInt(starrocksType, beShowDataType, columnVector, colIndex, nullable);
             }
             if (flinkTypeRoot == LogicalTypeRoot.SMALLINT) {
-                transToFlinkSmallInt(starrocksType, beShowDataType, columnVector, colIndex);
+                transToFlinkSmallInt(starrocksType, beShowDataType, columnVector, colIndex, nullable);
             }
             if (flinkTypeRoot == LogicalTypeRoot.INTEGER) {
-                transToFlinkInt(starrocksType, beShowDataType, columnVector, colIndex);
+                transToFlinkInt(starrocksType, beShowDataType, columnVector, colIndex, nullable);
             }
             if (flinkTypeRoot == LogicalTypeRoot.BIGINT) {
-                transToFlinkBigInt(starrocksType, beShowDataType, columnVector, colIndex);
+                transToFlinkBigInt(starrocksType, beShowDataType, columnVector, colIndex, nullable);
             }
             if (flinkTypeRoot == LogicalTypeRoot.FLOAT) {
-                transToFlinkFloat(starrocksType, beShowDataType, columnVector, colIndex);
+                transToFlinkFloat(starrocksType, beShowDataType, columnVector, colIndex, nullable);
             }
             if (flinkTypeRoot == LogicalTypeRoot.DOUBLE) {
-                transToFlinkDouble(starrocksType, beShowDataType, columnVector, colIndex);
+                transToFlinkDouble(starrocksType, beShowDataType, columnVector, colIndex, nullable);
             }
             if (flinkTypeRoot == LogicalTypeRoot.DECIMAL) {
-                transToFlinkDecimal(starrocksType, beShowDataType, columnVector, colIndex);
+                transToFlinkDecimal(starrocksType, beShowDataType, columnVector, colIndex, nullable);
             }
         }
     }
 
-    private void transToFlinkDate(String starrocksType, Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex) {
+    private void transToFlinkDate(String starrocksType, Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex, boolean nullable) {
         
         switch (starrocksType) {
             case Const.DATA_TYPE_STARROCKS_DATE:
-            srDateToFDate(beShowDataType, curFieldVector, colIndex);
+            srDateToFDate(beShowDataType, curFieldVector, colIndex, nullable);
             break; 
         }
     }
 
-    private void transToFlinkTimestamp(String starrocksType, Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex) {
+    private void transToFlinkTimestamp(String starrocksType, Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex, boolean nullable) {
         
         switch (starrocksType) {
             case Const.DATA_TYPE_STARROCKS_DATETIME:
-            srDataTimeToFTimestamp(beShowDataType, curFieldVector, colIndex);
+            srDataTimeToFTimestamp(beShowDataType, curFieldVector, colIndex, nullable);
             break; 
         }
     }
 
-    private void transToFlinkChar(String starrocksType, Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex) {
+    private void transToFlinkChar(String starrocksType, Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex, boolean nullable) {
         
         switch (starrocksType) {
             case Const.DATA_TYPE_STARROCKS_CHAR:
-            srCharToFChar(beShowDataType, curFieldVector, colIndex);
+            srCharToFChar(beShowDataType, curFieldVector, colIndex, nullable);
             case Const.DATA_TYPE_STARROCKS_VARCHAR:
-            srCharToFChar(beShowDataType, curFieldVector, colIndex);
+            srCharToFChar(beShowDataType, curFieldVector, colIndex, nullable);
             case Const.DATA_TYPE_STARROCKS_LARGEINT:
-            srCharToFChar(beShowDataType, curFieldVector, colIndex);
+            srCharToFChar(beShowDataType, curFieldVector, colIndex, nullable);
             break; 
         }
     }
 
-    private void transToFlinkBoolean(String starrocksType, Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex) {
+    private void transToFlinkBoolean(String starrocksType, Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex, boolean nullable) {
         
         switch (starrocksType) {
             case Const.DATA_TYPE_STARROCKS_BOOLEAN:
-            srBoolToFBool(beShowDataType, curFieldVector, colIndex);
+            srBoolToFBool(beShowDataType, curFieldVector, colIndex, nullable);
             break;
         }
     }
     
-    private void transToFlinkTinyInt(String starrocksType, Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex) {
+    private void transToFlinkTinyInt(String starrocksType, Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex, boolean nullable) {
         
         switch (starrocksType) {
             case Const.DATA_TYPE_STARROCKS_TINYINT:
-            srTinyIntToFTinyInt(beShowDataType, curFieldVector, colIndex);
+            srTinyIntToFTinyInt(beShowDataType, curFieldVector, colIndex, nullable);
             break;
         }
     }
 
-    private void transToFlinkSmallInt(String starrocksType, Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex) {
+    private void transToFlinkSmallInt(String starrocksType, Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex, boolean nullable) {
         
         switch (starrocksType) {
             case Const.DATA_TYPE_STARROCKS_SMALLINT:
-            srSmallToFSmalInt(beShowDataType, curFieldVector, colIndex);
+            srSmallToFSmalInt(beShowDataType, curFieldVector, colIndex, nullable);
             break;
         }
     }
 
-    private void transToFlinkInt(String starrocksType, Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex) {
+    private void transToFlinkInt(String starrocksType, Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex, boolean nullable) {
         
         switch (starrocksType) {
             case Const.DATA_TYPE_STARROCKS_INT:
-            srIntToFInt(beShowDataType, curFieldVector, colIndex);
+            srIntToFInt(beShowDataType, curFieldVector, colIndex, nullable);
             break;
         }
     }
 
-    private void transToFlinkBigInt(String starrocksType, Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex) {
+    private void transToFlinkBigInt(String starrocksType, Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex, boolean nullable) {
         
         switch (starrocksType) {
             case Const.DATA_TYPE_STARROCKS_BIGINT:
-            srBigIntToFBigInt(beShowDataType, curFieldVector, colIndex);
+            srBigIntToFBigInt(beShowDataType, curFieldVector, colIndex, nullable);
             break;
         }
     }
 
-    private void transToFlinkFloat(String starrocksType, Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex) {
+    private void transToFlinkFloat(String starrocksType, Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex, boolean nullable) {
         
         switch (starrocksType) {
             case Const.DATA_TYPE_STARROCKS_FLOAT:
-            srFloatToFloat(beShowDataType, curFieldVector, colIndex);
+            srFloatToFloat(beShowDataType, curFieldVector, colIndex, nullable);
             break;
         }
     }
 
-    private void transToFlinkDouble(String starrocksType, Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex) {
+    private void transToFlinkDouble(String starrocksType, Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex, boolean nullable) {
         
         switch (starrocksType) {
             case Const.DATA_TYPE_STARROCKS_DOUBLE:
-            srDoubleToFDouble(beShowDataType, curFieldVector, colIndex);
+            srDoubleToFDouble(beShowDataType, curFieldVector, colIndex, nullable);
             break;
         }
     }
 
-    private void transToFlinkDecimal(String starrocksType, Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex) {
+    private void transToFlinkDecimal(String starrocksType, Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex , boolean nullable) {
         
         switch (starrocksType) {
             case Const.DATA_TYPE_STARROCKS_DECIMAL128:
-            srDecimalToFDecimal(beShowDataType, curFieldVector, colIndex);
+            srDecimalToFDecimal(beShowDataType, curFieldVector, colIndex, nullable);
             break;
             case Const.DATA_TYPE_STARROCKS_DECIMALV2:
-            srDecimalToFDecimal(beShowDataType, curFieldVector, colIndex);
+            srDecimalToFDecimal(beShowDataType, curFieldVector, colIndex, nullable);
             break;
             case Const.DATA_TYPE_STARROCKS_DECIMAL:
-            srDecimalToFDecimal(beShowDataType, curFieldVector, colIndex);
+            srDecimalToFDecimal(beShowDataType, curFieldVector, colIndex, nullable);
             break;
         }
     }
 
-    private void srDateToFDate(Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex) {
+    private void srDateToFDate(Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex, boolean nullable) {
         // beShowDataType.String => Flink Date
         Preconditions.checkArgument(beShowDataType.equals(Types.MinorType.VARCHAR), "");
         VarCharVector varCharVector = (VarCharVector) curFieldVector;
         for (int rowIndex = 0; rowIndex < rowCountOfBatch; rowIndex ++) {
             if (varCharVector.isNull(rowIndex)) {
+                if (!nullable) {
+                    throwNullableException(colIndex);
+                }
                 setValueToFlinkRows(rowIndex, colIndex, null);
                 continue;
             }
@@ -334,12 +335,15 @@ public class StarRocksSourceFlinkRows {
         }
     }
 
-    private void srDataTimeToFTimestamp(Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex) {
+    private void srDataTimeToFTimestamp(Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex, boolean nullable) {
         // beShowDataType.String => Flink Timestamp
         Preconditions.checkArgument(beShowDataType.equals(Types.MinorType.VARCHAR), "");
         VarCharVector varCharVector = (VarCharVector) curFieldVector;
         for (int rowIndex = 0; rowIndex < rowCountOfBatch; rowIndex ++) {
             if (varCharVector.isNull(rowIndex)) {
+                if (!nullable) {
+                    throwNullableException(colIndex);
+                }
                 setValueToFlinkRows(rowIndex, colIndex, null);
                 continue;
             }
@@ -359,12 +363,15 @@ public class StarRocksSourceFlinkRows {
         }
     }
 
-    private void srCharToFChar(Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex) {
+    private void srCharToFChar(Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex, boolean nullable) {
         // beShowDataType.String => Flink CHAR/VARCHAR/STRING
         Preconditions.checkArgument(beShowDataType.equals(Types.MinorType.VARCHAR), "");
         VarCharVector varCharVector = (VarCharVector) curFieldVector;
         for (int rowIndex = 0; rowIndex < rowCountOfBatch; rowIndex ++) {
             if (varCharVector.isNull(rowIndex)) {
+                if (!nullable) {
+                    throwNullableException(colIndex);
+                }
                 setValueToFlinkRows(rowIndex, colIndex, null);
                 continue;
             }
@@ -373,87 +380,115 @@ public class StarRocksSourceFlinkRows {
         }
     }
 
-    private void srBoolToFBool(Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex) {
+    private void srBoolToFBool(Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex, boolean nullable) {
         // beShowDataType.Bit => Flink boolean
         Preconditions.checkArgument(beShowDataType.equals(Types.MinorType.BIT), "");
         BitVector bitVector = (BitVector) curFieldVector;
         for (int rowIndex = 0; rowIndex < rowCountOfBatch; rowIndex++) {
             Object fieldValue = bitVector.isNull(rowIndex) ? null : bitVector.get(rowIndex) != 0;
+            if (fieldValue == null && !nullable) {
+                throwNullableException(colIndex);
+            }
             setValueToFlinkRows(rowIndex, colIndex, fieldValue);
         }
     }
 
-    private void srTinyIntToFTinyInt(Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex) {
+    private void srTinyIntToFTinyInt(Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex, boolean nullable) {
         // beShowDataType.TinyInt => Flink TinyInt
         Preconditions.checkArgument(beShowDataType.equals(Types.MinorType.TINYINT), "");
         TinyIntVector tinyIntVector = (TinyIntVector) curFieldVector;
         for (int rowIndex = 0; rowIndex < rowCountOfBatch; rowIndex++) {
             Object fieldValue = tinyIntVector.isNull(rowIndex) ? null : tinyIntVector.get(rowIndex);
+            if (fieldValue == null && !nullable) {
+                throwNullableException(colIndex);
+            }
             setValueToFlinkRows(rowIndex, colIndex, fieldValue);
         }
     }
 
-    private void srSmallToFSmalInt(Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex) {
+    private void srSmallToFSmalInt(Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex, boolean nullable) {
         // beShowDataType.SmalInt => Flink SmalInt
         Preconditions.checkArgument(beShowDataType.equals(Types.MinorType.SMALLINT), "");
         SmallIntVector smallIntVector = (SmallIntVector) curFieldVector;
         for (int rowIndex = 0; rowIndex < rowCountOfBatch; rowIndex++) {
             Object fieldValue = smallIntVector.isNull(rowIndex) ? null : smallIntVector.get(rowIndex);
+            if (fieldValue == null && !nullable) {
+                throwNullableException(colIndex);
+            }
             setValueToFlinkRows(rowIndex, colIndex, fieldValue);
         }
     }
 
-    private void srIntToFInt(Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex) {
+    private void srIntToFInt(Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex, boolean nullable) {
         // beShowDataType.Int => Flink Int
         Preconditions.checkArgument(beShowDataType.equals(Types.MinorType.INT), "");
         IntVector intVector = (IntVector) curFieldVector;
         for (int rowIndex = 0; rowIndex < rowCountOfBatch; rowIndex++) {
             Object fieldValue = intVector.isNull(rowIndex) ? null : intVector.get(rowIndex);
+            if (fieldValue == null && !nullable) {
+                throwNullableException(colIndex);
+            }
             setValueToFlinkRows(rowIndex, colIndex, fieldValue);
         }
     }
 
-    private void srBigIntToFBigInt(Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex) {
+    private void srBigIntToFBigInt(Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex, boolean nullable) {
         // beShowDataType.BigInt => Flink BigInt
         Preconditions.checkArgument(beShowDataType.equals(Types.MinorType.BIGINT), "");
         BigIntVector bigIntVector = (BigIntVector) curFieldVector;
         for (int rowIndex = 0; rowIndex < rowCountOfBatch; rowIndex++) {
             Object fieldValue = bigIntVector.isNull(rowIndex) ? null : bigIntVector.get(rowIndex);
+            if (fieldValue == null && !nullable) {
+                throwNullableException(colIndex);
+            }
             setValueToFlinkRows(rowIndex, colIndex, fieldValue);
         }
     }
 
-    private void srFloatToFloat(Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex) {
+    private void srFloatToFloat(Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex, boolean nullable) {
         // beShowDataType.Float => Flink Float
         Preconditions.checkArgument(beShowDataType.equals(Types.MinorType.FLOAT4), "");
         Float4Vector float4Vector = (Float4Vector) curFieldVector;
         for (int rowIndex = 0; rowIndex < rowCountOfBatch; rowIndex++) {
             Object fieldValue = float4Vector.isNull(rowIndex) ? null : float4Vector.get(rowIndex);
+            if (fieldValue == null && !nullable) {
+                throwNullableException(colIndex);
+            }
             setValueToFlinkRows(rowIndex, colIndex, fieldValue);
         }
     }
 
-    private void srDoubleToFDouble(Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex) {
+    private void srDoubleToFDouble(Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex, boolean nullable) {
         // beShowDataType.Double => Flink Double
         Preconditions.checkArgument(beShowDataType.equals(Types.MinorType.FLOAT8), "");
         Float8Vector float8Vector = (Float8Vector) curFieldVector;
         for (int rowIndex = 0; rowIndex < rowCountOfBatch; rowIndex++) {
             Object fieldValue = float8Vector.isNull(rowIndex) ? null : float8Vector.get(rowIndex);
+            if (fieldValue == null && !nullable) {
+                throwNullableException(colIndex);
+            }
             setValueToFlinkRows(rowIndex, colIndex, fieldValue);
         }
     }
 
-    private void srDecimalToFDecimal(Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex) {
+    private void srDecimalToFDecimal(Types.MinorType beShowDataType, FieldVector curFieldVector, int colIndex, boolean nullable) {
         // beShowDataType.Decimal => Flink Decimal
         Preconditions.checkArgument(beShowDataType.equals(Types.MinorType.DECIMAL), "");
         DecimalVector decimalVector = (DecimalVector) curFieldVector;
         for (int rowIndex = 0; rowIndex < rowCountOfBatch; rowIndex++) {
             if (decimalVector.isNull(rowIndex)) {
+                if (!nullable) {
+                    throwNullableException(colIndex);
+                }
                 setValueToFlinkRows(rowIndex, colIndex, null);
                 continue;
             }
             BigDecimal value = decimalVector.getObject(rowIndex);
             setValueToFlinkRows(rowIndex, colIndex, DecimalData.fromBigDecimal(value, value.precision(), value.scale()));
         }
+    }
+
+    private void throwNullableException(int colIndex) {
+        throw new RuntimeException("Data could not be null. please check create table SQL, column index is: " + colIndex);
     }
 }

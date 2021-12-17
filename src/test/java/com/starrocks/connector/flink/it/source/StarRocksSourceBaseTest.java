@@ -21,6 +21,9 @@ import org.junit.Before;
 public abstract class StarRocksSourceBaseTest {
 
     protected TableSchema TABLE_SCHEMA;
+
+    protected TableSchema TABLE_SCHEMA_NOT_NULL;
+
     protected StarRocksSourceOptions OPTIONS;
 
     protected int[][] PROJECTION_ARRAY;
@@ -88,6 +91,27 @@ public abstract class StarRocksSourceBaseTest {
             .field("decimal_1", DataTypes.DECIMAL(27, 9))
             .build();
         TABLE_SCHEMA = tableSchema;
+    }
+
+    @Before
+    public void initializeTableSchemaNotNull() {
+
+        TableSchema tableSchema = TableSchema.builder()
+            .field("date_1", DataTypes.DATE().notNull())
+            .field("datetime_1", DataTypes.TIMESTAMP(6).notNull())
+            .field("char_1", DataTypes.CHAR(20).notNull())
+            .field("varchar_1", DataTypes.STRING().notNull())
+            .field("boolean_1", DataTypes.BOOLEAN().notNull())
+            .field("tinyint_1", DataTypes.TINYINT().notNull())
+            .field("smallint_1", DataTypes.SMALLINT().notNull())
+            .field("int_1", DataTypes.INT().notNull())
+            .field("bigint_1", DataTypes.BIGINT().notNull())
+            .field("largeint_1", DataTypes.STRING().notNull())
+            .field("float_1", DataTypes.FLOAT().notNull())
+            .field("double_1", DataTypes.DOUBLE().notNull())
+            .field("decimal_1", DataTypes.DECIMAL(27, 9).notNull())
+            .build();
+        TABLE_SCHEMA_NOT_NULL = tableSchema;
     }
 
 
