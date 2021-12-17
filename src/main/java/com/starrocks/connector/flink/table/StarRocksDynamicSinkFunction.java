@@ -106,6 +106,12 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
             // only primary key table support `update` and `delete`
             return;
         }
+
+        if (value instanceof RowData && RowKind.UPDATE_BEFORE.equals(((RowData)value).getRowKind())) {
+            // write UPDATE_BEFORE is not necessary
+            return;
+        }
+
         if (value instanceof NestedRowData) {
             final int headerSize = 256;
             NestedRowData ddlData = (NestedRowData) value;
