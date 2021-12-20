@@ -58,6 +58,8 @@ public class StarRocksSinkOptions implements Serializable {
         .stringType().noDefaultValue().withDescription("StarRocks user password.");
 
     // optional sink configurations
+    public static final ConfigOption<String> SINK_LABEL_PREFIX = ConfigOptions.key("sink.label-prefix")
+        .stringType().noDefaultValue().withDescription("The prefix of the stream load label. Available values are within [-_A-Za-z0-9]");
     public static final ConfigOption<Integer> SINK_CONNECT_TIMEOUT = ConfigOptions.key("sink.connect.timeout-ms")
         .intType().defaultValue(1000).withDescription("Timeout in millisecond for connecting to the `load-url`.");
     public static final ConfigOption<String> SINK_SEMANTIC = ConfigOptions.key("sink.semantic")
@@ -124,6 +126,10 @@ public class StarRocksSinkOptions implements Serializable {
 
     public List<String> getLoadUrlList() {
         return tableOptions.getOptional(LOAD_URL).orElse(null);
+    }
+    
+    public String getLabelPrefix() {
+        return tableOptions.getOptional(SINK_LABEL_PREFIX).orElse(null);
     }
 
     public int getSinkMaxRetries() {

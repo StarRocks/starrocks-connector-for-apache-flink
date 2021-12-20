@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.starrocks.connector.flink.StarRocksSinkBaseTest;
+import com.starrocks.connector.flink.manager.StarRocksSinkBufferEntity;
 import com.starrocks.connector.flink.manager.StarRocksStreamLoadVisitor;
 
 public class StarRocksStreamLoadVisitorTest extends StarRocksSinkBaseTest {
@@ -40,7 +41,10 @@ public class StarRocksStreamLoadVisitorTest extends StarRocksSinkBaseTest {
         // test failed
         String exMsg = "";
         try {
-            visitor.doStreamLoad(new Tuple3<>(mockFailedResponse(), (long)"aaaa".getBytes().length, Lists.newArrayList("aaaa".getBytes())));
+            mockFailedResponse();
+            StarRocksSinkBufferEntity entity = new StarRocksSinkBufferEntity(OPTIONS.getDatabaseName(), OPTIONS.getTableName(), OPTIONS.getLabelPrefix());
+            entity.addToBuffer("aaaa".getBytes());
+            visitor.doStreamLoad(entity);
         } catch (Exception e) {
             exMsg = e.getLocalizedMessage();
         }
@@ -53,7 +57,10 @@ public class StarRocksStreamLoadVisitorTest extends StarRocksSinkBaseTest {
         // test failed
         String exMsg = "";
         try {
-            visitor.doStreamLoad(new Tuple3<>(mockFailedResponse(), (long)"aaaa".getBytes().length, Lists.newArrayList("aaaa".getBytes())));
+            mockFailedResponse();
+            StarRocksSinkBufferEntity entity = new StarRocksSinkBufferEntity(OPTIONS.getDatabaseName(), OPTIONS.getTableName(), OPTIONS.getLabelPrefix());
+            entity.addToBuffer("aaaa".getBytes());
+            visitor.doStreamLoad(entity);
         } catch (Exception e) {
             exMsg = e.getMessage();
         }
@@ -61,7 +68,10 @@ public class StarRocksStreamLoadVisitorTest extends StarRocksSinkBaseTest {
         // test suucess
         exMsg = "";
         try {
-            visitor.doStreamLoad(new Tuple3<>(mockSuccessResponse(), (long)"aaaa".getBytes().length, Lists.newArrayList("aaaa".getBytes())));
+            mockSuccessResponse();
+            StarRocksSinkBufferEntity entity = new StarRocksSinkBufferEntity(OPTIONS.getDatabaseName(), OPTIONS.getTableName(), OPTIONS.getLabelPrefix());
+            entity.addToBuffer("aaaa".getBytes());
+            visitor.doStreamLoad(entity);
         } catch (Exception e) {
             exMsg = e.getLocalizedMessage();
         }
@@ -69,28 +79,40 @@ public class StarRocksStreamLoadVisitorTest extends StarRocksSinkBaseTest {
         // test label already exists
         exMsg = "";
         try {
-            visitor.doStreamLoad(new Tuple3<>(mockLabelExistsResponse(new String[]{"PREPARE", "ABORTED"}), (long)"aaaa".getBytes().length, Lists.newArrayList("aaaa".getBytes())));
+            mockLabelExistsResponse(new String[]{"PREPARE", "ABORTED"});
+            StarRocksSinkBufferEntity entity = new StarRocksSinkBufferEntity(OPTIONS.getDatabaseName(), OPTIONS.getTableName(), OPTIONS.getLabelPrefix());
+            entity.addToBuffer("aaaa".getBytes());
+            visitor.doStreamLoad(entity);
         } catch (Exception e) {
             exMsg = e.getLocalizedMessage();
         }
         assertTrue(0 < exMsg.length());
         exMsg = "";
         try {
-            visitor.doStreamLoad(new Tuple3<>(mockLabelExistsResponse(new String[]{"UNKONW"}), (long)"aaaa".getBytes().length, Lists.newArrayList("aaaa".getBytes())));
+            mockLabelExistsResponse(new String[]{"UNKONW"});
+            StarRocksSinkBufferEntity entity = new StarRocksSinkBufferEntity(OPTIONS.getDatabaseName(), OPTIONS.getTableName(), OPTIONS.getLabelPrefix());
+            entity.addToBuffer("aaaa".getBytes());
+            visitor.doStreamLoad(entity);
         } catch (Exception e) {
             exMsg = e.getLocalizedMessage();
         }
         assertTrue(0 < exMsg.length());
         exMsg = "";
         try {
-            visitor.doStreamLoad(new Tuple3<>(mockLabelExistsResponse(new String[]{"PREPARE", "VISIBLE"}), (long)"aaaa".getBytes().length, Lists.newArrayList("aaaa".getBytes())));
+            mockLabelExistsResponse(new String[]{"PREPARE", "VISIBLE"});
+            StarRocksSinkBufferEntity entity = new StarRocksSinkBufferEntity(OPTIONS.getDatabaseName(), OPTIONS.getTableName(), OPTIONS.getLabelPrefix());
+            entity.addToBuffer("aaaa".getBytes());
+            visitor.doStreamLoad(entity);
         } catch (Exception e) {
             exMsg = e.getLocalizedMessage();
         }
         assertEquals(0, exMsg.length());
         exMsg = "";
         try {
-            visitor.doStreamLoad(new Tuple3<>(mockLabelExistsResponse(new String[]{"PREPARE", "COMMITTED"}), (long)"aaaa".getBytes().length, Lists.newArrayList("aaaa".getBytes())));
+            mockLabelExistsResponse(new String[]{"PREPARE", "COMMITTED"});
+            StarRocksSinkBufferEntity entity = new StarRocksSinkBufferEntity(OPTIONS.getDatabaseName(), OPTIONS.getTableName(), OPTIONS.getLabelPrefix());
+            entity.addToBuffer("aaaa".getBytes());
+            visitor.doStreamLoad(entity);
         } catch (Exception e) {
             exMsg = e.getLocalizedMessage();
         }
