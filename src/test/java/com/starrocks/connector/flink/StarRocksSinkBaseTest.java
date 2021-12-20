@@ -17,6 +17,7 @@ package com.starrocks.connector.flink;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.Field;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.ByteBuffer;
@@ -26,6 +27,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import com.alibaba.fastjson.JSON;
@@ -43,6 +45,7 @@ import org.junit.After;
 import org.junit.Before;
 
 import mockit.Mocked;
+import mockit.Tested;
 import mockit.Expectations;
 
 public abstract class StarRocksSinkBaseTest {
@@ -67,6 +70,7 @@ public abstract class StarRocksSinkBaseTest {
         put("filter-ratio", "0");
     }};
     protected final String SINK_PROPS_FILTER_RATIO = "0";
+    protected final String SINK_LABEL_PREFIX = "prefix";
 
     protected StarRocksSinkOptions OPTIONS;
     protected StarRocksSinkOptions.Builder OPTIONS_BUILDER;
@@ -122,6 +126,12 @@ public abstract class StarRocksSinkBaseTest {
                                         out.write("".getBytes());
                                     } else {
                                         String body = mockResonse.size() > 0 ? (mockResonse.size() == 1 ? mockResonse.peekFirst() : mockResonse.pollFirst()) : "";
+                                        if (body.length() > 0) {
+                                            JSONObject tmp = JSON.parseObject(body);
+                                            if (tmp.containsKey("LoadTimeMs")) {
+                                                Thread.sleep(tmp.getLong("LoadTimeMs"));
+                                            }
+                                        }
                                         String res = "HTTP/1.1 200 OK\r\n" +
                                                     "Content-Length:" + body.length() + "\r\n" +
                                                     "Connection:close\r\n" +
@@ -169,6 +179,7 @@ public abstract class StarRocksSinkBaseTest {
             .withProperty("table-name", TABLE)
             .withProperty("username", USERNAME)
             .withProperty("password", PASSWORD)
+            .withProperty("sink.label-prefix", SINK_LABEL_PREFIX)
             .withProperty("sink.semantic", SINK_SEMANTIC.getName())
             .withProperty("sink.buffer-flush.interval-ms", SINK_MAX_INTERVAL)
             .withProperty("sink.buffer-flush.max-bytes", SINK_MAX_BYTES)
@@ -203,12 +214,17 @@ public abstract class StarRocksSinkBaseTest {
     }
 
     protected String mockSuccessResponse() {
+        return mockWaitSuccessResponse(0l);
+    }
+
+    protected String mockWaitSuccessResponse(long waitMs) {
         String label = UUID.randomUUID().toString();
         Map<String, Object> r = new HashMap<String, Object>();
         r.put("TxnId", new java.util.Date().getTime());
         r.put("Label", label);
         r.put("Status", "Success");
         r.put("Message", "OK");
+        r.put("LoadTimeMs", waitMs);
         mockResonse = new LinkedList<>();
         mockResonse.add(JSONObject.toJSONString(r));
         return label;
@@ -244,6 +260,7 @@ public abstract class StarRocksSinkBaseTest {
         r.put("Label", label);
         r.put("Status", "Success");
         r.put("Message", "OK");
+        r.put("LoadTimeMs", 10);
         mockResonse.add(JSONObject.toJSONString(r));
         return label;
     }
@@ -275,6 +292,18 @@ public abstract class StarRocksSinkBaseTest {
             return bos.array();
         }
         throw new RuntimeException("Failed to join rows data, unsupported `format` from stream load properties:");
+    }
+
+    protected Object getPrivateFieldValue(Object ins, String name) throws Exception {
+        Field field = ins.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return field.get(ins);
+    }
+
+    protected void setPrivateFieldValue(Object ins, String name, Object value) throws Exception {
+        Field field = ins.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        field.set(ins, value);
     }
     
 }
