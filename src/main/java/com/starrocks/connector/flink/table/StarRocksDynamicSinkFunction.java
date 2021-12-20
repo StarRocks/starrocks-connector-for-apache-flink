@@ -102,10 +102,6 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
             totalInvokeRowsTime.inc(System.nanoTime() - start);
             return;
         }
-        if (value instanceof RowData && !sinkOptions.supportUpsertDelete() && !RowKind.INSERT.equals(((RowData)value).getRowKind())) {
-            // only primary key table support `update` and `delete`
-            return;
-        }
         if (value instanceof NestedRowData) {
             final int headerSize = 256;
             NestedRowData ddlData = (NestedRowData) value;
@@ -132,6 +128,17 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
             } else if (stmt instanceof Alter) {
                 Alter alter = (Alter) stmt;
             }
+        }
+        if (!(value instanceof RowData)) {
+            return;
+        }
+        if (RowKind.UPDATE_BEFORE.equals(((RowData)value).getRowKind())) {
+            // do not need update_before, cauz an update action happened on the primary keys will be separated into `delete` and `create`
+            return;
+        }
+        if (!sinkOptions.supportUpsertDelete() && RowKind.DELETE.equals(((RowData)value).getRowKind())) {
+            // let go the UPDATE_AFTER and INSERT rows for tables who have a group of `unique` or `duplicate` keys.
+            return;
         }
         sinkManager.writeRecord(
             serializer.serialize(rowTransformer.transform(value, sinkOptions.supportUpsertDelete()))
