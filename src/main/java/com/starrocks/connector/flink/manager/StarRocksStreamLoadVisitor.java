@@ -28,7 +28,6 @@ import com.starrocks.connector.flink.table.StarRocksSinkOptions;
 
 import java.util.HashMap;
 import org.apache.commons.codec.binary.Base64;
-import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -43,7 +42,6 @@ import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -77,20 +75,20 @@ public class StarRocksStreamLoadVisitor implements Serializable {
         this.__opAutoProjectionInJson = __opAutoProjectionInJson;
     }
 
-    public Map<String, Object> doStreamLoad(Tuple3<String, Long, ArrayList<byte[]>> labeledRows) throws IOException {
+    public Map<String, Object> doStreamLoad(StarRocksSinkBufferEntity bufferEntity) throws IOException {
         String host = getAvailableHost();
         if (null == host) {
             throw new IOException("None of the hosts in `load_url` could be connected.");
         }
         String loadUrl = new StringBuilder(host)
             .append("/api/")
-            .append(sinkOptions.getDatabaseName())
+            .append(bufferEntity.getDatabase())
             .append("/")
-            .append(sinkOptions.getTableName())
+            .append(bufferEntity.getTable())
             .append("/_stream_load")
             .toString();
-        LOG.info(String.format("Start to join batch data: rows[%d] bytes[%d] label[%s].", labeledRows.f2.size(), labeledRows.f1, labeledRows.f0));
-        Map<String, Object> loadResult = doHttpPut(loadUrl, labeledRows.f0, joinRows(labeledRows.f2, labeledRows.f1.intValue()));
+        LOG.info(String.format("Start to join batch data: label[%s].", bufferEntity.getLabel()));
+        Map<String, Object> loadResult = doHttpPut(loadUrl, bufferEntity.getLabel(), joinRows(bufferEntity.getBuffer(),  (int) bufferEntity.getBatchSize()));
         final String keyStatus = "Status";
         if (null == loadResult || !loadResult.containsKey(keyStatus)) {
             throw new IOException("Unable to flush data to StarRocks: unknown result status, usually caused by: 1.authorization or permission related problems. 2.Wrong column_separator or row_delimiter. 3.Column count exceeded the limitation.");
@@ -108,7 +106,7 @@ public class StarRocksStreamLoadVisitor implements Serializable {
         } else if (RESULT_LABEL_EXISTED.equals(loadResult.get(keyStatus))) {
             LOG.error(String.format("Stream Load response: \n%s\n", JSON.toJSONString(loadResult)));
             // has to block-checking the state to get the final result
-            checkLabelState(host, labeledRows.f0);
+            checkLabelState(host, bufferEntity.getLabel());
         }
         return loadResult;
     }
@@ -239,7 +237,7 @@ public class StarRocksStreamLoadVisitor implements Serializable {
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> doHttpPut(String loadUrl, String label, byte[] data) throws IOException {
-        LOG.info(String.format("Executing stream load to: '%s', size: '%s'", loadUrl, data.length));
+        LOG.info(String.format("Executing stream load to: '%s', size: '%s'", Thread.currentThread().getId(), loadUrl, data.length));
         final HttpClientBuilder httpClientBuilder = HttpClients.custom()
             .setRedirectStrategy(new DefaultRedirectStrategy() {
                 @Override

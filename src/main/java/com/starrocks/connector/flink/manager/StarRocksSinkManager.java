@@ -31,7 +31,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.ScheduledExecutorService;
@@ -44,8 +44,6 @@ import com.starrocks.connector.flink.table.StarRocksSinkOptions;
 import com.starrocks.connector.flink.table.StarRocksSinkSemantic;
 
 import org.apache.flink.api.common.functions.RuntimeContext;
-import org.apache.flink.api.java.tuple.Tuple3;
-import org.apache.flink.calcite.shaded.com.google.common.base.Strings;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 import org.apache.flink.calcite.shaded.com.google.common.collect.Lists;
@@ -63,7 +61,7 @@ public class StarRocksSinkManager implements Serializable {
     private final StarRocksStreamLoadVisitor starrocksStreamLoadVisitor;
     private final StarRocksSinkOptions sinkOptions;
     private final Map<String, List<LogicalTypeRoot>> typesMap;
-    final LinkedBlockingDeque<Tuple3<String, Long, ArrayList<byte[]>>> flushQueue = new LinkedBlockingDeque<>(1);
+    final LinkedBlockingDeque<StarRocksSinkBufferEntity> flushQueue = new LinkedBlockingDeque<>(1);
 
     private transient Counter totalFlushBytes;
     private transient Counter totalFlushRows;
@@ -99,13 +97,10 @@ public class StarRocksSinkManager implements Serializable {
     private static final String HISTOGRAM_WRITE_DATA_TIME_MS = "writeDataTimeMs";
     private static final String HISTOGRAM_LOAD_TIME_MS = "loadTimeMs";
 
-    static final String EOF = "EOF";
-
-    private final ArrayList<byte[]> buffer = new ArrayList<>();
-    private int batchCount = 0;
-    private long batchSize = 0;
-    volatile boolean closed = false;
-    volatile boolean flushThreadAlive = false;
+    private final Map<String, StarRocksSinkBufferEntity> bufferMap = new ConcurrentHashMap<>();
+    private long FLUSH_QUEUE_POLL_TIMEOUT = 3000;
+    private volatile boolean closed = false;
+    private volatile boolean flushThreadAlive = false;
     private volatile Throwable flushException;
 
     private ScheduledExecutorService scheduler;
@@ -122,7 +117,7 @@ public class StarRocksSinkManager implements Serializable {
         typesMap.put("largeint", Lists.newArrayList(LogicalTypeRoot.DECIMAL, LogicalTypeRoot.BIGINT, LogicalTypeRoot.INTEGER, LogicalTypeRoot.BINARY));
         typesMap.put("char", Lists.newArrayList(LogicalTypeRoot.CHAR, LogicalTypeRoot.VARCHAR));
         typesMap.put("date", Lists.newArrayList(LogicalTypeRoot.DATE, LogicalTypeRoot.VARCHAR));
-        typesMap.put("datetime", Lists.newArrayList(LogicalTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE, LogicalTypeRoot.VARCHAR));
+        typesMap.put("datetime", Lists.newArrayList(LogicalTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE, LogicalTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE, LogicalTypeRoot.VARCHAR));
         typesMap.put("decimal", Lists.newArrayList(LogicalTypeRoot.DECIMAL, LogicalTypeRoot.BIGINT, LogicalTypeRoot.INTEGER, LogicalTypeRoot.DOUBLE, LogicalTypeRoot.FLOAT));
         typesMap.put("double", Lists.newArrayList(LogicalTypeRoot.DOUBLE, LogicalTypeRoot.BIGINT, LogicalTypeRoot.INTEGER));
         typesMap.put("float", Lists.newArrayList(LogicalTypeRoot.FLOAT, LogicalTypeRoot.INTEGER));
@@ -195,12 +190,11 @@ public class StarRocksSinkManager implements Serializable {
             synchronized (StarRocksSinkManager.this) {
                 if (!closed) {
                     try {
-                        String label = createBatchLabel();
-                        LOG.info(String.format("StarRocks interval Sinking triggered: label[%s].", label));
-                        if (batchCount == 0) {
+                        LOG.info("StarRocks interval Sinking triggered.");
+                        if (bufferMap.isEmpty()) {
                             startScheduler();
                         }
-                        flush(label, false);
+                        flush(null, false);
                     } catch (Exception e) {
                         flushException = e;
                     }
@@ -216,42 +210,56 @@ public class StarRocksSinkManager implements Serializable {
         }
     }
 
-    public final synchronized void writeRecord(String record) throws IOException {
+    public final synchronized void writeRecords(String database, String table, String... records) throws IOException {
         checkFlushException();
         try {
-            byte[] bts = record.getBytes(StandardCharsets.UTF_8);
-            buffer.add(bts);
-            batchCount++;
-            batchSize += bts.length;
+            if (0 == records.length) return;
+            String bufferKey = String.format("%s,%s", database, table);
+            StarRocksSinkBufferEntity bufferEntity = bufferMap.computeIfAbsent(bufferKey, k -> new StarRocksSinkBufferEntity(database, table, sinkOptions.getLabelPrefix()));
+            for (String record : records) {
+                byte[] bts = record.getBytes(StandardCharsets.UTF_8);
+                bufferEntity.addToBuffer(bts);
+            }
             if (StarRocksSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
                 return;
             }
-            if (batchCount >= sinkOptions.getSinkMaxRows() || batchSize >= sinkOptions.getSinkMaxBytes()) {
-                String label = createBatchLabel();
-                LOG.info(String.format("StarRocks buffer Sinking triggered: rows[%d] label[%s].", batchCount, label));
-                flush(label, false);
+            if (bufferEntity.getBatchCount() >= sinkOptions.getSinkMaxRows() || bufferEntity.getBatchSize() >= sinkOptions.getSinkMaxBytes()) {
+                LOG.info(String.format("StarRocks buffer Sinking triggered: db: [%s] table: [%s] rows[%d] label[%s].", database, table, bufferEntity.getBatchCount(), bufferEntity.getLabel()));
+                flush(bufferKey, false);
             }
         } catch (Exception e) {
             throw new IOException("Writing records to StarRocks failed.", e);
         }
     }
 
-    public synchronized void flush(String label, boolean waitUtilDone) throws Exception {
+    public synchronized void flush(String bufferKey, boolean waitUtilDone) throws Exception {
+        if (bufferMap.isEmpty()) {
+            flushInternal(null, waitUtilDone);
+            return;
+        }
+        if (null == bufferKey) {
+            for (String key : bufferMap.keySet()) {
+                flushInternal(key, waitUtilDone);
+            }
+            return;
+        }
+        flushInternal(bufferKey, waitUtilDone);
+    }
+
+    private synchronized void flushInternal(String bufferKey, boolean waitUtilDone) throws Exception {
         checkFlushException();
-        if (batchCount == 0) {
+        if (null == bufferKey || bufferMap.isEmpty() || !bufferMap.containsKey(bufferKey)) {
             if (waitUtilDone) {
                 waitAsyncFlushingDone();
             }
             return;
         }
-        offer(new Tuple3<>(label, batchSize,  new ArrayList<>(buffer)));
+        offer(bufferMap.get(bufferKey));
+        bufferMap.remove(bufferKey);
         if (waitUtilDone) {
             // wait the last flush
             waitAsyncFlushingDone();
         }
-        buffer.clear();
-        batchCount = 0;
-        batchSize = 0;
     }
 
     public synchronized void close() {
@@ -272,9 +280,8 @@ public class StarRocksSinkManager implements Serializable {
                 return;
             }
             try {
-                String label = createBatchLabel();
-                if (batchCount > 0) LOG.info(String.format("StarRocks Sink is about to close: label[%s].", label));
-                flush(label, true);
+                LOG.info("StarRocks Sink is about to close.");
+                flush(null, true);
             } catch (Exception e) {
                 throw new RuntimeException("Writing records to StarRocks failed.", e);
             } finally {
@@ -284,50 +291,42 @@ public class StarRocksSinkManager implements Serializable {
         checkFlushException();
     }
 
-    public String createBatchLabel() {
-        return UUID.randomUUID().toString();
+    public Map<String, StarRocksSinkBufferEntity> getBufferedBatchMap() {
+        return bufferMap;
     }
 
-    public List<byte[]> getBufferedBatchList() {
-        return buffer;
-    }
-
-    public void setBufferedBatchList(List<byte[]> list) throws IOException {
+    public void setBufferedBatchMap(Map<String, StarRocksSinkBufferEntity> bufferMap) throws IOException {
         if (!StarRocksSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
             return;
         }
-        this.buffer.clear();
-        batchCount = 0;
-        batchSize = 0;
-        for (byte[] row : list) {
-            writeRecord(new String(row, StandardCharsets.UTF_8));
-        }
+        this.bufferMap.clear();
+        this.bufferMap.putAll(bufferMap);
     }
 
     /**
-     * Return false if met eof and flush thread will exit.
+     * @return false if met eof and flush thread will exit.
      */
-    public boolean asyncFlush() throws Exception {
-        Tuple3<String, Long, ArrayList<byte[]>> flushData = flushQueue.poll(3L, TimeUnit.SECONDS);
-        if (flushData == null || Strings.isNullOrEmpty(flushData.f0)) {
+    private boolean asyncFlush() throws Exception {
+        StarRocksSinkBufferEntity flushData = flushQueue.poll(FLUSH_QUEUE_POLL_TIMEOUT, TimeUnit.MILLISECONDS);
+        if (flushData == null || (0 == flushData.getBatchCount() && !flushData.EOF())) {
             return true;
         }
-        if (EOF.equals(flushData.f0)) {
+        if (flushData.EOF()) {
             return false;
         }
         stopScheduler();
-        LOG.info(String.format("Async stream load: rows[%d] bytes[%d] label[%s].", flushData.f2.size(), flushData.f1, flushData.f0));
+        LOG.info(String.format("Async stream load: db[%s] table[%s] rows[%d] bytes[%d] label[%s].", flushData.getDatabase(), flushData.getTable(), flushData.getBatchCount(), flushData.getBatchSize(), flushData.getLabel()));
         long startWithRetries = System.nanoTime();
         for (int i = 0; i <= sinkOptions.getSinkMaxRetries(); i++) {
             try {
                 long start = System.nanoTime();
                 // flush to StarRocks with stream load
                 Map<String, Object> result = starrocksStreamLoadVisitor.doStreamLoad(flushData);
-                LOG.info(String.format("Async stream load finished: label[%s].", flushData.f0));
+                LOG.info(String.format("Async stream load finished: label[%s].", flushData.getLabel()));
                 // metrics
                 if (null != totalFlushBytes) {
-                    totalFlushBytes.inc(flushData.f1);
-                    totalFlushRows.inc(flushData.f2.size());
+                    totalFlushBytes.inc(flushData.getBatchSize());
+                    totalFlushRows.inc(flushData.getBatchCount());
                     totalFlushTime.inc(System.nanoTime() - startWithRetries);
                     totalFlushTimeWithoutRetries.inc(System.nanoTime() - start);
                     totalFlushSucceededTimes.inc();
@@ -345,9 +344,9 @@ public class StarRocksSinkManager implements Serializable {
                     throw e;
                 }
                 if (e instanceof StarRocksStreamLoadFailedException && ((StarRocksStreamLoadFailedException)e).needReCreateLabel()) {
-                    String newLabel = createBatchLabel();
-                    LOG.warn(String.format("Batch label changed from [%s] to [%s]", flushData.f0, newLabel));
-                    flushData.f0 = newLabel;
+                    String oldLabel = flushData.getLabel();
+                    flushData.reGenerateLabel();
+                    LOG.warn(String.format("Batch label changed from [%s] to [%s]", oldLabel, flushData.getLabel()));
                 }
                 try {
                     Thread.sleep(1000l * Math.min(i + 1, 10));
@@ -362,19 +361,19 @@ public class StarRocksSinkManager implements Serializable {
 
     private void waitAsyncFlushingDone() throws InterruptedException {
         // wait for previous flushings
-        offer(new Tuple3<>("", 0L, null));
-        offer(new Tuple3<>("", 0L, null));
+        offer(new StarRocksSinkBufferEntity(null, null, null));
+        offer(new StarRocksSinkBufferEntity(null, null, null));
         checkFlushException();
     }
 
-    void offer(Tuple3<String, Long, ArrayList<byte[]>> tuple3) throws InterruptedException{
+    void offer(StarRocksSinkBufferEntity bufferEntity) throws InterruptedException{
         if (!flushThreadAlive) {
-            LOG.info(String.format("Flush thread already exit, ignore offer request for label[%s]", tuple3.f0));
+            LOG.info(String.format("Flush thread already exit, ignore offer request for label[%s]", bufferEntity.getLabel()));
             return;
         }
 
         long start = System.nanoTime();
-        if (!flushQueue.offer(tuple3, sinkOptions.getSinkOfferTimeout(), TimeUnit.MILLISECONDS)) {
+        if (!flushQueue.offer(bufferEntity, sinkOptions.getSinkOfferTimeout(), TimeUnit.MILLISECONDS)) {
             throw new RuntimeException(
                 "Timeout while offering data to flushQueue, exceed " + sinkOptions.getSinkOfferTimeout() + " ms, see " +
                     StarRocksSinkOptions.SINK_BATCH_OFFER_TIMEOUT.key());
@@ -386,7 +385,7 @@ public class StarRocksSinkManager implements Serializable {
 
     private void offerEOF() {
         try {
-            offer(new Tuple3<>(EOF, 0L, null));
+            offer(new StarRocksSinkBufferEntity(null, null, null).asEOF());
         } catch (Exception e) {
             LOG.warn("Writing EOF failed.", e);
         }
