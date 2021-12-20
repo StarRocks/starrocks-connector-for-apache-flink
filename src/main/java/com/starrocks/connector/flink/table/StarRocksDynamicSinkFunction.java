@@ -18,7 +18,6 @@ import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.api.common.typeinfo.TypeHint;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
-import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.runtime.state.FunctionInitializationContext;
@@ -30,18 +29,18 @@ import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.binary.NestedRowData;
 import org.apache.flink.types.RowKind;
 import org.apache.flink.util.InstantiationUtil;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.flink.calcite.shaded.com.google.common.base.Strings;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.alter.Alter;
 import net.sf.jsqlparser.statement.truncate.Truncate;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
+import com.starrocks.connector.flink.manager.StarRocksSinkBufferEntity;
 import com.starrocks.connector.flink.manager.StarRocksSinkManager;
 import com.starrocks.connector.flink.row.StarRocksIRowTransformer;
 import com.starrocks.connector.flink.row.StarRocksISerializer;
@@ -59,9 +58,10 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
     private transient Counter totalInvokeRows;
     private static final String COUNTER_INVOKE_ROWS_COST_TIME = "totalInvokeRowsTimeNs";
     private static final String COUNTER_INVOKE_ROWS = "totalInvokeRows";
+    private static final Logger LOG = LoggerFactory.getLogger(StarRocksDynamicSinkFunction.class);
 
     // state only works with `StarRocksSinkSemantic.EXACTLY_ONCE`
-    private transient ListState<Tuple2<String, List<byte[]>>> checkpointedState;
+    private transient ListState<Map<String, StarRocksSinkBufferEntity>> checkpointedState;
  
     public StarRocksDynamicSinkFunction(StarRocksSinkOptions sinkOptions, TableSchema schema, StarRocksIRowTransformer<T> rowTransformer) {
         this.sinkManager = new StarRocksSinkManager(sinkOptions, schema);
@@ -96,14 +96,19 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
             flushPreviousState();
         }
         if (null == serializer) {
+            if (value instanceof StarRocksSinkRowDataWithMeta) {
+                StarRocksSinkRowDataWithMeta data = (StarRocksSinkRowDataWithMeta)value;
+                if (Strings.isNullOrEmpty(data.getDatabase()) || Strings.isNullOrEmpty(data.getTable()) || null == data.getDataRows()) {
+                    LOG.warn(String.format("json row data not fullfilled. {database: %s, table: %s, dataRows: %s}", data.getDatabase(), data.getTable(), data.getDataRows()));
+                    return;
+                }
+                sinkManager.writeRecords(data.getDatabase(), data.getTable(), data.getDataRows());
+                return;
+            }
             // raw data sink
-            sinkManager.writeRecord((String)value);
+            sinkManager.writeRecords(sinkOptions.getDatabaseName(), sinkOptions.getTableName(), (String) value);
             totalInvokeRows.inc(1);
             totalInvokeRowsTime.inc(System.nanoTime() - start);
-            return;
-        }
-        if (value instanceof RowData && !sinkOptions.supportUpsertDelete() && !RowKind.INSERT.equals(((RowData)value).getRowKind())) {
-            // only primary key table support `update` and `delete`
             return;
         }
         if (value instanceof NestedRowData) {
@@ -133,7 +138,20 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
                 Alter alter = (Alter) stmt;
             }
         }
-        sinkManager.writeRecord(
+        if (!(value instanceof RowData)) {
+            // only primary key table support `update` and `delete`
+            return;
+        }
+        if (RowKind.UPDATE_BEFORE.equals(((RowData)value).getRowKind())) {
+            // do not need update_before, cause an update action happened on the primary keys will be separated into `delete` and `create`
+            return;
+        }
+        if (!sinkOptions.supportUpsertDelete() && RowKind.DELETE.equals(((RowData)value).getRowKind())) {
+            return;
+        }
+        sinkManager.writeRecords(
+            sinkOptions.getDatabaseName(),
+            sinkOptions.getTableName(),
             serializer.serialize(rowTransformer.transform(value, sinkOptions.supportUpsertDelete()))
         );
         totalInvokeRows.inc(1);
@@ -145,10 +163,10 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
         if (!StarRocksSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
             return;
         }
-        ListStateDescriptor<Tuple2<String, List<byte[]>>> descriptor =
+        ListStateDescriptor<Map<String, StarRocksSinkBufferEntity>> descriptor =
             new ListStateDescriptor<>(
                 "buffered-rows",
-                TypeInformation.of(new TypeHint<Tuple2<String, List<byte[]>>>(){})
+                TypeInformation.of(new TypeHint<Map<String, StarRocksSinkBufferEntity>>(){})
             );
         checkpointedState = context.getOperatorStateStore().getListState(descriptor);
     }
@@ -158,10 +176,10 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
         if (StarRocksSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
             flushPreviousState();
             // save state
-            checkpointedState.add(new Tuple2<>(sinkManager.createBatchLabel(), new ArrayList<>(sinkManager.getBufferedBatchList())));
+            checkpointedState.add(sinkManager.getBufferedBatchMap());
             return;
         }
-        sinkManager.flush(sinkManager.createBatchLabel(), true);
+        sinkManager.flush(null, true);
     }
 
     @Override
@@ -175,9 +193,9 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
 
     private void flushPreviousState() throws Exception {
         // flush the batch saved at the previous checkpoint
-        for (Tuple2<String, List<byte[]>> state : checkpointedState.get()) {
-            sinkManager.setBufferedBatchList(state.f1);
-            sinkManager.flush(state.f0, true);
+        for (Map<String, StarRocksSinkBufferEntity> state : checkpointedState.get()) {
+            sinkManager.setBufferedBatchMap(state);
+            sinkManager.flush(null, true);
         }
         checkpointedState.clear();
     }

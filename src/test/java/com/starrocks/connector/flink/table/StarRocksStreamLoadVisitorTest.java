@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.starrocks.connector.flink.StarRocksSinkBaseTest;
+import com.starrocks.connector.flink.manager.StarRocksSinkBufferEntity;
 import com.starrocks.connector.flink.manager.StarRocksStreamLoadVisitor;
 
 public class StarRocksStreamLoadVisitorTest extends StarRocksSinkBaseTest {
@@ -40,7 +41,10 @@ public class StarRocksStreamLoadVisitorTest extends StarRocksSinkBaseTest {
         // test failed
         String exMsg = "";
         try {
-            visitor.doStreamLoad(new Tuple3<>(mockFailedResponse(), (long)"aaaa".getBytes().length, Lists.newArrayList("aaaa".getBytes())));
+            mockFailedResponse();
+            StarRocksSinkBufferEntity entity = new StarRocksSinkBufferEntity(OPTIONS.getDatabaseName(), OPTIONS.getTableName());
+            entity.addToBuffer("aaaa".getBytes());
+            visitor.doStreamLoad(entity);
         } catch (Exception e) {
             exMsg = e.getLocalizedMessage();
         }
@@ -53,7 +57,10 @@ public class StarRocksStreamLoadVisitorTest extends StarRocksSinkBaseTest {
         // test failed
         String exMsg = "";
         try {
-            visitor.doStreamLoad(new Tuple3<>(mockFailedResponse(), (long)"aaaa".getBytes().length, Lists.newArrayList("aaaa".getBytes())));
+            mockFailedResponse();
+            StarRocksSinkBufferEntity entity = new StarRocksSinkBufferEntity(OPTIONS.getDatabaseName(), OPTIONS.getTableName());
+            entity.addToBuffer("aaaa".getBytes());
+            visitor.doStreamLoad(entity);
         } catch (Exception e) {
             exMsg = e.getMessage();
         }
@@ -61,7 +68,10 @@ public class StarRocksStreamLoadVisitorTest extends StarRocksSinkBaseTest {
         // test suucess
         exMsg = "";
         try {
-            visitor.doStreamLoad(new Tuple3<>(mockSuccessResponse(), (long)"aaaa".getBytes().length, Lists.newArrayList("aaaa".getBytes())));
+            mockSuccessResponse();
+            StarRocksSinkBufferEntity entity = new StarRocksSinkBufferEntity(OPTIONS.getDatabaseName(), OPTIONS.getTableName());
+            entity.addToBuffer("aaaa".getBytes());
+            visitor.doStreamLoad(entity);
         } catch (Exception e) {
             exMsg = e.getLocalizedMessage();
         }

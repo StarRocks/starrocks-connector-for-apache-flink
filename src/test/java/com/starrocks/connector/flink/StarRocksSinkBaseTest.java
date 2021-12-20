@@ -17,6 +17,7 @@ package com.starrocks.connector.flink;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.Field;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.ByteBuffer;
@@ -25,6 +26,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import com.alibaba.fastjson.JSON;
@@ -41,6 +43,7 @@ import org.junit.After;
 import org.junit.Before;
 
 import mockit.Mocked;
+import mockit.Tested;
 import mockit.Expectations;
 
 public abstract class StarRocksSinkBaseTest {
@@ -70,7 +73,7 @@ public abstract class StarRocksSinkBaseTest {
     protected StarRocksSinkOptions.Builder OPTIONS_BUILDER;
     protected TableSchema TABLE_SCHEMA;
     protected Map<String, String> STARROCKS_TABLE_META;
-    protected String mockResonse = "";
+    protected Map<String, Object> mockResonse;
     private ServerSocket serverSocket;
 
     @Before
@@ -107,26 +110,42 @@ public abstract class StarRocksSinkBaseTest {
             public void run() {
                 try {
                     while (true) {
-                        try (Socket socket = serverSocket.accept()) {
-                            InputStream in = socket.getInputStream();
-                            byte[] b = new byte[in.available()];
-                            int len = in.read(b);
-                            new String(b, 0, len);
-                            Thread.sleep(100);
-                            String res = "HTTP/1.1 200 OK\r\n" +
-                                        "\r\n" +
-                                        mockResonse;
-                            OutputStream out = socket.getOutputStream();
-                            if (0 == len) {
-                                out.write("".getBytes());
-                            } else {
-                                out.write(res.getBytes());
-                            }
-                            out.flush();
-                            out.close();
-                            in.close();
-                            socket.close();
-                        }
+                        try {
+                            if (null == serverSocket || serverSocket.isClosed()) break;
+                            Socket ac = serverSocket.accept();
+                            final Socket socket = ac;
+                            if (null == mockResonse) continue;
+                            long waitTime = Long.valueOf(mockResonse.get("LoadTimeMs").toString());
+                            String respStr = JSON.toJSONString(mockResonse);
+                            new Thread(new Runnable(){
+                                @Override
+                                public void run() {
+                                    try {
+                                        InputStream in = socket.getInputStream();
+                                        byte[] b = new byte[in.available()];
+                                        int len = in.read(b);
+                                        new String(b, 0, len);
+                                        Thread.sleep(Math.max(waitTime, 100));
+                                        String res = "HTTP/1.1 200 OK\r\n" +
+                                                    "\r\n" +
+                                                    respStr;
+                                        OutputStream out = socket.getOutputStream();
+                                        if (0 == len) {
+                                            out.write("".getBytes());
+                                        } else {
+                                            out.write(res.getBytes());
+                                        }
+                                        out.flush();
+                                        out.close();
+                                        in.close();
+                                    } catch (Exception e) {} finally {
+                                        try {
+                                            socket.close();
+                                        } catch (Exception ex) {}
+                                    }                 
+                                }
+                            }).start();
+                        } catch (Exception e) {}
                     }
                 } catch (Exception e) {}
 
@@ -186,10 +205,6 @@ public abstract class StarRocksSinkBaseTest {
         };
     }
 
-    protected void mockMapResponse(Map<String, Object> resp) {
-        mockResonse = JSON.toJSONString(resp);
-    }
-
     protected String mockSuccessResponse() {
         String label = UUID.randomUUID().toString();
         Map<String, Object> r = new HashMap<String, Object>();
@@ -197,7 +212,20 @@ public abstract class StarRocksSinkBaseTest {
         r.put("Label", label);
         r.put("Status", "Success");
         r.put("Message", "OK");
-        mockMapResponse(r);
+        r.put("LoadTimeMs", 10);
+        mockResonse = r;
+        return label;
+    }
+
+    protected String mockWaitSuccessResponse(long waitMs) {
+        String label = UUID.randomUUID().toString();
+        Map<String, Object> r = new HashMap<String, Object>();
+        r.put("TxnId", new java.util.Date().getTime());
+        r.put("Label", label);
+        r.put("Status", "Success");
+        r.put("Message", "OK");
+        r.put("LoadTimeMs", waitMs);
+        mockResonse = r;
         return label;
     }
 
@@ -208,7 +236,8 @@ public abstract class StarRocksSinkBaseTest {
         r.put("Label", label);
         r.put("Status", "Fail");
         r.put("Message", "Failed to do stream loading.");
-        mockMapResponse(r);
+        r.put("LoadTimeMs", 10);
+        mockResonse = r;
         return label;
     }
 
@@ -239,6 +268,18 @@ public abstract class StarRocksSinkBaseTest {
             return bos.array();
         }
         throw new RuntimeException("Failed to join rows data, unsupported `format` from stream load properties:");
+    }
+
+    protected Object getPrivateFieldValue(Object ins, String name) throws Exception {
+        Field field = ins.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return field.get(ins);
+    }
+
+    protected void setPrivateFieldValue(Object ins, String name, Object value) throws Exception {
+        Field field = ins.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        field.set(ins, value);
     }
     
 }
