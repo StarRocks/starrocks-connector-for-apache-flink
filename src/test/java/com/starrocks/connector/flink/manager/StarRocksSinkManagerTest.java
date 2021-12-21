@@ -42,6 +42,7 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
     @Test
     public void testValidateTableStructure() {
         mockTableStructure();
+        mockStarRocksVersion(null);
         OPTIONS.getSinkStreamLoadProperties().remove("columns");
         assertTrue(!OPTIONS.hasColumnMappingProperty());
         // test succeeded
@@ -99,6 +100,7 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
     @Test
     public void testWriteMaxBatch() throws IOException {
         mockTableStructure();
+        mockStarRocksVersion(null);
         long maxRows = OPTIONS.getSinkMaxRows();
         stopHttpServer();
         try {
@@ -126,6 +128,7 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
     @Test
     public void testWriteMaxBytes() throws IOException {
         mockTableStructure();
+        mockStarRocksVersion(null);
         long maxSize = OPTIONS.getSinkMaxBytes();
         stopHttpServer();
         int rowLength = 100000;
@@ -155,6 +158,7 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
     @Test
     public void testWriteMaxRetries() throws IOException {
         mockTableStructure();
+        mockStarRocksVersion(null);
         int maxRetries = OPTIONS.getSinkMaxRetries();
         if (maxRetries <= 0) return;
         stopHttpServer();
@@ -190,6 +194,7 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
     @Test
     public void testFlush() throws Exception {
         mockTableStructure();
+        mockStarRocksVersion(null);
         mockSuccessResponse();
         String exMsg = "";
         try {
@@ -227,6 +232,7 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
     @Test
     public void testClose() throws InterruptedException {
         mockTableStructure();
+        mockStarRocksVersion(null);
         mockSuccessResponse();
         String exMsg = "";
 
@@ -249,6 +255,7 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
     @Test
     public void testOffer() throws InterruptedException {
         mockTableStructure();
+        mockStarRocksVersion(null);
         mockSuccessResponse();
         String exMsg = "";
         long offerTimeoutMs = 500L;
