@@ -15,7 +15,6 @@
 package com.starrocks.connector.flink.manager;
 
 import java.io.Serializable;
-import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -62,9 +61,29 @@ public class StarRocksQueryVisitor implements Serializable {
         return rows;
     }
 
+    public String getStarRocksVersion() {
+        final String query = "select current_version() as ver;";
+        List<Map<String, Object>> rows;
+        try {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug(String.format("Executing query '%s'", query));
+            }
+            rows = executeQuery(query);
+            if (null == rows || rows.isEmpty()) {
+                return "";
+            }
+            String version = rows.get(0).get("ver").toString();
+            LOG.info(String.format("StarRocks version: [%s].", version));
+            return version;
+        } catch (ClassNotFoundException se) {
+            throw new IllegalArgumentException("Failed to find jdbc driver." + se.getMessage(), se);
+        } catch (SQLException se) {
+            throw new IllegalArgumentException("Failed to get StarRocks version. " + se.getMessage(), se);
+        }
+    }
+
     private List<Map<String, Object>> executeQuery(String query, String... args) throws ClassNotFoundException, SQLException {
-        Connection dbConn = jdbcConnProvider.getConnection();
-        PreparedStatement stmt = dbConn.prepareStatement(query, ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY);
+        PreparedStatement stmt = jdbcConnProvider.getConnection().prepareStatement(query, ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY);
         for (int i = 0; i < args.length; i++) {
             stmt.setString(i + 1, args[i]);
         }
@@ -84,7 +103,7 @@ public class StarRocksQueryVisitor implements Serializable {
         }
         rs.absolute(currRowIndex);
         rs.close();
-        dbConn.close();
+        jdbcConnProvider.close();
         return list;
     }
 }

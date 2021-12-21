@@ -97,6 +97,8 @@ public class StarRocksDynamicTableSinkITTest extends StarRocksSinkBaseTest {
                 result = meta;
             }
         };
+
+        mockStarRocksVersion(null);
         EnvironmentSettings bsSettings = EnvironmentSettings.newInstance()
             .useBlinkPlanner().inBatchMode().build();
         TableEnvironment tEnv = TableEnvironment.create(bsSettings);

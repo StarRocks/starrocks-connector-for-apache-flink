@@ -36,7 +36,7 @@ public class StarRocksStreamLoadVisitorTest extends StarRocksSinkBaseTest {
     @Test
     public void testNoAvailableHost() throws IOException {
         stopHttpServer();
-        StarRocksStreamLoadVisitor visitor = new StarRocksStreamLoadVisitor(OPTIONS, TABLE_SCHEMA.getFieldNames());
+        StarRocksStreamLoadVisitor visitor = new StarRocksStreamLoadVisitor(OPTIONS, TABLE_SCHEMA.getFieldNames(), true);
         // test failed
         String exMsg = "";
         try {
@@ -49,7 +49,7 @@ public class StarRocksStreamLoadVisitorTest extends StarRocksSinkBaseTest {
 
     @Test
     public void testDoStreamLoad() throws IOException {
-        StarRocksStreamLoadVisitor visitor = new StarRocksStreamLoadVisitor(OPTIONS, TABLE_SCHEMA.getFieldNames());
+        StarRocksStreamLoadVisitor visitor = new StarRocksStreamLoadVisitor(OPTIONS, TABLE_SCHEMA.getFieldNames(), true);
         // test failed
         String exMsg = "";
         try {
