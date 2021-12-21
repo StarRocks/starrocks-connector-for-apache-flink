@@ -186,6 +186,15 @@ public abstract class StarRocksSinkBaseTest {
         };
     }
 
+    protected void mockStarRocksVersion(String version) {
+        new Expectations(){
+            {
+                v.getStarRocksVersion();
+                result = null == version ? "2.0.0" : version;
+            }
+        };
+    }
+
     protected void mockMapResponse(Map<String, Object> resp) {
         mockResonse = JSON.toJSONString(resp);
     }
