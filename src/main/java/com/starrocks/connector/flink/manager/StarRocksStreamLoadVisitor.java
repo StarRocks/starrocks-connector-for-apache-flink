@@ -61,10 +61,12 @@ public class StarRocksStreamLoadVisitor implements Serializable {
     private final StarRocksSinkOptions sinkOptions;
     private final String[] fieldNames;
     private long pos;
+    private boolean __opAutoProjectionInJson;
 
-    public StarRocksStreamLoadVisitor(StarRocksSinkOptions sinkOptions, String[] fieldNames) {
+    public StarRocksStreamLoadVisitor(StarRocksSinkOptions sinkOptions, String[] fieldNames, boolean __opAutoProjectionInJson) {
         this.fieldNames = fieldNames;
         this.sinkOptions = sinkOptions;
+        this.__opAutoProjectionInJson = __opAutoProjectionInJson;
     }
 
     public Map<String, Object> doStreamLoad(Tuple3<String, Long, ArrayList<byte[]>> labeledRows) throws IOException {
@@ -194,7 +196,7 @@ public class StarRocksStreamLoadVisitor implements Serializable {
             for (Map.Entry<String,String> entry : props.entrySet()) {
                 httpPut.setHeader(entry.getKey(), entry.getValue());
             }
-            if (!props.containsKey("columns") && (sinkOptions.supportUpsertDelete() || StarRocksSinkOptions.StreamLoadFormat.CSV.equals(sinkOptions.getStreamLoadFormat()))) {
+            if (!props.containsKey("columns") && ((sinkOptions.supportUpsertDelete() && !__opAutoProjectionInJson) || StarRocksSinkOptions.StreamLoadFormat.CSV.equals(sinkOptions.getStreamLoadFormat()))) {
                 String cols = String.join(",", Arrays.asList(fieldNames).stream().map(f -> String.format("`%s`", f.trim().replace("`", ""))).collect(Collectors.toList()));
                 if (cols.length() > 0 && sinkOptions.supportUpsertDelete()) {
                     cols += String.format(",%s", StarRocksSinkOP.COLUMN_KEY);
@@ -203,7 +205,6 @@ public class StarRocksStreamLoadVisitor implements Serializable {
             }
             httpPut.setHeader("Expect", "100-continue");
             httpPut.setHeader("label", label);
-            httpPut.setHeader("Content-Type", "application/x-www-form-urlencoded");
             httpPut.setHeader("Authorization", getBasicAuthHeader(sinkOptions.getUsername(), sinkOptions.getPassword()));
             httpPut.setEntity(new ByteArrayEntity(data));
             httpPut.setConfig(RequestConfig.custom().setRedirectsEnabled(true).build());

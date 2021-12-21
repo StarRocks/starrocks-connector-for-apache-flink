@@ -30,7 +30,8 @@ import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.binary.NestedRowData;
 import org.apache.flink.types.RowKind;
 import org.apache.flink.util.InstantiationUtil;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.flink.calcite.shaded.com.google.common.base.Strings;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
@@ -50,6 +51,7 @@ import com.starrocks.connector.flink.row.StarRocksSerializerFactory;
 public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> implements CheckpointedFunction {
 
     private static final long serialVersionUID = 1L;
+    private static final Logger LOG = LoggerFactory.getLogger(StarRocksDynamicSinkFunction.class);
 
     private StarRocksSinkManager sinkManager;
     private StarRocksIRowTransformer<T> rowTransformer;
@@ -130,6 +132,7 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
             }
         }
         if (!(value instanceof RowData)) {
+            LOG.warn("Unsupported row data invoked: [%s]", value.getClass().getName());
             return;
         }
         if (RowKind.UPDATE_BEFORE.equals(((RowData)value).getRowKind())) {

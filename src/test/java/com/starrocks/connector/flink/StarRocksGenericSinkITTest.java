@@ -72,6 +72,7 @@ public class StarRocksGenericSinkITTest extends StarRocksSinkBaseTest {
                 result = meta;
             }
         };
+        mockStarRocksVersion(null);
         mockSuccessResponse();
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setRestartStrategy(new RestartStrategies.NoRestartStrategyConfiguration());
