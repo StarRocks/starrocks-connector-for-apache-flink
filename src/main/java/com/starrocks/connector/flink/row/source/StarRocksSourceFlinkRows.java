@@ -64,7 +64,7 @@ public class StarRocksSourceFlinkRows {
 
     private int offsetOfBatchForRead;
     private int rowCountOfBatch;
-    private int flinksRowsCount;
+    private int flinkRowsCount;
 
     private List<GenericRowData> sourceFlinkRows = new ArrayList<>();
     private final ArrowStreamReader arrowStreamReader;
@@ -105,14 +105,14 @@ public class StarRocksSourceFlinkRows {
                 sourceFlinkRows.add(new GenericRowData(this.selectColumns.length));
             }
             this.genFlinkRows();
-            flinksRowsCount += root.getRowCount();
+            flinkRowsCount += root.getRowCount();
         }
         return this;
     }
 
     public boolean hasNext() {
         
-        if (offsetOfBatchForRead < flinksRowsCount) {
+        if (offsetOfBatchForRead < flinkRowsCount) {
             return true;
         }
         this.close();
@@ -130,7 +130,7 @@ public class StarRocksSourceFlinkRows {
     }
 
     public int getReadRowCount() {
-        return flinksRowsCount;
+        return flinkRowsCount;
     }
 
     private void close() {
