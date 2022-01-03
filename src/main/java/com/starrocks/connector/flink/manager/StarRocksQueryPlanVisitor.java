@@ -48,7 +48,7 @@ public class StarRocksQueryPlanVisitor implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    private static final Logger LOG = LoggerFactory.getLogger(StarRocksSinkManager.class);
+    private static final Logger LOG = LoggerFactory.getLogger(StarRocksQueryPlanVisitor.class);
 
     private final StarRocksSourceOptions sourceOptions;
 
