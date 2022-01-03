@@ -14,9 +14,13 @@
 
 package com.starrocks.connector.flink.table.source.struct;
 
+import java.io.Serializable;
+
 import com.starrocks.connector.flink.table.source.StarRocksSourceQueryType;
 
-public class PushDownHolder {
+public class PushDownHolder implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     private String filter = "";
     private long limit;
