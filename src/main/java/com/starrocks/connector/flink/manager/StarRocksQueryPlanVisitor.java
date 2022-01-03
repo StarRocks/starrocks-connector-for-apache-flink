@@ -97,7 +97,15 @@ public class StarRocksQueryPlanVisitor implements Serializable {
 
     private static QueryPlan getQueryPlan(String querySQL, String httpNode, StarRocksSourceOptions sourceOptions) throws IOException {
         
-        String url = "http://" + httpNode + "/api/" + sourceOptions.getDatabaseName() + "/" + sourceOptions.getTableName() + "/_query_plan";
+        String url = new StringBuilder("http://")
+            .append(httpNode)
+            .append("/api/")
+            .append(sourceOptions.getDatabaseName())
+            .append("/")
+            .append(sourceOptions.getTableName())
+            .append("/_query_plan")
+            .toString();
+
         Map<String, Object> bodyMap = new HashMap<>();
         bodyMap.put("sql", querySQL);
         String body = new JSONObject(bodyMap).toString();
