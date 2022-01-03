@@ -121,6 +121,12 @@ public class StarRocksQueryPlanVisitor implements Serializable {
             requsetCode = response.getStatusLine().getStatusCode();
             if (200 != requsetCode) {
                 LOG.warn("Request failed with code:{}", requsetCode);
+                try {
+                    Thread.sleep(1000l * (i + 1));
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("Unable to get query plan, interrupted while doing another attempt", ex);
+                }
                 continue;
             } else {
                 break;
