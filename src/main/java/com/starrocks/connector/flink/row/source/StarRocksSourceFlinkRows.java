@@ -52,7 +52,6 @@ import java.math.BigDecimal;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -61,6 +60,10 @@ import java.util.NoSuchElementException;
 public class StarRocksSourceFlinkRows {
 
     private static Logger LOG = LoggerFactory.getLogger(StarRocksSourceFlinkRows.class);
+
+    public static final String DATETIME_FORMAT_LONG = "yyyy-MM-dd HH:mm:ss.SSSSSS";
+    public static final String DATETIME_FORMAT_SHORT = "yyyy-MM-dd HH:mm:ss";
+    public static final String DATE_FORMAT = "yyyy-MM-dd";
 
     private int offsetOfBatchForRead;
     private int rowCountOfBatch;
@@ -184,39 +187,50 @@ public class StarRocksSourceFlinkRows {
             }
             if (flinkTypeRoot == LogicalTypeRoot.DATE) {
                 transToFlinkDate(starrocksType, beShowDataType, columnVector, colIndex, nullable);
+                continue;
             }
             if (flinkTypeRoot == LogicalTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE ||
                 flinkTypeRoot == LogicalTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE || 
                 flinkTypeRoot == LogicalTypeRoot.TIMESTAMP_WITH_TIME_ZONE) {
                 transToFlinkTimestamp(starrocksType, beShowDataType, columnVector, colIndex, nullable);
+                continue;
             }
             if (flinkTypeRoot == LogicalTypeRoot.CHAR ||
                 flinkTypeRoot == LogicalTypeRoot.VARCHAR) {
                 transToFlinkChar(starrocksType, beShowDataType, columnVector, colIndex, nullable);
+                continue;
             }
             if (flinkTypeRoot == LogicalTypeRoot.BOOLEAN) {
                 transToFlinkBoolean(starrocksType, beShowDataType, columnVector, colIndex, nullable);
+                continue;
             }
             if (flinkTypeRoot == LogicalTypeRoot.TINYINT) {
                 transToFlinkTinyInt(starrocksType, beShowDataType, columnVector, colIndex, nullable);
+                continue;
             }
             if (flinkTypeRoot == LogicalTypeRoot.SMALLINT) {
                 transToFlinkSmallInt(starrocksType, beShowDataType, columnVector, colIndex, nullable);
+                continue;
             }
             if (flinkTypeRoot == LogicalTypeRoot.INTEGER) {
                 transToFlinkInt(starrocksType, beShowDataType, columnVector, colIndex, nullable);
+                continue;
             }
             if (flinkTypeRoot == LogicalTypeRoot.BIGINT) {
                 transToFlinkBigInt(starrocksType, beShowDataType, columnVector, colIndex, nullable);
+                continue;
             }
             if (flinkTypeRoot == LogicalTypeRoot.FLOAT) {
                 transToFlinkFloat(starrocksType, beShowDataType, columnVector, colIndex, nullable);
+                continue;
             }
             if (flinkTypeRoot == LogicalTypeRoot.DOUBLE) {
                 transToFlinkDouble(starrocksType, beShowDataType, columnVector, colIndex, nullable);
+                continue;
             }
             if (flinkTypeRoot == LogicalTypeRoot.DECIMAL) {
                 transToFlinkDecimal(starrocksType, beShowDataType, columnVector, colIndex, nullable);
+                continue;
             }
         }
     }
@@ -344,7 +358,7 @@ public class StarRocksSourceFlinkRows {
             }
             String value = new String(varCharVector.get(rowIndex));
             LocalDate date = LocalDate.parse(value, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-            int timestamp = (int)date.atStartOfDay(ZoneOffset.ofHours(8)).toLocalDate().toEpochDay();
+            int timestamp = (int)date.atStartOfDay().toLocalDate().toEpochDay();
             setValueToFlinkRows(rowIndex, colIndex, timestamp);
         }
     }
@@ -361,17 +375,15 @@ public class StarRocksSourceFlinkRows {
                 setValueToFlinkRows(rowIndex, colIndex, null);
                 continue;
             }
-            String formatStringLong = "yyyy-MM-dd HH:mm:ss.SSSSSS";
-            String formatStringShort = "yyyy-MM-dd HH:mm:ss";
             String value = new String(varCharVector.get(rowIndex));
-            if (value.length() < formatStringShort.length()) {
+            if (value.length() < DATETIME_FORMAT_SHORT.length()) {
                 throw new RuntimeException("");
             }
-            if (value.length() == formatStringShort.length()) {
-                value = DataUtil.addZeroForNum(value + ".", formatStringLong.length());
+            if (value.length() == DATETIME_FORMAT_SHORT.length()) {
+                value = DataUtil.addZeroForNum(value + ".", DATETIME_FORMAT_LONG.length());
             } 
-            value = DataUtil.addZeroForNum(value, formatStringLong.length());
-            DateTimeFormatter df = DateTimeFormatter.ofPattern(formatStringLong);
+            value = DataUtil.addZeroForNum(value, DATETIME_FORMAT_LONG.length());
+            DateTimeFormatter df = DateTimeFormatter.ofPattern(DATETIME_FORMAT_LONG);
             LocalDateTime ldt = LocalDateTime.parse(value, df);
             setValueToFlinkRows(rowIndex, colIndex, TimestampData.fromLocalDateTime(ldt));
         }
