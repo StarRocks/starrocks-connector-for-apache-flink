@@ -13,6 +13,7 @@ public class StarRocksSource {
      *
      * @param sourceOptions     StarRocksSourceOptions as the document listed, such as http-nodes, load-url, batch size and maximum retries
      * @param flinkSchema       FlinkSchema
+     * @return StarRocksDynamicSourceFunction Function of RichParallelSourceFunction
      */
     public static StarRocksDynamicSourceFunction source(StarRocksSourceOptions sourceOptions, TableSchema flinkSchema) {
         
