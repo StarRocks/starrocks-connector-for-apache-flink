@@ -65,8 +65,8 @@ public class StarRocksQueryPlanVisitor implements Serializable {
         QueryPlan plan = getQueryPlan(SQL, httpNodes[new Random().nextInt(httpNodes.length)], sourceOptions);
         Map<String, Set<Long>> beXTablets = transferQueryPlanToBeXTablet(plan);
         List<QueryBeXTablets> queryBeXTabletsList = new ArrayList<>();
-        beXTablets.forEach((be, tablets) -> {
-            QueryBeXTablets queryBeXTablets = new QueryBeXTablets(be, new ArrayList<>(tablets));
+        beXTablets.entrySet().stream().forEach(entry -> {
+            QueryBeXTablets queryBeXTablets = new QueryBeXTablets(entry.getKey(), new ArrayList<>(entry.getValue()));
             queryBeXTabletsList.add(queryBeXTablets);
         });
         return new QueryInfo(plan, queryBeXTabletsList);
