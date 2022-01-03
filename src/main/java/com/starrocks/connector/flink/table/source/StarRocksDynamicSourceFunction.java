@@ -43,8 +43,8 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
     
     private StarRocksSourceQueryType queryType;
 
-    private transient Counter totalCountDataRowsOfSingleSubTask;
-    private static final String COUNTER_TOTAL_COUNT_DATA_ROWS_OF_SINGLE_SUBTASK = "totalCountDataRowsOfSingleSubTask";
+    private transient Counter counterTotalscannedrows;
+    private static final String TOTAL_SCANNED_ROWS = "totalscannedrows";
 
     public StarRocksDynamicSourceFunction(StarRocksSourceOptions sourceOptions, TableSchema flinkSchema) {
         
@@ -124,7 +124,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
     @Override
     public void open(Configuration parameters) throws Exception {
         super.open(parameters);
-        this.totalCountDataRowsOfSingleSubTask = getRuntimeContext().getMetricGroup().counter(COUNTER_TOTAL_COUNT_DATA_ROWS_OF_SINGLE_SUBTASK);
+        this.counterTotalscannedrows = getRuntimeContext().getMetricGroup().counter(TOTAL_SCANNED_ROWS);
 
         int subTaskId = getRuntimeContext().getIndexOfThisSubtask();
         if (this.queryType == StarRocksSourceQueryType.QueryCount) {
@@ -149,7 +149,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
         this.dataReaderList.forEach(dataReader -> {
             while (dataReader.hasNext()) {
                 RowData row = dataReader.getNext();
-                totalCountDataRowsOfSingleSubTask.inc(1);
+                counterTotalscannedrows.inc(1);
                 sourceContext.collect(row);
             }
         });

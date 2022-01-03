@@ -131,7 +131,7 @@ public class StarRocksDynamicLookupFunction extends TableFunction<RowData> {
         } else {
             ArrayList<RowData> rows = new ArrayList<>();
             this.dataReaderList.forEach(dataReader -> {
-            while (dataReader.hasNext()) {
+                while (dataReader.hasNext()) {
                     RowData row = dataReader.getNext();
                     rows.add(row);
                     collect(row);
