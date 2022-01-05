@@ -52,6 +52,19 @@ public class StarRocksExpressionExtractor implements ExpressionVisitor<String> {
     public String visit(CallExpression call) {
 
         FunctionDefinition funcDef = call.getFunctionDefinition();
+
+        if (funcDef.equals(BuiltInFunctionDefinitions.LIKE)) {
+            throw new RuntimeException("Not support filter -> [like]");
+        }
+
+        if (funcDef.equals(BuiltInFunctionDefinitions.IN)) {
+            throw new RuntimeException("Not support filter -> [in]");
+        }
+
+        if (funcDef.equals(BuiltInFunctionDefinitions.BETWEEN)) {
+            throw new RuntimeException("Not support filter -> [between]");
+        }
+
         if (funcDef.equals(BuiltInFunctionDefinitions.CAST)) {
             return call.getChildren().get(0).accept(this);
         }
