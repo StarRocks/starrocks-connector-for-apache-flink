@@ -53,7 +53,7 @@ public abstract class StarRocksSourceBaseTest {
     protected final int AVAILABLE_QUERY_PORT = 53329;
     protected final String JDBC_URL = "jdbc:mysql://127.0.0.1:53329,127.0.0.1:" + AVAILABLE_QUERY_PORT;
     protected final int AVAILABLE_HTTP_PORT = 29592;
-    protected final String SCAN_URL = "127.0.0.1:29592,127.0.0.1:" + AVAILABLE_HTTP_PORT;
+    protected String SCAN_URL = "127.0.0.1:" + AVAILABLE_HTTP_PORT;
     protected String mockResonse = "";
     protected String querySQL = "select * from sr";
 
@@ -72,8 +72,7 @@ public abstract class StarRocksSourceBaseTest {
         };
     }
 
-    @Before
-    public void initializeOptions() {
+    private void initializeOptions() {
 
         StarRocksSourceOptions options = StarRocksSourceOptions.builder()
                 .withProperty("scan-url", SCAN_URL)
@@ -131,13 +130,15 @@ public abstract class StarRocksSourceBaseTest {
 
     @Before
     public void createHttpServer() throws IOException {
-        serverSocket = new ServerSocket(AVAILABLE_HTTP_PORT);
+        tryBindingServerSocket();
         new Thread(new Runnable(){
             @Override
             public void run() {
                 try {
                     while (true) {
-                        Socket socket = serverSocket.accept();
+                        if (null == serverSocket || serverSocket.isClosed()) break;
+                        Socket ac = serverSocket.accept();
+                        final Socket socket = ac;
                         InputStream in = socket.getInputStream();
                         BufferedReader bd = new BufferedReader(new InputStreamReader(in));
                         String requestHeader;
@@ -168,6 +169,19 @@ public abstract class StarRocksSourceBaseTest {
             }
         }).start();
     }
+
+    private void tryBindingServerSocket() {
+        int maxTryingPorts = 100;
+        for (int i = 0; i < maxTryingPorts; i++) {
+            try {
+                int port = AVAILABLE_HTTP_PORT + i;
+                serverSocket = new ServerSocket(port);
+                SCAN_URL = "127.0.0.1:" + port;
+                initializeOptions();
+            } catch (IOException e) {}
+        }
+    }
+
 
     @After
     public void stopHttpServer() throws IOException {
