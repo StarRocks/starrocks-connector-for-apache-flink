@@ -89,8 +89,8 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
 
     private String genSQL(StarRocksSourceOptions options) {
 
-        String columns = options.getColumns().equals("") ? "*" : options.getColumns();
-        String filter = options.getFilter().equals("") ? "" : " where " + options.getFilter();
+        String columns = options.getColumns().isEmpty() ? "*" : options.getColumns();
+        String filter = options.getFilter().isEmpty() ? "" : " where " + options.getFilter();
         String SQL = "select " + columns + " from " + options.getDatabaseName() + "." + options.getTableName() + filter;
         return SQL;
     }
@@ -110,7 +110,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
             break;
         }
         SQL = SQL + " from " + sourceOptions.getDatabaseName() + "." + sourceOptions.getTableName();
-        if (!(filter == null || filter.equals(""))) {
+        if (!(filter == null || filter.isEmpty())) {
             SQL = SQL + " where " + filter;
         }
         if (limit > 0) {
@@ -146,7 +146,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
     @Override
     public void run(SourceContext<RowData> sourceContext) {
 
-        this.dataReaderList.forEach(dataReader -> {
+        this.dataReaderList.stream().forEach(dataReader -> {
             while (dataReader.hasNext()) {
                 RowData row = dataReader.getNext();
                 counterTotalscannedrows.inc(1);
@@ -157,7 +157,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
 
     @Override
     public void cancel() {
-        this.dataReaderList.forEach(dataReader -> {
+        this.dataReaderList.stream().forEach(dataReader -> {
             if (dataReader != null) {
                 dataReader.close();
             }
