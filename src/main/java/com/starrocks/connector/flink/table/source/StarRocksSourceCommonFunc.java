@@ -38,6 +38,27 @@ import org.apache.flink.table.api.TableSchema;
 
 public class StarRocksSourceCommonFunc {
     
+    private static StarRocksQueryVisitor starrocksQueryVisitor;
+
+    private static StarRocksQueryVisitor getStarRocksQueryVisitor(StarRocksSourceOptions sourceOptions) {
+
+        if (null == starrocksQueryVisitor) {
+            synchronized(StarRocksSourceCommonFunc.class) {
+                if (null == starrocksQueryVisitor) {
+                    StarRocksJdbcConnectionOptions jdbcOptions = new StarRocksJdbcConnectionOptions(
+                        sourceOptions.getJdbcUrl(), sourceOptions.getUsername(), sourceOptions.getPassword()
+                    );
+                    StarRocksJdbcConnectionProvider jdbcConnProvider;
+                    jdbcConnProvider = new StarRocksJdbcConnectionProvider(jdbcOptions);
+                    starrocksQueryVisitor = new StarRocksQueryVisitor(
+                        jdbcConnProvider, sourceOptions.getDatabaseName(), sourceOptions.getTableName()
+                    );
+                }
+            }
+        }
+        return starrocksQueryVisitor;
+    }
+
     public static List<List<QueryBeXTablets>> splitQueryBeXTablets(int subTaskCount, QueryInfo queryInfo) {
 
         List<List<QueryBeXTablets>> curBeXTabletList = new ArrayList<>();
@@ -110,33 +131,21 @@ public class StarRocksSourceCommonFunc {
         }
     }
 
+    // public static void validateTableStructure(StarRocksSourceOptions sourceOptions, TableSchema flinkSchema) {
 
-    private static StarRocksQueryVisitor genStarRocksQueryVisitor(StarRocksSourceOptions sourceOptions) {
+    //     StarRocksQueryVisitor starrocksQueryVisitor = genStarRocksQueryVisitor(sourceOptions);
+    //     List<Map<String, Object>> rows = starrocksQueryVisitor.getTableColumnsMetaData();
+    //     List<TableColumn> flinkCols = flinkSchema.getTableColumns();
+    //     if (flinkCols.size() != rows.size()) {
+    //         throw new RuntimeException("Flink columns size not equal StarRocks columns");
+    //     }
+    // }
 
-        StarRocksJdbcConnectionProvider jdbcConnProvider;
-        StarRocksQueryVisitor starrocksQueryVisitor;
-        StarRocksJdbcConnectionOptions jdbcOptions = new StarRocksJdbcConnectionOptions(sourceOptions.getJdbcUrl(), sourceOptions.getUsername(), sourceOptions.getPassword());
-        jdbcConnProvider = new StarRocksJdbcConnectionProvider(jdbcOptions);
-        starrocksQueryVisitor = new StarRocksQueryVisitor(jdbcConnProvider, sourceOptions.getDatabaseName(), sourceOptions.getTableName());
-        return starrocksQueryVisitor;
-    }
-
-
-    public static void validateTableStructure(StarRocksSourceOptions sourceOptions, TableSchema flinkSchema) {
-
-        StarRocksQueryVisitor starrocksQueryVisitor = genStarRocksQueryVisitor(sourceOptions);
-        List<Map<String, Object>> rows = starrocksQueryVisitor.getTableColumnsMetaData();
-        List<TableColumn> flinkCols = flinkSchema.getTableColumns();
-        if (flinkCols.size() != rows.size()) {
-            throw new RuntimeException("Flink columns size not equal StarRocks columns");
-        }
-    }
 
     public static int getQueryCount(StarRocksSourceOptions sourceOptions, String SQL) {
-        StarRocksQueryVisitor starrocksQueryVisitor = genStarRocksQueryVisitor(sourceOptions);
+        StarRocksQueryVisitor starrocksQueryVisitor = getStarRocksQueryVisitor(sourceOptions);
         return starrocksQueryVisitor.getQueryCount(SQL);
     }
-
 
     public static Map<String, ColunmRichInfo> genColumnMap(TableSchema flinkSchema) {
 
@@ -156,7 +165,9 @@ public class StarRocksSourceCommonFunc {
                 .stream().sorted(Comparator.comparing(ColunmRichInfo::getColunmIndexInSchema)).collect(Collectors.toList());
     }
 
-    public static SelectColumn[] genSelectedColumns(Map<String, ColunmRichInfo> columnMap, StarRocksSourceOptions sourceOptions, List<ColunmRichInfo> colunmRichInfos) {
+    public static SelectColumn[] genSelectedColumns(Map<String, ColunmRichInfo> columnMap, 
+                                                    StarRocksSourceOptions sourceOptions, 
+                                                    List<ColunmRichInfo> colunmRichInfos) {
         List<SelectColumn> selectedColumns = new ArrayList<>();
         // user selected colums from sourceOptions
         String selectColumnString = sourceOptions.getColumns();
