@@ -380,7 +380,8 @@ public class StarRocksSourceFlinkRows {
                 throw new RuntimeException("");
             }
             if (value.length() == DATETIME_FORMAT_SHORT.length()) {
-                value = DataUtil.addZeroForNum(value + ".", DATETIME_FORMAT_LONG.length());
+                StringBuilder sb = new StringBuilder(value).append(".");
+                value = DataUtil.addZeroForNum(sb.toString(), DATETIME_FORMAT_LONG.length());
             } 
             value = DataUtil.addZeroForNum(value, DATETIME_FORMAT_LONG.length());
             DateTimeFormatter df = DateTimeFormatter.ofPattern(DATETIME_FORMAT_LONG);

@@ -21,9 +21,9 @@ import org.apache.flink.table.data.GenericRowData;
 
 public class StarRocksSourceTrickReader implements StarRocksSourceDataReader, Serializable {
 
-    private int dataCount;
+    private Long dataCount;
 
-    public StarRocksSourceTrickReader(int dataCount) {
+    public StarRocksSourceTrickReader(Long dataCount) {
         this.dataCount = dataCount;
     }
 

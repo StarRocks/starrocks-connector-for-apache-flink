@@ -88,34 +88,23 @@ public class StarRocksQueryVisitor implements Serializable {
         return list;
     }
 
-    public int getQueryCount(String SQL) {
-        int count;
+    public Long getQueryCount(String SQL) {
+        Long count = 0L;
         try {
             if (LOG.isDebugEnabled()) {
                 LOG.debug(String.format("Executing query '%s'", SQL));
             }
-            count = executeCountQuery(SQL, this.database, this.table);
+            List<Map<String, Object>> data = executeQuery(SQL);
+            Object opCount = data.get(0).values().stream().findFirst().get();
+            if (null == opCount) {
+                throw new RuntimeException("Faild to get data count from StarRocks. ");
+            }
+            count = (Long)opCount;
         } catch (ClassNotFoundException se) {
             throw new IllegalArgumentException("Failed to find jdbc driver." + se.getMessage(), se);
         } catch (SQLException se) {
             throw new IllegalArgumentException("Failed to get table schema info from StarRocks. " + se.getMessage(), se);
         }
-        return count;
-    }
-
-    private int executeCountQuery(String query, String... args) throws ClassNotFoundException, SQLException {
-
-        Connection dbConn = jdbcConnProvider.getConnection();
-        PreparedStatement stmt = dbConn.prepareStatement(query, ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY);
-        ResultSet rs = stmt.executeQuery();
-        int count = 0;
-        if (rs.next()) { 
-            count = rs.getInt(1); 
-        } else {
-            throw new RuntimeException("Failed to get count from StarRocks. ");
-        }
-        rs.close();
-        dbConn.close();
         return count;
     }
 }

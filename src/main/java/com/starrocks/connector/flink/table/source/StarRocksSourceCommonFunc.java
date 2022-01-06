@@ -142,7 +142,7 @@ public class StarRocksSourceCommonFunc {
     // }
 
 
-    public static int getQueryCount(StarRocksSourceOptions sourceOptions, String SQL) {
+    public static Long getQueryCount(StarRocksSourceOptions sourceOptions, String SQL) {
         StarRocksQueryVisitor starrocksQueryVisitor = getStarRocksQueryVisitor(sourceOptions);
         return starrocksQueryVisitor.getQueryCount(SQL);
     }
