@@ -53,7 +53,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
         Map<String, ColunmRichInfo> columnMap = StarRocksSourceCommonFunc.genColumnMap(flinkSchema);
         this.colunmRichInfos = StarRocksSourceCommonFunc.genColunmRichInfo(columnMap);
         String SQL = genSQL(sourceOptions);
-        if (this.sourceOptions.getColumns().trim().equals("count(*)") || this.sourceOptions.getColumns().trim().equals("count(1)")) {
+        if (this.sourceOptions.getColumns().trim().contains("count(")) {
             this.queryType = StarRocksSourceQueryType.QueryCount;
             this.dataCount = StarRocksSourceCommonFunc.getQueryCount(this.sourceOptions, SQL);
             this.selectColumns = null;
