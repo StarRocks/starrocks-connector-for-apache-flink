@@ -118,17 +118,15 @@ public class StarRocksQueryPlanVisitor implements Serializable {
             post.setEntity(new ByteArrayEntity(body.getBytes()));
             response = httpClient.execute(post);
             requsetCode = response.getStatusLine().getStatusCode();
-            if (200 != requsetCode) {
-                LOG.warn("Request failed with code:{}", requsetCode);
-                try {
-                    Thread.sleep(1000l * (i + 1));
-                } catch (InterruptedException ex) {
-                    Thread.currentThread().interrupt();
-                    throw new IOException("Unable to get query plan, interrupted while doing another attempt", ex);
-                }
-                continue;
-            } else {
+            if (200 == requsetCode || i == sourceOptions.getScanMaxRetries() - 1) {
                 break;
+            }
+            LOG.warn("Request failed with code:{}", requsetCode);
+            try {
+                Thread.sleep(1000l * (i + 1));
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Unable to get query plan, interrupted while doing another attempt", ex);
             }
         }
         if (200 != requsetCode) {
