@@ -83,11 +83,10 @@ public class StarRocksQueryPlanVisitor implements Serializable {
                     beXTablets.put(beNode, new HashSet<>());
                     candidateBe = beNode;
                     break;
-                } else {
-                    if (beXTablets.get(beNode).size() < tabletCount) {
-                        candidateBe = beNode;
-                        tabletCount = beXTablets.get(beNode).size();
-                    }
+                } 
+                if (beXTablets.get(beNode).size() < tabletCount) {
+                    candidateBe = beNode;
+                    tabletCount = beXTablets.get(beNode).size();
                 }
             }
             beXTablets.get(candidateBe).add(Long.valueOf(tabletId));
