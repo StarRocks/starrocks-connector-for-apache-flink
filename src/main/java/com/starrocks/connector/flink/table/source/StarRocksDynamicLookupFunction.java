@@ -1,26 +1,17 @@
-/*
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.starrocks.connector.flink.table.source;
 
 import java.text.SimpleDateFormat;
+import java.time.Duration;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
 
 import com.starrocks.connector.flink.table.source.struct.ColunmRichInfo;
 
@@ -28,37 +19,33 @@ import com.starrocks.connector.flink.table.source.struct.QueryBeXTablets;
 import com.starrocks.connector.flink.table.source.struct.QueryInfo;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 
-
-import org.apache.flink.table.data.DecimalData;
+import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
-import org.apache.flink.table.data.TimestampData;
-import org.apache.flink.table.data.binary.BinaryStringData;
 import org.apache.flink.table.functions.FunctionContext;
 import org.apache.flink.table.functions.TableFunction;
-import org.apache.flink.table.types.logical.LogicalTypeRoot;
 import org.apache.flink.types.Row;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.flink.shaded.guava18.com.google.common.cache.Cache;
-import org.apache.flink.shaded.guava18.com.google.common.cache.CacheBuilder;
-
 public class StarRocksDynamicLookupFunction extends TableFunction<RowData> {
-
-    private static final Logger LOG = LoggerFactory.getLogger(StarRocksDynamicLookupFunction.class);
+    
+    private static final Logger LOG = LoggerFactory.getLogger(StarRocksDynamicLUFunction.class);
     
     private final ColunmRichInfo[] filterRichInfos;
     private final StarRocksSourceOptions sourceOptions;
-    private final ArrayList<String> filterList;
     private QueryInfo queryInfo;
     private final SelectColumn[] selectColumns;
     private final List<ColunmRichInfo> columnRichInfos;
     private List<StarRocksSourceDataReader> dataReaderList;
-
-    private transient Cache<Row, List<RowData>> cache;
+    
     private final long cacheMaxSize;
     private final long cacheExpireMs;
     private final int maxRetryTimes;
+
+    // cache for lookup data
+    private Map<Row, List<RowData>> cacheMap;
+
+    private transient long nextLoadTime;
 
     public StarRocksDynamicLookupFunction(StarRocksSourceOptions sourceOptions, 
                                           ColunmRichInfo[] filterRichInfos, 
@@ -74,41 +61,40 @@ public class StarRocksDynamicLookupFunction extends TableFunction<RowData> {
         this.cacheExpireMs = sourceOptions.getLookupCacheTTL();
         this.maxRetryTimes = sourceOptions.getLookupMaxRetries();
 
-        this.filterList = new ArrayList<>();
         this.dataReaderList = new ArrayList<>();
+        this.cacheMap = new HashMap<>();
+        this.nextLoadTime = -1L;
     }
     
     @Override
     public void open(FunctionContext context) throws Exception {
         super.open(context);
-        this.cache =
-                    cacheMaxSize == -1 || cacheExpireMs == -1
-                            ? null
-                            : CacheBuilder.newBuilder()
-                                    .expireAfterWrite(cacheExpireMs, TimeUnit.MILLISECONDS)
-                                    .maximumSize(cacheMaxSize)
-                                    .build();
     }
 
     public void eval(Object... keys) {
-
+        reloadData();
         Row keyRow = Row.of(keys);
-        if (cache != null) {
-            List<RowData> cachedRows = cache.getIfPresent(keyRow);
-            if (cachedRows != null) {
-                for (RowData cachedRow : cachedRows) {
-                    collect(cachedRow);
-                }
-                return;
-            }
+        List<RowData> curList = cacheMap.get(keyRow);
+        if (curList != null) {
+            curList.parallelStream().forEach(data -> {
+                collect(data);
+            });
         }
+    }
 
-        for (int j = 0; j < keys.length; j ++) {
-            getFieldValue(keys[j], filterRichInfos[j]);
+    private void reloadData() {
+
+        if (nextLoadTime > System.currentTimeMillis()) {
+            return;
         }
-        String filter = String.join(" and ", filterList);
-        filterList.clear();
-        String SQL = "select * from " + sourceOptions.getDatabaseName() + "." + sourceOptions.getTableName() + " where " + filter;
+        if (nextLoadTime > 0) {
+            LOG.info("Lookup join cache has expired after {} (ms), reloading", this.cacheExpireMs);
+        } else {
+            LOG.info("Populating lookup join cache");
+        }
+        cacheMap.clear();
+        List<RowData> tmpDataList = new ArrayList<>();
+        String SQL = "select * from " + sourceOptions.getDatabaseName() + "." + sourceOptions.getTableName();
         LOG.info("LookUpFunction SQL [{}]", SQL);
         this.queryInfo = StarRocksSourceCommonFunc.getQueryInfo(this.sourceOptions, SQL);
         List<List<QueryBeXTablets>> lists = StarRocksSourceCommonFunc.splitQueryBeXTablets(1, queryInfo);
@@ -121,81 +107,21 @@ public class StarRocksDynamicLookupFunction extends TableFunction<RowData> {
             beReader.startToRead();
             this.dataReaderList.add(beReader);
         });
-        if (cache == null) {
-            this.dataReaderList.forEach(dataReader -> {
-                while (dataReader.hasNext()) {
-                    RowData row = dataReader.getNext();
-                    collect(row);
-                }
-            });
-        } else {
-            ArrayList<RowData> rows = new ArrayList<>();
-            this.dataReaderList.forEach(dataReader -> {
-                while (dataReader.hasNext()) {
-                    RowData row = dataReader.getNext();
-                    rows.add(row);
-                    collect(row);
-                }
-            });
-            rows.trimToSize();
-            cache.put(keyRow, rows);
-        }        
-    }
-
-    private void getFieldValue(Object obj, ColunmRichInfo colunmRichInfo) {
-
-        LogicalTypeRoot flinkTypeRoot = colunmRichInfo.getDataType().getLogicalType().getTypeRoot();
-        String filter = "";
-
-        if (flinkTypeRoot == LogicalTypeRoot.DATE) {
-            Calendar c = Calendar.getInstance();
-            c.setTime(new Date(0L));
-            c.add(Calendar.DATE, (int)obj);
-            Date d = c.getTime();
-            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-            filter = colunmRichInfo.getColumnName() + " = '" + sdf.format(d).toString() + "'";
-        }
-        if (flinkTypeRoot == LogicalTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE ||
-            flinkTypeRoot == LogicalTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE || 
-            flinkTypeRoot == LogicalTypeRoot.TIMESTAMP_WITH_TIME_ZONE) {
-            
-            DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSS");
-            String strDateTime = dtf.format(((TimestampData)obj).toLocalDateTime());
-            filter = colunmRichInfo.getColumnName() + " = '" + strDateTime + "'";
-        }
-        if (flinkTypeRoot == LogicalTypeRoot.CHAR ||
-            flinkTypeRoot == LogicalTypeRoot.VARCHAR) {
-
-            filter = colunmRichInfo.getColumnName() + " = '" + ((BinaryStringData)obj).toString() + "'";
-        }
-        if (flinkTypeRoot == LogicalTypeRoot.BOOLEAN) {
-            filter = colunmRichInfo.getColumnName() + " = " + (boolean) obj;
-        }
-        if (flinkTypeRoot == LogicalTypeRoot.TINYINT) {
-            filter = colunmRichInfo.getColumnName() + " = " + (byte) obj;
-        }
-        if (flinkTypeRoot == LogicalTypeRoot.SMALLINT) {
-            filter = colunmRichInfo.getColumnName() + " = " + (short) obj;
-        }
-        if (flinkTypeRoot == LogicalTypeRoot.INTEGER) {
-            filter = colunmRichInfo.getColumnName() + " = " + (int) obj;
-        }
-        if (flinkTypeRoot == LogicalTypeRoot.BIGINT) {
-            filter = colunmRichInfo.getColumnName() + " = " + (long) obj;
-        }
-        if (flinkTypeRoot == LogicalTypeRoot.FLOAT) {
-            filter = colunmRichInfo.getColumnName() + " = " + (float) obj;
-        }
-        if (flinkTypeRoot == LogicalTypeRoot.DOUBLE) {
-            filter = colunmRichInfo.getColumnName() + " = " + (double) obj;
-        }
-        if (flinkTypeRoot == LogicalTypeRoot.DECIMAL) {
-            filter = colunmRichInfo.getColumnName() + " = " + (DecimalData) obj;
-        }
-
-        if (!filter.equals("")) {
-            filterList.add(filter);
-        }
+        this.dataReaderList.forEach(dataReader -> {
+            while (dataReader.hasNext()) {
+                RowData row = dataReader.getNext();
+                tmpDataList.add(row);
+            }
+        }); 
+        cacheMap = tmpDataList.parallelStream().collect(Collectors.groupingBy(row -> {
+            GenericRowData gRowData = (GenericRowData)row;
+            Object keyObj[] = new Object[filterRichInfos.length];
+            for (int i = 0; i < filterRichInfos.length; i ++) {
+                keyObj[i] = gRowData.getField(filterRichInfos[i].getColunmIndexInSchema());
+            }
+            return Row.of(keyObj);
+        }));
+        nextLoadTime = System.currentTimeMillis() + this.cacheExpireMs;
     }
 
     @Override

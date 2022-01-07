@@ -97,7 +97,7 @@ public class StarRocksSourceOptions implements Serializable {
                                     + "specified. Cache is not enabled as default.");
 
     public static final ConfigOption<Long> LOOKUP_CACHE_TTL_MS = ConfigOptions.key("lookup.cache.ttl-ms")
-            .longType().defaultValue(-1L).withDescription("the cache time to live.");
+            .longType().defaultValue(5000L).withDescription("the cache time to live.");
 
     public static final ConfigOption<Integer> LOOKUP_MAX_RETRIES = ConfigOptions.key("lookup.max-retries")
             .intType().defaultValue(1).withDescription("the max retry times if lookup database failed.");
