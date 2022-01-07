@@ -108,16 +108,20 @@ public class StarRocksQueryPlanVisitor implements Serializable {
         Map<String, Object> bodyMap = new HashMap<>();
         bodyMap.put("sql", querySQL);
         String body = new JSONObject(bodyMap).toString();
-        CloseableHttpResponse response = null;
         int requsetCode = 0;
+        String respString = "";
         for (int i = 0; i < sourceOptions.getScanMaxRetries(); i ++) {
-            CloseableHttpClient httpClient = HttpClients.createDefault();
-            HttpPost post = new HttpPost(url);
-            post.setHeader("Content-Type", "application/json;charset=UTF-8");
-            post.setHeader("Authorization", getBasicAuthHeader(sourceOptions.getUsername(), sourceOptions.getPassword()));
-            post.setEntity(new ByteArrayEntity(body.getBytes()));
-            response = httpClient.execute(post);
-            requsetCode = response.getStatusLine().getStatusCode();
+            try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+                HttpPost post = new HttpPost(url);
+                post.setHeader("Content-Type", "application/json;charset=UTF-8");
+                post.setHeader("Authorization", getBasicAuthHeader(sourceOptions.getUsername(), sourceOptions.getPassword()));
+                post.setEntity(new ByteArrayEntity(body.getBytes()));
+                try (CloseableHttpResponse response = httpClient.execute(post)) {
+                    requsetCode = response.getStatusLine().getStatusCode();
+                    HttpEntity respEntity = response.getEntity();
+                    respString = EntityUtils.toString(respEntity, "UTF-8");
+                }
+            }
             if (200 == requsetCode || i == sourceOptions.getScanMaxRetries() - 1) {
                 break;
             }
@@ -130,14 +134,13 @@ public class StarRocksQueryPlanVisitor implements Serializable {
             }
         }
         if (200 != requsetCode) {
-            throw new RuntimeException("Request of get queryPlan failed with code " + requsetCode + " " + EntityUtils.toString(response.getEntity(), "UTF-8"));
+            throw new RuntimeException("Request of get queryPlan failed with code " + requsetCode + " " + respString);
         }
-        HttpEntity respEntity = response.getEntity();
-        if (null == respEntity) {
+        if (respString == "") {
             LOG.warn("Request failed with empty response.");
             throw new RuntimeException("Request failed with empty response." + requsetCode);
         }
-        JSONObject jsonObject = JSONObject.parseObject(EntityUtils.toString(respEntity));
+        JSONObject jsonObject = JSONObject.parseObject(respString);
         return JSONObject.toJavaObject(jsonObject, QueryPlan.class);
     }
 
