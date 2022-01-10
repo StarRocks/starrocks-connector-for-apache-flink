@@ -122,7 +122,7 @@ public class StarRocksDynamicLUFunction extends TableFunction<RowData> {
             this.dataReaderList.add(beReader);
         });
         if (cache == null) {
-            this.dataReaderList.forEach(dataReader -> {
+            this.dataReaderList.parallelStream().forEach(dataReader -> {
                 while (dataReader.hasNext()) {
                     RowData row = dataReader.getNext();
                     collect(row);
@@ -130,7 +130,7 @@ public class StarRocksDynamicLUFunction extends TableFunction<RowData> {
             });
         } else {
             ArrayList<RowData> rows = new ArrayList<>();
-            this.dataReaderList.forEach(dataReader -> {
+            this.dataReaderList.parallelStream().forEach(dataReader -> {
                 while (dataReader.hasNext()) {
                     RowData row = dataReader.getNext();
                     rows.add(row);

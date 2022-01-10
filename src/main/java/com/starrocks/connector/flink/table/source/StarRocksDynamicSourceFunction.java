@@ -146,7 +146,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
     @Override
     public void run(SourceContext<RowData> sourceContext) {
 
-        this.dataReaderList.stream().forEach(dataReader -> {
+        this.dataReaderList.parallelStream().forEach(dataReader -> {
             while (dataReader.hasNext()) {
                 RowData row = dataReader.getNext();
                 counterTotalscannedrows.inc(1);
@@ -157,7 +157,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
 
     @Override
     public void cancel() {
-        this.dataReaderList.stream().forEach(dataReader -> {
+        this.dataReaderList.parallelStream().forEach(dataReader -> {
             if (dataReader != null) {
                 dataReader.close();
             }
