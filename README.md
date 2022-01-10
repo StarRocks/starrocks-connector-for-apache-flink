@@ -148,6 +148,31 @@ tEnv.executeSql(
 | totalFlushSucceededTimes | counter | number of times that the data-batch been successfully flushed. |
 | totalFlushFailedTimes | counter | number of times that the flushing been failed. |
 
+## Type mappings
+
+### Sink
+
+| Flink type | StarRocks type |
+|  :-: | :-: |
+| BOOLEAN | BOOLEAN |
+| TINYINT | TINYINT |
+| SMALLINT | SMALLINT |
+| INTEGER | INTEGER |
+| BIGINT | BIGINT |
+| FLOAT | FLOAT |
+| DOUBLE | DOUBLE |
+| DECIMAL | DECIMAL |
+| BINARY | INT |
+| CHAR | STRING |
+| VARCHAR | STRING |
+| STRING | STRING |
+| DATE | DATE |
+| TIMESTAMP_WITHOUT_TIME_ZONE(N) | DATETIME |
+| TIMESTAMP_WITH_LOCAL_TIME_ZONE(N) | DATETIME |
+| ARRAY\<T\> | ARRAY\<T\> |
+| MAP\<KT,VT\> | JSON STRING |
+| ROW\<arg T...\> | JSON STRING |
+
 ### Notes
 
 1. `Flush` action was triggered `at-least-once` when: `cachedRows >= ${sink.buffer-flush.max-rows} || cachedBytes >= ${sink.buffer-flush.max-bytes} || idleTime >= ${sink.buffer-flush.interval-ms}`
