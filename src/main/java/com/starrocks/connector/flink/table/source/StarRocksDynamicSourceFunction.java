@@ -91,33 +91,43 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
 
         String columns = options.getColumns().isEmpty() ? "*" : options.getColumns();
         String filter = options.getFilter().isEmpty() ? "" : " where " + options.getFilter();
-        String SQL = "select " + columns + " from " + options.getDatabaseName() + "." + options.getTableName() + filter;
-        return SQL;
+        StringBuilder sqlSb = new StringBuilder("select ");
+        sqlSb.append(columns);
+        sqlSb.append(" from ");
+        sqlSb.append(sourceOptions.getDatabaseName());
+        sqlSb.append(".");
+        sqlSb.append(sourceOptions.getTableName());
+        sqlSb.append(filter);
+        return sqlSb.toString();
     }
 
     private String genSQL(StarRocksSourceQueryType queryType, String columns, String filter, long limit) {
 
-        String SQL = "select";
+        StringBuilder sqlSb = new StringBuilder("select ");
         switch (queryType) {
         case QueryCount:
-            SQL = SQL + " count(*) ";
+            sqlSb.append("count(*)");
             break;
         case QueryAllColumns:
-            SQL = SQL + " * ";
+            sqlSb.append("*");
             break;
         case QuerySomeColumns:
-            SQL = SQL + " " + columns + " ";
+            sqlSb.append(columns);
             break;
         }
-        SQL = SQL + " from " + sourceOptions.getDatabaseName() + "." + sourceOptions.getTableName();
+        sqlSb.append(" from ");
+        sqlSb.append(sourceOptions.getDatabaseName());
+        sqlSb.append(".");
+        sqlSb.append(sourceOptions.getTableName());
         if (!(filter == null || filter.isEmpty())) {
-            SQL = SQL + " where " + filter;
+            sqlSb.append(" where ");
+            sqlSb.append(filter);
         }
         if (limit > 0) {
             // (not support) SQL = SQL + " limit " + limit;
             throw new RuntimeException("Read data from be not support limit now !");
         }
-        return SQL;
+        return sqlSb.toString();
     }
 
 

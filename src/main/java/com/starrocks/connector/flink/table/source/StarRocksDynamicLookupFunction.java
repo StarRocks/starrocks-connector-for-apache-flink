@@ -1,16 +1,11 @@
 package com.starrocks.connector.flink.table.source;
 
-import java.text.SimpleDateFormat;
-import java.time.Duration;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.Date;
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collector;
+
 import java.util.stream.Collectors;
 
 import com.starrocks.connector.flink.table.source.struct.ColunmRichInfo;
