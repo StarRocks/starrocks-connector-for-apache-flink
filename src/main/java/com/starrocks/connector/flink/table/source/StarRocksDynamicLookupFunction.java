@@ -31,7 +31,6 @@ public class StarRocksDynamicLookupFunction extends TableFunction<RowData> {
     private QueryInfo queryInfo;
     private final SelectColumn[] selectColumns;
     private final List<ColunmRichInfo> columnRichInfos;
-    private List<StarRocksSourceDataReader> dataReaderList;
     
     private final long cacheMaxSize;
     private final long cacheExpireMs;
@@ -55,8 +54,7 @@ public class StarRocksDynamicLookupFunction extends TableFunction<RowData> {
         this.cacheMaxSize = sourceOptions.getLookupCacheMaxRows();
         this.cacheExpireMs = sourceOptions.getLookupCacheTTL();
         this.maxRetryTimes = sourceOptions.getLookupMaxRetries();
-
-        this.dataReaderList = new ArrayList<>();
+        
         this.cacheMap = new HashMap<>();
         this.nextLoadTime = -1L;
     }
@@ -88,7 +86,7 @@ public class StarRocksDynamicLookupFunction extends TableFunction<RowData> {
             LOG.info("Populating lookup join cache");
         }
         cacheMap.clear();
-        List<RowData> tmpDataList = new ArrayList<>();
+        
         StringBuffer sqlSb = new StringBuffer("select * from "); 
         sqlSb.append("`" + sourceOptions.getDatabaseName() + "`");
         sqlSb.append(".");
@@ -96,22 +94,20 @@ public class StarRocksDynamicLookupFunction extends TableFunction<RowData> {
         LOG.info("LookUpFunction SQL [{}]", sqlSb.toString());
         this.queryInfo = StarRocksSourceCommonFunc.getQueryInfo(this.sourceOptions, sqlSb.toString());
         List<List<QueryBeXTablets>> lists = StarRocksSourceCommonFunc.splitQueryBeXTablets(1, queryInfo);
-        lists.get(0).forEach(beXTablets -> {
+        cacheMap = lists.get(0).parallelStream().flatMap(beXTablets -> {
             StarRocksSourceBeReader beReader = new StarRocksSourceBeReader(beXTablets.getBeNode(), 
                                                                            columnRichInfos, 
                                                                            selectColumns, 
                                                                            sourceOptions);
             beReader.openScanner(beXTablets.getTabletIds(), queryInfo.getQueryPlan().getOpaqued_query_plan(), sourceOptions);
             beReader.startToRead();
-            this.dataReaderList.add(beReader);
-        });
-        this.dataReaderList.parallelStream().forEach(dataReader -> {
-            while (dataReader.hasNext()) {
-                RowData row = dataReader.getNext();
+            List<RowData> tmpDataList = new ArrayList<>();
+            while (beReader.hasNext()) {
+                RowData row = beReader.getNext();
                 tmpDataList.add(row);
             }
-        }); 
-        cacheMap = tmpDataList.parallelStream().collect(Collectors.groupingBy(row -> {
+            return tmpDataList.stream();
+        }).collect(Collectors.groupingBy(row -> {
             GenericRowData gRowData = (GenericRowData)row;
             Object keyObj[] = new Object[filterRichInfos.length];
             for (int i = 0; i < filterRichInfos.length; i ++) {
