@@ -29,7 +29,7 @@ import org.slf4j.LoggerFactory;
 
 public class StarRocksDynamicLookupFunction extends TableFunction<RowData> {
     
-    private static final Logger LOG = LoggerFactory.getLogger(StarRocksDynamicLUFunction.class);
+    private static final Logger LOG = LoggerFactory.getLogger(StarRocksDynamicLookupFunction.class);
     
     private final ColunmRichInfo[] filterRichInfos;
     private final StarRocksSourceOptions sourceOptions;

@@ -43,9 +43,9 @@ import org.slf4j.LoggerFactory;
 import org.apache.flink.shaded.guava18.com.google.common.cache.Cache;
 import org.apache.flink.shaded.guava18.com.google.common.cache.CacheBuilder;
 
-public class StarRocksDynamicLUFunction extends TableFunction<RowData> {
+public class StarRocksDynamicLRUFunction extends TableFunction<RowData> {
 
-    private static final Logger LOG = LoggerFactory.getLogger(StarRocksDynamicLUFunction.class);
+    private static final Logger LOG = LoggerFactory.getLogger(StarRocksDynamicLRUFunction.class);
     
     private final ColunmRichInfo[] filterRichInfos;
     private final StarRocksSourceOptions sourceOptions;
@@ -60,7 +60,7 @@ public class StarRocksDynamicLUFunction extends TableFunction<RowData> {
     private final long cacheExpireMs;
     private final int maxRetryTimes;
 
-    public StarRocksDynamicLUFunction(StarRocksSourceOptions sourceOptions, 
+    public StarRocksDynamicLRUFunction(StarRocksSourceOptions sourceOptions, 
                                           ColunmRichInfo[] filterRichInfos, 
                                           List<ColunmRichInfo> columnRichInfos,
                                           SelectColumn[] selectColumns

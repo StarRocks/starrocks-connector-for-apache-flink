@@ -54,7 +54,6 @@ public class StarRocksQueryPlanVisitor implements Serializable {
 
 
     public StarRocksQueryPlanVisitor(StarRocksSourceOptions sourceOptions) {
-
         this.sourceOptions = sourceOptions;
     }
 
@@ -136,7 +135,7 @@ public class StarRocksQueryPlanVisitor implements Serializable {
         if (200 != requsetCode) {
             throw new RuntimeException("Request of get queryPlan failed with code " + requsetCode + " " + respString);
         }
-        if (respString == "") {
+        if (respString.isEmpty() || respString.equals("")) {
             LOG.warn("Request failed with empty response.");
             throw new RuntimeException("Request failed with empty response." + requsetCode);
         }
