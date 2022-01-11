@@ -40,6 +40,9 @@ public class StarRocksSourceCommonFunc {
     
     private static StarRocksQueryVisitor starrocksQueryVisitor;
 
+    private static StarRocksQueryPlanVisitor starRocksQueryPlanVisitor;
+    
+
     private static StarRocksQueryVisitor getStarRocksQueryVisitor(StarRocksSourceOptions sourceOptions) {
 
         if (null == starrocksQueryVisitor) {
@@ -57,6 +60,18 @@ public class StarRocksSourceCommonFunc {
             }
         }
         return starrocksQueryVisitor;
+    }
+
+    private static StarRocksQueryPlanVisitor getStarRocksQueryPlanVisitor(StarRocksSourceOptions sourceOptions) {
+
+        if (null == starRocksQueryPlanVisitor) {
+            synchronized(StarRocksSourceCommonFunc.class) {
+                if (null == starRocksQueryPlanVisitor) {
+                    starRocksQueryPlanVisitor = new StarRocksQueryPlanVisitor(sourceOptions);
+                }
+            }
+        }
+        return starRocksQueryPlanVisitor;
     }
 
     public static List<List<QueryBeXTablets>> splitQueryBeXTablets(int subTaskCount, QueryInfo queryInfo) {
@@ -191,7 +206,7 @@ public class StarRocksSourceCommonFunc {
 
     public static QueryInfo getQueryInfo(StarRocksSourceOptions sourceOptions, String SQL) {
 
-        StarRocksQueryPlanVisitor starRocksQueryPlanVisitor = new StarRocksQueryPlanVisitor(sourceOptions);
+        StarRocksQueryPlanVisitor starRocksQueryPlanVisitor = getStarRocksQueryPlanVisitor(sourceOptions);
         QueryInfo queryInfo = null;
         try {
             queryInfo = starRocksQueryPlanVisitor.getQueryInfo(SQL);
