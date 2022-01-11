@@ -89,9 +89,12 @@ public class StarRocksDynamicLookupFunction extends TableFunction<RowData> {
         }
         cacheMap.clear();
         List<RowData> tmpDataList = new ArrayList<>();
-        String SQL = "select * from " + sourceOptions.getDatabaseName() + "." + sourceOptions.getTableName();
-        LOG.info("LookUpFunction SQL [{}]", SQL);
-        this.queryInfo = StarRocksSourceCommonFunc.getQueryInfo(this.sourceOptions, SQL);
+        StringBuffer sqlSb = new StringBuffer("select * from "); 
+        sqlSb.append("`" + sourceOptions.getDatabaseName() + "`");
+        sqlSb.append(".");
+        sqlSb.append("`" + sourceOptions.getTableName() + "`");
+        LOG.info("LookUpFunction SQL [{}]", sqlSb.toString());
+        this.queryInfo = StarRocksSourceCommonFunc.getQueryInfo(this.sourceOptions, sqlSb.toString());
         List<List<QueryBeXTablets>> lists = StarRocksSourceCommonFunc.splitQueryBeXTablets(1, queryInfo);
         lists.get(0).forEach(beXTablets -> {
             StarRocksSourceBeReader beReader = new StarRocksSourceBeReader(beXTablets.getBeNode(), 

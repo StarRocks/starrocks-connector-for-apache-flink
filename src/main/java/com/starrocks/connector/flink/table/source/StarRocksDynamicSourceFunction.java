@@ -95,9 +95,9 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
         StringBuilder sqlSb = new StringBuilder("select ");
         sqlSb.append(columns);
         sqlSb.append(" from ");
-        sqlSb.append(sourceOptions.getDatabaseName());
+        sqlSb.append("`" + sourceOptions.getDatabaseName() + "`");
         sqlSb.append(".");
-        sqlSb.append(sourceOptions.getTableName());
+        sqlSb.append("`" + sourceOptions.getTableName() + "`");
         sqlSb.append(filter);
         return sqlSb.toString();
     }
@@ -117,9 +117,9 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
             break;
         }
         sqlSb.append(" from ");
-        sqlSb.append(sourceOptions.getDatabaseName());
+        sqlSb.append("`" + sourceOptions.getDatabaseName() + "`");
         sqlSb.append(".");
-        sqlSb.append(sourceOptions.getTableName());
+        sqlSb.append("`" + sourceOptions.getTableName() + "`");
         if (!Strings.isNullOrEmpty(filter)) {
             sqlSb.append(" where ");
             sqlSb.append(filter);
