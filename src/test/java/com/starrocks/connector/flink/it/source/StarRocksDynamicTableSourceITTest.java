@@ -1,6 +1,7 @@
 package com.starrocks.connector.flink.it.source;
 
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.util.List;
@@ -32,5 +33,16 @@ public class StarRocksDynamicTableSourceITTest extends StarRocksSourceBaseTest {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         List<RowData> dList = env.addSource(StarRocksSource.source(OPTIONS_WITH_COLUMN_IS_COUNT, TABLE_SCHEMA)).setParallelism(5).executeAndCollect(50);
         assertTrue(dList.size() == dataCount);
+    }
+
+
+    @Test
+    public void testSinkCommonProperties() {
+        assertEquals(JDBC_URL, OPTIONS.getJdbcUrl());
+        assertEquals(SCAN_URL, OPTIONS.getScanUrl());
+        assertEquals(DATABASE, OPTIONS.getDatabaseName());
+        assertEquals(TABLE, OPTIONS.getTableName());
+        assertEquals(USERNAME, OPTIONS.getUsername());
+        assertEquals(PASSWORD, OPTIONS.getPassword());
     }
 }

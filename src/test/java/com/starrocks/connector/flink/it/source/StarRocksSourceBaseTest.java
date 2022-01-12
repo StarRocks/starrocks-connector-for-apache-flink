@@ -58,7 +58,7 @@ public abstract class StarRocksSourceBaseTest {
     protected final int AVAILABLE_HTTP_PORT = 29592;
     protected String SCAN_URL = "127.0.0.1:" + AVAILABLE_HTTP_PORT;
     protected String mockResonse = "";
-    protected String querySQL = "select * from sr";
+    protected String querySQL = "select * from StarRocks";
 
     @Before
     public void initializeCommon() {
@@ -82,8 +82,8 @@ public abstract class StarRocksSourceBaseTest {
                 .withProperty("jdbc-url", JDBC_URL)
                 .withProperty("username", USERNAME)
                 .withProperty("password", PASSWORD)
-                .withProperty("table-name", DATABASE)
-                .withProperty("database-name", TABLE)
+                .withProperty("table-name", TABLE)
+                .withProperty("database-name", DATABASE)
                 .build();
         OPTIONS = options;
     }
