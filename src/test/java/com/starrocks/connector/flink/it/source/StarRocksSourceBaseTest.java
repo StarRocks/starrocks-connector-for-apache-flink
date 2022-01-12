@@ -23,7 +23,10 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.HashMap;
+import java.util.Map;
 
+import com.alibaba.fastjson.JSONObject;
 import com.starrocks.connector.flink.table.source.StarRocksSourceOptions;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 
@@ -58,7 +61,9 @@ public abstract class StarRocksSourceBaseTest {
     protected final int AVAILABLE_HTTP_PORT = 29592;
     protected String SCAN_URL = "127.0.0.1:" + AVAILABLE_HTTP_PORT;
     protected String mockResonse = "";
-    protected String querySQL = "select * from StarRocks";
+    protected String querySQL = "select * from `test`.`test_source`";
+
+    protected int tabletCount = 50;
 
     @Before
     public void initializeCommon() {
@@ -185,6 +190,30 @@ public abstract class StarRocksSourceBaseTest {
                 } catch (Exception e) {}
             }
         }).start();
+    }
+
+    protected void mockResonsefunc() {
+
+        String[] beNode = new String[]{"172.0.0.1:9660", "172.0.0.2:9660", "172.0.0.3:9660"};
+
+        Map<String, Object> respMap = new HashMap<>();
+        respMap.put("opaqued_query_plan", "mockPlan");
+        respMap.put("status", "200");
+        Map<Integer, Object> partitionsSet = new HashMap<>();
+        for (int i = 0; i < tabletCount; i ++) {
+            Map<String, Object> pMap = new HashMap<>();
+            pMap.put("version", 4);
+            pMap.put("versionHash", 6318449679607016199L);
+            pMap.put("schemaHash", 975114127);
+            pMap.put("routings", new String[]{
+                beNode[i%beNode.length], 
+                beNode[i%beNode.length + 1 >= beNode.length ? 0 : i%beNode.length + 1]
+            });
+            partitionsSet.put(i, pMap);
+        }
+        respMap.put("partitions", partitionsSet);
+        JSONObject json = new JSONObject(respMap);
+        mockResonse = json.toJSONString();
     }
 
     private void tryBindingServerSocket() {
