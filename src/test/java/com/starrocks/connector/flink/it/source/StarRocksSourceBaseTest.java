@@ -32,6 +32,7 @@ import org.apache.flink.table.api.TableSchema;
 import org.junit.After;
 import org.junit.Before;
 
+
 public abstract class StarRocksSourceBaseTest {
 
     protected TableSchema TABLE_SCHEMA;
@@ -39,6 +40,8 @@ public abstract class StarRocksSourceBaseTest {
     protected TableSchema TABLE_SCHEMA_NOT_NULL;
 
     protected StarRocksSourceOptions OPTIONS;
+
+    protected StarRocksSourceOptions OPTIONS_WITH_COLUMN_IS_COUNT;
 
     protected int[][] PROJECTION_ARRAY;
     protected SelectColumn[] SELECT_COLUMNS;
@@ -72,7 +75,7 @@ public abstract class StarRocksSourceBaseTest {
         };
     }
 
-    private void initializeOptions() {
+    private void initializeCommonOptions() {
 
         StarRocksSourceOptions options = StarRocksSourceOptions.builder()
                 .withProperty("scan-url", SCAN_URL)
@@ -83,6 +86,20 @@ public abstract class StarRocksSourceBaseTest {
                 .withProperty("database-name", TABLE)
                 .build();
         OPTIONS = options;
+    }
+
+    private void initializeColumnIsCountOptions() {
+
+        StarRocksSourceOptions options = StarRocksSourceOptions.builder()
+                .withProperty("scan-url", SCAN_URL)
+                .withProperty("jdbc-url", JDBC_URL)
+                .withProperty("username", USERNAME)
+                .withProperty("password", PASSWORD)
+                .withProperty("table-name", DATABASE)
+                .withProperty("database-name", TABLE)
+                .withProperty("scan.columns", "count(1)")
+                .build();
+        OPTIONS_WITH_COLUMN_IS_COUNT = options;
     }
 
     @Before
@@ -177,7 +194,8 @@ public abstract class StarRocksSourceBaseTest {
                 int port = AVAILABLE_HTTP_PORT + i;
                 serverSocket = new ServerSocket(port);
                 SCAN_URL = "127.0.0.1:" + port;
-                initializeOptions();
+                initializeCommonOptions();
+                initializeColumnIsCountOptions();
             } catch (IOException e) {}
         }
     }

@@ -1,7 +1,5 @@
 package com.starrocks.connector.flink.row.source;
 
-
-import com.ibm.icu.impl.IllegalIcuArgumentException;
 import com.starrocks.connector.flink.tools.DataUtil;
 
 

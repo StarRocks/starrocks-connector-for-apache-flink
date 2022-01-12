@@ -124,7 +124,7 @@ public class StarRocksQueryPlanVisitor implements Serializable {
             if (200 == requsetCode || i == sourceOptions.getScanMaxRetries() - 1) {
                 break;
             }
-            LOG.warn("Request failed with code:{}", requsetCode);
+            LOG.warn("Request of get query plan failed with code:{}", requsetCode);
             try {
                 Thread.sleep(1000l * (i + 1));
             } catch (InterruptedException ex) {
@@ -133,7 +133,7 @@ public class StarRocksQueryPlanVisitor implements Serializable {
             }
         }
         if (200 != requsetCode) {
-            throw new RuntimeException("Request of get queryPlan failed with code " + requsetCode + " " + respString);
+            throw new RuntimeException("Request of get query plan failed with code " + requsetCode + " " + respString);
         }
         if (respString.isEmpty() || respString.equals("")) {
             LOG.warn("Request failed with empty response.");
