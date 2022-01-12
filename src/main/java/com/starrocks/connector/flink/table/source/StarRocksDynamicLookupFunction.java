@@ -76,7 +76,6 @@ public class StarRocksDynamicLookupFunction extends TableFunction<RowData> {
     }
 
     private void reloadData() {
-
         if (nextLoadTime > System.currentTimeMillis()) {
             return;
         }

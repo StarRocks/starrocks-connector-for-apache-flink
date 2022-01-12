@@ -91,7 +91,6 @@ public class StarRocksDynamicLRUFunction extends TableFunction<RowData> {
     }
 
     public void eval(Object... keys) {
-
         Row keyRow = Row.of(keys);
         if (cache != null) {
             List<RowData> cachedRows = cache.getIfPresent(keyRow);
@@ -143,10 +142,8 @@ public class StarRocksDynamicLRUFunction extends TableFunction<RowData> {
     }
 
     private void getFieldValue(Object obj, ColunmRichInfo colunmRichInfo) {
-
         LogicalTypeRoot flinkTypeRoot = colunmRichInfo.getDataType().getLogicalType().getTypeRoot();
         String filter = "";
-
         if (flinkTypeRoot == LogicalTypeRoot.DATE) {
             Calendar c = Calendar.getInstance();
             c.setTime(new Date(0L));

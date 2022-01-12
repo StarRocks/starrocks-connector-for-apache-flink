@@ -67,7 +67,6 @@ public class StarRocksSourceFlinkRows {
 
     public StarRocksSourceFlinkRows(TScanBatchResult nextResult, List<ColunmRichInfo> colunmRichInfos, 
                                     StarRocksSchema srSchema, SelectColumn[] selectColumns) {
-
         this.colunmRichInfos = colunmRichInfos;
         this.selectColumns = selectColumns;
         this.starRocksSchema = srSchema;
@@ -79,7 +78,6 @@ public class StarRocksSourceFlinkRows {
     }
 
     public StarRocksSourceFlinkRows genFlinkRowsFromArrow() throws IOException {
-
         this.root = arrowStreamReader.getVectorSchemaRoot();
         while (arrowStreamReader.loadNextBatch()) {
             fieldVectors = root.getFieldVectors();
@@ -97,7 +95,6 @@ public class StarRocksSourceFlinkRows {
     }
 
     public boolean hasNext() {
-        
         if (offsetOfBatchForRead < flinkRowsCount) {
             return true;
         }
@@ -107,7 +104,6 @@ public class StarRocksSourceFlinkRows {
 
 
     public GenericRowData next() {
-
         if (!hasNext()) {
             LOG.error("offset larger than flinksRowsCount");
             throw new RuntimeException("read offset larger than flinksRowsCount");
@@ -134,7 +130,6 @@ public class StarRocksSourceFlinkRows {
     }
     
     private void setValueToFlinkRows(int rowIndex, int colunm, Object obj) {
-        
         if (rowIndex > rowCountOfBatch) {
             String errMsg = "Get row offset: " + rowIndex + " larger than row size: " + rowCountOfBatch;
             LOG.error("Get row offset: {} larger than row size: {}", rowIndex, rowCountOfBatch);
@@ -144,9 +139,7 @@ public class StarRocksSourceFlinkRows {
     }
 
     private void genFlinkRows() {
-
         for (int colIndex = 0; colIndex < this.selectColumns.length; colIndex ++) {
-
             FieldVector columnVector = fieldVectors.get(colIndex);
             Types.MinorType beShowDataType = columnVector.getMinorType();
             String starrocksType = starRocksSchema.get(colIndex).getType();
@@ -168,7 +161,6 @@ public class StarRocksSourceFlinkRows {
                     "flink type is -> [" + flinkTypeRoot.toString() + "]"
                 );
             }
-
             StarRocksToFlinkTrans translators = Const.DataTypeRelationMap.get(flinkTypeRoot).get(starrocksType);
             Object[] result = translators.transToFlinkData(beShowDataType, columnVector, rowCountOfBatch, colIndex, nullable);
             for (int i = 0; i < result.length; i ++) {

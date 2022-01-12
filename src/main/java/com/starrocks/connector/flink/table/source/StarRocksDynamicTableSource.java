@@ -45,7 +45,6 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
     private final PushDownHolder pushDownHolder;
 
     public StarRocksDynamicTableSource(StarRocksSourceOptions options, TableSchema schema, PushDownHolder pushDownHolder) {
-
         this.options = options;
         this.flinkSchema = schema;
         this.pushDownHolder = pushDownHolder;
@@ -70,7 +69,6 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
 
     @Override
     public LookupRuntimeProvider getLookupRuntimeProvider(LookupContext context) {
-        
         int[] projectedFields = Arrays.stream(context.getKeys()).mapToInt(value -> value[0]).toArray();
         ColunmRichInfo filerRichInfo[] = new ColunmRichInfo[projectedFields.length];
         for (int i = 0; i < projectedFields.length; i ++) {

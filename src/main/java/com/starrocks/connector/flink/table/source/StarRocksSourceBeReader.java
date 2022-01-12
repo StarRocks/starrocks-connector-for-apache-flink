@@ -63,7 +63,6 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
 
     public StarRocksSourceBeReader(String beNodeInfo, List<ColunmRichInfo> colunmRichInfos, SelectColumn[] selectColumns, 
                                         StarRocksSourceOptions sourceOptions) {
-        
         if (sourceOptions.getBeHostMappingList().length() > 0) {
             String list = sourceOptions.getBeHostMappingList();
             Map<String, String> mappingMap = new HashMap<>();
@@ -100,18 +99,14 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
     }
 
     public void openScanner(List<Long> tablets, String opaqued_query_plan, StarRocksSourceOptions sourceOptions) {
-
         TScanOpenParams params = new TScanOpenParams();
-
         params.setTablet_ids(tablets);
         params.setOpaqued_query_plan(opaqued_query_plan);
         params.setCluster(Const.DEFAULT_CLUSTER_NAME);
-
         params.setDatabase(sourceOptions.getDatabaseName());
         params.setTable(sourceOptions.getTableName());
         params.setUser(sourceOptions.getUsername());
         params.setPasswd(sourceOptions.getPassword());
-
         params.setBatch_size(sourceOptions.getBatchRows());
         if (sourceOptions.getProperties() != null ) {
             params.setProperties(sourceOptions.getProperties());    
@@ -140,7 +135,6 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
     }
 
     public void startToRead() {
-
         TScanNextBatchParams params = new TScanNextBatchParams();
         params.setContext_id(this.contextId);
         params.setOffset(this.readerOffset);
@@ -168,7 +162,6 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
 
     @Override
     public GenericRowData getNext() {
-
         GenericRowData preparedData = this.curData;
         this.curData = null;
         if (this.curFlinkRows.hasNext()) {

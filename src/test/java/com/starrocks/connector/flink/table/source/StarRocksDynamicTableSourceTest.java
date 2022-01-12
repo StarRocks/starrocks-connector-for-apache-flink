@@ -36,7 +36,6 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
 
     @Test
     public void testApplyProjection() {
-
         dynamicTableSource.applyProjection(PROJECTION_ARRAY);
         assertEquals("char_1, int_1", pushDownHolder.getColumns());
 

@@ -178,7 +178,6 @@ public class StarRocksSourceOptions implements Serializable {
     }
 
     public Map<String, String> getProperties() {
-
         String json = tableOptions.get(SCAN_PROPERTIES);
         if (json == null) {
             return null;

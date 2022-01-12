@@ -44,7 +44,6 @@ public class StarRocksSourceCommonFunc {
     
 
     private static StarRocksQueryVisitor getStarRocksQueryVisitor(StarRocksSourceOptions sourceOptions) {
-
         if (null == starrocksQueryVisitor) {
             synchronized(StarRocksSourceCommonFunc.class) {
                 if (null == starrocksQueryVisitor) {
@@ -63,7 +62,6 @@ public class StarRocksSourceCommonFunc {
     }
 
     private static StarRocksQueryPlanVisitor getStarRocksQueryPlanVisitor(StarRocksSourceOptions sourceOptions) {
-
         if (null == starRocksQueryPlanVisitor) {
             synchronized(StarRocksSourceCommonFunc.class) {
                 if (null == starRocksQueryPlanVisitor) {
@@ -75,7 +73,6 @@ public class StarRocksSourceCommonFunc {
     }
 
     public static List<List<QueryBeXTablets>> splitQueryBeXTablets(int subTaskCount, QueryInfo queryInfo) {
-
         List<List<QueryBeXTablets>> curBeXTabletList = new ArrayList<>();
         for (int i = 0; i < subTaskCount; i ++) {
             curBeXTabletList.add(new ArrayList<>());
@@ -162,7 +159,6 @@ public class StarRocksSourceCommonFunc {
     }
 
     public static Map<String, ColunmRichInfo> genColumnMap(TableSchema flinkSchema) {
-
         Map<String, ColunmRichInfo> columnMap = new HashMap<>();
         List<TableColumn> flinkColumns = flinkSchema.getTableColumns();
         for (int i = 0; i < flinkColumns.size(); i++) {
@@ -174,7 +170,6 @@ public class StarRocksSourceCommonFunc {
     }
 
     public static List<ColunmRichInfo> genColunmRichInfo(Map<String, ColunmRichInfo> columnMap) {
-        
         return columnMap.values().stream().collect(Collectors.toList())
                 .stream().sorted(Comparator.comparing(ColunmRichInfo::getColunmIndexInSchema)).collect(Collectors.toList());
     }
@@ -205,7 +200,6 @@ public class StarRocksSourceCommonFunc {
     }
 
     public static QueryInfo getQueryInfo(StarRocksSourceOptions sourceOptions, String SQL) {
-
         StarRocksQueryPlanVisitor starRocksQueryPlanVisitor = getStarRocksQueryPlanVisitor(sourceOptions);
         QueryInfo queryInfo = null;
         try {

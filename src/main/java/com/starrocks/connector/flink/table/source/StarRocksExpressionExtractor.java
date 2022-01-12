@@ -33,7 +33,6 @@ import org.apache.flink.table.functions.FunctionDefinition;
 public class StarRocksExpressionExtractor implements ExpressionVisitor<String> {
 
     private static final Map<FunctionDefinition, String> FUNC_TO_STR = new HashMap<>();
-
         static {
             FUNC_TO_STR.put(BuiltInFunctionDefinitions.EQUALS, "=");
             FUNC_TO_STR.put(BuiltInFunctionDefinitions.NOT_EQUALS, "<>");
@@ -50,25 +49,19 @@ public class StarRocksExpressionExtractor implements ExpressionVisitor<String> {
 
     @Override
     public String visit(CallExpression call) {
-
         FunctionDefinition funcDef = call.getFunctionDefinition();
-
         if (funcDef.equals(BuiltInFunctionDefinitions.LIKE)) {
             throw new RuntimeException("Not support filter -> [like]");
         }
-
         if (funcDef.equals(BuiltInFunctionDefinitions.IN)) {
             throw new RuntimeException("Not support filter -> [in]");
         }
-
         if (funcDef.equals(BuiltInFunctionDefinitions.BETWEEN)) {
             throw new RuntimeException("Not support filter -> [between]");
         }
-
         if (funcDef.equals(BuiltInFunctionDefinitions.CAST)) {
             return call.getChildren().get(0).accept(this);
         }
-    
         if (funcDef.equals(BuiltInFunctionDefinitions.NOT) && call.getOutputDataType().equals(DataTypes.BOOLEAN())) {
             return call.getChildren().get(0).toString() + " = false";
         }

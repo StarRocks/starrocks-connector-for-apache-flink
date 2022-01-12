@@ -117,9 +117,5 @@ public class Const {
                 put(DATA_TYPE_STARROCKS_DECIMAL128, new StarRocksToFlinkTranslators().new ToFlinkDecimal());
             }
         });
-
     }
-    
-
-
 }

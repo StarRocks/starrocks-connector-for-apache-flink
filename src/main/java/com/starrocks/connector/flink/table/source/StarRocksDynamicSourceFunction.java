@@ -48,7 +48,6 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
     private static final String TOTAL_SCANNED_ROWS = "totalScannedRows";
 
     public StarRocksDynamicSourceFunction(StarRocksSourceOptions sourceOptions, TableSchema flinkSchema) {
-        
         // StarRocksSourceCommonFunc.validateTableStructure(sourceOptions, flinkSchema);
         this.sourceOptions = sourceOptions;
         Map<String, ColunmRichInfo> columnMap = StarRocksSourceCommonFunc.genColumnMap(flinkSchema);
@@ -67,7 +66,6 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
 
     public StarRocksDynamicSourceFunction(StarRocksSourceOptions sourceOptions, TableSchema flinkSchema, 
                                             String filter, long limit, SelectColumn[] selectColumns, String columns, StarRocksSourceQueryType queryType) {
-        
         // StarRocksSourceCommonFunc.validateTableStructure(sourceOptions, flinkSchema);
         this.sourceOptions = sourceOptions;
         Map<String, ColunmRichInfo> columnMap = StarRocksSourceCommonFunc.genColumnMap(flinkSchema);
@@ -89,7 +87,6 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
     }
 
     private String genSQL(StarRocksSourceOptions options) {
-
         String columns = options.getColumns().isEmpty() ? "*" : options.getColumns();
         String filter = options.getFilter().isEmpty() ? "" : " where " + options.getFilter();
         StringBuilder sqlSb = new StringBuilder("select ");
@@ -103,7 +100,6 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
     }
 
     private String genSQL(StarRocksSourceQueryType queryType, String columns, String filter, long limit) {
-
         StringBuilder sqlSb = new StringBuilder("select ");
         switch (queryType) {
         case QueryCount:
@@ -156,7 +152,6 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
 
     @Override
     public void run(SourceContext<RowData> sourceContext) {
-
         this.dataReaderList.parallelStream().forEach(dataReader -> {
             while (dataReader.hasNext()) {
                 RowData row = dataReader.getNext();

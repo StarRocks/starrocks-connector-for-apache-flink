@@ -58,7 +58,6 @@ public class StarRocksQueryPlanVisitor implements Serializable {
     }
 
     public QueryInfo getQueryInfo(String SQL) throws IOException {
-        
         LOG.info("query sql [{}]", SQL);
         String[] httpNodes = sourceOptions.getScanUrl().split(",");
         QueryPlan plan = getQueryPlan(SQL, httpNodes[new Random().nextInt(httpNodes.length)], sourceOptions);
@@ -72,7 +71,6 @@ public class StarRocksQueryPlanVisitor implements Serializable {
     }
 
     private static Map<String, Set<Long>> transferQueryPlanToBeXTablet(QueryPlan queryPlan) {
-
         Map<String, Set<Long>> beXTablets = new HashMap<>();
         queryPlan.getPartitions().forEach((tabletId, routingList) -> {
             int tabletCount = Integer.MAX_VALUE;
@@ -94,7 +92,6 @@ public class StarRocksQueryPlanVisitor implements Serializable {
     }
 
     private static QueryPlan getQueryPlan(String querySQL, String httpNode, StarRocksSourceOptions sourceOptions) throws IOException {
-        
         String url = new StringBuilder("http://")
             .append(httpNode)
             .append("/api/")

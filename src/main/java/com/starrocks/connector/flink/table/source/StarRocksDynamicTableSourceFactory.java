@@ -32,7 +32,6 @@ public final class StarRocksDynamicTableSourceFactory implements DynamicTableSou
 
     @Override
     public DynamicTableSource createDynamicTableSource(Context context) {
-
         final FactoryUtil.TableFactoryHelper helper = FactoryUtil.createTableFactoryHelper(this, context);
         helper.validateExcept(StarRocksSourceOptions.SOURCE_PROPERTIES_PREFIX);
         ReadableConfig options = helper.getOptions();
@@ -51,7 +50,6 @@ public final class StarRocksDynamicTableSourceFactory implements DynamicTableSou
 
     @Override
     public Set<ConfigOption<?>> requiredOptions() {
-
         final Set<ConfigOption<?>> options = new HashSet<>();
         options.add(StarRocksSourceOptions.USERNAME);
         options.add(StarRocksSourceOptions.PASSWORD);
@@ -64,7 +62,6 @@ public final class StarRocksDynamicTableSourceFactory implements DynamicTableSou
 
     @Override
     public Set<ConfigOption<?>> optionalOptions() {
-
         final Set<ConfigOption<?>> options = new HashSet<>();
         options.add(StarRocksSourceOptions.SCAN_CONNECT_TIMEOUT);
         options.add(StarRocksSourceOptions.SCAN_BATCH_ROWS);

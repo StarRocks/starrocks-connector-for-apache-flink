@@ -67,13 +67,10 @@ public abstract class StarRocksSourceBaseTest {
 
     @Before
     public void initializeCommon() {
-
         PROJECTION_ARRAY = new int[2][1];
         PROJECTION_ARRAY[0] = new int[]{2};
         PROJECTION_ARRAY[1] = new int[]{7};
-
         PROJECTION_ARRAY_NULL = new int[0][0];
-
         SELECT_COLUMNS = new SelectColumn[]{
             new SelectColumn("char_1", 2),
             new SelectColumn("int_1", 7),
@@ -81,7 +78,6 @@ public abstract class StarRocksSourceBaseTest {
     }
 
     private void initializeCommonOptions() {
-
         StarRocksSourceOptions options = StarRocksSourceOptions.builder()
                 .withProperty("scan-url", SCAN_URL)
                 .withProperty("jdbc-url", JDBC_URL)
@@ -94,7 +90,6 @@ public abstract class StarRocksSourceBaseTest {
     }
 
     private void initializeColumnIsCountOptions() {
-
         StarRocksSourceOptions options = StarRocksSourceOptions.builder()
                 .withProperty("scan-url", SCAN_URL)
                 .withProperty("jdbc-url", JDBC_URL)
@@ -109,7 +104,6 @@ public abstract class StarRocksSourceBaseTest {
 
     @Before
     public void initializeTableSchema() {
-
         TableSchema tableSchema = TableSchema.builder()
             .field("date_1", DataTypes.DATE())
             .field("datetime_1", DataTypes.TIMESTAMP(6))
@@ -130,7 +124,6 @@ public abstract class StarRocksSourceBaseTest {
 
     @Before
     public void initializeTableSchemaNotNull() {
-
         TableSchema tableSchema = TableSchema.builder()
             .field("date_1", DataTypes.DATE().notNull())
             .field("datetime_1", DataTypes.TIMESTAMP(6).notNull())
@@ -193,9 +186,7 @@ public abstract class StarRocksSourceBaseTest {
     }
 
     protected void mockResonsefunc() {
-
         String[] beNode = new String[]{"172.0.0.1:9660", "172.0.0.2:9660", "172.0.0.3:9660"};
-
         Map<String, Object> respMap = new HashMap<>();
         respMap.put("opaqued_query_plan", "mockPlan");
         respMap.put("status", "200");
@@ -228,7 +219,6 @@ public abstract class StarRocksSourceBaseTest {
             } catch (IOException e) {}
         }
     }
-
 
     @After
     public void stopHttpServer() throws IOException {

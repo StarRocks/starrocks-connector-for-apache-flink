@@ -45,7 +45,6 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
 
     @Before
     public void initParams() {  
-
         srSchema.setStatus(0);
         ArrayList<Column> properties = new ArrayList<>();
         properties.add(new Column("date_1", "DATE", "", 0, 0));
@@ -62,7 +61,6 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
         properties.add(new Column("double_1", "DOUBLE", "", 0, 0));
         properties.add(new Column("decimal_1", "DECIMAL128", "", 0, 0));
         srSchema.setProperties(properties);
-
         columnMap = StarRocksSourceCommonFunc.genColumnMap(TABLE_SCHEMA_NOT_NULL);
         colunmRichInfos = StarRocksSourceCommonFunc.genColunmRichInfo(columnMap);
         selectColumns = StarRocksSourceCommonFunc.genSelectedColumns(columnMap, OPTIONS, colunmRichInfos);
@@ -70,7 +68,6 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
 
     @Test
     public void testGenFlinkRows() throws FileNotFoundException, IOException {
-
         String fileName = curPath + "/src/test/resources/rowsData";
         String line;
         try (BufferedReader br = new BufferedReader(new FileReader(fileName))){
@@ -88,7 +85,6 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
         }
         TScanBatchResult nextResult = new TScanBatchResult();
         nextResult.setRows(byteArray);
-
         StarRocksSourceFlinkRows flinkRows = new StarRocksSourceFlinkRows(nextResult, colunmRichInfos, srSchema, selectColumns);
         flinkRows = flinkRows.genFlinkRowsFromArrow();
         int dataCount = 0;
@@ -102,8 +98,6 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
 
     @Test
     public void testGenFlinkRowsWithNull() throws FileNotFoundException, IOException {
-
-        
         String fileName = curPath + "/src/test/resources/rowsDataWithNull";
         String line;
         try (BufferedReader br = new BufferedReader(new FileReader(fileName))){
@@ -121,9 +115,7 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
         }
         TScanBatchResult nextResult = new TScanBatchResult();
         nextResult.setRows(byteArray);
-
         StarRocksSourceFlinkRows flinkRows = new StarRocksSourceFlinkRows(nextResult, colunmRichInfos, srSchema, selectColumns);
-
         String eMsg = null;
         try {
             flinkRows = flinkRows.genFlinkRowsFromArrow();

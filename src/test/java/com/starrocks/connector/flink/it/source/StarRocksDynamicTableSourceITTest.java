@@ -26,7 +26,6 @@ public class StarRocksDynamicTableSourceITTest extends StarRocksSourceBaseTest {
 
     @Test
     public void testDataStream() throws Exception {
-
         new MockUp<StarRocksSourceCommonFunc>() {
             @Mock
             public Long getQueryCount(StarRocksSourceOptions sourceOptions, String SQL) {
@@ -40,7 +39,6 @@ public class StarRocksDynamicTableSourceITTest extends StarRocksSourceBaseTest {
 
     @Test
     public void testTableAPI() {
-
         mockResonsefunc();
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);
