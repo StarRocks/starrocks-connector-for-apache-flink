@@ -50,66 +50,65 @@ public class Const {
     public static final String DATA_TYPE_STARROCKS_DECIMAL128 = "DECIMAL128";
     
 
-    public static HashMap<LogicalTypeRoot, HashMap<String, StarRocksToFlinkTrans>> DataTypeRelationMap = new HashMap<LogicalTypeRoot, HashMap<String, StarRocksToFlinkTrans>>();
+    public static HashMap<LogicalTypeRoot, HashMap<String, StarRocksToFlinkTrans>> DataTypeRelationMap = new HashMap<LogicalTypeRoot, HashMap<String, StarRocksToFlinkTrans>>(){{
 
-    static {
-        DataTypeRelationMap.put(LogicalTypeRoot.DATE, new HashMap<String, StarRocksToFlinkTrans>() {{
+        put(LogicalTypeRoot.DATE, new HashMap<String, StarRocksToFlinkTrans>() {{
                 put(DATA_TYPE_STARROCKS_DATE, new StarRocksToFlinkTranslators().new ToFlinkDate());
             }
         });
 
-        DataTypeRelationMap.put(LogicalTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE, new HashMap<String, StarRocksToFlinkTrans>() {{
+        put(LogicalTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE, new HashMap<String, StarRocksToFlinkTrans>() {{
                 put(DATA_TYPE_STARROCKS_DATETIME, new StarRocksToFlinkTranslators().new ToFlinkTimestamp());
             }
         });
-        DataTypeRelationMap.put(LogicalTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE, new HashMap<String, StarRocksToFlinkTrans>() {{
+        put(LogicalTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE, new HashMap<String, StarRocksToFlinkTrans>() {{
                 put(DATA_TYPE_STARROCKS_DATETIME, new StarRocksToFlinkTranslators().new ToFlinkTimestamp());
             }
         });
-        DataTypeRelationMap.put(LogicalTypeRoot.TIMESTAMP_WITH_TIME_ZONE, new HashMap<String, StarRocksToFlinkTrans>() {{
+        put(LogicalTypeRoot.TIMESTAMP_WITH_TIME_ZONE, new HashMap<String, StarRocksToFlinkTrans>() {{
                 put(DATA_TYPE_STARROCKS_DATETIME, new StarRocksToFlinkTranslators().new ToFlinkTimestamp());
             }
         });
 
-        DataTypeRelationMap.put(LogicalTypeRoot.CHAR, new HashMap<String, StarRocksToFlinkTrans>() {{
+        put(LogicalTypeRoot.CHAR, new HashMap<String, StarRocksToFlinkTrans>() {{
                 put(DATA_TYPE_STARROCKS_CHAR, new StarRocksToFlinkTranslators().new ToFlinkChar());
             }
         });
-        DataTypeRelationMap.put(LogicalTypeRoot.VARCHAR, new HashMap<String, StarRocksToFlinkTrans>() {{
+        put(LogicalTypeRoot.VARCHAR, new HashMap<String, StarRocksToFlinkTrans>() {{
                 put(DATA_TYPE_STARROCKS_VARCHAR, new StarRocksToFlinkTranslators().new ToFlinkChar());
                 put(DATA_TYPE_STARROCKS_LARGEINT, new StarRocksToFlinkTranslators().new ToFlinkChar());
             }
         });
 
-        DataTypeRelationMap.put(LogicalTypeRoot.BOOLEAN, new HashMap<String, StarRocksToFlinkTrans>() {{
+        put(LogicalTypeRoot.BOOLEAN, new HashMap<String, StarRocksToFlinkTrans>() {{
                 put(DATA_TYPE_STARROCKS_BOOLEAN, new StarRocksToFlinkTranslators().new ToFlinkBoolean());
             }
         });
-        DataTypeRelationMap.put(LogicalTypeRoot.TINYINT, new HashMap<String, StarRocksToFlinkTrans>() {{
+        put(LogicalTypeRoot.TINYINT, new HashMap<String, StarRocksToFlinkTrans>() {{
                 put(DATA_TYPE_STARROCKS_TINYINT, new StarRocksToFlinkTranslators().new ToFlinkTinyInt());
             }
         });
-        DataTypeRelationMap.put(LogicalTypeRoot.SMALLINT, new HashMap<String, StarRocksToFlinkTrans>() {{
+        put(LogicalTypeRoot.SMALLINT, new HashMap<String, StarRocksToFlinkTrans>() {{
                 put(DATA_TYPE_STARROCKS_SMALLINT, new StarRocksToFlinkTranslators().new ToFlinkSmallInt());
             }
         });
-        DataTypeRelationMap.put(LogicalTypeRoot.INTEGER, new HashMap<String, StarRocksToFlinkTrans>() {{
+        put(LogicalTypeRoot.INTEGER, new HashMap<String, StarRocksToFlinkTrans>() {{
                 put(DATA_TYPE_STARROCKS_INT, new StarRocksToFlinkTranslators().new ToFlinkInt());
             }
         });
-        DataTypeRelationMap.put(LogicalTypeRoot.BIGINT, new HashMap<String, StarRocksToFlinkTrans>() {{
+        put(LogicalTypeRoot.BIGINT, new HashMap<String, StarRocksToFlinkTrans>() {{
                 put(DATA_TYPE_STARROCKS_BIGINT, new StarRocksToFlinkTranslators().new ToFlinkBigInt());
             }
         });
-        DataTypeRelationMap.put(LogicalTypeRoot.FLOAT, new HashMap<String, StarRocksToFlinkTrans>() {{
+        put(LogicalTypeRoot.FLOAT, new HashMap<String, StarRocksToFlinkTrans>() {{
                 put(DATA_TYPE_STARROCKS_FLOAT, new StarRocksToFlinkTranslators().new ToFlinkFloat());
             }
         });
-        DataTypeRelationMap.put(LogicalTypeRoot.DOUBLE, new HashMap<String, StarRocksToFlinkTrans>() {{
+        put(LogicalTypeRoot.DOUBLE, new HashMap<String, StarRocksToFlinkTrans>() {{
                 put(DATA_TYPE_STARROCKS_DOUBLE, new StarRocksToFlinkTranslators().new ToFlinkDouble());
             }
         });
-        DataTypeRelationMap.put(LogicalTypeRoot.DECIMAL, new HashMap<String, StarRocksToFlinkTrans>() {{
+        put(LogicalTypeRoot.DECIMAL, new HashMap<String, StarRocksToFlinkTrans>() {{
                 put(DATA_TYPE_STARROCKS_DECIMAL, new StarRocksToFlinkTranslators().new ToFlinkDecimal());
                 put(DATA_TYPE_STARROCKS_DECIMALV2, new StarRocksToFlinkTranslators().new ToFlinkDecimal());
                 put(DATA_TYPE_STARROCKS_DECIMAL32, new StarRocksToFlinkTranslators().new ToFlinkDecimal());
@@ -117,5 +116,5 @@ public class Const {
                 put(DATA_TYPE_STARROCKS_DECIMAL128, new StarRocksToFlinkTranslators().new ToFlinkDecimal());
             }
         });
-    }
+    }};
 }
