@@ -1,4 +1,4 @@
-package com.starrocks.connector.flink.table.source;
+package com.starrocks.connector.flink.manager.source;
 
 import static org.junit.Assert.assertTrue;
 
