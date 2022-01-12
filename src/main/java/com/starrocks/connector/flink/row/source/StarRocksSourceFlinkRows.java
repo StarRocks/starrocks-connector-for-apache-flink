@@ -48,11 +48,6 @@ import java.util.NoSuchElementException;
 public class StarRocksSourceFlinkRows {
 
     private static Logger LOG = LoggerFactory.getLogger(StarRocksSourceFlinkRows.class);
-
-    public static final String DATETIME_FORMAT_LONG = "yyyy-MM-dd HH:mm:ss.SSSSSS";
-    public static final String DATETIME_FORMAT_SHORT = "yyyy-MM-dd HH:mm:ss";
-    public static final String DATE_FORMAT = "yyyy-MM-dd";
-
     private int offsetOfBatchForRead;
     private int rowCountOfBatch;
     private int flinkRowsCount;

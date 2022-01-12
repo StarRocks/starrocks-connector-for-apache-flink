@@ -1,6 +1,7 @@
 package com.starrocks.connector.flink.row.source;
 
 
+import com.ibm.icu.impl.IllegalIcuArgumentException;
 import com.starrocks.connector.flink.tools.DataUtil;
 
 
@@ -59,7 +60,7 @@ public class StarRocksToFlinkTranslators {
                     continue;
                 }
                 String value = new String(varCharVector.get(rowIndex));
-                LocalDate date = LocalDate.parse(value, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+                LocalDate date = LocalDate.parse(value, DateTimeFormatter.ofPattern(DATE_FORMAT));
                 int timestamp = (int)date.atStartOfDay().toLocalDate().toEpochDay();
                 result[rowIndex] = timestamp;
             }
@@ -86,7 +87,7 @@ public class StarRocksToFlinkTranslators {
                 }
                 String value = new String(varCharVector.get(rowIndex));
                 if (value.length() < DATETIME_FORMAT_SHORT.length()) {
-                    throw new RuntimeException("");
+                    throw new IllegalArgumentException("Date value length shorter than DATETIME_FORMAT_SHORT");
                 }
                 if (value.length() == DATETIME_FORMAT_SHORT.length()) {
                     StringBuilder sb = new StringBuilder(value).append(".");
