@@ -5,6 +5,14 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-latest
+    - name: Setup thrift
+      uses: dodopizza/setup-thrift@v1
+      with:
+        version: 0.13.0
+    - name: Generate code
+      run: |
+        thrift --gen netstd -o ./nuget/Pay.Specs -strict -r ./gensrc/StarrocksExternalService.thrift
+        cp -r ./gensrc/gen-java/com/starrocks/connector/flink/thrift/* ./src/main/java/com/starrocks/connector/flink/thrift
     steps:
       - name: Checkout
         uses: actions/checkout@v2
