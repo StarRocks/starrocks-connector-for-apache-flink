@@ -175,7 +175,6 @@ public class StarRocksSourceFlinkRows {
                     }
                 } catch(Exception e) {
                     latch.countDown();
-                    System.out.println(e.getMessage());
                     throw new RuntimeException(e.getMessage());
                 }
                 handleCol.addAndGet(1);
