@@ -12,7 +12,6 @@ jobs:
           version: 0.13.0
       - name: Generate code
         run: |
-          mkdir ./src/main/java/com/starrocks/connector/flink/thrift
           thrift --gen java -o ./src/main/java/com/starrocks/connector/flink/thrift -strict -r ./gensrc/StarrocksExternalService.thrift
       - name: Checkout
         uses: actions/checkout@v2
