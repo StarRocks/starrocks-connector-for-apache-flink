@@ -12,8 +12,7 @@ jobs:
           version: 0.13.0
       - name: Generate code
         run: |
-          thrift --gen netstd -o ./nuget/Pay.Specs -strict -r ./gensrc/StarrocksExternalService.thrift
-          cp -r ./gensrc/gen-java/com/starrocks/connector/flink/thrift/* ./src/main/java/com/starrocks/connector/flink/thrift
+          thrift --gen netstd -o ./src/main/java/com/starrocks/connector/flink/thrift -strict -r ./gensrc/StarrocksExternalService.thrift
       - name: Checkout
         uses: actions/checkout@v2
         with:
