@@ -17,7 +17,8 @@ jobs:
       - name: Generate code
         run: |
           mkdir ./src/main/java/com/starrocks/connector/flink/thrift
-          thrift --gen java -o ./src/main/java/com/starrocks/connector/flink/thrift -strict -r ./gensrc/StarrocksExternalService.thrift
+          thrift --gen java -o ./ -strict -r ./gensrc/StarrocksExternalService.thrift
+          mv ./gen-java/* ./src/main/java/com/starrocks/connector/flink/thrift
       - name: Pacakge Test
         uses: xlui/action-maven-cli@jdk8
         with:
