@@ -36,6 +36,8 @@ import java.util.stream.Collectors;
 import com.starrocks.connector.flink.StarRocksSinkBaseTest;
 
 import mockit.Expectations;
+import mockit.MockUp;
+import mockit.Mock;
 
 public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
 
@@ -104,7 +106,7 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
         try {
             StarRocksSinkManager mgr = new StarRocksSinkManager(OPTIONS, TABLE_SCHEMA);
             for (int i = 0; i < maxRows - 1; i++) {
-                mgr.writeRecord("test record");
+                mgr.writeRecords(OPTIONS.getDatabaseName(), OPTIONS.getTableName(), "test record");
             }
         } catch (Exception e) {
             throw e;
@@ -114,7 +116,7 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
             StarRocksSinkManager mgr = new StarRocksSinkManager(OPTIONS, TABLE_SCHEMA);
             mgr.startAsyncFlushing();
             for (int i = 0; i < maxRows * 3; i++) {
-                mgr.writeRecord("test record"+i);
+                mgr.writeRecords(OPTIONS.getDatabaseName(), OPTIONS.getTableName(), "test record"+i);
             }
             mgr.close();
         } catch (Exception e) {
@@ -132,7 +134,7 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
         try {
             StarRocksSinkManager mgr = new StarRocksSinkManager(OPTIONS, TABLE_SCHEMA);
             for (int i = 0; i < maxSize / rowLength - 1; i++) {
-                mgr.writeRecord(new String(new char[rowLength]));
+                mgr.writeRecords(OPTIONS.getDatabaseName(), OPTIONS.getTableName(), new String(new char[rowLength]));
             }
         } catch (Exception e) {
             throw e;
@@ -142,9 +144,9 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
             StarRocksSinkManager mgr = new StarRocksSinkManager(OPTIONS, TABLE_SCHEMA);
             mgr.startAsyncFlushing();
             for (int i = 0; i < maxSize / rowLength + 1; i++) {
-                mgr.writeRecord(new String(new char[rowLength]));
+                mgr.writeRecords(OPTIONS.getDatabaseName(), OPTIONS.getTableName(), new String(new char[rowLength]));
             }
-            mgr.writeRecord(new String(new char[rowLength]));
+            mgr.writeRecords(OPTIONS.getDatabaseName(), OPTIONS.getTableName(), new String(new char[rowLength]));
             mgr.close();
         } catch (Exception e) {
             exMsg = e.getMessage();
@@ -164,7 +166,7 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
             StarRocksSinkManager mgr = new StarRocksSinkManager(OPTIONS, TABLE_SCHEMA);
             mgr.startAsyncFlushing();
             for (int i = 0; i < OPTIONS.getSinkMaxRows(); i++) {
-                mgr.writeRecord("");
+                mgr.writeRecords(OPTIONS.getDatabaseName(), OPTIONS.getTableName(), "");
             }
             mgr.close();
         } catch (Exception e) {
@@ -195,7 +197,10 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
         try {
             StarRocksSinkManager mgr = new StarRocksSinkManager(OPTIONS, TABLE_SCHEMA);
             mgr.startAsyncFlushing();
-            mgr.writeRecord("");
+            mgr.writeRecords(OPTIONS.getDatabaseName(), OPTIONS.getTableName(), "");
+            mgr.writeRecords("db1", "table1", "");
+            mgr.writeRecords("db2", "table2", "");
+            mgr.writeRecords("db3", "table3", "");
             mgr.close();
         } catch (Exception e) {
             exMsg = e.getMessage();
@@ -205,7 +210,10 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
         try {
             StarRocksSinkManager mgr = new StarRocksSinkManager(OPTIONS, TABLE_SCHEMA);
             mgr.startAsyncFlushing();
-            mgr.writeRecord("");
+            mgr.writeRecords(OPTIONS.getDatabaseName(), OPTIONS.getTableName(), "");
+            mgr.writeRecords("db1", "table1", "");
+            mgr.writeRecords("db2", "table2", "");
+            mgr.writeRecords("db3", "table3", "");
             mgr.close();
         } catch (Exception e) {
             exMsg = e.getMessage();
@@ -216,7 +224,10 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
         try {
             StarRocksSinkManager mgr = new StarRocksSinkManager(OPTIONS, TABLE_SCHEMA);
             mgr.startAsyncFlushing();
-            mgr.writeRecord("");
+            mgr.writeRecords(OPTIONS.getDatabaseName(), OPTIONS.getTableName(), "");
+            mgr.writeRecords("db1", "table1", "");
+            mgr.writeRecords("db2", "table2", "");
+            mgr.writeRecords("db3", "table3", "");
             mgr.close();
         } catch (Exception e) {
             exMsg = e.getMessage();
@@ -225,7 +236,7 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
     }
 
     @Test
-    public void testClose() throws InterruptedException {
+    public void testClose() throws Exception {
         mockTableStructure();
         mockSuccessResponse();
         String exMsg = "";
@@ -234,33 +245,41 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
         StarRocksSinkManager mgr = new StarRocksSinkManager(OPTIONS, TABLE_SCHEMA);
         try {
             mgr.startAsyncFlushing();
-            mgr.writeRecord("");
-            mgr.flush(mgr.createBatchLabel(), true);
+            mgr.writeRecords(OPTIONS.getDatabaseName(), OPTIONS.getTableName(), "");
+            mgr.flush(null, true);
             mgr.close();
         } catch (Exception e) {
             exMsg = e.getMessage();
         }
         assertEquals(0, exMsg.length());
-        assertTrue(mgr.closed);
+        assertTrue((boolean)getPrivateFieldValue(mgr, "closed"));
         TimeUnit.MILLISECONDS.sleep(100L); // wait flush thread exit
-        assertFalse(mgr.flushThreadAlive);
+        assertFalse((boolean)getPrivateFieldValue(mgr, "flushThreadAlive"));
     }
 
     @Test
-    public void testOffer() throws InterruptedException {
+    public void testOffer() throws Exception {
         mockTableStructure();
-        mockSuccessResponse();
         String exMsg = "";
         long offerTimeoutMs = 500L;
+        mockWaitSuccessResponse(offerTimeoutMs + 100L);
 
+        new MockUp<StarRocksSinkOptions>(OPTIONS.getClass()) {
+            @Mock
+            public long getSinkOfferTimeout() {
+                return offerTimeoutMs;
+            }
+
+        };
         // flush cost more than offer timeout
-        StarRocksSinkManager mgr = mockStarRocksSinkManager(offerTimeoutMs, offerTimeoutMs + 100L);
+        StarRocksSinkManager mgr = new StarRocksSinkManager(OPTIONS, TABLE_SCHEMA);
+        setPrivateFieldValue(mgr, "FLUSH_QUEUE_POLL_TIMEOUT", 10);
         try {
             mgr.startAsyncFlushing();
-            mgr.writeRecord("");
-            mgr.flush(mgr.createBatchLabel(), true);
-            mgr.writeRecord("");
-            mgr.flush(mgr.createBatchLabel(), true);
+            mgr.writeRecords(OPTIONS.getDatabaseName(), OPTIONS.getTableName(), "");
+            mgr.flush(null, true);
+            mgr.writeRecords(OPTIONS.getDatabaseName(), OPTIONS.getTableName(), "");
+            mgr.flush(null, true);
         } catch (Exception e) {
             exMsg = e.getMessage();
             e.printStackTrace();
@@ -268,53 +287,24 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
         assertTrue(0 < exMsg.length());
         assertTrue(exMsg.startsWith("Timeout while offering data to flushQueue"));
 
+
         exMsg = "";
+        mockWaitSuccessResponse(offerTimeoutMs - 100L);
         // flush cost less than offer timeout
-        mgr = mockStarRocksSinkManager(offerTimeoutMs, offerTimeoutMs - 100L);
+        mgr = new StarRocksSinkManager(OPTIONS, TABLE_SCHEMA);
         try {
             mgr.startAsyncFlushing();
-            mgr.writeRecord("");
-            mgr.flush(mgr.createBatchLabel(), true);
-            mgr.writeRecord("");
-            mgr.flush(mgr.createBatchLabel(), true);
+            mgr.writeRecords(OPTIONS.getDatabaseName(), OPTIONS.getTableName(), "");
+            mgr.flush(null, true);
+            mgr.writeRecords(OPTIONS.getDatabaseName(), OPTIONS.getTableName(), "");
+            mgr.flush(null, true);
             mgr.close();
         } catch (Exception e) {
             exMsg = e.getMessage();
         }
         assertEquals(0, exMsg.length());
-        assertTrue(mgr.closed);
+        assertTrue((boolean)getPrivateFieldValue(mgr, "closed"));
         TimeUnit.MILLISECONDS.sleep(100L); // wait flush thread exit
-        assertFalse(mgr.flushThreadAlive);
-    }
-
-    private StarRocksSinkManager mockStarRocksSinkManager(final long offerTimeoutMs, final long mockFlushCostMs) {
-        return new StarRocksSinkManager(OPTIONS, TABLE_SCHEMA) {
-
-            @Override
-            public boolean asyncFlush() throws Exception {
-                Tuple3<String, Long, ArrayList<byte[]>> flushData = flushQueue.poll(10L, TimeUnit.MILLISECONDS);
-                if (flushData == null || Strings.isNullOrEmpty(flushData.f0)) {
-                    return true;
-                }
-                if (EOF.equals(flushData.f0)) {
-                    return false;
-                }
-                TimeUnit.MILLISECONDS.sleep(mockFlushCostMs);
-                return true;
-            }
-
-            @Override
-            void offer(Tuple3<String, Long, ArrayList<byte[]>> tuple3) throws InterruptedException {
-                if (!flushThreadAlive) {
-                    return;
-                }
-
-                if (!flushQueue.offer(tuple3, offerTimeoutMs, TimeUnit.MILLISECONDS)) {
-                    throw new RuntimeException(
-                        "Timeout while offering data to flushQueue, exceed " + offerTimeoutMs + " ms, see " +
-                            StarRocksSinkOptions.SINK_BATCH_OFFER_TIMEOUT.key());
-                }
-            }
-        };
+        assertFalse((boolean)getPrivateFieldValue(mgr, "flushThreadAlive"));
     }
 }
