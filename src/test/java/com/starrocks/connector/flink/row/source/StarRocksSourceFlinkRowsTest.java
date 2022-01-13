@@ -122,6 +122,6 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
         } catch (Exception e){
             eMsg = e.getMessage();
         }
-        assertTrue(eMsg.contains("Data could not be null. please check create table SQL, column index is: "));
+        assertTrue(eMsg.contains("Gen flink data err, some data not be setted correctly"));
     }
 }
