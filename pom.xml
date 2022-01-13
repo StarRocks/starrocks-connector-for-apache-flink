@@ -51,6 +51,8 @@ limitations under the License.
         <maven-enforcer-plugin.version>3.0.0-M3</maven-enforcer-plugin.version>
         <maven-surefire-plugin.version>3.0.0-M4</maven-surefire-plugin.version>
         <flink.version>1.13.0</flink.version>
+        <arrow.version>5.0.0</arrow.version>
+        <thrift.version>0.13.0</thrift.version>
     </properties>
     <profiles>
         <profile>
@@ -137,6 +139,21 @@ limitations under the License.
             <scope>test</scope>
         </dependency>
         <dependency>
+            <groupId>org.apache.thrift</groupId>
+            <artifactId>libthrift</artifactId>
+            <version>${thrift.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>arrow-vector</artifactId>
+            <version>${arrow.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>arrow-memory-netty</artifactId>
+            <version>${arrow.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-test-utils_${scala.version}</artifactId>
             <version>${flink.version}</version>
@@ -214,7 +231,7 @@ limitations under the License.
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
-                <version>3.0.0</version>
+                <version>3.2.1</version>
                 <executions>
                     <!-- Run shade goal on package phase -->
                     <execution>
@@ -237,6 +254,26 @@ limitations under the License.
                                     <pattern>org.apache.commons</pattern>
                                     <shadedPattern>com.starrocks.shade.org.apache.commons</shadedPattern>
                                 </relocation>
+                                <relocation>
+                                    <pattern>org.apache.thrift</pattern>
+                                    <shadedPattern>com.starrocks.shade.org.apache.thrift</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.apache.arrow</pattern>
+                                    <shadedPattern>com.starrocks.shade.org.apache.arrow</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>io.netty</pattern>
+                                    <shadedPattern>com.starrocks.shade.io.netty</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.google.flatbuffers</pattern>
+                                    <shadedPattern>com.starrocks.shade.com.google.flatbuffers</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.fasterxml.jackson.core</pattern>
+                                    <shadedPattern>com.starrocks.shade.com.fasterxml.jackson.core</shadedPattern>
+                                </relocation>
                             </relocations>
                             <artifactSet>
                                 <includes>
@@ -247,6 +284,17 @@ limitations under the License.
                                     <include>org.apache.httpcomponents:httpcore</include>
                                     <include>com.alibaba:fastjson</include>
                                     <include>mysql:mysql-connector-java</include>
+                                    <include>org.apache.thrift:libthrift</include>
+                                    <include>org.apache.arrow:arrow-vector</include>
+                                    <include>org.apache.arrow:arrow-memory-netty</include>
+                                    <include>org.apache.arrow:arrow-memory-core</include>
+                                    <include>org.apache.arrow:arrow-format</include>
+                                    <include>io.netty:netty-buffer</include>
+                                    <include>io.netty:netty-common</include>
+                                    <include>com.google.flatbuffers:flatbuffers-java</include>
+                                    <include>com.fasterxml.jackson.core:jackson-annotations</include>
+                                    <include>com.fasterxml.jackson.core:jackson-core</include>
+                                    <include>com.fasterxml.jackson.core:jackson-databind</include>
                                 </includes>
                             </artifactSet>
                             <filters>

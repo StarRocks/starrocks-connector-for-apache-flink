@@ -10,6 +10,15 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+      - name: Setup thrift
+        uses: dodopizza/setup-thrift@v1
+        with:
+          version: 0.13.0
+      - name: Generate code
+        run: |
+          mkdir ./src/main/java/com/starrocks/connector/flink/thrift
+          thrift --gen java -o ./ -strict -r ./gensrc/StarrocksExternalService.thrift
+          mv ./gen-java/* ./src/main/java/com/starrocks/connector/flink/thrift
       - name: Pacakge Test
         uses: xlui/action-maven-cli@jdk8
         with:
