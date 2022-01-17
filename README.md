@@ -105,6 +105,29 @@ select date_1, smallint_1 from flink_test where char_1 <> 'A' and int_1 = -126
 | scan.params.mem-limit-byte  | NO       | 1024 * 1024 * 1024(1G) | String | Memory limit for a single query                              |
 | scan.max-retries            | NO       | 1                  | String | Max request retry times.                                     |
 
+### Type mapping
+
+| StarRocks  | Flink     |
+| ---------- | --------- |
+| NULL_TYPE  | NULL      |
+| BOOLEAN    | BOOLEAN   |
+| TINYINT    | TINYINT   |
+| SMALLINT   | SMALLINT  |
+| INT        | INT       |
+| BIGINT     | BIGINT    |
+| LARGEINT   | STRING    |
+| FLOAT      | FLOAT     |
+| DOUBLE     | DOUBLE    |
+| DATE       | DATE      |
+| DATETIME   | TIMESTAMP |
+| DECIMAL    | DECIMAL   |
+| DECIMALV2  | DECIMAL   |
+| DECIMAL32  | DECIMAL   |
+| DECIMAL64  | DECIMAL   |
+| DECIMAL128 | DECIMAL   |
+| CHAR       | CHAR      |
+| VARCHAR    | STRING    |
+
 ### Metrics
 
 | Name | Type | Description |
