@@ -22,6 +22,124 @@
 
 Click [HERE](https://search.maven.org/search?q=g:com.starrocks) to get the latest version.
 
+## Start using source like
+
+```java
+
+StarRocksSourceOptions options = StarRocksSourceOptions.builder()
+	.withProperty("scan-url", "fe_ip1:8030,fe_ip2:8030,fe_ip3:8030")
+	.withProperty("jdbc-url", "jdbc:mysql://fe_ip:9030")
+	.withProperty("username", "root")
+	.withProperty("password", "")
+	.withProperty("table-name", "flink_test")
+	.withProperty("database-name", "test")
+	.build();
+
+TableSchema tableSchema = TableSchema.builder()
+	.field("date_1", DataTypes.DATE())
+  	.field("datetime_1", DataTypes.TIMESTAMP(6))
+  	.field("char_1", DataTypes.CHAR(20))
+  	.field("varchar_1", DataTypes.STRING())
+  	.field("boolean_1", DataTypes.BOOLEAN())
+  	.field("tinyint_1", DataTypes.TINYINT())
+  	.field("smallint_1", DataTypes.SMALLINT())
+  	.field("int_1", DataTypes.INT())
+  	.field("bigint_1", DataTypes.BIGINT())
+  	.field("largeint_1", DataTypes.STRING())
+  	.field("float_1", DataTypes.FLOAT())
+  	.field("double_1", DataTypes.DOUBLE())
+  	.field("decimal_1", DataTypes.DECIMAL(27, 9))
+  	.build();
+
+StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+env.addSource(StarRocksSource.source(options, tableSchema)).setParallelism(5).print();
+env.execute("StarRocks flink source");
+```
+
+### OR
+
+```java
+
+// create a table with `structure` and `properties`
+CREATE TABLE flink_test (
+    date_1 DATE,
+    datetime_1 TIMESTAMP(6),
+    char_1 CHAR(20),
+    varchar_1 VARCHAR,
+    boolean_1 BOOLEAN,
+    tinyint_1 TINYINT,
+    smallint_1 SMALLINT,
+    int_1 INT,
+    bigint_1 BIGINT,
+    largeint_1 STRING,
+    float_1 FLOAT,
+    double_1 DOUBLE,
+    decimal_1 DECIMAL(27,9)
+) WITH (
+   'connector'='starrocks',
+   'scan-url'='fe_ip1:8030,fe_ip2:8030,fe_ip3:8030',
+   'jdbc-url'='jdbc:mysql://fe_ip:9030',
+   'username'='root',
+   'password'='',
+   'database-name'='flink_test',
+   'table-name'='flink_test'
+);
+
+select date_1, smallint_1 from flink_test where char_1 <> 'A' and int_1 = -126
+```
+
+### Source Options
+
+| Option                      | Required | Default            | Type   | Description                                                  |
+| :-------------------------- | :------- | :----------------- | :----- | :----------------------------------------------------------- |
+| connector                   | YES      | NONE               | String | starrocks                                                    |
+| scan-url                    | YES      | NONE               | String | Hosts of the fe node like: `fe_ip1:http_port,fe_ip2:http_port...`. |
+| jadc-url                    | YES      | NONE               | String | Hosts of the fe node like: `fe_ip1:query_port,fe_ip2: query_port...`. |
+| username                    | YES      | NONE               | String | StarRocks user name.                                         |
+| password                    | YES      | NONE               | String | StarRocks user password.                                     |
+| database-name               | YES      | NONE               | String | Database name                                                |
+| table-name                  | YES      | NONE               | String | Table name                                                   |
+| scan.connect.timeout-ms     | NO       | 1000               | String | Connect timeout                                              |
+| scan.params.keep-alive-min  | NO       | 10                 | String | Max keep alive time min                                      |
+| scan.params.query-timeout-s | NO       | 600(5min)          | String | Query timeout for a single query(The value of this parameter needs to be longer than the estimated period of the source) |
+| scan.params.mem-limit-byte  | NO       | 1024 * 1024 * 1024(1G) | String | Memory limit for a single query                              |
+| scan.max-retries            | NO       | 1                  | String | Max request retry times.                                     |
+
+### Metrics
+
+| Name | Type | Description |
+|  :-: | :-:  | :-:  |
+| totalScannedRows | counter | successfully collected data |
+
+### Type mappings
+
+| StarRocks  | Flink     |
+| ---------- | --------- |
+| NULL_TYPE  | NULL      |
+| BOOLEAN    | BOOLEAN   |
+| TINYINT    | TINYINT   |
+| SMALLINT   | SMALLINT  |
+| INT        | INT       |
+| BIGINT     | BIGINT    |
+| LARGEINT   | STRING    |
+| FLOAT      | FLOAT     |
+| DOUBLE     | DOUBLE    |
+| DATE       | DATE      |
+| DATETIME   | TIMESTAMP |
+| DECIMAL    | DECIMAL   |
+| DECIMALV2  | DECIMAL   |
+| DECIMAL32  | DECIMAL   |
+| DECIMAL64  | DECIMAL   |
+| DECIMAL128 | DECIMAL   |
+| CHAR       | CHAR      |
+| VARCHAR    | STRING    |
+
+### Notes
+
+1. Before compiling, please execute build-thrift.sh(build-thrift.bat).
+2. `exactly-once` semantic cannot be guaranteed in the case of a task failure.
+3. Only support SQL like `select {column name/*/count(1)} from {table-name} where ...`, aggregate query is not currently supported.
+
 ### Start using like
 
 ```java
