@@ -17,6 +17,9 @@
     <!-- for flink-1.13 -->
     <version>x.x.x_flink-1.13_2.11</version>
     <version>x.x.x_flink-1.13_2.12</version>
+    <!-- for flink-1.14 -->
+    <version>x.x.x_flink-1.14_2.11</version>
+    <version>x.x.x_flink-1.14_2.12</version>
 </dependency>
 ```
 
