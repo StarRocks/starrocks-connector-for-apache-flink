@@ -175,20 +175,6 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
             exMsg = e.getMessage();
         }
         assertTrue(0 < exMsg.length());
-
-        // Executors.newScheduledThreadPool(1, new ExecutorThreadFactory("test")).schedule(() -> {
-        //     try {
-        //         createHttpServer();
-        //     } catch (Exception e) {}
-        // }, maxRetries * 1000 - 500, TimeUnit.MILLISECONDS);
-        // try {
-        //     StarRocksSinkManager mgr = new StarRocksSinkManager(OPTIONS, TABLE_SCHEMA);
-        //     for (int i = 0; i < OPTIONS.getSinkMaxRows(); i++) {
-        //         mgr.writeRecord("");
-        //     }
-        // } catch (Exception e) {
-        //     throw e;
-        // }
     }
 
     @Test
@@ -250,6 +236,23 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
         assertTrue(mgr.closed);
         TimeUnit.MILLISECONDS.sleep(100L); // wait flush thread exit
         assertFalse(mgr.flushThreadAlive);
+    }
+
+    @Test
+    public void testLabelExist() {
+        mockTableStructure();
+        mockStarRocksVersion(null);
+        mockLabelExistsResponse(new String[]{"PREPARE", "VISIBLE"});
+        String exMsg = "";
+        try {
+            StarRocksSinkManager mgr = new StarRocksSinkManager(OPTIONS, TABLE_SCHEMA);
+            mgr.startAsyncFlushing();
+            mgr.writeRecord("");
+            mgr.close();
+        } catch (Exception e) {
+            exMsg = e.getMessage();
+        }
+        assertTrue(0 == exMsg.length());
     }
 
     @Test

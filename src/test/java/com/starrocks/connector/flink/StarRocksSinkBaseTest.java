@@ -22,12 +22,14 @@ import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONObject;
 import com.starrocks.connector.flink.manager.StarRocksQueryVisitor;
 import com.starrocks.connector.flink.row.StarRocksDelimiterParser;
 import com.starrocks.connector.flink.table.StarRocksSinkOptions;
@@ -70,7 +72,7 @@ public abstract class StarRocksSinkBaseTest {
     protected StarRocksSinkOptions.Builder OPTIONS_BUILDER;
     protected TableSchema TABLE_SCHEMA;
     protected Map<String, String> STARROCKS_TABLE_META;
-    protected String mockResonse = "";
+    protected LinkedList<String> mockResonse = new LinkedList<>();
     private ServerSocket serverSocket;
 
     @Before
@@ -105,31 +107,36 @@ public abstract class StarRocksSinkBaseTest {
         new Thread(new Runnable(){
             @Override
             public void run() {
-                try {
-                    while (true) {
-                        try (Socket socket = serverSocket.accept()) {
-                            InputStream in = socket.getInputStream();
-                            byte[] b = new byte[in.available()];
-                            int len = in.read(b);
-                            new String(b, 0, len);
-                            Thread.sleep(100);
-                            String res = "HTTP/1.1 200 OK\r\n" +
-                                        "\r\n" +
-                                        mockResonse;
-                            OutputStream out = socket.getOutputStream();
-                            if (0 == len) {
-                                out.write("".getBytes());
-                            } else {
-                                out.write(res.getBytes());
+                while (true) {
+                    try {
+                        Socket socket = serverSocket.accept();
+                        new Thread(new Runnable(){
+                            @Override
+                            public void run() {
+                                try {
+                                    InputStream in = socket.getInputStream();
+                                    byte[] b = new byte[in.available()];
+                                    int len = in.read(b);
+                                    OutputStream out = socket.getOutputStream();
+                                    if (0 == len) {
+                                        out.write("".getBytes());
+                                    } else {
+                                        String body = mockResonse.size() > 0 ? (mockResonse.size() == 1 ? mockResonse.peekFirst() : mockResonse.pollFirst()) : "";
+                                        String res = "HTTP/1.1 200 OK\r\n" +
+                                                    "Content-Length:" + body.length() + "\r\n" +
+                                                    "Connection:close\r\n" +
+                                                    "\r\n" + body;
+                                        out.write(res.getBytes());
+                                    }
+                                    out.flush();
+                                    out.close();
+                                    in.close();
+                                    socket.close();
+                                } catch (Exception e) {}
                             }
-                            out.flush();
-                            out.close();
-                            in.close();
-                            socket.close();
-                        }
-                    }
-                } catch (Exception e) {}
-
+                        }).start();
+                    } catch (Exception e) {}
+                }
             }
         }).start();
     }
@@ -195,10 +202,6 @@ public abstract class StarRocksSinkBaseTest {
         };
     }
 
-    protected void mockMapResponse(Map<String, Object> resp) {
-        mockResonse = JSON.toJSONString(resp);
-    }
-
     protected String mockSuccessResponse() {
         String label = UUID.randomUUID().toString();
         Map<String, Object> r = new HashMap<String, Object>();
@@ -206,7 +209,8 @@ public abstract class StarRocksSinkBaseTest {
         r.put("Label", label);
         r.put("Status", "Success");
         r.put("Message", "OK");
-        mockMapResponse(r);
+        mockResonse = new LinkedList<>();
+        mockResonse.add(JSONObject.toJSONString(r));
         return label;
     }
 
@@ -217,7 +221,30 @@ public abstract class StarRocksSinkBaseTest {
         r.put("Label", label);
         r.put("Status", "Fail");
         r.put("Message", "Failed to do stream loading.");
-        mockMapResponse(r);
+        mockResonse = new LinkedList<>();
+        mockResonse.add(JSONObject.toJSONString(r));
+        return label;
+    }
+
+    protected String mockLabelExistsResponse(String[] stateList) {
+        String label = UUID.randomUUID().toString();
+        Map<String, Object> r = new HashMap<String, Object>();
+        r.put("Label", label);
+        r.put("Status", "Label Already Exists");
+        mockResonse = new LinkedList<>();
+        mockResonse.add(JSONObject.toJSONString(r));
+        for (String status : stateList) {
+            Map<String, Object> s = new HashMap<String, Object>();
+            s.put("msg", "Success");
+            s.put("state", status);
+            mockResonse.add(JSONObject.toJSONString(s));
+        }
+        r = new HashMap<String, Object>();
+        r.put("TxnId", new java.util.Date().getTime());
+        r.put("Label", label);
+        r.put("Status", "Success");
+        r.put("Message", "OK");
+        mockResonse.add(JSONObject.toJSONString(r));
         return label;
     }
 
