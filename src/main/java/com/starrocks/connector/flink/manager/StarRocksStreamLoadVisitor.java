@@ -47,6 +47,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 
@@ -62,6 +63,13 @@ public class StarRocksStreamLoadVisitor implements Serializable {
     private final String[] fieldNames;
     private long pos;
     private boolean __opAutoProjectionInJson;
+    private static final String RESULT_FAILED = "Fail";
+    private static final String RESULT_LABEL_EXISTED = "Label Already Exists";
+    private static final String LAEBL_STATE_VISIBLE = "VISIBLE";
+    private static final String LAEBL_STATE_COMMITTED = "COMMITTED";
+    private static final String RESULT_LABEL_PREPARE = "PREPARE";
+    private static final String RESULT_LABEL_ABORTED = "ABORTED";
+    private static final String RESULT_LABEL_UNKNOWN = "UNKNOWN";
 
     public StarRocksStreamLoadVisitor(StarRocksSinkOptions sinkOptions, String[] fieldNames, boolean __opAutoProjectionInJson) {
         this.fieldNames = fieldNames;
@@ -90,19 +98,66 @@ public class StarRocksStreamLoadVisitor implements Serializable {
         if (LOG.isDebugEnabled()) {
             LOG.debug(String.format("Stream Load response: \n%s\n", JSON.toJSONString(loadResult)));
         }
-        if (loadResult.get(keyStatus).equals("Fail")) {
-            LOG.error(String.format("Stream Load response: \n%s\n", JSON.toJSONString(loadResult)));
+        if (RESULT_FAILED.equals(loadResult.get(keyStatus))) {
             Map<String, String> logMap = new HashMap<>();
             if (loadResult.containsKey("ErrorURL")) {
                 logMap.put("streamLoadErrorLog", getErrorLog((String) loadResult.get("ErrorURL")));
             }
             throw new StarRocksStreamLoadFailedException(String.format("Failed to flush data to StarRocks, Error " +
                 "response: \n%s\n%s\n", JSON.toJSONString(loadResult), JSON.toJSONString(logMap)), loadResult);
+        } else if (RESULT_LABEL_EXISTED.equals(loadResult.get(keyStatus))) {
+            LOG.error(String.format("Stream Load response: \n%s\n", JSON.toJSONString(loadResult)));
+            // has to block-checking the state to get the final result
+            checkLabelState(host, labeledRows.f0);
         }
         return loadResult;
     }
 
-    public String getErrorLog(String errorUrl) {
+    @SuppressWarnings("unchecked")
+    private void checkLabelState(String host, String label) throws IOException {
+        int idx = 0;
+        while(true) {
+            try {
+                TimeUnit.SECONDS.sleep(Math.min(++idx, 5));
+            } catch (InterruptedException ex) {
+                break;
+            }
+            try (CloseableHttpClient httpclient = HttpClients.createDefault()) {
+                HttpGet httpGet = new HttpGet(new StringBuilder(host).append("/api/").append(sinkOptions.getDatabaseName()).append("/get_load_state?label=").append(label).toString());
+                httpGet.setHeader("Authorization", getBasicAuthHeader(sinkOptions.getUsername(), sinkOptions.getPassword()));
+                httpGet.setHeader("Connection", "close");
+
+                try (CloseableHttpResponse resp = httpclient.execute(httpGet)) {
+                    HttpEntity respEntity = getHttpEntity(resp);
+                    if (respEntity == null) {
+                        throw new StarRocksStreamLoadFailedException(String.format("Failed to flush data to StarRocks, Error " +
+                                "could not get the final state of label[%s].\n", label), null);
+                    }
+                    Map<String, Object> result = (Map<String, Object>)JSON.parse(EntityUtils.toString(respEntity));
+                    String labelState = (String)result.get("state");
+                    if (null == labelState) {
+                        throw new StarRocksStreamLoadFailedException(String.format("Failed to flush data to StarRocks, Error " +
+                                "could not get the final state of label[%s]. response[%s]\n", label, EntityUtils.toString(respEntity)), null);
+                    }
+                    LOG.info(String.format("Checking label[%s] state[%s]\n", label, labelState));
+                    switch(labelState) {
+                        case LAEBL_STATE_VISIBLE:
+                        case LAEBL_STATE_COMMITTED:
+                            return;
+                        case RESULT_LABEL_PREPARE:
+                            continue;
+                        case RESULT_LABEL_ABORTED:
+                        case RESULT_LABEL_UNKNOWN:
+                        default:
+                            throw new StarRocksStreamLoadFailedException(String.format("Failed to flush data to StarRocks, Error " +
+                                "label[%s] state[%s]\n", label, labelState), null);
+                    }
+                }
+            }
+        }
+    }
+
+    private String getErrorLog(String errorUrl) {
         if (errorUrl == null || errorUrl.isEmpty() || !errorUrl.startsWith("http")) {
             return null;
         }
