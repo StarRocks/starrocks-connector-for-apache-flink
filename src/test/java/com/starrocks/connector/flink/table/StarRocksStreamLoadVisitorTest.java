@@ -66,6 +66,35 @@ public class StarRocksStreamLoadVisitorTest extends StarRocksSinkBaseTest {
             exMsg = e.getLocalizedMessage();
         }
         assertEquals(0, exMsg.length());
+        // test label already exists
+        exMsg = "";
+        try {
+            visitor.doStreamLoad(new Tuple3<>(mockLabelExistsResponse(new String[]{"PREPARE", "ABORTED"}), (long)"aaaa".getBytes().length, Lists.newArrayList("aaaa".getBytes())));
+        } catch (Exception e) {
+            exMsg = e.getLocalizedMessage();
+        }
+        assertTrue(0 < exMsg.length());
+        exMsg = "";
+        try {
+            visitor.doStreamLoad(new Tuple3<>(mockLabelExistsResponse(new String[]{"UNKONW"}), (long)"aaaa".getBytes().length, Lists.newArrayList("aaaa".getBytes())));
+        } catch (Exception e) {
+            exMsg = e.getLocalizedMessage();
+        }
+        assertTrue(0 < exMsg.length());
+        exMsg = "";
+        try {
+            visitor.doStreamLoad(new Tuple3<>(mockLabelExistsResponse(new String[]{"PREPARE", "VISIBLE"}), (long)"aaaa".getBytes().length, Lists.newArrayList("aaaa".getBytes())));
+        } catch (Exception e) {
+            exMsg = e.getLocalizedMessage();
+        }
+        assertEquals(0, exMsg.length());
+        exMsg = "";
+        try {
+            visitor.doStreamLoad(new Tuple3<>(mockLabelExistsResponse(new String[]{"PREPARE", "COMMITTED"}), (long)"aaaa".getBytes().length, Lists.newArrayList("aaaa".getBytes())));
+        } catch (Exception e) {
+            exMsg = e.getLocalizedMessage();
+        }
+        assertEquals(0, exMsg.length());
     }
         
     @Test
