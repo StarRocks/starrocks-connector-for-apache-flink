@@ -68,7 +68,7 @@ public class StarRocksSinkOptions implements Serializable {
     public static final ConfigOption<Long> SINK_BATCH_FLUSH_INTERVAL = ConfigOptions.key("sink.buffer-flush.interval-ms")
         .longType().defaultValue(300000L).withDescription("Flush interval of the row batch in millisecond.");
     public static final ConfigOption<Integer> SINK_MAX_RETRIES = ConfigOptions.key("sink.max-retries")
-        .intType().defaultValue(1).withDescription("Max flushing retry times of the row batch.");
+        .intType().defaultValue(3).withDescription("Max flushing retry times of the row batch.");
     public static final ConfigOption<Long> SINK_BATCH_OFFER_TIMEOUT = ConfigOptions.key("sink.buffer-flush.enqueue-timeout-ms")
         .longType().defaultValue(600000L).withDescription("Offer to flushQueue timeout in millisecond.");
     public static final ConfigOption<Integer> SINK_METRIC_HISTOGRAM_WINDOW_SIZE = ConfigOptions.key("sink.metric.histogram-window-size")
@@ -217,9 +217,9 @@ public class StarRocksSinkOptions implements Serializable {
 
     private void validateParamsRange() {
         tableOptions.getOptional(SINK_MAX_RETRIES).ifPresent(val -> {
-            if (val.intValue() < 0 || val.intValue() > 10) {
+            if (val.intValue() < 0 || val.intValue() > 1000) {
                 throw new ValidationException(
-                    String.format("Unsupported value '%d' for '%s'. Supported value range: [0, 10].",
+                    String.format("Unsupported value '%d' for '%s'. Supported value range: [0, 1000].",
                         val, SINK_MAX_RETRIES.key()));
             }
         });
