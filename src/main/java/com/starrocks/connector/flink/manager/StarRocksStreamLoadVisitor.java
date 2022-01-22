@@ -147,6 +147,8 @@ public class StarRocksStreamLoadVisitor implements Serializable {
                         case RESULT_LABEL_PREPARE:
                             continue;
                         case RESULT_LABEL_ABORTED:
+                            throw new StarRocksStreamLoadFailedException(String.format("Failed to flush data to StarRocks, Error " +
+                                    "label[%s] state[%s]\n", label, labelState), null, true);
                         case RESULT_LABEL_UNKNOWN:
                         default:
                             throw new StarRocksStreamLoadFailedException(String.format("Failed to flush data to StarRocks, Error " +
