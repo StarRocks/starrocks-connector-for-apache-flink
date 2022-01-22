@@ -350,7 +350,7 @@ public class StarRocksSinkManager implements Serializable {
                     flushData.f0 = newLabel;
                 }
                 try {
-                    Thread.sleep(1000l * (i + 1));
+                    Thread.sleep(1000l * Math.min(i + 1, 10));
                 } catch (InterruptedException ex) {
                     Thread.currentThread().interrupt();
                     throw new IOException("Unable to flush, interrupted while doing another attempt", e);
