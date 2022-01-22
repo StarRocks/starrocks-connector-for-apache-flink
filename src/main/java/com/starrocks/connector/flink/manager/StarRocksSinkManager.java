@@ -344,6 +344,11 @@ public class StarRocksSinkManager implements Serializable {
                 if (i >= sinkOptions.getSinkMaxRetries()) {
                     throw e;
                 }
+                if (e instanceof StarRocksStreamLoadFailedException && ((StarRocksStreamLoadFailedException)e).needReCreateLabel()) {
+                    String newLabel = createBatchLabel();
+                    LOG.warn(String.format("Batch label changed from [%s] to [%s]", flushData.f0, newLabel));
+                    flushData.f0 = newLabel;
+                }
                 try {
                     Thread.sleep(1000l * (i + 1));
                 } catch (InterruptedException ex) {
