@@ -260,6 +260,9 @@ public class StarRocksStreamLoadVisitor implements Serializable {
                 }
                 httpPut.setHeader("columns", cols);
             }
+            if (!httpPut.containsHeader("timeout")) {
+                httpPut.setHeader("timeout", "60");
+            }
             httpPut.setHeader("Expect", "100-continue");
             httpPut.setHeader("label", label);
             httpPut.setHeader("Authorization", getBasicAuthHeader(sinkOptions.getUsername(), sinkOptions.getPassword()));
