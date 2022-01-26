@@ -88,7 +88,10 @@ public class StarRocksExpressionExtractor implements ExpressionVisitor<String> {
 
     @Override
     public String visit(ValueLiteralExpression valueLiteral) {
-        if (valueLiteral.getOutputDataType() == DataTypes.DATE() || valueLiteral.getOutputDataType().toString().equals("DATE NOT NULL")) {
+        if (valueLiteral.getOutputDataType().getLogicalType().getTypeRoot().equals(DataTypes.TIMESTAMP().getLogicalType().getTypeRoot()) || 
+            valueLiteral.getOutputDataType().getLogicalType().getTypeRoot().equals(DataTypes.TIMESTAMP_WITH_LOCAL_TIME_ZONE().getLogicalType().getTypeRoot()) || 
+            valueLiteral.getOutputDataType().getLogicalType().getTypeRoot().equals(DataTypes.TIMESTAMP_WITH_TIME_ZONE().getLogicalType().getTypeRoot()) ||
+            valueLiteral.getOutputDataType().getLogicalType().getTypeRoot().equals(DataTypes.DATE().getLogicalType().getTypeRoot())) {
             return "'" + valueLiteral.toString() + "'";
         }
         return valueLiteral.toString();

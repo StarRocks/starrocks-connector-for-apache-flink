@@ -94,7 +94,7 @@ select date_1, smallint_1 from flink_test where char_1 <> 'A' and int_1 = -126
 | :-------------------------- | :------- | :----------------- | :----- | :----------------------------------------------------------- |
 | connector                   | YES      | NONE               | String | starrocks                                                    |
 | scan-url                    | YES      | NONE               | String | Hosts of the fe node like: `fe_ip1:http_port,fe_ip2:http_port...`. |
-| jadc-url                    | YES      | NONE               | String | Hosts of the fe node like: `fe_ip1:query_port,fe_ip2: query_port...`. |
+| jdbc-url                    | YES      | NONE               | String | Hosts of the fe node like: `fe_ip1:query_port,fe_ip2: query_port...`. |
 | username                    | YES      | NONE               | String | StarRocks user name.                                         |
 | password                    | YES      | NONE               | String | StarRocks user password.                                     |
 | database-name               | YES      | NONE               | String | Database name                                                |
