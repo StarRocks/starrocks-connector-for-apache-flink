@@ -131,17 +131,15 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
                 Alter alter = (Alter) stmt;
             }
         }
-        if (!(value instanceof RowData)) {
-            LOG.warn("Unsupported row data invoked: [%s]", value.getClass().getName());
-            return;
-        }
-        if (RowKind.UPDATE_BEFORE.equals(((RowData)value).getRowKind())) {
-            // do not need update_before, cauz an update action happened on the primary keys will be separated into `delete` and `create`
-            return;
-        }
-        if (!sinkOptions.supportUpsertDelete() && RowKind.DELETE.equals(((RowData)value).getRowKind())) {
-            // let go the UPDATE_AFTER and INSERT rows for tables who have a group of `unique` or `duplicate` keys.
-            return;
+        if (value instanceof RowData) {
+            if (RowKind.UPDATE_BEFORE.equals(((RowData)value).getRowKind())) {
+                // do not need update_before, cauz an update action happened on the primary keys will be separated into `delete` and `create`
+                return;
+            }
+            if (!sinkOptions.supportUpsertDelete() && RowKind.DELETE.equals(((RowData)value).getRowKind())) {
+                // let go the UPDATE_AFTER and INSERT rows for tables who have a group of `unique` or `duplicate` keys.
+                return;
+            }
         }
         sinkManager.writeRecord(
             serializer.serialize(rowTransformer.transform(value, sinkOptions.supportUpsertDelete()))
