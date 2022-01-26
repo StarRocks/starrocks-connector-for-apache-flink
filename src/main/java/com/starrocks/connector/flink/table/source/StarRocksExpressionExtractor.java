@@ -28,6 +28,7 @@ import org.apache.flink.table.expressions.TypeLiteralExpression;
 import org.apache.flink.table.expressions.ValueLiteralExpression;
 import org.apache.flink.table.functions.BuiltInFunctionDefinitions;
 import org.apache.flink.table.functions.FunctionDefinition;
+import org.apache.flink.table.types.logical.LogicalTypeRoot;
 
 
 public class StarRocksExpressionExtractor implements ExpressionVisitor<String> {
@@ -88,7 +89,11 @@ public class StarRocksExpressionExtractor implements ExpressionVisitor<String> {
 
     @Override
     public String visit(ValueLiteralExpression valueLiteral) {
-        if (valueLiteral.getOutputDataType() == DataTypes.DATE() || valueLiteral.getOutputDataType().toString().equals("DATE NOT NULL")) {
+        LogicalTypeRoot typeRoot = valueLiteral.getOutputDataType().getLogicalType().getTypeRoot();
+        if (typeRoot.equals(LogicalTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE) || 
+            typeRoot.equals(LogicalTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE) || 
+            typeRoot.equals(LogicalTypeRoot.TIMESTAMP_WITH_TIME_ZONE) ||
+            typeRoot.equals(LogicalTypeRoot.DATE)) {
             return "'" + valueLiteral.toString() + "'";
         }
         return valueLiteral.toString();

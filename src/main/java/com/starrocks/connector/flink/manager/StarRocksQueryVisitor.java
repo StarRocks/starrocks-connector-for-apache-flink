@@ -103,7 +103,7 @@ public class StarRocksQueryVisitor implements Serializable {
         } catch (ClassNotFoundException se) {
             throw new IllegalArgumentException("Failed to find jdbc driver." + se.getMessage(), se);
         } catch (SQLException se) {
-            throw new IllegalArgumentException("Failed to get table schema info from StarRocks. " + se.getMessage(), se);
+            throw new IllegalArgumentException("Failed to get data count from StarRocks. " + se.getMessage(), se);
         }
         return count;
     }
