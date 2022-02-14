@@ -47,13 +47,14 @@ import java.util.Set;
 public class StarRocksQueryPlanVisitor implements Serializable {
 
     private static final long serialVersionUID = 1L;
-
     private static final Logger LOG = LoggerFactory.getLogger(StarRocksQueryPlanVisitor.class);
-
-    private final StarRocksSourceOptions sourceOptions;
-
+    private StarRocksSourceOptions sourceOptions;
 
     public StarRocksQueryPlanVisitor(StarRocksSourceOptions sourceOptions) {
+        this.sourceOptions = sourceOptions;
+    }
+
+    public void setSourceOptions(StarRocksSourceOptions sourceOptions) {
         this.sourceOptions = sourceOptions;
     }
 
