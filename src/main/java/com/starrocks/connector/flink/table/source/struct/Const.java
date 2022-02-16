@@ -56,7 +56,6 @@ public class Const {
                 put(DATA_TYPE_STARROCKS_DATE, new StarRocksToFlinkTranslators().new ToFlinkDate());
             }
         });
-
         put(LogicalTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE, new HashMap<String, StarRocksToFlinkTrans>() {{
                 put(DATA_TYPE_STARROCKS_DATETIME, new StarRocksToFlinkTranslators().new ToFlinkTimestamp());
             }
@@ -69,7 +68,6 @@ public class Const {
                 put(DATA_TYPE_STARROCKS_DATETIME, new StarRocksToFlinkTranslators().new ToFlinkTimestamp());
             }
         });
-
         put(LogicalTypeRoot.CHAR, new HashMap<String, StarRocksToFlinkTrans>() {{
                 put(DATA_TYPE_STARROCKS_CHAR, new StarRocksToFlinkTranslators().new ToFlinkChar());
             }
@@ -79,7 +77,6 @@ public class Const {
                 put(DATA_TYPE_STARROCKS_LARGEINT, new StarRocksToFlinkTranslators().new ToFlinkChar());
             }
         });
-
         put(LogicalTypeRoot.BOOLEAN, new HashMap<String, StarRocksToFlinkTrans>() {{
                 put(DATA_TYPE_STARROCKS_BOOLEAN, new StarRocksToFlinkTranslators().new ToFlinkBoolean());
             }

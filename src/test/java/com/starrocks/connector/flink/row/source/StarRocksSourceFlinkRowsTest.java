@@ -28,10 +28,12 @@ import com.starrocks.connector.flink.it.source.StarRocksSourceBaseTest;
 import com.starrocks.connector.flink.table.source.StarRocksSourceCommonFunc;
 import com.starrocks.connector.flink.table.source.struct.Column;
 import com.starrocks.connector.flink.table.source.struct.ColunmRichInfo;
+import com.starrocks.connector.flink.table.source.struct.Const;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 import com.starrocks.connector.flink.table.source.struct.StarRocksSchema;
 import com.starrocks.connector.flink.thrift.TScanBatchResult;
 
+import org.apache.flink.table.types.logical.LogicalTypeRoot;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -123,5 +125,125 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
             eMsg = e.getMessage();
         }
         assertTrue(eMsg.contains("Data could not be null. please check create table SQL, column index is"));
+    }
+
+    @Test
+    public void testDataTypeTrans() {
+
+        Const.DataTypeRelationMap.entrySet().stream().forEach(entry -> {
+            if (entry.getKey().equals(LogicalTypeRoot.DATE)) {
+                entry.getValue().entrySet().stream().forEach(type -> {
+                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_DATE)) {
+                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkDate);
+                    }
+                });
+            }
+            if (entry.getKey().equals(LogicalTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE)) {
+                entry.getValue().entrySet().stream().forEach(type -> {
+                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_DATETIME)) {
+                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkTimestamp);
+                    }
+                });
+            }
+            if (entry.getKey().equals(LogicalTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE)) {
+                entry.getValue().entrySet().stream().forEach(type -> {
+                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_DATETIME)) {
+                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkTimestamp);
+                    }
+                });
+            }
+            if (entry.getKey().equals(LogicalTypeRoot.TIMESTAMP_WITH_TIME_ZONE)) {
+                entry.getValue().entrySet().stream().forEach(type -> {
+                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_DATETIME)) {
+                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkTimestamp);
+                    }
+                });
+            }
+            if (entry.getKey().equals(LogicalTypeRoot.CHAR)) {
+                entry.getValue().entrySet().stream().forEach(type -> {
+                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_CHAR)) {
+                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkChar);
+                    }
+                });
+            }
+            if (entry.getKey().equals(LogicalTypeRoot.VARCHAR)) {
+                entry.getValue().entrySet().stream().forEach(type -> {
+                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_VARCHAR)) {
+                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkChar);
+                    }
+                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_LARGEINT)) {
+                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkChar);
+                    }
+                });
+            }
+            if (entry.getKey().equals(LogicalTypeRoot.BOOLEAN)) {
+                entry.getValue().entrySet().stream().forEach(type -> {
+                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_BOOLEAN)) {
+                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkBoolean);
+                    }
+                });
+            }
+            if (entry.getKey().equals(LogicalTypeRoot.TINYINT)) {
+                entry.getValue().entrySet().stream().forEach(type -> {
+                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_TINYINT)) {
+                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkTinyInt);
+                    }
+                });
+            }
+            if (entry.getKey().equals(LogicalTypeRoot.SMALLINT)) {
+                entry.getValue().entrySet().stream().forEach(type -> {
+                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_SMALLINT)) {
+                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkSmallInt);
+                    }
+                });
+            }
+            if (entry.getKey().equals(LogicalTypeRoot.INTEGER)) {
+                entry.getValue().entrySet().stream().forEach(type -> {
+                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_INT)) {
+                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkInt);
+                    }
+                });
+            }
+            if (entry.getKey().equals(LogicalTypeRoot.BIGINT)) {
+                entry.getValue().entrySet().stream().forEach(type -> {
+                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_BIGINT)) {
+                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkBigInt);
+                    }
+                });
+            }
+            if (entry.getKey().equals(LogicalTypeRoot.FLOAT)) {
+                entry.getValue().entrySet().stream().forEach(type -> {
+                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_FLOAT)) {
+                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkFloat);
+                    }
+                });
+            }
+            if (entry.getKey().equals(LogicalTypeRoot.DOUBLE)) {
+                entry.getValue().entrySet().stream().forEach(type -> {
+                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_DOUBLE)) {
+                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkDouble);
+                    }
+                });
+            }
+            if (entry.getKey().equals(LogicalTypeRoot.DECIMAL)) {
+                entry.getValue().entrySet().stream().forEach(type -> {
+                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_DECIMAL)) {
+                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkDecimal);
+                    }
+                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_DECIMALV2)) {
+                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkDecimal);
+                    }
+                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_DECIMAL32)) {
+                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkDecimal);
+                    }
+                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_DECIMAL64)) {
+                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkDecimal);
+                    }
+                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_DECIMAL128)) {
+                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkDecimal);
+                    }
+                });
+            }
+        });
     }
 }
