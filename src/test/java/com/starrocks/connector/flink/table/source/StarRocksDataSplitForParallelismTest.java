@@ -26,6 +26,7 @@ import java.util.List;
 import com.starrocks.connector.flink.table.source.struct.QueryBeXTablets;
 import com.starrocks.connector.flink.table.source.struct.QueryInfo;
 import com.starrocks.connector.flink.table.source.struct.QueryPlan;
+
 public class StarRocksDataSplitForParallelismTest {
     
     @Test

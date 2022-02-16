@@ -70,7 +70,7 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
     public void testGenFlinkRows() throws FileNotFoundException, IOException {
         String fileName = curPath + "/src/test/resources/rowsData";
         String line;
-        try (BufferedReader br = new BufferedReader(new FileReader(fileName))){
+        try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
             line = br.readLine();
         }
         assertTrue(line != null);
