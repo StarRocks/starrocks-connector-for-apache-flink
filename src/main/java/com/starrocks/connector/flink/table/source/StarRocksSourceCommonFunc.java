@@ -69,6 +69,7 @@ public class StarRocksSourceCommonFunc {
                 }
             }
         }
+        starRocksQueryPlanVisitor.setSourceOptions(sourceOptions);
         return starRocksQueryPlanVisitor;
     }
 

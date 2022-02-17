@@ -84,7 +84,7 @@ public class StarRocksQueryVisitor implements Serializable {
         }
         rs.absolute(currRowIndex);
         rs.close();
-        dbConn.close();
+        jdbcConnProvider.close();
         return list;
     }
 

@@ -28,10 +28,19 @@ import java.util.Map;
 
 import com.alibaba.fastjson.JSONObject;
 import com.starrocks.connector.flink.table.source.StarRocksSourceOptions;
+import com.starrocks.connector.flink.table.source.StarrocksExternalServiceImpl;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
+import com.starrocks.connector.flink.thrift.TStarrocksExternalService;
 
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.TableSchema;
+import org.apache.thrift.protocol.TBinaryProtocol;
+import org.apache.thrift.server.TServer;
+import org.apache.thrift.server.TThreadPoolServer;
+import org.apache.thrift.transport.TServerSocket;
+import org.apache.thrift.transport.TServerTransport;
+import org.apache.thrift.transport.TTransportException;
+import org.apache.thrift.transport.TTransportFactory;
 import org.junit.After;
 import org.junit.Before;
 
@@ -39,30 +48,26 @@ import org.junit.Before;
 public abstract class StarRocksSourceBaseTest {
 
     protected TableSchema TABLE_SCHEMA;
-
     protected TableSchema TABLE_SCHEMA_NOT_NULL;
-
     protected StarRocksSourceOptions OPTIONS;
-
     protected StarRocksSourceOptions OPTIONS_WITH_COLUMN_IS_COUNT;
-
     protected int[][] PROJECTION_ARRAY;
     protected SelectColumn[] SELECT_COLUMNS;
     protected int[][] PROJECTION_ARRAY_NULL;
-
     protected final String DATABASE = "test";
     protected final String TABLE = "test_source";
     protected final String USERNAME = "root";
     protected final String PASSWORD = "root123";
-
-    private ServerSocket serverSocket;
+    private ServerSocket httpSocket;
     protected final int AVAILABLE_QUERY_PORT = 53329;
     protected final String JDBC_URL = "jdbc:mysql://127.0.0.1:53329,127.0.0.1:" + AVAILABLE_QUERY_PORT;
     protected final int AVAILABLE_HTTP_PORT = 29592;
     protected String SCAN_URL = "127.0.0.1:" + AVAILABLE_HTTP_PORT;
+    private TServer thriftServer;
+    private ServerSocket thriftSocket;
+    protected int AVAILABLE_THRIFT_PORT = 21592;
     protected String mockResonse = "";
     protected String querySQL = "select * from `test`.`test_source`";
-
     protected int tabletCount = 50;
 
     @Before
@@ -142,17 +147,16 @@ public abstract class StarRocksSourceBaseTest {
         TABLE_SCHEMA_NOT_NULL = tableSchema;
     }
 
-
     @Before
     public void createHttpServer() throws IOException {
-        tryBindingServerSocket();
+        tryBindingHttpServerSocket();
         new Thread(new Runnable(){
             @Override
             public void run() {
                 try {
                     while (true) {
-                        if (null == serverSocket || serverSocket.isClosed()) break;
-                        Socket ac = serverSocket.accept();
+                        if (null == httpSocket || httpSocket.isClosed()) break;
+                        Socket ac = httpSocket.accept();
                         final Socket socket = ac;
                         InputStream in = socket.getInputStream();
                         BufferedReader bd = new BufferedReader(new InputStreamReader(in));
@@ -185,8 +189,32 @@ public abstract class StarRocksSourceBaseTest {
         }).start();
     }
 
+    @Before
+    public void createThriftServer() {
+        tryBindingThriftServerSocket();
+        Thread thriftThread = new Thread(() -> {
+            TStarrocksExternalService.Processor<StarrocksExternalServiceImpl> processor = new TStarrocksExternalService.Processor<>(new StarrocksExternalServiceImpl());
+            try (TServerTransport transport = new TServerSocket(thriftSocket)) {
+                TThreadPoolServer.Args tArgs = new TThreadPoolServer.Args(transport);
+                tArgs.processor(processor);
+                tArgs.protocolFactory(new TBinaryProtocol.Factory());
+                tArgs.transportFactory(new TTransportFactory());
+                tArgs.minWorkerThreads(10);
+                tArgs.maxWorkerThreads(20);
+                thriftServer = new TThreadPoolServer(tArgs);
+                thriftServer.serve();
+            } catch (TTransportException e) {
+                e.printStackTrace();
+            }
+        });
+        thriftThread.start();
+    }
+
     protected void mockResonsefunc() {
-        String[] beNode = new String[]{"172.0.0.1:9660", "172.0.0.2:9660", "172.0.0.3:9660"};
+        String[] beNode = new String[]{
+            "127.0.0.1:" + AVAILABLE_THRIFT_PORT, 
+            "127.0.0.2:" + AVAILABLE_THRIFT_PORT, 
+            "127.0.0.3:" + AVAILABLE_THRIFT_PORT};
         Map<String, Object> respMap = new HashMap<>();
         respMap.put("opaqued_query_plan", "mockPlan");
         respMap.put("status", "200");
@@ -207,24 +235,74 @@ public abstract class StarRocksSourceBaseTest {
         mockResonse = json.toJSONString();
     }
 
-    private void tryBindingServerSocket() {
+    protected void mockOneBeResonsefunc() {
+        String[] beNode = new String[]{
+            "127.0.0.1:" + AVAILABLE_THRIFT_PORT};
+        Map<String, Object> respMap = new HashMap<>();
+        respMap.put("opaqued_query_plan", "mockPlan");
+        respMap.put("status", "200");
+        Map<Integer, Object> partitionsSet = new HashMap<>();
+        for (int i = 0; i < tabletCount; i ++) {
+            Map<String, Object> pMap = new HashMap<>();
+            pMap.put("version", 4);
+            pMap.put("versionHash", 6318449679607016199L);
+            pMap.put("schemaHash", 975114127);
+            pMap.put("routings", new String[]{
+                beNode[i%beNode.length], 
+                beNode[i%beNode.length + 1 >= beNode.length ? 0 : i%beNode.length + 1]
+            });
+            partitionsSet.put(i, pMap);
+        }
+        respMap.put("partitions", partitionsSet);
+        JSONObject json = new JSONObject(respMap);
+        mockResonse = json.toJSONString();
+    }
+
+    private void tryBindingHttpServerSocket() {
         int maxTryingPorts = 100;
         for (int i = 0; i < maxTryingPorts; i++) {
             try {
                 int port = AVAILABLE_HTTP_PORT + i;
-                serverSocket = new ServerSocket(port);
+                httpSocket = new ServerSocket(port);
                 SCAN_URL = "127.0.0.1:" + port;
                 initializeCommonOptions();
                 initializeColumnIsCountOptions();
+                break;
+            } catch (IOException e) {}
+        }
+    }
+
+    private void tryBindingThriftServerSocket() {
+        int maxTryingPorts = 100;
+        for (int i = 0; i < maxTryingPorts; i++) {
+            try {
+                int port = AVAILABLE_THRIFT_PORT + i;
+                thriftSocket = new ServerSocket(port);
+                AVAILABLE_THRIFT_PORT = port;
+                break;
             } catch (IOException e) {}
         }
     }
 
     @After
     public void stopHttpServer() throws IOException {
-        if (serverSocket != null) {
-            serverSocket.close();
+        if (httpSocket != null) {
+            httpSocket.close();
         }
-        serverSocket = null;
+        httpSocket = null;
+    }
+
+    @After
+    public void stopThriftServer() {
+        if (thriftServer != null) {
+            thriftServer.stop();
+        }
+        thriftServer = null;
+        if (thriftSocket != null) {
+            try {
+                thriftSocket.close();
+            } catch (IOException e) {}
+        }
+        thriftSocket = null;
     }
 }

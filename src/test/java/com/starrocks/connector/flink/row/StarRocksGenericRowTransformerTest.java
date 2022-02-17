@@ -29,8 +29,7 @@ import java.util.Map;
 
 import com.alibaba.fastjson.JSON;
 import com.starrocks.connector.flink.StarRocksSinkBaseTest;
-import com.starrocks.connector.flink.row.StarRocksGenericRowTransformer;
-import com.starrocks.connector.flink.row.StarRocksSerializerFactory;
+
 
 public class StarRocksGenericRowTransformerTest extends StarRocksSinkBaseTest {
 

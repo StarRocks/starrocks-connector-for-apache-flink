@@ -39,7 +39,7 @@ public class StarRocksDynamicTableSourceITTest extends StarRocksSourceBaseTest {
 
     @Test
     public void testTableAPI() {
-        mockResonsefunc();
+        mockOneBeResonsefunc();
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);
         StreamTableEnvironment tEnv;
@@ -58,28 +58,26 @@ public class StarRocksDynamicTableSourceITTest extends StarRocksSourceBaseTest {
                     "largeint_1 STRING,"+
                     "float_1 FLOAT,"+
                     "double_1 DOUBLE,"+
-                    "decimal_1 DECIMAL(27,9)\n"+
+                    "decimal_1 DECIMAL(10,9)\n"+
                 ") WITH (\n" +
                     "  'connector' = 'starrocks',\n" +
                     "  'scan-url' = '" + OPTIONS.getScanUrl() + "',\n" +
+                    "  'scan.connect.timeout-ms' = '5000', " +
                     "  'jdbc-url' = '" + OPTIONS.getJdbcUrl() + "',\n" +
                     "  'username' = '" + OPTIONS.getUsername() + "',\n" +
                     "  'password' = '" + OPTIONS.getPassword() + "',\n" +
                     "  'database-name' = '" + OPTIONS.getDatabaseName() + "',\n" +
                     "  'table-name' = '" + OPTIONS.getTableName() + "')"
                 );
-
-        boolean checkCause = false;
+        Exception e = null;
         try {
-            tEnv.executeSql("select * from flink_type_test").print();
-            Thread.sleep(2000);
-        } catch (Exception e) {
-            checkCause = checkCause(
-                e.getCause(), 
-                "Failed to create brpc source:java.net.SocketTimeoutException: connect timed out"
-            );
+            tEnv.executeSql("select * from flink_type_test").print();;
+            Thread.sleep(5000);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            e = ex;
         }
-        assertTrue(checkCause);
+        assertTrue(e == null);
     }
 
     private boolean checkCause(Throwable throwable, String causeStr) {
