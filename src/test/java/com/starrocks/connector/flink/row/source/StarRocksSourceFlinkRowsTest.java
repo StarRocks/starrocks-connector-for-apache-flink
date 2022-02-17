@@ -20,6 +20,7 @@ import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -33,6 +34,10 @@ import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 import com.starrocks.connector.flink.table.source.struct.StarRocksSchema;
 import com.starrocks.connector.flink.thrift.TScanBatchResult;
 
+import org.apache.flink.table.data.DecimalData;
+import org.apache.flink.table.data.GenericRowData;
+import org.apache.flink.table.data.StringData;
+import org.apache.flink.table.data.TimestampData;
 import org.apache.flink.table.types.logical.LogicalTypeRoot;
 import org.junit.Before;
 import org.junit.Test;
@@ -92,7 +97,68 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
         int dataCount = 0;
         while (flinkRows.hasNext()) {
             dataCount ++;
-            flinkRows.next();
+            GenericRowData preparedData = flinkRows.next();
+            for (int i = 0; i < preparedData.getArity(); i ++) {
+                Object currentObj = preparedData.getField(i);
+                if (i == 0) {
+                    assertTrue(currentObj instanceof Integer); 
+                    assertTrue((Integer)currentObj == 17978);
+                }
+                if (i == 1) {
+                    assertTrue(currentObj instanceof TimestampData);
+                    TimestampData actual = (TimestampData)currentObj;
+                    Timestamp expect = new Timestamp(1584892800000L);
+                    expect.setNanos(189760000);
+                    assertTrue(actual.toTimestamp().equals(expect));
+                }
+                if (i == 2) {
+                    assertTrue(currentObj instanceof StringData);
+                    assertTrue(StringData.fromString("DEF").equals((StringData)currentObj));
+                }
+                if (i == 3) {
+                    assertTrue(currentObj instanceof StringData);
+                    assertTrue(StringData.fromString("A").equals((StringData)currentObj));
+                }
+                if (i == 4) {
+                    assertTrue(currentObj instanceof Boolean);
+                    assertTrue((Boolean)currentObj == true);
+                }
+                if (i == 5) {
+                    assertTrue(currentObj instanceof Byte);
+                    assertTrue((Byte)currentObj == 0);
+                }
+                if (i == 6) {
+                    assertTrue(currentObj instanceof Short);
+                    assertTrue((Short)currentObj == -32768);
+                }
+                if (i == 7) {
+                    assertTrue(currentObj instanceof Integer);
+                    assertTrue((Integer)currentObj == -2147483648);
+                }
+                if (i == 8) {
+                    assertTrue(currentObj instanceof Long);
+                    assertTrue((Long)currentObj == -9223372036854775808L);
+                }
+                if (i == 9) {
+                    assertTrue(currentObj instanceof StringData);
+                    assertTrue(StringData.fromString("-18446744073709551616").equals((StringData)currentObj));
+                }
+                if (i == 10) {
+                    assertTrue(currentObj instanceof Float);
+                    assertTrue((Float)currentObj == -3.1F);
+                }
+                if (i == 11) {
+                    assertTrue(currentObj instanceof Double);
+                    assertTrue((Double)currentObj == -3.14D);
+                }
+                if (i == 12) {
+                    assertTrue(currentObj instanceof DecimalData);
+                    DecimalData cur = (DecimalData)currentObj;
+                    assertTrue(cur.toUnscaledLong() == -3141291000L);
+                    assertTrue(cur.precision() == 10);
+                    assertTrue(cur.scale() == 9);
+                }
+            }
         }
         assertTrue(flinkRows.getReadRowCount() == dataCount);
     }
