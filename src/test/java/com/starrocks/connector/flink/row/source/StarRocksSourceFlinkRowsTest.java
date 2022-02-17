@@ -109,7 +109,7 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
                     TimestampData actual = (TimestampData)currentObj;
                     Timestamp expect = new Timestamp(1584892800000L);
                     expect.setNanos(189760000);
-                    assertTrue(actual.toTimestamp().equals(expect));
+                    assertTrue(actual.toTimestamp().compareTo(expect) == 0);
                 }
                 if (i == 2) {
                     assertTrue(currentObj instanceof StringData);
