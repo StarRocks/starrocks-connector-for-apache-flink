@@ -145,12 +145,13 @@ public class StarRocksSourceFlinkRows {
         final AtomicInteger index = new AtomicInteger(0);
         List<SelectColumn> selectColumnsList = Arrays.asList(selectColumns);
         selectColumnsList.stream().map(column -> new Object[]{column, index.getAndAdd(1)})
-        .collect(Collectors.toList()).parallelStream().forEach(columnWithIndex -> {
-            SelectColumn column = (SelectColumn) columnWithIndex[0];
-            int colIndex = (int) columnWithIndex[1];
+        .collect(Collectors.toList())
+        .parallelStream().forEach(columnAndIndex -> {
+            SelectColumn column = (SelectColumn) columnAndIndex[0];
+            int colIndex = (int) columnAndIndex[1];
             FieldVector columnVector = fieldVectors.get(colIndex);
             Types.MinorType beShowDataType = columnVector.getMinorType();
-            String starrocksType = starRocksSchema.get(colIndex).getType();
+            String starrocksType = starRocksSchema.get(column.getColumnIndexInFlinkTable()).getType();
             ColunmRichInfo richInfo = colunmRichInfos.get(column.getColumnIndexInFlinkTable());
             boolean nullable = richInfo.getDataType().getLogicalType().isNullable();
             LogicalTypeRoot flinkTypeRoot = richInfo.getDataType().getLogicalType().getTypeRoot();
