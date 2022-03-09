@@ -73,8 +73,9 @@ fi
 
 cd $TP_INSTALL_DIR/bin/
 ./thrift -r -gen java $ROOT/../gensrc/StarrocksExternalService.thrift
-if [ ! -d "$ROOT/../src/main/java/com/starrocks/connector/flink/thrift" ]; then
-    mkdir $ROOT/../src/main/java/com/starrocks/connector/flink/thrift
+if [ ! -d "$ROOT/../src/main/java/com/starrocks/thrift" ]; then
+    mkdir -p $ROOT/../src/main/java/com/starrocks/thrift
 fi
-cp -r gen-java/com/starrocks/connector/flink/thrift/* $ROOT/../src/main/java/com/starrocks/connector/flink/thrift
+echo $pwd
+cp -r gen-java/com/starrocks/thrift/* $ROOT/../src/main/java/com/starrocks/thrift
 echo "done..."

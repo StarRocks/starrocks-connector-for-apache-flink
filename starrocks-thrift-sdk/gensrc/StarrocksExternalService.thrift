@@ -19,7 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-namespace java com.starrocks.connector.flink.thrift
+namespace java com.starrocks.thrift
 namespace cpp starrocks
 
 include "Types.thrift"
