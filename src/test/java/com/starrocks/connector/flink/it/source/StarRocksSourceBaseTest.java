@@ -30,17 +30,17 @@ import com.alibaba.fastjson.JSONObject;
 import com.starrocks.connector.flink.table.source.StarRocksSourceOptions;
 import com.starrocks.connector.flink.table.source.StarrocksExternalServiceImpl;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
-import com.starrocks.connector.flink.thrift.TStarrocksExternalService;
+import com.starrocks.thrift.TStarrocksExternalService;
 
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.TableSchema;
-import org.apache.thrift.protocol.TBinaryProtocol;
-import org.apache.thrift.server.TServer;
-import org.apache.thrift.server.TThreadPoolServer;
-import org.apache.thrift.transport.TServerSocket;
-import org.apache.thrift.transport.TServerTransport;
-import org.apache.thrift.transport.TTransportException;
-import org.apache.thrift.transport.TTransportFactory;
+import com.starrocks.shade.org.apache.thrift.protocol.TBinaryProtocol;
+import com.starrocks.shade.org.apache.thrift.server.TServer;
+import com.starrocks.shade.org.apache.thrift.server.TThreadPoolServer;
+import com.starrocks.shade.org.apache.thrift.transport.TServerSocket;
+import com.starrocks.shade.org.apache.thrift.transport.TServerTransport;
+import com.starrocks.shade.org.apache.thrift.transport.TTransportException;
+import com.starrocks.shade.org.apache.thrift.transport.TTransportFactory;
 import org.junit.After;
 import org.junit.Before;
 

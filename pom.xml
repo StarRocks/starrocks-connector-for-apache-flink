@@ -52,7 +52,6 @@ limitations under the License.
         <maven-surefire-plugin.version>3.0.0-M4</maven-surefire-plugin.version>
         <flink.version>1.13.0</flink.version>
         <arrow.version>5.0.0</arrow.version>
-        <thrift.version>0.13.0</thrift.version>
     </properties>
     <profiles>
         <profile>
@@ -73,6 +72,12 @@ limitations under the License.
     </profiles> 
     <dependencies>
         <!-- Table ecosystem -->
+        <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>starrocks-thrift-sdk</artifactId>
+            <version>1.0.1</version>
+            <scope>provided</scope>
+        </dependency>
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-table-planner-blink_${scala.version}</artifactId>
@@ -137,11 +142,6 @@ limitations under the License.
             <artifactId>junit</artifactId>
             <version>4.12</version>
             <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.thrift</groupId>
-            <artifactId>libthrift</artifactId>
-            <version>${thrift.version}</version>
         </dependency>
         <dependency>
             <groupId>org.apache.arrow</groupId>
@@ -255,10 +255,6 @@ limitations under the License.
                                     <shadedPattern>com.starrocks.shade.org.apache.commons</shadedPattern>
                                 </relocation>
                                 <relocation>
-                                    <pattern>org.apache.thrift</pattern>
-                                    <shadedPattern>com.starrocks.shade.org.apache.thrift</shadedPattern>
-                                </relocation>
-                                <relocation>
                                     <pattern>org.apache.arrow</pattern>
                                     <shadedPattern>com.starrocks.shade.org.apache.arrow</shadedPattern>
                                 </relocation>
@@ -284,7 +280,6 @@ limitations under the License.
                                     <include>org.apache.httpcomponents:httpcore</include>
                                     <include>com.alibaba:fastjson</include>
                                     <include>mysql:mysql-connector-java</include>
-                                    <include>org.apache.thrift:libthrift</include>
                                     <include>org.apache.arrow:arrow-vector</include>
                                     <include>org.apache.arrow:arrow-memory-netty</include>
                                     <include>org.apache.arrow:arrow-memory-core</include>

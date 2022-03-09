@@ -22,19 +22,19 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.starrocks.connector.flink.thrift.TPrimitiveType;
-import com.starrocks.connector.flink.thrift.TScanBatchResult;
-import com.starrocks.connector.flink.thrift.TScanCloseParams;
-import com.starrocks.connector.flink.thrift.TScanCloseResult;
-import com.starrocks.connector.flink.thrift.TScanColumnDesc;
-import com.starrocks.connector.flink.thrift.TScanNextBatchParams;
-import com.starrocks.connector.flink.thrift.TScanOpenParams;
-import com.starrocks.connector.flink.thrift.TScanOpenResult;
-import com.starrocks.connector.flink.thrift.TStarrocksExternalService;
-import com.starrocks.connector.flink.thrift.TStatus;
-import com.starrocks.connector.flink.thrift.TStatusCode;
+import com.starrocks.thrift.TPrimitiveType;
+import com.starrocks.thrift.TScanBatchResult;
+import com.starrocks.thrift.TScanCloseParams;
+import com.starrocks.thrift.TScanCloseResult;
+import com.starrocks.thrift.TScanColumnDesc;
+import com.starrocks.thrift.TScanNextBatchParams;
+import com.starrocks.thrift.TScanOpenParams;
+import com.starrocks.thrift.TScanOpenResult;
+import com.starrocks.thrift.TStarrocksExternalService;
+import com.starrocks.thrift.TStatus;
+import com.starrocks.thrift.TStatusCode;
 
-import org.apache.thrift.TException;
+import com.starrocks.shade.org.apache.thrift.TException;
 
 public class StarrocksExternalServiceImpl implements TStarrocksExternalService.Iface {
 
