@@ -6,7 +6,7 @@ if not exist thrift.exe (
 )
 start thrift.exe -r -gen java %~dp0%\gensrc\StarrocksExternalService.thrift
 cd %~p0%
-if not exist src\main\java\com\starrocks\connector\flink\thrift md src\main\java\com\starrocks\connector\flink\thrift 
+if not exist src\main\java\com\starrocks\thrift md src\main\java\com\starrocks\thrift 
 pause
-copy thrift\gen-java\com\starrocks\connector\flink\thrift src\main\java\com\starrocks\connector\flink\thrift
+copy thrift\gen-java\com\starrocks\thrift src\main\java\com\starrocks\thrift
 pause

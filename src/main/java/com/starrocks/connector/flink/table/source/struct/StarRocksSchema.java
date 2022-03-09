@@ -14,7 +14,7 @@
 
 package com.starrocks.connector.flink.table.source.struct;
 
-import com.starrocks.connector.flink.thrift.TScanColumnDesc;
+import com.starrocks.thrift.TScanColumnDesc;
 
 import java.util.ArrayList;
 import java.util.List;

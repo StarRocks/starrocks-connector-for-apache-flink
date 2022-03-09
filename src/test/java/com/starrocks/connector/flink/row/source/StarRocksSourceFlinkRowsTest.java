@@ -20,7 +20,6 @@ import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
-import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -32,7 +31,7 @@ import com.starrocks.connector.flink.table.source.struct.ColunmRichInfo;
 import com.starrocks.connector.flink.table.source.struct.Const;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 import com.starrocks.connector.flink.table.source.struct.StarRocksSchema;
-import com.starrocks.connector.flink.thrift.TScanBatchResult;
+import com.starrocks.thrift.TScanBatchResult;
 
 import org.apache.flink.table.data.DecimalData;
 import org.apache.flink.table.data.GenericRowData;

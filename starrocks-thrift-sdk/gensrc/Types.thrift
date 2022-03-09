@@ -20,7 +20,7 @@
 // under the License.
 
 namespace cpp starrocks
-namespace java com.starrocks.connector.flink.thrift
+namespace java com.starrocks.thrift
 
 
 typedef i64 TTimestamp
