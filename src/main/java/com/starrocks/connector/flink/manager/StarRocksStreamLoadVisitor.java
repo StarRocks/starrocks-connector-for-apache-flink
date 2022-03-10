@@ -22,9 +22,9 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
 import com.alibaba.fastjson.JSON;
-import com.starrocks.connector.flink.row.StarRocksDelimiterParser;
-import com.starrocks.connector.flink.row.StarRocksSinkOP;
-import com.starrocks.connector.flink.table.StarRocksSinkOptions;
+import com.starrocks.connector.flink.row.sink.StarRocksDelimiterParser;
+import com.starrocks.connector.flink.row.sink.StarRocksSinkOP;
+import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 
 import java.util.HashMap;
 import org.apache.commons.codec.binary.Base64;

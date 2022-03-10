@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package com.starrocks.connector.flink;
+package com.starrocks.connector.flink.it.sink;
 
 import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.TableEnvironment;
@@ -25,6 +25,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import com.starrocks.connector.flink.StarRocksSinkBaseTest;
 
 public class StarRocksDynamicTableSinkITTest extends StarRocksSinkBaseTest {
     

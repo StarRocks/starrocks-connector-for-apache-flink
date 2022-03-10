@@ -14,10 +14,10 @@
 
 package com.starrocks.connector.flink;
 
-import com.starrocks.connector.flink.row.StarRocksGenericRowTransformer;
-import com.starrocks.connector.flink.row.StarRocksSinkRowBuilder;
-import com.starrocks.connector.flink.table.StarRocksDynamicSinkFunction;
-import com.starrocks.connector.flink.table.StarRocksSinkOptions;
+import com.starrocks.connector.flink.row.sink.StarRocksGenericRowTransformer;
+import com.starrocks.connector.flink.row.sink.StarRocksSinkRowBuilder;
+import com.starrocks.connector.flink.table.sink.StarRocksDynamicSinkFunction;
+import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 
 import org.apache.flink.streaming.api.functions.sink.SinkFunction;
 import org.apache.flink.table.api.TableSchema;
