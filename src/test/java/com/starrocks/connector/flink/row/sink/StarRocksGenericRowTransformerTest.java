@@ -12,10 +12,9 @@
  * limitations under the License.
  */
 
-package com.starrocks.connector.flink.row;
+package com.starrocks.connector.flink.row.sink;
 
 import org.apache.flink.api.common.functions.RuntimeContext;
-import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.calcite.shaded.com.google.common.base.Strings;
 import org.junit.Test;
 
@@ -26,30 +25,40 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import java.math.BigDecimal;
-import java.sql.Timestamp;
-import java.time.LocalDate;
 import java.util.Map;
 
 import com.alibaba.fastjson.JSON;
 import com.starrocks.connector.flink.StarRocksSinkBaseTest;
-import com.starrocks.connector.flink.row.StarRocksSerializerFactory;
-import com.starrocks.connector.flink.row.StarRocksTableRowTransformer;
+import com.starrocks.connector.flink.row.sink.StarRocksGenericRowTransformer;
+import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
 
-import org.apache.flink.table.data.DecimalData;
-import org.apache.flink.table.data.GenericRowData;
-import org.apache.flink.table.data.RowData;
-import org.apache.flink.table.data.StringData;
-import org.apache.flink.table.data.TimestampData;
+public class StarRocksGenericRowTransformerTest extends StarRocksSinkBaseTest {
 
-public class StarRocksTableRowTransformerTest extends StarRocksSinkBaseTest {
+    class UserInfoForTest {
+        public byte age;
+        public String resume;
+        public String birthDate;
+        public String birthDateTime;
+        public BigDecimal savings;
+        public short todaySteps;
+        public String name;
+    }
 
     @SuppressWarnings("unchecked")
     @Test
-    public void testTransformer(@Injectable TypeInformation<RowData> rowDataTypeInfo, @Injectable RuntimeContext runtimeCtx) {
-        StarRocksTableRowTransformer rowTransformer = new StarRocksTableRowTransformer(rowDataTypeInfo);
+    public void testTransformer(@Injectable RuntimeContext runtimeCtx) {
+        StarRocksGenericRowTransformer<UserInfoForTest> rowTransformer = new StarRocksGenericRowTransformer<>((slots, m) -> {
+            slots[0] = m.age;
+            slots[1] = m.resume;
+            slots[2] = m.birthDate;
+            slots[3] = m.birthDateTime;
+            slots[4] = m.savings;
+            slots[5] = m.todaySteps;
+            slots[6] = m.name;
+        });
         rowTransformer.setRuntimeContext(runtimeCtx);
         rowTransformer.setTableSchema(TABLE_SCHEMA);
-        GenericRowData rowData = createRowData();
+        UserInfoForTest rowData = createRowData();
         String result = StarRocksSerializerFactory.createSerializer(OPTIONS, TABLE_SCHEMA.getFieldNames()).serialize(rowTransformer.transform(rowData, OPTIONS.supportUpsertDelete()));
 
         Map<String, String> loadProsp = OPTIONS.getSinkStreamLoadProperties();
@@ -67,15 +76,15 @@ public class StarRocksTableRowTransformerTest extends StarRocksSinkBaseTest {
         }
     }
 
-    private GenericRowData createRowData() {
-        GenericRowData genericRowData = new GenericRowData(TABLE_SCHEMA.getFieldCount());
-        genericRowData.setField(0, (byte)20);
-        genericRowData.setField(1, StringData.fromString("xxxssss"));
-        genericRowData.setField(2, TimestampData.fromTimestamp(Timestamp.valueOf("2021-02-02 12:22:22.01")));
-        genericRowData.setField(3, (int)LocalDate.now().toEpochDay());
-        genericRowData.setField(4, DecimalData.fromBigDecimal(BigDecimal.valueOf(1000), 10, 2));
-        genericRowData.setField(5, (short)30);
-        genericRowData.setField(6, StringData.fromString("ch"));
-        return genericRowData;
+    private UserInfoForTest createRowData() {
+        UserInfoForTest u = new UserInfoForTest();
+        u.age = 88;
+        u.resume = "Imposible is Nothing.";
+        u.birthDate = "1979-01-01";
+        u.birthDateTime = "1979-01-01 12:01:01";
+        u.savings = BigDecimal.valueOf(1000000.25);
+        u.todaySteps = 1024;
+        u.name = "Stephen";
+        return u;
     }
 }

@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package com.starrocks.connector.flink;
+package com.starrocks.connector.flink.it.sink;
 
 import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -30,6 +30,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import com.starrocks.connector.flink.StarRocksSink;
+import com.starrocks.connector.flink.StarRocksSinkBaseTest;
 
 class TestEntry implements Serializable {
 

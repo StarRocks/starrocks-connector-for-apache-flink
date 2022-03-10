@@ -12,9 +12,9 @@
  * limitations under the License.
  */
 
-package com.starrocks.connector.flink.table;
+package com.starrocks.connector.flink.table.sink;
 
-import com.starrocks.connector.flink.row.StarRocksTableRowTransformer;
+import com.starrocks.connector.flink.row.sink.StarRocksTableRowTransformer;
 
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.table.api.TableSchema;

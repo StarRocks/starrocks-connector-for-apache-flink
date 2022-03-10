@@ -40,8 +40,8 @@ import java.util.stream.Collectors;
 
 import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionOptions;
 import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
-import com.starrocks.connector.flink.table.StarRocksSinkOptions;
-import com.starrocks.connector.flink.table.StarRocksSinkSemantic;
+import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
+import com.starrocks.connector.flink.table.sink.StarRocksSinkSemantic;
 
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.metrics.Counter;

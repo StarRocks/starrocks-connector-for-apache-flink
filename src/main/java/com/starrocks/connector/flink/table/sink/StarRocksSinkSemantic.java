@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package com.starrocks.connector.flink.table;
+package com.starrocks.connector.flink.table.sink;
 
 import java.util.Arrays;
 import java.util.List;
