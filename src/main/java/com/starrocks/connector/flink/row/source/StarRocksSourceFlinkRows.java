@@ -151,7 +151,7 @@ public class StarRocksSourceFlinkRows {
             int colIndex = (int) columnAndIndex[1];
             FieldVector columnVector = fieldVectors.get(colIndex);
             Types.MinorType beShowDataType = columnVector.getMinorType();
-            String starrocksType = starRocksSchema.get(column.getColumnIndexInFlinkTable()).getType();
+            String starrocksType = starRocksSchema.get(colIndex).getType();
             ColunmRichInfo richInfo = colunmRichInfos.get(column.getColumnIndexInFlinkTable());
             boolean nullable = richInfo.getDataType().getLogicalType().isNullable();
             LogicalTypeRoot flinkTypeRoot = richInfo.getDataType().getLogicalType().getTypeRoot();
