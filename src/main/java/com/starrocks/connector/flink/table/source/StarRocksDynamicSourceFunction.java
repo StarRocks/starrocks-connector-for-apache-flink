@@ -47,7 +47,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
     private transient Counter counterTotalScannedRows;
     private static final String TOTAL_SCANNED_ROWS = "totalScannedRows";
 
-    public StarRocksDynamicSourceFunction(StarRocksSourceOptions sourceOptions, TableSchema flinkSchema) {
+    public StarRocksDynamicSourceFunction(TableSchema flinkSchema, StarRocksSourceOptions sourceOptions) {
         // StarRocksSourceCommonFunc.validateTableStructure(sourceOptions, flinkSchema);
         this.sourceOptions = sourceOptions;
         Map<String, ColunmRichInfo> columnMap = StarRocksSourceCommonFunc.genColumnMap(flinkSchema);
