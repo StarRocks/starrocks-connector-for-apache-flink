@@ -29,8 +29,8 @@ public class StarRocksSource {
      * @param flinkSchema       FlinkSchema
      * @return StarRocksDynamicSourceFunction Function of RichParallelSourceFunction
      */
-    public static StarRocksDynamicSourceFunction source(StarRocksSourceOptions sourceOptions, TableSchema flinkSchema) {
+    public static StarRocksDynamicSourceFunction source(TableSchema flinkSchema, StarRocksSourceOptions sourceOptions) {
         
-        return new StarRocksDynamicSourceFunction(sourceOptions, flinkSchema);
+        return new StarRocksDynamicSourceFunction(flinkSchema, sourceOptions);
     }
 }
