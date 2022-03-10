@@ -12,9 +12,8 @@
  * limitations under the License.
  */
 
-package com.starrocks.connector.flink.manager;
+package com.starrocks.connector.flink.manager.sink;
 
-import com.starrocks.connector.flink.table.StarRocksSinkOptions;
 import java.util.ArrayList;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.calcite.shaded.com.google.common.base.Strings;
@@ -34,6 +33,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import com.starrocks.connector.flink.StarRocksSinkBaseTest;
+import com.starrocks.connector.flink.manager.StarRocksSinkManager;
+import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 
 import mockit.Expectations;
 import mockit.MockUp;

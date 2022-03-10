@@ -12,9 +12,12 @@
  * limitations under the License.
  */
 
-package com.starrocks.connector.flink.row;
+package com.starrocks.connector.flink.row.sink;
 
 import java.io.Serializable;
-import java.util.function.BiConsumer;
 
-public interface StarRocksSinkRowBuilder<T> extends BiConsumer<Object[], T>, Serializable {}
+public interface StarRocksISerializer extends Serializable {
+
+    String serialize(Object[] values);
+    
+}

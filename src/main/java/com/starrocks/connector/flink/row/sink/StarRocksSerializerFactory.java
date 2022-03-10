@@ -12,9 +12,9 @@
  * limitations under the License.
  */
 
-package com.starrocks.connector.flink.row;
+package com.starrocks.connector.flink.row.sink;
 
-import com.starrocks.connector.flink.table.StarRocksSinkOptions;
+import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 
 public class StarRocksSerializerFactory {
 

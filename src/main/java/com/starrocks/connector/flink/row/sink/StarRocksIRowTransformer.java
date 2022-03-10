@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package com.starrocks.connector.flink.row;
+package com.starrocks.connector.flink.row.sink;
 
 import java.io.Serializable;
 

@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package com.starrocks.connector.flink.row;
+package com.starrocks.connector.flink.row.sink;
 
 import org.junit.Test;
 
@@ -29,6 +29,8 @@ import java.util.stream.Collectors;
 
 import com.alibaba.fastjson.JSON;
 import com.starrocks.connector.flink.StarRocksSinkBaseTest;
+import com.starrocks.connector.flink.row.sink.StarRocksISerializer;
+import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
 
 
 public class StarRocksJsonSerializerTest extends StarRocksSinkBaseTest {
