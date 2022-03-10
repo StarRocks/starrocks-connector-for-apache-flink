@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package com.starrocks.connector.flink.table;
+package com.starrocks.connector.flink.table.sink;
 
 import org.apache.flink.calcite.shaded.com.google.common.base.Preconditions;
 import org.apache.flink.configuration.ConfigOption;

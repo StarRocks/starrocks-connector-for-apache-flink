@@ -12,33 +12,32 @@
  * limitations under the License.
  */
 
-package com.starrocks.connector.flink.row;
+package com.starrocks.connector.flink.row.sink;
 
-import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 
 import com.alibaba.fastjson.JSON;
 
-public class StarRocksCsvSerializer implements StarRocksISerializer {
-    
+public class StarRocksJsonSerializer implements StarRocksISerializer {
+
     private static final long serialVersionUID = 1L;
+    
+    private final String[] fieldNames;
 
-    private final String columnSeparator;
-
-    public StarRocksCsvSerializer(String sp) {
-        this.columnSeparator = StarRocksDelimiterParser.parse(sp, "\t");
+    public StarRocksJsonSerializer(String[] fieldNames) {
+        this.fieldNames = fieldNames;
     }
 
     @Override
     public String serialize(Object[] values) {
-        StringBuilder sb = new StringBuilder();
+        Map<String, Object> rowMap = new HashMap<>(values.length);
         int idx = 0;
-        for (Object val : values) {
-            sb.append(null == val ? "\\N" : ((val instanceof Map || val instanceof List) ? JSON.toJSONString(val) : val));
-            if (idx++ < values.length - 1) {
-                sb.append(columnSeparator);
-            }
+        for (String fieldName : fieldNames) {
+            rowMap.put(fieldName, values[idx] instanceof Map ? JSON.toJSONString(values[idx]) : values[idx]);
+            idx++;
         }
-        return sb.toString();
+        return JSON.toJSONString(rowMap);
     }
+    
 }
