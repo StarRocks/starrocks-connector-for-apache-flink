@@ -33,7 +33,7 @@ public class StarRocksDynamicTableSourceITTest extends StarRocksSourceBaseTest {
             }
         };
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        List<RowData> dList = env.addSource(StarRocksSource.source(OPTIONS_WITH_COLUMN_IS_COUNT, TABLE_SCHEMA)).setParallelism(5).executeAndCollect(50);
+        List<RowData> dList = env.addSource(StarRocksSource.source(TABLE_SCHEMA, OPTIONS_WITH_COLUMN_IS_COUNT)).setParallelism(5).executeAndCollect(50);
         assertTrue(dList.size() == dataCount);
     }
 
