@@ -18,7 +18,7 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.UUID;
 
-import org.apache.flink.shaded.guava30.com.google.common.base.Strings;
+import org.apache.flink.shaded.guava18.com.google.common.base.Strings;
 
 public class StarRocksSinkBufferEntity implements Serializable {
 
