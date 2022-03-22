@@ -292,7 +292,9 @@ public class StarRocksSinkManager implements Serializable {
     }
 
     public Map<String, StarRocksSinkBufferEntity> getBufferedBatchMap() {
-        return bufferMap;
+        Map<String, StarRocksSinkBufferEntity> clone = new HashMap<>();
+        clone.putAll(bufferMap);
+        return clone;
     }
 
     public void setBufferedBatchMap(Map<String, StarRocksSinkBufferEntity> bufferMap) throws IOException {
