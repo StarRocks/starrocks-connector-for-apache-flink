@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.flink.row.source;
 
+import com.starrocks.connector.flink.table.source.struct.Column;
 import com.starrocks.connector.flink.table.source.struct.ColunmRichInfo;
 import com.starrocks.connector.flink.table.source.struct.Const;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
@@ -61,7 +62,7 @@ public class StarRocksSourceFlinkRows {
     private List<FieldVector> fieldVectors;
     private RootAllocator rootAllocator;
     private final List<ColunmRichInfo> colunmRichInfos;
-    private final SelectColumn[] selectColumns;
+    private final SelectColumn[] selectedColumns;
     private final StarRocksSchema starRocksSchema;
 
     public List<GenericRowData> getFlinkRows() {
@@ -71,7 +72,7 @@ public class StarRocksSourceFlinkRows {
     public StarRocksSourceFlinkRows(TScanBatchResult nextResult, List<ColunmRichInfo> colunmRichInfos, 
                                     StarRocksSchema srSchema, SelectColumn[] selectColumns) {
         this.colunmRichInfos = colunmRichInfos;
-        this.selectColumns = selectColumns;
+        this.selectedColumns = selectColumns;
         this.starRocksSchema = srSchema;
         this.rootAllocator = new RootAllocator(Integer.MAX_VALUE);
         byte[] bytes = nextResult.getRows();
@@ -89,7 +90,7 @@ public class StarRocksSourceFlinkRows {
             }
             rowCountOfBatch = root.getRowCount();
             for (int i = 0; i < rowCountOfBatch; i ++) {
-                sourceFlinkRows.add(new GenericRowData(this.selectColumns.length));
+                sourceFlinkRows.add(new GenericRowData(this.selectedColumns.length));
             }
             this.genFlinkRows();
             flinkRowsCount += root.getRowCount();
@@ -143,15 +144,22 @@ public class StarRocksSourceFlinkRows {
 
     private void genFlinkRows() {
         final AtomicInteger index = new AtomicInteger(0);
-        List<SelectColumn> selectColumnsList = Arrays.asList(selectColumns);
-        selectColumnsList.stream().map(column -> new Object[]{column, index.getAndAdd(1)})
+        List<SelectColumn> selectedColumnsList = Arrays.asList(selectedColumns);
+        selectedColumnsList.stream().map(column -> new Object[]{column, index.getAndAdd(1)})
         .collect(Collectors.toList())
         .parallelStream().forEach(columnAndIndex -> {
             SelectColumn column = (SelectColumn) columnAndIndex[0];
             int colIndex = (int) columnAndIndex[1];
             FieldVector columnVector = fieldVectors.get(colIndex);
             Types.MinorType beShowDataType = columnVector.getMinorType();
-            String starrocksType = starRocksSchema.get(colIndex).getType(); 
+            Column srColumn = starRocksSchema.get(column.getColumnName());
+            if (null == srColumn) {
+                throw new RuntimeException(
+                    "Can not find StarRocks column info from open_scan result, " +
+                    "column name is -> [" + column.getColumnName() + "]"
+                );
+            }
+            String starrocksType = srColumn.getType(); 
             ColunmRichInfo richInfo = colunmRichInfos.get(column.getColumnIndexInFlinkTable());
             boolean nullable = richInfo.getDataType().getLogicalType().isNullable();
             LogicalTypeRoot flinkTypeRoot = richInfo.getDataType().getLogicalType().getTypeRoot();
