@@ -31,7 +31,12 @@ import com.starrocks.connector.flink.table.source.struct.ColunmRichInfo;
 import com.starrocks.connector.flink.table.source.struct.Const;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 import com.starrocks.connector.flink.table.source.struct.StarRocksSchema;
+import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanBatchResult;
+import com.starrocks.thrift.TScanColumnDesc;
+import com.starrocks.thrift.TScanOpenResult;
+import com.starrocks.thrift.TStatus;
+import com.starrocks.thrift.TStatusCode;
 
 import org.apache.flink.table.data.DecimalData;
 import org.apache.flink.table.data.GenericRowData;
@@ -44,6 +49,8 @@ import org.junit.Test;
 public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
     
     protected StarRocksSchema srSchema = new StarRocksSchema();
+    protected StarRocksSchema srWrongOrderSchema = new StarRocksSchema();
+    protected StarRocksSchema srLessSchema = new StarRocksSchema();
     protected SelectColumn[] selectColumns;
     protected List<ColunmRichInfo> colunmRichInfos;
     protected String curPath = System.getProperty("user.dir");
@@ -51,22 +58,10 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
 
     @Before
     public void initParams() {  
-        srSchema.setStatus(0);
-        ArrayList<Column> properties = new ArrayList<>();
-        properties.add(new Column("date_1", "DATE", "", 0, 0));
-        properties.add(new Column("datetime_1", "DATETIME", "", 0, 0));
-        properties.add(new Column("char_1", "CHAR", "", 0, 0));
-        properties.add(new Column("varchar_1", "VARCHAR", "", 0, 0));
-        properties.add(new Column("boolean_1", "BOOLEAN", "", 0, 0));
-        properties.add(new Column("tinyint_1", "TINYINT", "", 0, 0));
-        properties.add(new Column("smallint_1", "SMALLINT", "", 0, 0));
-        properties.add(new Column("int_1", "INT", "", 0, 0));
-        properties.add(new Column("bigint_1", "BIGINT", "", 0, 0));
-        properties.add(new Column("largeint_1", "LARGEINT", "", 0, 0));
-        properties.add(new Column("float_1", "FLOAT", "", 0, 0));
-        properties.add(new Column("double_1", "DOUBLE", "", 0, 0));
-        properties.add(new Column("decimal_1", "DECIMAL128", "", 0, 0));
-        srSchema.setProperties(properties);
+        
+        srSchema = StarRocksSchema.genSchema(this.rightOrderList());
+        srWrongOrderSchema = StarRocksSchema.genSchema(this.wrongOrderList());
+        srLessSchema = StarRocksSchema.genSchema(this.lessList());
         columnMap = StarRocksSourceCommonFunc.genColumnMap(TABLE_SCHEMA_NOT_NULL);
         colunmRichInfos = StarRocksSourceCommonFunc.genColunmRichInfo(columnMap);
         selectColumns = StarRocksSourceCommonFunc.genSelectedColumns(columnMap, OPTIONS, colunmRichInfos);
@@ -91,8 +86,26 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
         }
         TScanBatchResult nextResult = new TScanBatchResult();
         nextResult.setRows(byteArray);
-        StarRocksSourceFlinkRows flinkRows = new StarRocksSourceFlinkRows(nextResult, colunmRichInfos, srSchema, selectColumns);
-        flinkRows = flinkRows.genFlinkRowsFromArrow();
+        // generate flinkRows1 with right srSchema
+        StarRocksSourceFlinkRows flinkRows1 = new StarRocksSourceFlinkRows(nextResult, colunmRichInfos, srSchema, selectColumns);
+        flinkRows1 = flinkRows1.genFlinkRowsFromArrow();
+        checkFlinkRows(flinkRows1);
+        // generate flinkRows2 with wrong srSchema
+        StarRocksSourceFlinkRows flinkRows2 = new StarRocksSourceFlinkRows(nextResult, colunmRichInfos, srWrongOrderSchema, selectColumns);
+        flinkRows2 = flinkRows2.genFlinkRowsFromArrow();
+        checkFlinkRows(flinkRows2);
+
+        // generate flinkRows3 with less column srSchema
+        try {
+            StarRocksSourceFlinkRows flinkRows3 = new StarRocksSourceFlinkRows(nextResult, colunmRichInfos, srLessSchema, selectColumns);
+            flinkRows3 = flinkRows3.genFlinkRowsFromArrow();
+        } catch (Exception e) {
+            assertTrue(e.getMessage().contains("Can not find StarRocks column info from "));
+        }
+        
+    }
+
+    public void checkFlinkRows(StarRocksSourceFlinkRows flinkRows) {
         int dataCount = 0;
         while (flinkRows.hasNext()) {
             dataCount ++;
@@ -160,7 +173,6 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
         }
         assertTrue(flinkRows.getReadRowCount() == dataCount);
     }
-
 
     @Test
     public void testGenFlinkRowsWithNull() throws FileNotFoundException, IOException {
@@ -309,5 +321,155 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
                 });
             }
         });
+    }
+
+    public List<TScanColumnDesc> rightOrderList() {
+        List<TScanColumnDesc> list = new ArrayList<>();
+        // date_1
+        TScanColumnDesc c0 = new TScanColumnDesc();
+        c0.name = "date_1";
+        c0.type = TPrimitiveType.DATE;
+        list.add(c0);
+        // datetime_1
+        TScanColumnDesc c1 = new TScanColumnDesc();
+        c1.name = "datetime_1";
+        c1.type = TPrimitiveType.DATETIME;
+        list.add(c1);
+        // "char_1"
+        TScanColumnDesc c2 = new TScanColumnDesc();
+        c2.name = "char_1";
+        c2.type = TPrimitiveType.CHAR;
+        list.add(c2);
+        // "varchar_1"
+        TScanColumnDesc c3 = new TScanColumnDesc();
+        c3.name = "varchar_1";
+        c3.type = TPrimitiveType.VARCHAR;
+        list.add(c3);
+        // "boolean_1"
+        TScanColumnDesc c4 = new TScanColumnDesc();
+        c4.name = "boolean_1";
+        c4.type = TPrimitiveType.BOOLEAN;
+        list.add(c4);
+        // "tinyint_1""
+        TScanColumnDesc c5 = new TScanColumnDesc();
+        c5.name = "tinyint_1";
+        c5.type = TPrimitiveType.TINYINT;
+        list.add(c5);
+        // "smallint_1"
+        TScanColumnDesc c6 = new TScanColumnDesc();
+        c6.name = "smallint_1";
+        c6.type = TPrimitiveType.SMALLINT;
+        list.add(c6);
+        // "int_1"
+        TScanColumnDesc c7 = new TScanColumnDesc();
+        c7.name = "int_1";
+        c7.type = TPrimitiveType.INT;
+        list.add(c7);
+        // "bigint_1"
+        TScanColumnDesc c8 = new TScanColumnDesc();
+        c8.name = "bigint_1";
+        c8.type = TPrimitiveType.BIGINT;
+        list.add(c8);
+        // "largeint_1"
+        TScanColumnDesc c9 = new TScanColumnDesc();
+        c9.name = "largeint_1";
+        c9.type = TPrimitiveType.LARGEINT;
+        list.add(c9);
+        // "float_1"
+        TScanColumnDesc c10 = new TScanColumnDesc();
+        c10.name = "float_1";
+        c10.type = TPrimitiveType.FLOAT;
+        list.add(c10);
+        // "double_1"
+        TScanColumnDesc c11 = new TScanColumnDesc();
+        c11.name = "double_1";
+        c11.type = TPrimitiveType.DOUBLE;
+        list.add(c11);
+        // "decimal_1"
+        TScanColumnDesc c12 = new TScanColumnDesc();
+        c12.name = "decimal_1";
+        c12.type = TPrimitiveType.DECIMALV2;
+        list.add(c12);
+        return list;
+    }
+
+    public List<TScanColumnDesc> wrongOrderList() {
+        List<TScanColumnDesc> list = new ArrayList<>();
+        // date_1
+        TScanColumnDesc c0 = new TScanColumnDesc();
+        c0.name = "date_1";
+        c0.type = TPrimitiveType.DATE;
+        list.add(c0);
+        // "char_1"
+        TScanColumnDesc c2 = new TScanColumnDesc();
+        c2.name = "char_1";
+        c2.type = TPrimitiveType.CHAR;
+        list.add(c2);
+        // "varchar_1"
+        TScanColumnDesc c3 = new TScanColumnDesc();
+        c3.name = "varchar_1";
+        c3.type = TPrimitiveType.VARCHAR;
+        list.add(c3);
+        // "boolean_1"
+        TScanColumnDesc c4 = new TScanColumnDesc();
+        c4.name = "boolean_1";
+        c4.type = TPrimitiveType.BOOLEAN;
+        list.add(c4);
+        // "tinyint_1""
+        TScanColumnDesc c5 = new TScanColumnDesc();
+        c5.name = "tinyint_1";
+        c5.type = TPrimitiveType.TINYINT;
+        list.add(c5);
+        // "smallint_1"
+        TScanColumnDesc c6 = new TScanColumnDesc();
+        c6.name = "smallint_1";
+        c6.type = TPrimitiveType.SMALLINT;
+        list.add(c6);
+        // "int_1"
+        TScanColumnDesc c7 = new TScanColumnDesc();
+        c7.name = "int_1";
+        c7.type = TPrimitiveType.INT;
+        list.add(c7);
+        // "bigint_1"
+        TScanColumnDesc c8 = new TScanColumnDesc();
+        c8.name = "bigint_1";
+        c8.type = TPrimitiveType.BIGINT;
+        list.add(c8);
+        // "largeint_1"
+        TScanColumnDesc c9 = new TScanColumnDesc();
+        c9.name = "largeint_1";
+        c9.type = TPrimitiveType.LARGEINT;
+        list.add(c9);
+        // "float_1"
+        TScanColumnDesc c10 = new TScanColumnDesc();
+        c10.name = "float_1";
+        c10.type = TPrimitiveType.FLOAT;
+        list.add(c10);
+        // "double_1"
+        TScanColumnDesc c11 = new TScanColumnDesc();
+        c11.name = "double_1";
+        c11.type = TPrimitiveType.DOUBLE;
+        list.add(c11);
+        // "decimal_1"
+        TScanColumnDesc c12 = new TScanColumnDesc();
+        c12.name = "decimal_1";
+        c12.type = TPrimitiveType.DECIMALV2;
+        list.add(c12);
+        // datetime_1
+        TScanColumnDesc c1 = new TScanColumnDesc();
+        c1.name = "datetime_1";
+        c1.type = TPrimitiveType.DATETIME;
+        list.add(c1);
+        return list;
+    }
+
+    public List<TScanColumnDesc> lessList() {
+        List<TScanColumnDesc> list = new ArrayList<>();
+        // date_1
+        TScanColumnDesc c0 = new TScanColumnDesc();
+        c0.name = "date_1";
+        c0.type = TPrimitiveType.DATE;
+        list.add(c0);
+        return list;
     }
 }
