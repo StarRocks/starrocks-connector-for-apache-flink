@@ -156,7 +156,7 @@ public class StarRocksSourceFlinkRows {
             if (null == srColumn) {
                 throw new RuntimeException(
                     "Can not find StarRocks column info from open_scan result, " +
-                    "colum name is -> [" + column.getColumnName() + "]"
+                    "column name is -> [" + column.getColumnName() + "]"
                 );
             }
             String starrocksType = srColumn.getType(); 
