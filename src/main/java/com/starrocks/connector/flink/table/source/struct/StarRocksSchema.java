@@ -16,59 +16,46 @@ package com.starrocks.connector.flink.table.source.struct;
 
 import com.starrocks.thrift.TScanColumnDesc;
 
-import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 public class StarRocksSchema {
-    private int status = 0;
-    private List<Column> properties;
+
+    private HashMap<String, Column> schemaMap;
 
     public StarRocksSchema() {
-        properties = new ArrayList<>();
+        schemaMap = new HashMap<>();
     }
 
-    public StarRocksSchema(int fieldCount) {
-        properties = new ArrayList<>(fieldCount);
+    public HashMap<String, Column> getSchema() {
+        return schemaMap;
     }
 
-    public int getStatus() {
-        return status;
-    }
-
-    public void setStatus(int status) {
-        this.status = status;
-    }
-
-    public List<Column> getProperties() {
-        return properties;
-    }
-
-    public void setProperties(List<Column> properties) {
-        this.properties = properties;
+    public void setSchema(HashMap<String, Column> schema) {
+        this.schemaMap = schema;
     }
 
     public void put(String name, String type, String comment, int scale, int precision) {
-        properties.add(new Column(name, type, comment, scale, precision));
+        schemaMap.put(name, new Column(name, type, comment, scale, precision));
     }
 
-    public void put(Column f) {
-        properties.add(f);
+    public void put(Column column) {
+        schemaMap.put(column.getName(), column);
     }
 
-    public Column get(int index) {
-        if (index >= properties.size()) {
-            throw new IndexOutOfBoundsException("Index: " + index + ", Fields size：" + properties.size());
-        }
-        return properties.get(index);
+    public Column get(String colunmName) {
+        return schemaMap.get(colunmName);
     }
 
     public int size() {
-        return properties.size();
+        return schemaMap.size();
     }
 
     public static StarRocksSchema genSchema(List<TScanColumnDesc> tscanColumnDescs) {
-        StarRocksSchema schema = new StarRocksSchema(tscanColumnDescs.size());
-        tscanColumnDescs.stream().forEach(desc -> schema.put(new Column(desc.getName(), desc.getType().name(), "", 0, 0)));
+        StarRocksSchema schema = new StarRocksSchema();
+        tscanColumnDescs.stream().forEach(desc -> schema.put(
+            new Column(desc.getName(), desc.getType().name(), "", 0, 0))
+        );
         return schema;
     }
 }
