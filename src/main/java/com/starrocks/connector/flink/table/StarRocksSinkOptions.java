@@ -14,12 +14,12 @@
 
 package com.starrocks.connector.flink.table;
 
-import org.apache.flink.calcite.shaded.com.google.common.base.Preconditions;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.table.api.ValidationException;
+import org.apache.flink.util.Preconditions;
 
 import java.io.Serializable;
 import java.util.Arrays;
