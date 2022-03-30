@@ -121,6 +121,7 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
             for (int i = 0; i < maxRows * 3; i++) {
                 mgr.writeRecords(OPTIONS.getDatabaseName(), OPTIONS.getTableName(), "test record"+i);
             }
+            mgr.flush(null, true);
             mgr.close();
         } catch (Exception e) {
             exMsg = e.getMessage();
@@ -151,6 +152,7 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
                 mgr.writeRecords(OPTIONS.getDatabaseName(), OPTIONS.getTableName(), new String(new char[rowLength]));
             }
             mgr.writeRecords(OPTIONS.getDatabaseName(), OPTIONS.getTableName(), new String(new char[rowLength]));
+            mgr.flush(null, true);
             mgr.close();
         } catch (Exception e) {
             exMsg = e.getMessage();
@@ -173,6 +175,7 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
             for (int i = 0; i < OPTIONS.getSinkMaxRows(); i++) {
                 mgr.writeRecords(OPTIONS.getDatabaseName(), OPTIONS.getTableName(), "");
             }
+            mgr.flush(null, true);
             mgr.close();
         } catch (Exception e) {
             exMsg = e.getMessage();
@@ -193,6 +196,7 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
             mgr.writeRecords("db1", "table1", "");
             mgr.writeRecords("db2", "table2", "");
             mgr.writeRecords("db3", "table3", "");
+            mgr.flush(null, true);
             mgr.close();
         } catch (Exception e) {
             exMsg = e.getMessage();
@@ -206,6 +210,7 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
             mgr.writeRecords("db1", "table1", "");
             mgr.writeRecords("db2", "table2", "");
             mgr.writeRecords("db3", "table3", "");
+            mgr.flush(null, true);
             mgr.close();
         } catch (Exception e) {
             exMsg = e.getMessage();
@@ -220,6 +225,7 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
             mgr.writeRecords("db1", "table1", "");
             mgr.writeRecords("db2", "table2", "");
             mgr.writeRecords("db3", "table3", "");
+            mgr.flush(null, true);
             mgr.close();
         } catch (Exception e) {
             exMsg = e.getMessage();
@@ -260,6 +266,7 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
             StarRocksSinkManager mgr = new StarRocksSinkManager(OPTIONS, TABLE_SCHEMA);
             mgr.startAsyncFlushing();
             mgr.writeRecords(OPTIONS.getDatabaseName(), OPTIONS.getTableName(), "");
+            mgr.flush(null, true);
             mgr.close();
         } catch (Exception e) {
             exMsg = e.getMessage();
