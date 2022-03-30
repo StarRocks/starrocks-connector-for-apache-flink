@@ -266,6 +266,9 @@ public class StarRocksSinkManager implements Serializable {
         if (!closed) {
             closed = true;
 
+            LOG.info("StarRocks Sink is about to close.");
+            this.bufferMap.clear();
+
             if (scheduledFuture != null) {
                 scheduledFuture.cancel(false);
                 scheduler.shutdown();
@@ -274,23 +277,7 @@ public class StarRocksSinkManager implements Serializable {
                 jdbcConnProvider.close();
             }
 
-            if (flushException != null) {
-                offerEOF();
-                checkFlushException();
-                return;
-            }
-            try {
-                LOG.info("StarRocks Sink is about to close.");
-                if (StarRocksSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
-                    this.bufferMap.clear();
-                    return;
-                }
-                flush(null, true);
-            } catch (Exception e) {
-                throw new RuntimeException("Writing records to StarRocks failed.", e);
-            } finally {
-              offerEOF();
-            }
+            offerEOF();
         }
         checkFlushException();
     }

@@ -182,11 +182,18 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
     }
 
     @Override
-    public synchronized void close() throws Exception {
-        super.close();
+    public synchronized void finish() throws Exception {
+        super.finish();
+        LOG.info("StarRocks sink is draining the remaining data.");
         if (StarRocksSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
             flushPreviousState();
         }
+        sinkManager.flush(null, true);
+    }
+
+    @Override
+    public synchronized void close() throws Exception {
+        super.close();
         sinkManager.close();
     }
 
