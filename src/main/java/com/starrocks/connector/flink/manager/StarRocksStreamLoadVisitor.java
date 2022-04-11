@@ -237,7 +237,7 @@ public class StarRocksStreamLoadVisitor implements Serializable {
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> doHttpPut(String loadUrl, String label, byte[] data) throws IOException {
-        LOG.info(String.format("Executing stream load to: '%s', size: '%s'", Thread.currentThread().getId(), loadUrl, data.length));
+        LOG.info(String.format("Executing stream load to: '%s', size: '%s', thread: %d", loadUrl, data.length, Thread.currentThread().getId()));
         final HttpClientBuilder httpClientBuilder = HttpClients.custom()
             .setRedirectStrategy(new DefaultRedirectStrategy() {
                 @Override
