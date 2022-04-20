@@ -44,10 +44,10 @@ import java.io.IOException;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+
 import java.util.NoSuchElementException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -61,7 +61,7 @@ public class StarRocksSourceFlinkRows {
     private List<GenericRowData> sourceFlinkRows = new ArrayList<>();
     private final ArrowStreamReader arrowStreamReader;
     private VectorSchemaRoot root;
-    private Map<String, FieldVector> fieldVectorMap;
+    private ConcurrentHashMap<String, FieldVector> fieldVectorMap;
     private RootAllocator rootAllocator;
     private final List<ColunmRichInfo> colunmRichInfos;
     private final SelectColumn[] selectedColumns;
@@ -81,14 +81,14 @@ public class StarRocksSourceFlinkRows {
         ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(bytes);
         this.arrowStreamReader = new ArrowStreamReader(byteArrayInputStream, rootAllocator);
         this.offsetOfBatchForRead = 0;
-        this.fieldVectorMap = new HashMap<>();
+        this.fieldVectorMap = new ConcurrentHashMap<String, FieldVector>();
     }
 
     public StarRocksSourceFlinkRows genFlinkRowsFromArrow() throws IOException {
         this.root = arrowStreamReader.getVectorSchemaRoot();
         while (arrowStreamReader.loadNextBatch()) {
             List<FieldVector> fieldVectors = root.getFieldVectors();
-            fieldVectors.forEach(vector -> {
+            fieldVectors.parallelStream().forEach(vector -> {
                 fieldVectorMap.put(vector.getName(), vector);
             });
             if (fieldVectors.size() == 0 || root.getRowCount() == 0) {
