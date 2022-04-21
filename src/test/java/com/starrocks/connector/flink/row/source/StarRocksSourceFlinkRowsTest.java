@@ -23,10 +23,11 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import com.starrocks.connector.flink.it.source.StarRocksSourceBaseTest;
 import com.starrocks.connector.flink.table.source.StarRocksSourceCommonFunc;
-import com.starrocks.connector.flink.table.source.struct.Column;
 import com.starrocks.connector.flink.table.source.struct.ColunmRichInfo;
 import com.starrocks.connector.flink.table.source.struct.Const;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
@@ -34,15 +35,13 @@ import com.starrocks.connector.flink.table.source.struct.StarRocksSchema;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanBatchResult;
 import com.starrocks.thrift.TScanColumnDesc;
-import com.starrocks.thrift.TScanOpenResult;
-import com.starrocks.thrift.TStatus;
-import com.starrocks.thrift.TStatusCode;
 
 import org.apache.flink.table.data.DecimalData;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.StringData;
 import org.apache.flink.table.data.TimestampData;
 import org.apache.flink.table.types.logical.LogicalTypeRoot;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -201,6 +200,22 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
             eMsg = e.getMessage();
         }
         assertTrue(eMsg.contains("Data could not be null. please check create table SQL, column index is"));
+    }
+
+    @Test 
+    public void testParallel() {
+        final AtomicInteger index = new AtomicInteger(0);
+        List<Integer> testList = new ArrayList<>();
+        for (int i = 0; i < 10; i ++) {
+            testList.add(i);
+        }
+        testList.stream().map(column -> new Object[]{column, index.getAndAdd(1)})
+        .collect(Collectors.toList())
+        .parallelStream().forEach(columnAndIndex -> {
+            Integer item = (Integer) columnAndIndex[0];
+            int colIndex = (int) columnAndIndex[1];
+            Assert.assertTrue(item == colIndex);
+        });
     }
 
     @Test

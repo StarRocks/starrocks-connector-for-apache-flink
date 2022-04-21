@@ -45,7 +45,9 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+
 import java.util.NoSuchElementException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -59,7 +61,7 @@ public class StarRocksSourceFlinkRows {
     private List<GenericRowData> sourceFlinkRows = new ArrayList<>();
     private final ArrowStreamReader arrowStreamReader;
     private VectorSchemaRoot root;
-    private List<FieldVector> fieldVectors;
+    private ConcurrentHashMap<String, FieldVector> fieldVectorMap;
     private RootAllocator rootAllocator;
     private final List<ColunmRichInfo> colunmRichInfos;
     private final SelectColumn[] selectedColumns;
@@ -79,12 +81,16 @@ public class StarRocksSourceFlinkRows {
         ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(bytes);
         this.arrowStreamReader = new ArrowStreamReader(byteArrayInputStream, rootAllocator);
         this.offsetOfBatchForRead = 0;
+        this.fieldVectorMap = new ConcurrentHashMap<String, FieldVector>();
     }
 
     public StarRocksSourceFlinkRows genFlinkRowsFromArrow() throws IOException {
         this.root = arrowStreamReader.getVectorSchemaRoot();
         while (arrowStreamReader.loadNextBatch()) {
-            fieldVectors = root.getFieldVectors();
+            List<FieldVector> fieldVectors = root.getFieldVectors();
+            fieldVectors.parallelStream().forEach(vector -> {
+                fieldVectorMap.put(vector.getName(), vector);
+            });
             if (fieldVectors.size() == 0 || root.getRowCount() == 0) {
                 continue;
             }
@@ -150,7 +156,13 @@ public class StarRocksSourceFlinkRows {
         .parallelStream().forEach(columnAndIndex -> {
             SelectColumn column = (SelectColumn) columnAndIndex[0];
             int colIndex = (int) columnAndIndex[1];
-            FieldVector columnVector = fieldVectors.get(colIndex);
+            FieldVector columnVector = fieldVectorMap.get(column.getColumnName());
+            if (null == columnVector) {
+                throw new RuntimeException(
+                    "Can not find StarRocks column data " +
+                    "column name is -> [" + column.getColumnName() + "]"
+                );
+            } 
             Types.MinorType beShowDataType = columnVector.getMinorType();
             Column srColumn = starRocksSchema.get(column.getColumnName());
             if (null == srColumn) {
