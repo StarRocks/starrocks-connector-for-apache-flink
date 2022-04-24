@@ -33,3 +33,9 @@ buildNumber.properties
 # thrift
 #
 thrift/
+
+#
+# other
+#
+
+src/test/java/com/starrocks/connector/flink/tmp
