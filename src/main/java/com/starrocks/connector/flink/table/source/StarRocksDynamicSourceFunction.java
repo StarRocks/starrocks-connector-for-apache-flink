@@ -22,13 +22,14 @@ import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 import org.apache.flink.api.common.typeinfo.TypeHint;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
-import org.apache.flink.calcite.shaded.com.google.common.base.Strings;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.streaming.api.functions.source.RichParallelSourceFunction;
 import org.apache.flink.table.api.TableSchema;
 
 import org.apache.flink.table.data.RowData;
+
+import org.apache.flink.shaded.guava18.com.google.common.base.Strings;
 
 import java.util.ArrayList;
 import java.util.List;

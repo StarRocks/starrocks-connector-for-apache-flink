@@ -18,9 +18,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 import org.apache.flink.api.java.utils.MultipleParameterTool;
-import org.apache.flink.calcite.shaded.com.google.common.base.Strings;
 import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.TableEnvironment;
+
+import org.apache.flink.shaded.guava18.com.google.common.base.Strings;
 
 public class ExecuteSQL {
     public static void main(String[] args) throws Exception {

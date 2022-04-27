@@ -14,9 +14,9 @@
 
 package com.starrocks.connector.flink.row.sink;
 
-import java.io.StringWriter;
+import org.apache.flink.shaded.guava18.com.google.common.base.Strings;
 
-import org.apache.flink.calcite.shaded.com.google.common.base.Strings;
+import java.io.StringWriter;
 
 public class StarRocksDelimiterParser {
 
