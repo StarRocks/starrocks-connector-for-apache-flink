@@ -281,10 +281,6 @@ public class StarRocksSinkManager implements Serializable {
             }
             try {
                 LOG.info("StarRocks Sink is about to close.");
-                if (StarRocksSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
-                    this.bufferMap.clear();
-                    return;
-                }
                 flush(null, true);
             } catch (Exception e) {
                 throw new RuntimeException("Writing records to StarRocks failed.", e);
