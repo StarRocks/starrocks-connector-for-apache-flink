@@ -277,7 +277,19 @@ public class StarRocksSinkManager implements Serializable {
                 jdbcConnProvider.close();
             }
 
-            offerEOF();
+            if (flushException != null) {
+                offerEOF();
+                checkFlushException();
+                return;
+            }
+            try {
+                LOG.info("StarRocks Sink is about to close.");
+                flush(null, true);
+            } catch (Exception e) {
+                throw new RuntimeException("Writing records to StarRocks failed.", e);
+            } finally {
+              offerEOF();
+            }
         }
         checkFlushException();
     }
