@@ -64,6 +64,8 @@ public class StarRocksSinkOptions implements Serializable {
         .intType().defaultValue(1000).withDescription("Timeout in millisecond for connecting to the `load-url`.");
     public static final ConfigOption<String> SINK_SEMANTIC = ConfigOptions.key("sink.semantic")
         .stringType().defaultValue(StarRocksSinkSemantic.AT_LEAST_ONCE.getName()).withDescription("Fault tolerance guarantee. `at-least-once` or `exactly-once`");
+    public static final ConfigOption<Boolean> SINK_CLEAR_DATA_ON_CLOSE = ConfigOptions.key("sink.clear-data-on-close")
+            .booleanType().defaultValue(true).withDescription("On exactly-once semantic. if set to `true`,The close method clears all data to prevent data duplication.");
     public static final ConfigOption<Long> SINK_BATCH_MAX_SIZE = ConfigOptions.key("sink.buffer-flush.max-bytes")
         .longType().defaultValue(90L * MEGA_BYTES_SCALE).withDescription("Max data bytes of the flush.");
     public static final ConfigOption<Long> SINK_BATCH_MAX_ROWS = ConfigOptions.key("sink.buffer-flush.max-rows")
@@ -170,6 +172,10 @@ public class StarRocksSinkOptions implements Serializable {
 
     public Integer getSinkParallelism() {
         return tableOptions.getOptional(SINK_PARALLELISM).orElse(null);
+    }
+
+    public boolean getClearDataOnClose() {
+        return tableOptions.get(SINK_CLEAR_DATA_ON_CLOSE).booleanValue();
     }
 
     public static Builder builder() {

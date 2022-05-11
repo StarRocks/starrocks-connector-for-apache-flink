@@ -94,7 +94,7 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
     public synchronized void invoke(T value, Context context) throws Exception {
         long start = System.nanoTime();
         if (StarRocksSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
-            flushPreviousState();
+            flushPreviousState("flush on invoke");
         }
         if (null == serializer) {
             if (value instanceof StarRocksSinkRowDataWithMeta) {
@@ -169,12 +169,15 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
                 TypeInformation.of(new TypeHint<Map<String, StarRocksSinkBufferEntity>>(){})
             );
         checkpointedState = context.getOperatorStateStore().getListState(descriptor);
+        for (Map<String, StarRocksSinkBufferEntity> state : checkpointedState.get()) {
+            LOG.info(String.format("initialize state, size: %s", state.size()));
+        }
     }
 
     @Override
     public synchronized void snapshotState(FunctionSnapshotContext context) throws Exception {
         if (StarRocksSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
-            flushPreviousState();
+            flushPreviousState("flush on snapshot state");
             // save state
             checkpointedState.add(sinkManager.getBufferedBatchMap());
             return;
@@ -186,14 +189,19 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
     public synchronized void close() throws Exception {
         super.close();
         if (StarRocksSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
-            flushPreviousState();
+            if (sinkOptions.getClearDataOnClose()){
+                checkpointedState.clear();
+            } else {
+                flushPreviousState("flush on close");
+            }
         }
         sinkManager.close();
     }
 
-    private void flushPreviousState() throws Exception {
+    private void flushPreviousState(String message) throws Exception {
         // flush the batch saved at the previous checkpoint
         for (Map<String, StarRocksSinkBufferEntity> state : checkpointedState.get()) {
+            LOG.info(String.format("flush previous state, size: %s, message: %s", state.size(), message));
             sinkManager.setBufferedBatchMap(state);
             sinkManager.flush(null, true);
         }
