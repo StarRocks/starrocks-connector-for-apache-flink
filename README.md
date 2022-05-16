@@ -1,21 +1,23 @@
 # flink-connector-starrocks
 
+This is connector for [Apache Flink®](https://flink.apache.org/)
+
 ## Prerequisites
 
 ```xml
 <dependency>
     <groupId>com.starrocks</groupId>
     <artifactId>flink-connector-starrocks</artifactId>
-    <!-- for flink-1.14 -->
+    <!-- for Apache Flink® 1.14 -->
     <version>x.x.x_flink-1.14_2.11</version>
     <version>x.x.x_flink-1.14_2.12</version>
-    <!-- for flink-1.13 -->
+    <!-- for Apache Flink® 1.13 -->
     <version>x.x.x_flink-1.13_2.11</version>
     <version>x.x.x_flink-1.13_2.12</version>
-    <!-- for flink-1.12 -->
+    <!-- for Apache Flink® 1.12 -->
     <version>x.x.x_flink-1.12_2.11</version>
     <version>x.x.x_flink-1.12_2.12</version>
-    <!-- for flink-1.11 -->
+    <!-- for Apache Flink® 1.11 -->
     <version>x.x.x_flink-1.11_2.11</version>
     <version>x.x.x_flink-1.11_2.12</version>
 </dependency>
@@ -23,7 +25,7 @@
 
 Click [HERE](https://search.maven.org/search?q=g:com.starrocks) to get the latest version.
 
-## Flink source
+## Apache Flink® source
 
 ```java
 StarRocksSourceOptions options = StarRocksSourceOptions.builder()
