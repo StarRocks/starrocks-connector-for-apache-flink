@@ -1,4 +1,4 @@
-# flink-connector-starrocks
+# starrocks-connector-for-apache-flink
 
 This is connector for [Apache Flink®](https://flink.apache.org/)
 
