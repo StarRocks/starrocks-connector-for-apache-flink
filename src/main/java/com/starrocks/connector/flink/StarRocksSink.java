@@ -58,7 +58,7 @@ public class StarRocksSink {
      * @param sinkOptions            StarRocksSinkOptions as the document listed, such as jdbc-url, load-url, batch size and maximum retries
      * @return SinkFunction          SinkFunction that could be add to a stream.
      */
-    public static SinkFunction<String> sink(StarRocksSinkOptions sinkOptions) {
+    public static <T> SinkFunction<T> sink(StarRocksSinkOptions sinkOptions) {
         return new StarRocksDynamicSinkFunction<>(sinkOptions);
     }
 
