@@ -14,9 +14,9 @@
 
 package com.starrocks.connector.flink.row;
 
+import com.google.common.base.Strings;
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
-import org.apache.flink.calcite.shaded.com.google.common.base.Strings;
 import org.junit.Test;
 
 import mockit.Injectable;
@@ -32,8 +32,6 @@ import java.util.Map;
 
 import com.alibaba.fastjson.JSON;
 import com.starrocks.connector.flink.StarRocksSinkBaseTest;
-import com.starrocks.connector.flink.row.StarRocksSerializerFactory;
-import com.starrocks.connector.flink.row.StarRocksTableRowTransformer;
 
 import org.apache.flink.table.data.DecimalData;
 import org.apache.flink.table.data.GenericRowData;

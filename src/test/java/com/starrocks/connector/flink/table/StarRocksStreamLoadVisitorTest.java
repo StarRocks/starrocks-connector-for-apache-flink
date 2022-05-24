@@ -14,19 +14,12 @@
 
 package com.starrocks.connector.flink.table;
 
-import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.api.java.tuple.Tuple3;
-import org.apache.flink.calcite.shaded.com.google.common.collect.Lists;
-import org.apache.http.HttpEntity;
-import org.apache.http.entity.ByteArrayEntity;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
 
 import com.starrocks.connector.flink.StarRocksSinkBaseTest;
 import com.starrocks.connector.flink.manager.StarRocksSinkBufferEntity;

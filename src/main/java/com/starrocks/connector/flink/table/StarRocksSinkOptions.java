@@ -89,7 +89,8 @@ public class StarRocksSinkOptions implements Serializable {
 
     public StarRocksSinkOptions(ReadableConfig options, Map<String, String> optionsMap) {
         this.tableOptions = options;
-        this.tableOptionsMap = optionsMap;
+        // Can not promise the input parameter optionsMap is serializable. Use the HashMap to copy the data.
+        this.tableOptionsMap = new HashMap<>(optionsMap);
         parseSinkStreamLoadProperties();
         this.validate();
     }
