@@ -14,12 +14,10 @@
 
 package com.starrocks.connector.flink.manager.sink;
 
-import java.util.ArrayList;
-import org.apache.flink.api.java.tuple.Tuple3;
-import org.apache.flink.calcite.shaded.com.google.common.base.Strings;
-import org.apache.flink.calcite.shaded.com.google.common.collect.Lists;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.TableSchema.Builder;
+
+import org.apache.flink.shaded.guava18.com.google.common.collect.Lists;
 
 import org.junit.Test;
 
