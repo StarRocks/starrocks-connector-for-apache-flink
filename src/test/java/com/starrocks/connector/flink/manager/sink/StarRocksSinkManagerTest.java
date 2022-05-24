@@ -14,10 +14,6 @@
 
 package com.starrocks.connector.flink.manager.sink;
 
-import java.util.ArrayList;
-import org.apache.flink.api.java.tuple.Tuple3;
-import org.apache.flink.calcite.shaded.com.google.common.base.Strings;
-import org.apache.flink.calcite.shaded.com.google.common.collect.Lists;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.TableSchema.Builder;
 
@@ -28,6 +24,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -58,7 +55,7 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
         new Expectations(){
             {
                 v.getTableColumnsMetaData();
-                result = Lists.newArrayList();
+                result = new ArrayList<>();
             }
         };
         String exMsg = "";
