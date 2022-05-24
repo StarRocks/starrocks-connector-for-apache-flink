@@ -16,14 +16,12 @@ package com.starrocks.connector.flink.row.sink;
 
 import java.io.StringWriter;
 
-import org.apache.flink.calcite.shaded.com.google.common.base.Strings;
-
 public class StarRocksDelimiterParser {
 
     private static final String HEX_STRING = "0123456789ABCDEF";
 
     public static String parse(String sp, String dSp) throws RuntimeException {
-        if (Strings.isNullOrEmpty(sp)) {
+        if (sp == null || sp.length() == 0) {
             return dSp;
         }
         if (!sp.toUpperCase().startsWith("\\X")) {
