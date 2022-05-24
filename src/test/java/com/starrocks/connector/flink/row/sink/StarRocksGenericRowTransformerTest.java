@@ -14,9 +14,8 @@
 
 package com.starrocks.connector.flink.row.sink;
 
+import com.google.common.base.Strings;
 import org.apache.flink.api.common.functions.RuntimeContext;
-
-import org.apache.flink.shaded.guava18.com.google.common.base.Strings;
 
 import org.junit.Test;
 
@@ -31,8 +30,6 @@ import java.util.Map;
 
 import com.alibaba.fastjson.JSON;
 import com.starrocks.connector.flink.StarRocksSinkBaseTest;
-import com.starrocks.connector.flink.row.sink.StarRocksGenericRowTransformer;
-import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
 
 public class StarRocksGenericRowTransformerTest extends StarRocksSinkBaseTest {
 

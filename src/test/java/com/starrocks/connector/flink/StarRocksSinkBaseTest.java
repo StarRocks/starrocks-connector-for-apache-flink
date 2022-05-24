@@ -27,7 +27,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import com.alibaba.fastjson.JSON;
@@ -45,7 +44,6 @@ import org.junit.After;
 import org.junit.Before;
 
 import mockit.Mocked;
-import mockit.Tested;
 import mockit.Expectations;
 
 public abstract class StarRocksSinkBaseTest {

@@ -26,6 +26,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -56,7 +57,7 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
         new Expectations(){
             {
                 v.getTableColumnsMetaData();
-                result = Lists.newArrayList();
+                result = new ArrayList<>();
             }
         };
         String exMsg = "";

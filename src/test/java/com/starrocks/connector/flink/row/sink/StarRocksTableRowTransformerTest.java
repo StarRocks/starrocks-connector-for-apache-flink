@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.flink.row.sink;
 
+import com.google.common.base.Strings;
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.junit.Test;
@@ -37,8 +38,6 @@ import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.StringData;
 import org.apache.flink.table.data.TimestampData;
-
-import org.apache.flink.shaded.guava18.com.google.common.base.Strings;
 
 public class StarRocksTableRowTransformerTest extends StarRocksSinkBaseTest {
 
