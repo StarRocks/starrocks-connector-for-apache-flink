@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.flink.table.source;
 
+import com.google.common.base.Strings;
 import com.starrocks.connector.flink.table.source.struct.ColunmRichInfo;
 import com.starrocks.connector.flink.table.source.struct.QueryBeXTablets;
 import com.starrocks.connector.flink.table.source.struct.QueryInfo;
@@ -28,8 +29,6 @@ import org.apache.flink.streaming.api.functions.source.RichParallelSourceFunctio
 import org.apache.flink.table.api.TableSchema;
 
 import org.apache.flink.table.data.RowData;
-
-import org.apache.flink.shaded.guava18.com.google.common.base.Strings;
 
 import java.util.ArrayList;
 import java.util.List;
