@@ -17,8 +17,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
+import com.google.common.base.Strings;
 import org.apache.flink.api.java.utils.MultipleParameterTool;
-import org.apache.flink.calcite.shaded.com.google.common.base.Strings;
 import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.TableEnvironment;
 
