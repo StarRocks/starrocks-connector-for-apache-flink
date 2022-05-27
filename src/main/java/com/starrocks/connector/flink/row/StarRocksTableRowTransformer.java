@@ -32,11 +32,11 @@ import com.alibaba.fastjson.serializer.ObjectSerializer;
 import com.alibaba.fastjson.serializer.SerializeConfig;
 import com.alibaba.fastjson.serializer.SerializeWriter;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
-import org.apache.flink.calcite.shaded.com.google.common.collect.Maps;
-import org.apache.flink.calcite.shaded.com.google.common.collect.Lists;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.data.ArrayData;
 import org.apache.flink.table.data.DecimalData;
@@ -145,7 +145,7 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
                 return convertNestedMap(record.getMap(pos), type);
             case ROW:
                 RowType rType = (RowType)type;
-                Map<String, Object> m = Maps.newHashMap();
+                Map<String, Object> m = new HashMap<>();
                 RowData row = record.getRow(pos, rType.getFieldCount());
                 rType.getFields().parallelStream().forEach(f -> m.put(f.getName(), typeConvertion(f.getType(), row, rType.getFieldIndex(f.getName()))));
                 return m;
