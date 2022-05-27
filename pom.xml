@@ -43,7 +43,7 @@ limitations under the License.
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.starrocks</groupId>
     <artifactId>flink-connector-starrocks</artifactId>
-    <version>1.2.1_flink-1.12_${scala.version}</version>
+    <version>1.2.2_flink-1.12_${scala.version}</version>
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
@@ -87,6 +87,11 @@ limitations under the License.
         </dependency>
         <!-- other -->
         <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>31.1-jre</version>
+        </dependency>
+        <dependency>
             <groupId>commons-codec</groupId>
             <artifactId>commons-codec</artifactId>
             <version>1.15</version>
@@ -127,18 +132,6 @@ limitations under the License.
             <version>5.1.49</version>
         </dependency>
         <dependency>
-            <groupId>org.jmockit</groupId>
-            <artifactId>jmockit</artifactId>
-            <version>1.48</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <version>4.12</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>starrocks-thrift-sdk</artifactId>
             <version>1.0.1</version>
@@ -172,6 +165,19 @@ limitations under the License.
                 <groupId>org.apache.curator</groupId>
               </exclusion>
             </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>org.jmockit</groupId>
+            <artifactId>jmockit</artifactId>
+            <version>1.48</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.12</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
     <build>
@@ -267,6 +273,10 @@ limitations under the License.
                                     <shadedPattern>com.starrocks.shade.com.google.flatbuffers</shadedPattern>
                                 </relocation>
                                 <relocation>
+                                    <pattern>com.google.common</pattern>
+                                    <shadedPattern>com.starrocks.shade.com.google.common</shadedPattern>
+                                </relocation>
+                                <relocation>
                                     <pattern>com.fasterxml.jackson.core</pattern>
                                     <shadedPattern>com.starrocks.shade.com.fasterxml.jackson.core</shadedPattern>
                                 </relocation>
@@ -288,6 +298,7 @@ limitations under the License.
                                     <include>io.netty:netty-buffer</include>
                                     <include>io.netty:netty-common</include>
                                     <include>com.google.flatbuffers:flatbuffers-java</include>
+                                    <include>com.google.guava:guava</include>
                                     <include>com.fasterxml.jackson.core:jackson-annotations</include>
                                     <include>com.fasterxml.jackson.core:jackson-core</include>
                                     <include>com.fasterxml.jackson.core:jackson-databind</include>
