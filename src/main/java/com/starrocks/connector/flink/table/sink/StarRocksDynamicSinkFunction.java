@@ -15,6 +15,18 @@
 package com.starrocks.connector.flink.table.sink;
 
 import com.google.common.base.Strings;
+import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionOptions;
+import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
+import com.starrocks.connector.flink.manager.StarRocksQueryVisitor;
+import com.starrocks.connector.flink.manager.StarRocksSinkBufferEntity;
+import com.starrocks.connector.flink.manager.StarRocksSinkManager;
+import com.starrocks.connector.flink.row.sink.StarRocksIRowTransformer;
+import com.starrocks.connector.flink.row.sink.StarRocksISerializer;
+import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
+import net.sf.jsqlparser.parser.CCJSqlParserUtil;
+import net.sf.jsqlparser.statement.Statement;
+import net.sf.jsqlparser.statement.alter.Alter;
+import net.sf.jsqlparser.statement.truncate.Truncate;
 import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.api.common.typeinfo.TypeHint;
@@ -30,22 +42,11 @@ import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.binary.NestedRowData;
 import org.apache.flink.types.RowKind;
 import org.apache.flink.util.InstantiationUtil;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import net.sf.jsqlparser.parser.CCJSqlParserUtil;
-import net.sf.jsqlparser.statement.Statement;
-import net.sf.jsqlparser.statement.alter.Alter;
-import net.sf.jsqlparser.statement.truncate.Truncate;
 
 import java.util.HashMap;
 import java.util.Map;
-
-import com.starrocks.connector.flink.manager.StarRocksSinkBufferEntity;
-import com.starrocks.connector.flink.manager.StarRocksSinkManager;
-import com.starrocks.connector.flink.row.sink.StarRocksIRowTransformer;
-import com.starrocks.connector.flink.row.sink.StarRocksISerializer;
-import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
 
 public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> implements CheckpointedFunction {
 
@@ -65,9 +66,13 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
     private transient ListState<Map<String, StarRocksSinkBufferEntity>> checkpointedState;
  
     public StarRocksDynamicSinkFunction(StarRocksSinkOptions sinkOptions, TableSchema schema, StarRocksIRowTransformer<T> rowTransformer) {
-        this.sinkManager = new StarRocksSinkManager(sinkOptions, schema);
+        StarRocksJdbcConnectionOptions jdbcOptions = new StarRocksJdbcConnectionOptions(sinkOptions.getJdbcUrl(), sinkOptions.getUsername(), sinkOptions.getPassword());
+        StarRocksJdbcConnectionProvider jdbcConnProvider = new StarRocksJdbcConnectionProvider(jdbcOptions);
+        StarRocksQueryVisitor starrocksQueryVisitor = new StarRocksQueryVisitor(jdbcConnProvider, sinkOptions.getDatabaseName(), sinkOptions.getTableName());
+        this.sinkManager = new StarRocksSinkManager(sinkOptions, schema, jdbcConnProvider, starrocksQueryVisitor);
+
         rowTransformer.setTableSchema(schema);
-        this.serializer = StarRocksSerializerFactory.createSerializer(sinkOptions, schema.getFieldNames());
+        this.serializer = StarRocksSerializerFactory.createSerializer(sinkOptions, schema.getFieldNames(), starrocksQueryVisitor.getFieldMapping());
         this.rowTransformer = rowTransformer;
         this.sinkOptions = sinkOptions;
     }
