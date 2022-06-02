@@ -76,6 +76,8 @@ public class StarRocksSinkOptions implements Serializable {
         .longType().defaultValue(600000L).withDescription("Offer to flushQueue timeout in millisecond.");
     public static final ConfigOption<Integer> SINK_METRIC_HISTOGRAM_WINDOW_SIZE = ConfigOptions.key("sink.metric.histogram-window-size")
         .intType().defaultValue(100).withDescription("Window size of histogram metrics.");
+    public static final ConfigOption<Boolean> SINK_ENABLE_PARTIAL_UPDATE = ConfigOptions.key("sink.enable-partial-update")
+            .booleanType().defaultValue(false).withDescription("Use Table partial update");
 
     public static final ConfigOption<Integer> SINK_PARALLELISM = FactoryUtil.SINK_PARALLELISM;
 
@@ -89,6 +91,7 @@ public class StarRocksSinkOptions implements Serializable {
     private final Map<String, String> tableOptionsMap;
     private StarRocksSinkSemantic sinkSemantic;
     private boolean supportUpsertDelete;
+    private Boolean enablePartialUpdate;
 
     public StarRocksSinkOptions(ReadableConfig options, Map<String, String> optionsMap) {
         this.tableOptions = options;
@@ -172,6 +175,10 @@ public class StarRocksSinkOptions implements Serializable {
         return tableOptions.getOptional(SINK_PARALLELISM).orElse(null);
     }
 
+    public boolean getSinkEnablePartialUpdate() {
+        return tableOptions.getOptional(SINK_ENABLE_PARTIAL_UPDATE).orElse(false);
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -201,8 +208,18 @@ public class StarRocksSinkOptions implements Serializable {
         supportUpsertDelete = true;
     }
 
+    public void enablePartialUpdate() {
+        this.enablePartialUpdate = true;
+    }
+
     public boolean supportUpsertDelete() {
         return supportUpsertDelete;
+    }
+
+    public boolean isEnablePartialUpdate() {
+        return enablePartialUpdate == null
+                ? (enablePartialUpdate = getSinkEnablePartialUpdate())
+                : enablePartialUpdate;
     }
 
     private void validateStreamLoadUrl() {
