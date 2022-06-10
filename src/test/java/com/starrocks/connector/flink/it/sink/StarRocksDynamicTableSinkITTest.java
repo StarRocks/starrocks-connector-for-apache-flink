@@ -14,19 +14,19 @@
 
 package com.starrocks.connector.flink.it.sink;
 
+import com.starrocks.connector.flink.StarRocksSinkBaseTest;
+
+import mockit.Expectations;
 import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.TableEnvironment;
 import org.junit.Test;
 
-import mockit.Expectations;
-
-import static org.junit.Assert.assertFalse;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.starrocks.connector.flink.StarRocksSinkBaseTest;
+import static org.junit.Assert.assertFalse;
 
 public class StarRocksDynamicTableSinkITTest extends StarRocksSinkBaseTest {
     
@@ -101,8 +101,8 @@ public class StarRocksDynamicTableSinkITTest extends StarRocksSinkBaseTest {
         };
 
         mockStarRocksVersion(null);
-        EnvironmentSettings bsSettings = EnvironmentSettings.newInstance()
-            .useBlinkPlanner().inBatchMode().build();
+
+        EnvironmentSettings bsSettings = EnvironmentSettings.newInstance().inBatchMode().build();
         TableEnvironment tEnv = TableEnvironment.create(bsSettings);
         mockSuccessResponse();
         String createSQL = "CREATE TABLE USER_RESULT(" +

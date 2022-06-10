@@ -13,14 +13,15 @@
  */
 
 package com.starrocks.connector.flink.tools;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 
 import com.google.common.base.Strings;
 import org.apache.flink.api.java.utils.MultipleParameterTool;
 import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.TableEnvironment;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 public class ExecuteSQL {
     public static void main(String[] args) throws Exception {
@@ -29,8 +30,7 @@ public class ExecuteSQL {
             throw new IllegalArgumentException("No sql file specified.");
         }
         Path path = Paths.get(params.get("f"));
-        EnvironmentSettings bsSettings = EnvironmentSettings.newInstance()
-                .useBlinkPlanner().inStreamingMode().build();
+        EnvironmentSettings bsSettings = EnvironmentSettings.newInstance().inStreamingMode().build();
         TableEnvironment tEnv = TableEnvironment.create(bsSettings);
         String[] sqls = (String.join("\n", Files.readAllLines(path)) + "\n").split(";\\s*\n");
         for (String sql : sqls) {
