@@ -8,6 +8,8 @@ This is connector for [Apache Flink®](https://flink.apache.org/)
 <dependency>
     <groupId>com.starrocks</groupId>
     <artifactId>flink-connector-starrocks</artifactId>
+    <!-- for Apache Flink® 1.15 -->
+    <version>x.x.x_flink-1.15</version>
     <!-- for Apache Flink® 1.14 -->
     <version>x.x.x_flink-1.14_2.11</version>
     <version>x.x.x_flink-1.14_2.12</version>
