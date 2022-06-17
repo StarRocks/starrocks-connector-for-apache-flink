@@ -66,41 +66,39 @@ public class StarRocksCsvSerializer implements StarRocksISerializer {
         }
 
         for (int i = 0; i < values.length; i++) {
+            if (i > 0) {
+                sb.append(columnSeparator);
+            }
+
             Object obj = values[i];
             if (obj == null) {
                 sb.append("\\N");
                 continue;
             }
 
-            String value;
-            if (obj instanceof String) {
-                if (((String) obj).isEmpty()) {
-                    value = (String) obj;
-                } else {
-                    DataType dataType = i >= dataTypes.length ? DataType.UNKNOWN : dataTypes[i];
-                    if ((dataType == DataType.JSON || dataType == DataType.UNKNOWN)) {
-                        String ori = (String) obj;
-                        if (ori.charAt(0) == '{' || ori.charAt(0) == '[') {
-                            value = JSON.parse((String) obj).toString();
-                        } else {
-                            value = ori;
-                        }
-                    } else {
-                        value = (String) obj;
-                    }
-                }
-            } else {
+            if (!(obj instanceof String)) {
                 if (ClassUtils.isPrimitiveWrapper(obj.getClass())) {
-                    value = obj.toString();
-                } else {
-                    value = JSON.toJSONString(obj);
+                    sb.append(obj);
+                    continue;
                 }
+
+                sb.append(JSON.toJSONString(obj));
+                continue;
+            }
+
+            String value = (String) obj;
+            if (value.isEmpty()) {
+                sb.append(value);
+                continue;
+            }
+
+            DataType dataType = i >= dataTypes.length ? DataType.UNKNOWN : dataTypes[i];
+            if ((dataType == DataType.JSON || dataType == DataType.UNKNOWN)
+                    && (value.charAt(0) == '{' || value.charAt(0) == '[')) {
+                value = JSON.parse(value).toString();
             }
 
             sb.append(value);
-            if (i < values.length - 1) {
-                sb.append(columnSeparator);
-            }
         }
 
 
