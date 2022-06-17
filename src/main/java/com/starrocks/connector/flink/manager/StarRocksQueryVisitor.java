@@ -15,7 +15,7 @@
 package com.starrocks.connector.flink.manager;
 
 import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
-import com.starrocks.connector.flink.table.DataType;
+import com.starrocks.connector.flink.table.StarRocksDataType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,12 +62,12 @@ public class StarRocksQueryVisitor implements Serializable {
         return rows;
     }
 
-    public Map<String, DataType> getFieldMapping() {
+    public Map<String, StarRocksDataType> getFieldMapping() {
         List<Map<String, Object>> columns = getTableColumnsMetaData();
 
-        Map<String, DataType> mapping = new LinkedHashMap<>();
+        Map<String, StarRocksDataType> mapping = new LinkedHashMap<>();
         for (Map<String, Object> column : columns) {
-            mapping.put(column.get("COLUMN_NAME").toString(), DataType.fromString(column.get("DATA_TYPE").toString()));
+            mapping.put(column.get("COLUMN_NAME").toString(), StarRocksDataType.fromString(column.get("DATA_TYPE").toString()));
         }
 
         return mapping;

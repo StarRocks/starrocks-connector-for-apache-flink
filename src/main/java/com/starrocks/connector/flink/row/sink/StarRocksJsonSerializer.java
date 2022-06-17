@@ -14,8 +14,6 @@
 
 package com.starrocks.connector.flink.row.sink;
 
-import com.starrocks.connector.flink.table.DataType;
-
 import com.alibaba.fastjson.JSON;
 
 import java.util.HashMap;
@@ -26,15 +24,9 @@ public class StarRocksJsonSerializer implements StarRocksISerializer {
     private static final long serialVersionUID = 1L;
     
     private final String[] fieldNames;
-    private final Map<String, DataType> mapping;
 
     public StarRocksJsonSerializer(String[] fieldNames) {
-        this(fieldNames, null);
-    }
-
-    public StarRocksJsonSerializer(String[] fieldNames, Map<String, DataType> mapping) {
         this.fieldNames = fieldNames;
-        this.mapping = mapping;
     }
 
     @Override
@@ -42,22 +34,10 @@ public class StarRocksJsonSerializer implements StarRocksISerializer {
         Map<String, Object> rowMap = new HashMap<>(values.length);
         int idx = 0;
         for (String fieldName : fieldNames) {
-            Object value = values[idx];
-
-            if (mapping != null && values[idx] instanceof String) {
-                DataType dataType = mapping.getOrDefault(fieldName, DataType.UNKNOWN);
-                if (dataType == DataType.JSON || dataType == DataType.UNKNOWN) {
-                    String ori = (String) values[idx];
-                    if (ori.charAt(0) == '{' || ori.charAt(0) == '[') {
-                        value = JSON.parse(ori);
-                    } else {
-                        value = ori;
-                    }
-                }
-            }
-            rowMap.put(fieldName, value);
+            rowMap.put(fieldName, values[idx]);
             idx++;
         }
+
         return JSON.toJSONString(rowMap);
     }
     

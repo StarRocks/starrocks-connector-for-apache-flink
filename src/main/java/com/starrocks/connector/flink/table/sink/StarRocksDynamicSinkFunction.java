@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.flink.table.sink;
 
-import com.google.common.base.Strings;
 import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionOptions;
 import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
 import com.starrocks.connector.flink.manager.StarRocksQueryVisitor;
@@ -23,6 +22,8 @@ import com.starrocks.connector.flink.manager.StarRocksSinkManager;
 import com.starrocks.connector.flink.row.sink.StarRocksIRowTransformer;
 import com.starrocks.connector.flink.row.sink.StarRocksISerializer;
 import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
+
+import com.google.common.base.Strings;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.alter.Alter;
@@ -71,8 +72,9 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
         StarRocksQueryVisitor starrocksQueryVisitor = new StarRocksQueryVisitor(jdbcConnProvider, sinkOptions.getDatabaseName(), sinkOptions.getTableName());
         this.sinkManager = new StarRocksSinkManager(sinkOptions, schema, jdbcConnProvider, starrocksQueryVisitor);
 
+        rowTransformer.setStarRocksColumns(starrocksQueryVisitor.getFieldMapping());
         rowTransformer.setTableSchema(schema);
-        this.serializer = StarRocksSerializerFactory.createSerializer(sinkOptions, schema.getFieldNames(), starrocksQueryVisitor.getFieldMapping());
+        this.serializer = StarRocksSerializerFactory.createSerializer(sinkOptions, schema.getFieldNames());
         this.rowTransformer = rowTransformer;
         this.sinkOptions = sinkOptions;
     }

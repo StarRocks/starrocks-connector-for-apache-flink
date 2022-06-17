@@ -14,12 +14,17 @@
 
 package com.starrocks.connector.flink.row.sink;
 
-import java.io.Serializable;
+import com.starrocks.connector.flink.table.StarRocksDataType;
 
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.table.api.TableSchema;
 
+import java.io.Serializable;
+import java.util.Map;
+
 public interface StarRocksIRowTransformer<T> extends Serializable {
+
+    void setStarRocksColumns(Map<String, StarRocksDataType> columns);
 
     void setTableSchema(TableSchema tableSchema);
 
