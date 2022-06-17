@@ -14,30 +14,26 @@
 
 package com.starrocks.connector.flink.table.source;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-
-import java.util.Arrays;
-
 import com.starrocks.connector.flink.it.source.StarRocksSourceBaseTest;
 import com.starrocks.connector.flink.table.source.struct.PushDownHolder;
 
-import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.TableEnvironment;
-import org.apache.flink.table.api.TableSchema;
-import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
-import org.apache.flink.table.api.internal.TableEnvironmentInternal;
-import org.apache.flink.table.delegation.Parser;
-import org.apache.flink.table.expressions.ResolvedExpression;
 import org.apache.flink.table.expressions.CallExpression;
 import org.apache.flink.table.expressions.FieldReferenceExpression;
+import org.apache.flink.table.expressions.ResolvedExpression;
 import org.apache.flink.table.functions.BuiltInFunctionDefinitions;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
 import static org.apache.flink.table.expressions.ApiExpressionUtils.valueLiteral;
+import static org.junit.Assert.assertEquals;
 
 public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
 
@@ -69,7 +65,18 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
     @Test
     public void testFilter() {
 
-        String filter = null;
+        String filter;
+
+        ResolvedExpression c9Ref = new FieldReferenceExpression("c6", DataTypes.STRING(), 0, 2);
+        ResolvedExpression c9CharLength = new CallExpression(BuiltInFunctionDefinitions.CHAR_LENGTH, Collections.singletonList(c9Ref), DataTypes.INT());
+        ResolvedExpression c9Exp =
+                new CallExpression(
+                        BuiltInFunctionDefinitions.LESS_THAN,
+                        Arrays.asList(c9CharLength, valueLiteral(10)),
+                        DataTypes.BOOLEAN());
+        dynamicTableSource.applyFilters(Collections.singletonList(c9Exp));
+        filter = pushDownHolder.getFilter();
+        Assert.assertTrue(filter.isEmpty());
 
         ResolvedExpression c5Ref = new FieldReferenceExpression("c5", DataTypes.TIMESTAMP(), 0, 2);
         ResolvedExpression c5Exp =
@@ -79,7 +86,7 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
                         DataTypes.BOOLEAN());
         dynamicTableSource.applyFilters(Arrays.asList(c5Exp));
         filter = pushDownHolder.getFilter();
-        assertTrue(filter.equals("(c5 = '2022-1-22 00:00:00')"));
+        assertEquals("(c5 = '2022-1-22 00:00:00')", filter);
 
         ResolvedExpression c4Ref = new FieldReferenceExpression("c4", DataTypes.DATE(), 0, 2);
         ResolvedExpression c4Exp =
@@ -87,9 +94,9 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
                         BuiltInFunctionDefinitions.EQUALS,
                         Arrays.asList(c4Ref, valueLiteral("2022-1-22")),
                         DataTypes.BOOLEAN());
-        dynamicTableSource.applyFilters(Arrays.asList(c4Exp));
+        dynamicTableSource.applyFilters(Collections.singletonList(c4Exp));
         filter = pushDownHolder.getFilter();
-        assertTrue(filter.equals("(c4 = '2022-1-22')"));
+        assertEquals("(c4 = '2022-1-22')", filter);
 
         ResolvedExpression c3Ref = new FieldReferenceExpression("c3", DataTypes.BOOLEAN(), 0, 2);
         ResolvedExpression c3Exp =
@@ -97,9 +104,9 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
                         BuiltInFunctionDefinitions.EQUALS,
                         Arrays.asList(c3Ref, valueLiteral(true)),
                         DataTypes.BOOLEAN());
-        dynamicTableSource.applyFilters(Arrays.asList(c3Exp));
+        dynamicTableSource.applyFilters(Collections.singletonList(c3Exp));
         filter = pushDownHolder.getFilter();
-        assertTrue(filter.equals("(c3 = true)"));
+        assertEquals("(c3 = true)", filter);
 
         ResolvedExpression c2Ref = new FieldReferenceExpression("c2", DataTypes.INT(), 0, 2);
         ResolvedExpression c2Exp =
@@ -138,16 +145,16 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
                 DataTypes.BOOLEAN())
         ));
         filter = pushDownHolder.getFilter();
-        assertTrue(filter.equals("(c1 = 1) and (c1 <> 1) and (c1 > 1) and (c1 >= 1) and (c1 < 1) and (c1 <= 1)"));
+        assertEquals("(c1 = 1) and (c1 <> 1) and (c1 > 1) and (c1 >= 1) and (c1 < 1) and (c1 <= 1)", filter);
 
         dynamicTableSource.applyFilters(Arrays.asList(c1Exp, c2Exp));
         filter = pushDownHolder.getFilter();
-        assertTrue(filter.equals("(c1 = 1) and (c2 = 2)"));
+        assertEquals("(c1 = 1) and (c2 = 2)", filter);
 
 
         dynamicTableSource.applyFilters(Arrays.asList(new CallExpression(BuiltInFunctionDefinitions.OR, Arrays.asList(c1Exp, c3Exp), DataTypes.BOOLEAN())));
         filter = pushDownHolder.getFilter();
-        assertTrue(filter.equals("((c1 = 1) or (c3 = true))"));
+        assertEquals("((c1 = 1) or (c3 = true))", filter);
 
 
         ResolvedExpression c6Exp =
@@ -156,10 +163,10 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
                         Arrays.asList(c1Ref, valueLiteral(1)),
                         DataTypes.BOOLEAN());
         try { 
-            dynamicTableSource.applyFilters(Arrays.asList(c6Exp));
+            dynamicTableSource.applyFilters(Collections.singletonList(c6Exp));
         } catch (Exception e) {
             e.printStackTrace();
-            assertTrue(e.getMessage().equals("Not support filter -> [like]"));
+            assertEquals("Not support filter -> [like]", e.getMessage());
         }
 
         ResolvedExpression c7Exp =
@@ -168,10 +175,10 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
                         Arrays.asList(c1Ref, valueLiteral(1)),
                         DataTypes.BOOLEAN());
         try { 
-            dynamicTableSource.applyFilters(Arrays.asList(c7Exp));
+            dynamicTableSource.applyFilters(Collections.singletonList(c7Exp));
         } catch (Exception e) {
             e.printStackTrace();
-            assertTrue(e.getMessage().equals("Not support filter -> [in]"));
+            assertEquals("Not support filter -> [in]", e.getMessage());
         }
 
         ResolvedExpression c8Exp =
@@ -180,10 +187,31 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
                         Arrays.asList(c1Ref, valueLiteral(1)),
                         DataTypes.BOOLEAN());
         try { 
-            dynamicTableSource.applyFilters(Arrays.asList(c8Exp));
+            dynamicTableSource.applyFilters(Collections.singletonList(c8Exp));
         } catch (Exception e) {
             e.printStackTrace();
-            assertTrue(e.getMessage().equals("Not support filter -> [between]"));
+            assertEquals("Not support filter -> [between]", e.getMessage());
         }
-    }   
+    }
+
+    @Test
+    public void test() {
+        EnvironmentSettings settings = EnvironmentSettings.newInstance().build();
+        TableEnvironment env = TableEnvironment.create(settings);
+//        env.explainSql("create table HTWSource (item_key string, vehicle_id string, item_type string, item_value string, modify_time timestamp) WITH ('connector' = 'datagen')");
+        env.executeSql("CREATE TABLE Orders (`user` BIGINT, product STRING, amount INT) WITH ('connector' = 'datagen')");
+        env.executeSql("CREATE TABLE HTWSource (`item_key` BIGINT, vehicle_id STRING, item_type STRING, item_value STRING, modify_time STRING) WITH ('connector' = 'datagen')");
+        System.out.println(env.explainSql(
+                "SELECT product, amount FROM Orders WHERE product LIKE '%Rubber%'"));
+
+        System.out.println(env.explainSql("select item_key,\n" +
+                "       vehicle_id,\n" +
+                "      item_type,item_value,modify_time\n" +
+                "from HTWSource \n" +
+                "where CHAR_LENGTH(vehicle_id) < 10"));
+
+        List<String> s = Collections.singletonList("a");
+
+        System.out.println(String.join(" is not null", s));
+    }
 }
