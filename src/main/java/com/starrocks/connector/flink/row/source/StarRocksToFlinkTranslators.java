@@ -28,6 +28,7 @@ import org.apache.flink.util.Preconditions;
 
 import java.math.BigDecimal;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -57,7 +58,7 @@ public class StarRocksToFlinkTranslators {
                     result[rowIndex] = null;
                     continue;
                 }
-                String value = new String(varCharVector.get(rowIndex));
+                String value = new String(varCharVector.get(rowIndex), StandardCharsets.UTF_8);
                 LocalDate date = LocalDate.parse(value, DateTimeFormatter.ofPattern(DATE_FORMAT));
                 int timestamp = (int)date.atStartOfDay().toLocalDate().toEpochDay();
                 result[rowIndex] = timestamp;
@@ -83,7 +84,7 @@ public class StarRocksToFlinkTranslators {
                     result[rowIndex] = null;
                     continue;
                 }
-                String value = new String(varCharVector.get(rowIndex));
+                String value = new String(varCharVector.get(rowIndex), StandardCharsets.UTF_8);
                 if (value.length() < DATETIME_FORMAT_SHORT.length()) {
                     throw new IllegalArgumentException("Date value length shorter than DATETIME_FORMAT_SHORT");
                 }
@@ -117,8 +118,7 @@ public class StarRocksToFlinkTranslators {
                     result[rowIndex] = null;
                     continue;
                 }
-                String value = new String(varCharVector.get(rowIndex));
-                result[rowIndex] = StringData.fromString(value);
+                result[rowIndex] = StringData.fromBytes(varCharVector.get(rowIndex));
             }
             return result;
         }
