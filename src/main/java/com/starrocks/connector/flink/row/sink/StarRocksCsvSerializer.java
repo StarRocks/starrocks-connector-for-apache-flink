@@ -14,13 +14,13 @@
 
 package com.starrocks.connector.flink.row.sink;
 
+import com.alibaba.fastjson.JSON;
+
 import java.util.List;
 import java.util.Map;
 
-import com.alibaba.fastjson.JSON;
-
 public class StarRocksCsvSerializer implements StarRocksISerializer {
-    
+
     private static final long serialVersionUID = 1L;
 
     private final String columnSeparator;

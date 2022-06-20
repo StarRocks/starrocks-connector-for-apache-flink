@@ -14,19 +14,28 @@
 
 package com.starrocks.connector.flink.manager;
 
+import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionOptions;
+import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
+import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
+import com.starrocks.connector.flink.table.sink.StarRocksSinkSemantic;
+
+import org.apache.flink.api.common.functions.RuntimeContext;
+import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Histogram;
 import org.apache.flink.runtime.metrics.DescriptiveStatisticsHistogram;
+import org.apache.flink.table.api.TableColumn;
 import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.api.constraints.UniqueConstraint;
 import org.apache.flink.table.types.logical.LogicalTypeRoot;
+import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Arrays;
-import java.util.concurrent.TimeUnit;
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,18 +45,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-
-import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionOptions;
-import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
-import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
-import com.starrocks.connector.flink.table.sink.StarRocksSinkSemantic;
-
-import org.apache.flink.api.common.functions.RuntimeContext;
-import org.apache.flink.metrics.Counter;
-import org.apache.flink.util.concurrent.ExecutorThreadFactory;
-import org.apache.flink.table.api.TableColumn;
-import org.apache.flink.table.api.constraints.UniqueConstraint;
 
 public class StarRocksSinkManager implements Serializable {
 
@@ -57,9 +56,8 @@ public class StarRocksSinkManager implements Serializable {
 
     private final StarRocksJdbcConnectionProvider jdbcConnProvider;
     private final StarRocksQueryVisitor starrocksQueryVisitor;
-    private final StarRocksStreamLoadVisitor starrocksStreamLoadVisitor;
+    private StarRocksStreamLoadVisitor starrocksStreamLoadVisitor;
     private final StarRocksSinkOptions sinkOptions;
-    private final Map<String, List<LogicalTypeRoot>> typesMap;
     final LinkedBlockingDeque<StarRocksSinkBufferEntity> flushQueue = new LinkedBlockingDeque<>(1);
 
     private transient Counter totalFlushBytes;
@@ -110,27 +108,29 @@ public class StarRocksSinkManager implements Serializable {
         StarRocksJdbcConnectionOptions jdbcOptions = new StarRocksJdbcConnectionOptions(sinkOptions.getJdbcUrl(), sinkOptions.getUsername(), sinkOptions.getPassword());
         this.jdbcConnProvider = new StarRocksJdbcConnectionProvider(jdbcOptions);
         this.starrocksQueryVisitor = new StarRocksQueryVisitor(jdbcConnProvider, sinkOptions.getDatabaseName(), sinkOptions.getTableName());
-        // validate table structure
-        typesMap = new HashMap<>();
-        typesMap.put("bigint", Arrays.asList(LogicalTypeRoot.BIGINT, LogicalTypeRoot.INTEGER, LogicalTypeRoot.BINARY));
-        typesMap.put("largeint", Arrays.asList(LogicalTypeRoot.DECIMAL, LogicalTypeRoot.BIGINT, LogicalTypeRoot.INTEGER, LogicalTypeRoot.BINARY));
-        typesMap.put("char", Arrays.asList(LogicalTypeRoot.CHAR, LogicalTypeRoot.VARCHAR));
-        typesMap.put("date", Arrays.asList(LogicalTypeRoot.DATE, LogicalTypeRoot.VARCHAR));
-        typesMap.put("datetime", Arrays.asList(LogicalTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE, LogicalTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE, LogicalTypeRoot.VARCHAR));
-        typesMap.put("decimal", Arrays.asList(LogicalTypeRoot.DECIMAL, LogicalTypeRoot.BIGINT, LogicalTypeRoot.INTEGER, LogicalTypeRoot.DOUBLE, LogicalTypeRoot.FLOAT));
-        typesMap.put("double", Arrays.asList(LogicalTypeRoot.DOUBLE, LogicalTypeRoot.BIGINT, LogicalTypeRoot.INTEGER));
-        typesMap.put("float", Arrays.asList(LogicalTypeRoot.FLOAT, LogicalTypeRoot.INTEGER));
-        typesMap.put("int", Arrays.asList(LogicalTypeRoot.INTEGER, LogicalTypeRoot.BINARY));
-        typesMap.put("tinyint", Arrays.asList(LogicalTypeRoot.TINYINT, LogicalTypeRoot.INTEGER, LogicalTypeRoot.BINARY, LogicalTypeRoot.BOOLEAN));
-        typesMap.put("smallint", Arrays.asList(LogicalTypeRoot.SMALLINT, LogicalTypeRoot.INTEGER, LogicalTypeRoot.BINARY));
-        typesMap.put("varchar", Arrays.asList(LogicalTypeRoot.VARCHAR, LogicalTypeRoot.ARRAY, LogicalTypeRoot.MAP, LogicalTypeRoot.ROW));
-        typesMap.put("string", Arrays.asList(LogicalTypeRoot.CHAR, LogicalTypeRoot.VARCHAR, LogicalTypeRoot.ARRAY, LogicalTypeRoot.MAP, LogicalTypeRoot.ROW));
-        validateTableStructure(flinkSchema);
-        String version = this.starrocksQueryVisitor.getStarRocksVersion();
+
+        init(flinkSchema);
+    }
+
+    public StarRocksSinkManager(StarRocksSinkOptions sinkOptions,
+                                TableSchema flinkSchema,
+                                StarRocksJdbcConnectionProvider jdbcConnProvider,
+                                StarRocksQueryVisitor starrocksQueryVisitor) {
+        this.sinkOptions = sinkOptions;
+        this.jdbcConnProvider = jdbcConnProvider;
+        this.starrocksQueryVisitor = starrocksQueryVisitor;
+
+        init(flinkSchema);
+    }
+
+
+    protected void init(TableSchema schema) {
+        validateTableStructure(schema);
+        String version = starrocksQueryVisitor.getStarRocksVersion();
         this.starrocksStreamLoadVisitor = new StarRocksStreamLoadVisitor(
-            sinkOptions,
-            null == flinkSchema ? new String[]{} : flinkSchema.getFieldNames(),
-            version.length() > 0 && !version.trim().startsWith("1.")
+                sinkOptions,
+                null == schema ? new String[]{} : schema.getFieldNames(),
+                version.length() > 0 && !version.trim().startsWith("1.")
         );
     }
 
@@ -483,4 +483,24 @@ public class StarRocksSinkManager implements Serializable {
             }
         }
     }
+
+    private static final Map<String, List<LogicalTypeRoot>> typesMap = new HashMap<>();
+
+    static {
+        // validate table structure
+        typesMap.put("bigint", Arrays.asList(LogicalTypeRoot.BIGINT, LogicalTypeRoot.INTEGER, LogicalTypeRoot.BINARY));
+        typesMap.put("largeint", Arrays.asList(LogicalTypeRoot.DECIMAL, LogicalTypeRoot.BIGINT, LogicalTypeRoot.INTEGER, LogicalTypeRoot.BINARY));
+        typesMap.put("char", Arrays.asList(LogicalTypeRoot.CHAR, LogicalTypeRoot.VARCHAR));
+        typesMap.put("date", Arrays.asList(LogicalTypeRoot.DATE, LogicalTypeRoot.VARCHAR));
+        typesMap.put("datetime", Arrays.asList(LogicalTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE, LogicalTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE, LogicalTypeRoot.VARCHAR));
+        typesMap.put("decimal", Arrays.asList(LogicalTypeRoot.DECIMAL, LogicalTypeRoot.BIGINT, LogicalTypeRoot.INTEGER, LogicalTypeRoot.DOUBLE, LogicalTypeRoot.FLOAT));
+        typesMap.put("double", Arrays.asList(LogicalTypeRoot.DOUBLE, LogicalTypeRoot.BIGINT, LogicalTypeRoot.INTEGER));
+        typesMap.put("float", Arrays.asList(LogicalTypeRoot.FLOAT, LogicalTypeRoot.INTEGER));
+        typesMap.put("int", Arrays.asList(LogicalTypeRoot.INTEGER, LogicalTypeRoot.BINARY));
+        typesMap.put("tinyint", Arrays.asList(LogicalTypeRoot.TINYINT, LogicalTypeRoot.INTEGER, LogicalTypeRoot.BINARY, LogicalTypeRoot.BOOLEAN));
+        typesMap.put("smallint", Arrays.asList(LogicalTypeRoot.SMALLINT, LogicalTypeRoot.INTEGER, LogicalTypeRoot.BINARY));
+        typesMap.put("varchar", Arrays.asList(LogicalTypeRoot.VARCHAR, LogicalTypeRoot.ARRAY, LogicalTypeRoot.MAP, LogicalTypeRoot.ROW));
+        typesMap.put("string", Arrays.asList(LogicalTypeRoot.CHAR, LogicalTypeRoot.VARCHAR, LogicalTypeRoot.ARRAY, LogicalTypeRoot.MAP, LogicalTypeRoot.ROW));
+    }
+
 }

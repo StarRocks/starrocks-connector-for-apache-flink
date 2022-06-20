@@ -14,8 +14,11 @@
 
 package com.starrocks.connector.flink.table.source;
 
-import org.apache.flink.table.api.DataTypes;
+import com.starrocks.connector.flink.table.source.struct.ColunmRichInfo;
+import com.starrocks.connector.flink.table.source.struct.PushDownHolder;
+import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 
+import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.connector.ChangelogMode;
 import org.apache.flink.table.connector.source.DynamicTableSource;
@@ -30,13 +33,10 @@ import org.apache.flink.table.expressions.ResolvedExpression;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-
-import com.starrocks.connector.flink.table.source.struct.ColunmRichInfo;
-import com.starrocks.connector.flink.table.source.struct.PushDownHolder;
-import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 
 public class StarRocksDynamicTableSource implements ScanTableSource, LookupTableSource, SupportsLimitPushDown, SupportsFilterPushDown, SupportsProjectionPushDown {
 
@@ -128,21 +128,27 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
     @Override
     public Result applyFilters(List<ResolvedExpression> filtersExpressions) {
         List<String> filters = new ArrayList<>();
+        List<ResolvedExpression> ac = new LinkedList<>();
+        List<ResolvedExpression> remain = new LinkedList<>();
+
         StarRocksExpressionExtractor extractor = new StarRocksExpressionExtractor();
         for (ResolvedExpression expression : filtersExpressions) {
             if (expression.getOutputDataType().equals(DataTypes.BOOLEAN()) && expression.getChildren().size() == 0) {
                 filters.add(expression.accept(extractor) + " = true");
+                ac.add(expression);
                 continue;
             }
             String str = expression.accept(extractor);
             if (str == null) {
+                remain.add(expression);
                 continue;
             }
             filters.add(str);
+            ac.add(expression);
         }
         Optional<String> filter = Optional.of(String.join(" and ", filters));
         this.pushDownHolder.setFilter(filter.get());
-        return Result.of(filtersExpressions, new ArrayList<>());
+        return Result.of(ac, remain);
     }
 
     @Override
