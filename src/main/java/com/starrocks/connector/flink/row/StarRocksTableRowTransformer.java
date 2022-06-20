@@ -14,24 +14,13 @@
 
 package com.starrocks.connector.flink.row;
 
-import java.io.IOException;
-import java.io.Serializable;
-import java.lang.reflect.Type;
-import java.sql.Date;
-import java.text.SimpleDateFormat;
-import java.time.LocalDate;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
+import com.starrocks.connector.flink.table.StarRocksDataType;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.serializer.JSONSerializer;
 import com.alibaba.fastjson.serializer.ObjectSerializer;
 import com.alibaba.fastjson.serializer.SerializeConfig;
 import com.alibaba.fastjson.serializer.SerializeWriter;
-
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import org.apache.flink.api.common.functions.RuntimeContext;
@@ -57,13 +46,27 @@ import org.apache.flink.table.types.logical.MapType;
 import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.table.types.logical.TimestampType;
 
+import java.io.IOException;
+import java.io.Serializable;
+import java.lang.reflect.Type;
+import java.sql.Date;
+import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
 public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<RowData> {
 
     private static final long serialVersionUID = 1L;
 
     private TypeInformation<RowData> rowDataTypeInfo;
     private Function<RowData, RowData> valueTransform;
-    private DataType[] dataTypes;
+    private String[] columnNames;
+    private DataType[] columnDataTypes;
+    private Map<String, StarRocksDataType> columns;
     private final SimpleDateFormat dateFormatter = new SimpleDateFormat("yyyy-MM-dd");
     
     public StarRocksTableRowTransformer(TypeInformation<RowData> rowDataTypeInfo) {
@@ -71,8 +74,14 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
     }
 
     @Override
+    public void setStarRocksColumns(Map<String, StarRocksDataType> columns) {
+        this.columns = columns;
+    }
+
+    @Override
     public void setTableSchema(TableSchema ts) {
-        dataTypes = ts.getFieldDataTypes();
+        this.columnNames = ts.getFieldNames();
+        this.columnDataTypes = ts.getFieldDataTypes();
     }
 
     @Override
@@ -87,9 +96,9 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
     @Override
     public Object[] transform(RowData record, boolean supportUpsertDelete) {
         RowData transformRecord = valueTransform.apply(record);
-        Object[] values = new Object[dataTypes.length + (supportUpsertDelete ? 1 : 0)];
+        Object[] values = new Object[columnDataTypes.length + (supportUpsertDelete ? 1 : 0)];
         int idx = 0;
-        for (DataType dataType : dataTypes) {
+        for (DataType dataType : columnDataTypes) {
             values[idx] = typeConvertion(dataType.getLogicalType(), transformRecord, idx);
             idx++;
         }
@@ -121,7 +130,18 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
                 return record.getDouble(pos);
             case CHAR:
             case VARCHAR:
-                return record.getString(pos).toString();
+                String sValue = record.getString(pos).toString();
+                if (columns == null) {
+                    return sValue;
+                }
+                StarRocksDataType starRocksDataType =
+                        columns.getOrDefault(columnNames[pos], StarRocksDataType.UNKNOWN);
+                if ((starRocksDataType == StarRocksDataType.JSON ||
+                        starRocksDataType == StarRocksDataType.UNKNOWN)
+                    && (sValue.charAt(0) == '{' || sValue.charAt(0) == '[')) {
+                    return JSON.parse(sValue);
+                }
+                return sValue;
             case DATE:
                 return dateFormatter.format(Date.valueOf(LocalDate.ofEpochDay(record.getInt(pos))));
             case TIMESTAMP_WITHOUT_TIME_ZONE:
@@ -148,6 +168,14 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
                 Map<String, Object> m = new HashMap<>();
                 RowData row = record.getRow(pos, rType.getFieldCount());
                 rType.getFields().parallelStream().forEach(f -> m.put(f.getName(), typeConvertion(f.getType(), row, rType.getFieldIndex(f.getName()))));
+                if (columns == null) {
+                    return m;
+                }
+                StarRocksDataType rStarRocksDataType =
+                        columns.getOrDefault(columnNames[pos], StarRocksDataType.UNKNOWN);
+                if (rStarRocksDataType == StarRocksDataType.STRING) {
+                    return JSON.toJSONString(m);
+                }
                 return m;
             default:
                 throw new UnsupportedOperationException("Unsupported type:" + type);

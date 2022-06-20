@@ -14,9 +14,9 @@
 
 package com.starrocks.connector.flink.row;
 
-import org.junit.Test;
+import com.starrocks.connector.flink.StarRocksSinkBaseTest;
 
-import static org.junit.Assert.assertEquals;
+import org.junit.Test;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -24,8 +24,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import com.starrocks.connector.flink.StarRocksSinkBaseTest;
-
+import static org.junit.Assert.assertEquals;
 
 public class StarRocksCsvSerializerTest extends StarRocksSinkBaseTest {
 

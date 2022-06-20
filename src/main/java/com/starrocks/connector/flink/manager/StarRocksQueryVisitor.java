@@ -14,20 +14,21 @@
 
 package com.starrocks.connector.flink.manager;
 
+import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
+import com.starrocks.connector.flink.table.StarRocksDataType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.Serializable;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.sql.ResultSetMetaData;
 import java.util.Map;
-
-import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
  
 public class StarRocksQueryVisitor implements Serializable {
 
@@ -61,6 +62,17 @@ public class StarRocksQueryVisitor implements Serializable {
         return rows;
     }
 
+    public Map<String, StarRocksDataType> getFieldMapping() {
+        List<Map<String, Object>> columns = getTableColumnsMetaData();
+
+        Map<String, StarRocksDataType> mapping = new LinkedHashMap<>();
+        for (Map<String, Object> column : columns) {
+            mapping.put(column.get("COLUMN_NAME").toString(), StarRocksDataType.fromString(column.get("DATA_TYPE").toString()));
+        }
+
+        return mapping;
+    }
+
     public String getStarRocksVersion() {
         final String query = "select current_version() as ver;";
         List<Map<String, Object>> rows;
@@ -69,7 +81,7 @@ public class StarRocksQueryVisitor implements Serializable {
                 LOG.debug(String.format("Executing query '%s'", query));
             }
             rows = executeQuery(query);
-            if (null == rows || rows.isEmpty()) {
+            if (rows.isEmpty()) {
                 return "";
             }
             String version = rows.get(0).get("ver").toString();
@@ -105,5 +117,25 @@ public class StarRocksQueryVisitor implements Serializable {
         rs.close();
         jdbcConnProvider.close();
         return list;
+    }
+
+    public Long getQueryCount(String SQL) {
+        Long count = 0L;
+        try {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug(String.format("Executing query '%s'", SQL));
+            }
+            List<Map<String, Object>> data = executeQuery(SQL);
+            Object opCount = data.get(0).values().stream().findFirst().orElse(null);
+            if (null == opCount) {
+                throw new RuntimeException("Faild to get data count from StarRocks. ");
+            }
+            count = (Long)opCount;
+        } catch (ClassNotFoundException se) {
+            throw new IllegalArgumentException("Failed to find jdbc driver." + se.getMessage(), se);
+        } catch (SQLException se) {
+            throw new IllegalArgumentException("Failed to get data count from StarRocks. " + se.getMessage(), se);
+        }
+        return count;
     }
 }
