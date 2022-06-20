@@ -14,9 +14,13 @@
 
 package com.starrocks.connector.flink.row.sink;
 
+import com.starrocks.connector.flink.table.StarRocksDataType;
+
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.data.RowData;
+
+import java.util.Map;
 
 public class StarRocksGenericRowTransformer<T> implements StarRocksIRowTransformer<T> {
     
@@ -27,6 +31,11 @@ public class StarRocksGenericRowTransformer<T> implements StarRocksIRowTransform
 
     public StarRocksGenericRowTransformer(StarRocksSinkRowBuilder<T> consumer) {
         this.consumer = consumer;
+    }
+
+    @Override
+    public void setStarRocksColumns(Map<String, StarRocksDataType> columns) {
+
     }
 
     @Override
