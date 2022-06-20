@@ -28,3 +28,9 @@ buildNumber.properties
 .vscode/
 
 .target
+
+#
+# other
+#
+
+src/test/java/com/starrocks/connector/flink/tmp
