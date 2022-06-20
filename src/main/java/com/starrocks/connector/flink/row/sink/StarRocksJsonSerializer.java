@@ -14,10 +14,10 @@
 
 package com.starrocks.connector.flink.row.sink;
 
+import com.alibaba.fastjson.JSON;
+
 import java.util.HashMap;
 import java.util.Map;
-
-import com.alibaba.fastjson.JSON;
 
 public class StarRocksJsonSerializer implements StarRocksISerializer {
 
@@ -34,9 +34,10 @@ public class StarRocksJsonSerializer implements StarRocksISerializer {
         Map<String, Object> rowMap = new HashMap<>(values.length);
         int idx = 0;
         for (String fieldName : fieldNames) {
-            rowMap.put(fieldName, values[idx] instanceof Map ? JSON.toJSONString(values[idx]) : values[idx]);
+            rowMap.put(fieldName, values[idx]);
             idx++;
         }
+
         return JSON.toJSONString(rowMap);
     }
     
