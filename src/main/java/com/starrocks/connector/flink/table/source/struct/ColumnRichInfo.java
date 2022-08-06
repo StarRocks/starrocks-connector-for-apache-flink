@@ -14,20 +14,20 @@
 
 package com.starrocks.connector.flink.table.source.struct;
 
-import java.io.Serializable;
-
 import org.apache.flink.table.types.DataType;
 
-public class ColunmRichInfo implements Serializable {
+import java.io.Serializable;
+
+public class ColumnRichInfo implements Serializable {
 
     private final String columnName;
-    private final int colunmIndexInSchema;
+    private final int columnIndexInSchema;
     private final DataType dataType;
 
 
-    public ColunmRichInfo(String columnName, int colunmIndexInSchema, DataType dataType) {
+    public ColumnRichInfo(String columnName, int columnIndexInSchema, DataType dataType) {
         this.columnName = columnName;
-        this.colunmIndexInSchema = colunmIndexInSchema;
+        this.columnIndexInSchema = columnIndexInSchema;
         this.dataType = dataType;
     }
 
@@ -35,8 +35,8 @@ public class ColunmRichInfo implements Serializable {
         return this.columnName;
     }
 
-    public int getColunmIndexInSchema() {
-        return this.colunmIndexInSchema;
+    public int getColumnIndexInSchema() {
+        return this.columnIndexInSchema;
     }
 
     public DataType getDataType() {
