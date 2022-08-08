@@ -26,7 +26,8 @@ import com.starrocks.connector.flink.row.sink.StarRocksDelimiterParser;
 import com.starrocks.connector.flink.row.sink.StarRocksSinkOP;
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 
-import java.util.HashMap;
+import java.util.*;
+
 import org.apache.commons.codec.binary.Base64;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.config.RequestConfig;
@@ -42,9 +43,6 @@ import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -181,12 +179,16 @@ public class StarRocksStreamLoadVisitor implements Serializable {
     }
 
     private String getAvailableHost() {
-        List<String> hostList = sinkOptions.getLoadUrlList();
+        List<String> hostList = new ArrayList<>(sinkOptions.getLoadUrlList());
         long tmp = pos + hostList.size();
+        Random random = new Random();
         for (; pos < tmp; pos++) {
-            String host = new StringBuilder("http://").append(hostList.get((int) (pos % hostList.size()))).toString();
+            int index = random.nextInt(hostList.size());
+            String host = new StringBuilder("http://").append(hostList.get(index)).toString();
             if (tryHttpConnection(host)) {
                 return host;
+            } else {
+                hostList.remove(index);
             }
         }
         return null;
