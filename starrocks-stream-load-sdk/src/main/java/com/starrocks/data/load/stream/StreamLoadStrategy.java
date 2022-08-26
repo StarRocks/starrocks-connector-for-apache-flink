@@ -1,7 +1,8 @@
 package com.starrocks.data.load.stream;
 
-import com.alibaba.fastjson.JSON;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
+
+import com.alibaba.fastjson.JSON;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,9 +44,6 @@ public interface StreamLoadStrategy {
             int totalReadableRegion = 0;
             for (TableRegion region : regions) {
                 long age = region.getAndIncrementAge();
-                if (!region.isReadable()) {
-                    continue;
-                }
                 totalReadableRegion++;
                 if (age >= oldAge) {
                     waitFlushRegions.add(region);
