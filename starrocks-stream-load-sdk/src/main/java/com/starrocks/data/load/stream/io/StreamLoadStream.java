@@ -83,6 +83,7 @@ public class StreamLoadStream extends InputStream {
         }
 
         if (endStream || !buffer.hasRemaining()) {
+            buffer.flip();
             return;
         }
 
