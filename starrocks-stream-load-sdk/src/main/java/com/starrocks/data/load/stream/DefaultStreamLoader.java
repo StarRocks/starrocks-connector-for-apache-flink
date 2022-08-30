@@ -376,6 +376,9 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
     }
 
     protected String genLabel(TableRegion region) {
-        return properties.getLabelPrefix() + "-" + region.getUniqueKey() + "-" + UUID.randomUUID();
+        if (properties.getLabelPrefix() != null) {
+            return properties.getLabelPrefix() + UUID.randomUUID();
+        }
+        return UUID.randomUUID().toString();
     }
 }
