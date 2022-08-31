@@ -14,16 +14,7 @@
 
 package com.starrocks.connector.flink.table.source;
 
-import java.util.ArrayList;
-
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import java.util.stream.Collectors;
-
-import com.starrocks.connector.flink.table.source.struct.ColunmRichInfo;
-
+import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
 import com.starrocks.connector.flink.table.source.struct.QueryBeXTablets;
 import com.starrocks.connector.flink.table.source.struct.QueryInfo;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
@@ -36,15 +27,21 @@ import org.apache.flink.types.Row;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
 public class StarRocksDynamicLookupFunction extends TableFunction<RowData> {
     
     private static final Logger LOG = LoggerFactory.getLogger(StarRocksDynamicLookupFunction.class);
     
-    private final ColunmRichInfo[] filterRichInfos;
+    private final ColumnRichInfo[] filterRichInfos;
     private final StarRocksSourceOptions sourceOptions;
     private QueryInfo queryInfo;
     private final SelectColumn[] selectColumns;
-    private final List<ColunmRichInfo> columnRichInfos;
+    private final List<ColumnRichInfo> columnRichInfos;
     
     private final long cacheMaxSize;
     private final long cacheExpireMs;
@@ -56,8 +53,8 @@ public class StarRocksDynamicLookupFunction extends TableFunction<RowData> {
     private transient long nextLoadTime;
 
     public StarRocksDynamicLookupFunction(StarRocksSourceOptions sourceOptions, 
-                                          ColunmRichInfo[] filterRichInfos, 
-                                          List<ColunmRichInfo> columnRichInfos,
+                                          ColumnRichInfo[] filterRichInfos,
+                                          List<ColumnRichInfo> columnRichInfos,
                                           SelectColumn[] selectColumns
                                           ) {
         this.sourceOptions = sourceOptions;
@@ -83,9 +80,7 @@ public class StarRocksDynamicLookupFunction extends TableFunction<RowData> {
         Row keyRow = Row.of(keys);
         List<RowData> curList = cacheMap.get(keyRow);
         if (curList != null) {
-            curList.parallelStream().forEach(data -> {
-                collect(data);
-            });
+            curList.parallelStream().forEach(this::collect);
         }
     }
 
@@ -100,18 +95,19 @@ public class StarRocksDynamicLookupFunction extends TableFunction<RowData> {
         }
         cacheMap.clear();
         
-        StringBuffer sqlSb = new StringBuffer("select * from "); 
-        sqlSb.append("`" + sourceOptions.getDatabaseName() + "`");
+        StringBuilder sqlSb = new StringBuilder("select * from ");
+        sqlSb.append("`").append(sourceOptions.getDatabaseName()).append("`");
         sqlSb.append(".");
         sqlSb.append("`" + sourceOptions.getTableName() + "`");
         LOG.info("LookUpFunction SQL [{}]", sqlSb.toString());
         this.queryInfo = StarRocksSourceCommonFunc.getQueryInfo(this.sourceOptions, sqlSb.toString());
         List<List<QueryBeXTablets>> lists = StarRocksSourceCommonFunc.splitQueryBeXTablets(1, queryInfo);
         cacheMap = lists.get(0).parallelStream().flatMap(beXTablets -> {
-            StarRocksSourceBeReader beReader = new StarRocksSourceBeReader(beXTablets.getBeNode(), 
-                                                                           columnRichInfos, 
-                                                                           selectColumns, 
-                                                                           sourceOptions);
+            StarRocksSourceBeReader beReader = new StarRocksSourceBeReader(
+                    beXTablets.getBeNode(),
+                    columnRichInfos,
+                    selectColumns,
+                    sourceOptions);
             beReader.openScanner(beXTablets.getTabletIds(), queryInfo.getQueryPlan().getOpaqued_query_plan(), sourceOptions);
             beReader.startToRead();
             List<RowData> tmpDataList = new ArrayList<>();
@@ -122,9 +118,9 @@ public class StarRocksDynamicLookupFunction extends TableFunction<RowData> {
             return tmpDataList.stream();
         }).collect(Collectors.groupingBy(row -> {
             GenericRowData gRowData = (GenericRowData)row;
-            Object keyObj[] = new Object[filterRichInfos.length];
+            Object[] keyObj = new Object[filterRichInfos.length];
             for (int i = 0; i < filterRichInfos.length; i ++) {
-                keyObj[i] = gRowData.getField(filterRichInfos[i].getColunmIndexInSchema());
+                keyObj[i] = gRowData.getField(filterRichInfos[i].getColumnIndexInSchema());
             }
             return Row.of(keyObj);
         }));
