@@ -14,6 +14,12 @@
 
 package com.starrocks.connector.flink.table.sink;
 
+import com.starrocks.connector.flink.manager.StarRocksSinkTable;
+import com.starrocks.connector.flink.row.sink.StarRocksDelimiterParser;
+import com.starrocks.data.load.stream.StreamLoadDataFormat;
+import com.starrocks.data.load.stream.properties.StreamLoadProperties;
+import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
+
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
@@ -21,8 +27,11 @@ import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.table.api.ValidationException;
 import org.apache.flink.table.factories.FactoryUtil;
 import org.apache.flink.util.Preconditions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -32,8 +41,10 @@ import java.util.List;
 
 public class StarRocksSinkOptions implements Serializable {
 
-    private static final long serialVersionUID = 1l;
-    private static final long KILO_BYTES_SCALE = 1024l;
+    private static final Logger log = LoggerFactory.getLogger(StarRocksSinkOptions.class);
+
+    private static final long serialVersionUID = 1L;
+    private static final long KILO_BYTES_SCALE = 1024L;
     private static final long MEGA_BYTES_SCALE = KILO_BYTES_SCALE * KILO_BYTES_SCALE;
     private static final long GIGA_BYTES_SCALE = MEGA_BYTES_SCALE * KILO_BYTES_SCALE;
 
@@ -42,40 +53,42 @@ public class StarRocksSinkOptions implements Serializable {
     }
 
     private static final String FORMAT_KEY = "format";
-    
+
     // required sink configurations
     public static final ConfigOption<String> JDBC_URL = ConfigOptions.key("jdbc-url")
-        .stringType().noDefaultValue().withDescription("Host of the stream load like: `jdbc:mysql://fe_ip1:query_port,fe_ip2:query_port...`.");
+            .stringType().noDefaultValue().withDescription("Host of the stream load like: `jdbc:mysql://fe_ip1:query_port,fe_ip2:query_port...`.");
     public static final ConfigOption<List<String>> LOAD_URL = ConfigOptions.key("load-url")
-        .stringType().asList().noDefaultValue().withDescription("Host of the stream load like: `fe_ip1:http_port;fe_ip2:http_port;fe_ip3:http_port`.");
+            .stringType().asList().noDefaultValue().withDescription("Host of the stream load like: `fe_ip1:http_port;fe_ip2:http_port;fe_ip3:http_port`.");
     public static final ConfigOption<String> DATABASE_NAME = ConfigOptions.key("database-name")
-        .stringType().noDefaultValue().withDescription("Database name of the stream load.");
+            .stringType().noDefaultValue().withDescription("Database name of the stream load.");
     public static final ConfigOption<String> TABLE_NAME = ConfigOptions.key("table-name")
-        .stringType().noDefaultValue().withDescription("Table name of the stream load.");
+            .stringType().noDefaultValue().withDescription("Table name of the stream load.");
     public static final ConfigOption<String> USERNAME = ConfigOptions.key("username")
-        .stringType().noDefaultValue().withDescription("StarRocks user name.");
+            .stringType().noDefaultValue().withDescription("StarRocks user name.");
     public static final ConfigOption<String> PASSWORD = ConfigOptions.key("password")
-        .stringType().noDefaultValue().withDescription("StarRocks user password.");
+            .stringType().noDefaultValue().withDescription("StarRocks user password.");
 
     // optional sink configurations
     public static final ConfigOption<String> SINK_LABEL_PREFIX = ConfigOptions.key("sink.label-prefix")
-        .stringType().noDefaultValue().withDescription("The prefix of the stream load label. Available values are within [-_A-Za-z0-9]");
+            .stringType().noDefaultValue().withDescription("The prefix of the stream load label. Available values are within [-_A-Za-z0-9]");
     public static final ConfigOption<Integer> SINK_CONNECT_TIMEOUT = ConfigOptions.key("sink.connect.timeout-ms")
-        .intType().defaultValue(1000).withDescription("Timeout in millisecond for connecting to the `load-url`.");
+            .intType().defaultValue(1000).withDescription("Timeout in millisecond for connecting to the `load-url`.");
+    public static final ConfigOption<Integer> SINK_IO_THREAD_COUNT = ConfigOptions.key("sink.io.thread-count")
+            .intType().defaultValue(Runtime.getRuntime().availableProcessors()).withDescription("Stream load thread count");
     public static final ConfigOption<String> SINK_SEMANTIC = ConfigOptions.key("sink.semantic")
-        .stringType().defaultValue(StarRocksSinkSemantic.AT_LEAST_ONCE.getName()).withDescription("Fault tolerance guarantee. `at-least-once` or `exactly-once`");
+            .stringType().defaultValue(StarRocksSinkSemantic.AT_LEAST_ONCE.getName()).withDescription("Fault tolerance guarantee. `at-least-once` or `exactly-once`");
     public static final ConfigOption<Long> SINK_BATCH_MAX_SIZE = ConfigOptions.key("sink.buffer-flush.max-bytes")
-        .longType().defaultValue(90L * MEGA_BYTES_SCALE).withDescription("Max data bytes of the flush.");
+            .longType().defaultValue(90L * MEGA_BYTES_SCALE).withDescription("Max data bytes of the flush.");
     public static final ConfigOption<Long> SINK_BATCH_MAX_ROWS = ConfigOptions.key("sink.buffer-flush.max-rows")
-        .longType().defaultValue(500000L).withDescription("Max row count of the flush.");
+            .longType().defaultValue(500000L).withDescription("Max row count of the flush.");
     public static final ConfigOption<Long> SINK_BATCH_FLUSH_INTERVAL = ConfigOptions.key("sink.buffer-flush.interval-ms")
-        .longType().defaultValue(300000L).withDescription("Flush interval of the row batch in millisecond.");
+            .longType().defaultValue(300000L).withDescription("Flush interval of the row batch in millisecond.");
     public static final ConfigOption<Integer> SINK_MAX_RETRIES = ConfigOptions.key("sink.max-retries")
-        .intType().defaultValue(3).withDescription("Max flushing retry times of the row batch.");
+            .intType().defaultValue(3).withDescription("Max flushing retry times of the row batch.");
     public static final ConfigOption<Long> SINK_BATCH_OFFER_TIMEOUT = ConfigOptions.key("sink.buffer-flush.enqueue-timeout-ms")
-        .longType().defaultValue(600000L).withDescription("Offer to flushQueue timeout in millisecond.");
+            .longType().defaultValue(600000L).withDescription("Offer to flushQueue timeout in millisecond.");
     public static final ConfigOption<Integer> SINK_METRIC_HISTOGRAM_WINDOW_SIZE = ConfigOptions.key("sink.metric.histogram-window-size")
-        .intType().defaultValue(100).withDescription("Window size of histogram metrics.");
+            .intType().defaultValue(100).withDescription("Window size of histogram metrics.");
 
     public static final ConfigOption<Integer> SINK_PARALLELISM = FactoryUtil.SINK_PARALLELISM;
 
@@ -90,12 +103,18 @@ public class StarRocksSinkOptions implements Serializable {
     private StarRocksSinkSemantic sinkSemantic;
     private boolean supportUpsertDelete;
 
+    private final List<StreamLoadTableProperties> tablePropertiesList = new ArrayList<>();
+
     public StarRocksSinkOptions(ReadableConfig options, Map<String, String> optionsMap) {
         this.tableOptions = options;
-        // Can not promise the input parameter optionsMap is serializable. Use the HashMap to copy the data.
-        this.tableOptionsMap = new HashMap<>(optionsMap);
+        this.tableOptionsMap = optionsMap;
         parseSinkStreamLoadProperties();
         this.validate();
+    }
+
+    public StarRocksSinkOptions addTableProperties(StreamLoadTableProperties tableProperties) {
+        tablePropertiesList.add(tableProperties);
+        return this;
     }
 
     private void validate() {
@@ -104,7 +123,7 @@ public class StarRocksSinkOptions implements Serializable {
         validateSinkSemantic();
         validateParamsRange();
     }
-    
+
     public String getJdbcUrl() {
         return tableOptions.get(JDBC_URL);
     }
@@ -128,40 +147,41 @@ public class StarRocksSinkOptions implements Serializable {
     public List<String> getLoadUrlList() {
         return tableOptions.getOptional(LOAD_URL).orElse(null);
     }
-    
+
     public String getLabelPrefix() {
         return tableOptions.getOptional(SINK_LABEL_PREFIX).orElse(null);
     }
 
     public int getSinkMaxRetries() {
-        return tableOptions.get(SINK_MAX_RETRIES).intValue();
+        return tableOptions.get(SINK_MAX_RETRIES);
     }
 
     public long getSinkMaxFlushInterval() {
-        return tableOptions.get(SINK_BATCH_FLUSH_INTERVAL).longValue();
+        return tableOptions.get(SINK_BATCH_FLUSH_INTERVAL);
     }
 
     public long getSinkMaxRows() {
-        return tableOptions.get(SINK_BATCH_MAX_ROWS).longValue();
+        return tableOptions.get(SINK_BATCH_MAX_ROWS);
     }
 
     public long getSinkMaxBytes() {
-        return tableOptions.get(SINK_BATCH_MAX_SIZE).longValue();
+        return tableOptions.get(SINK_BATCH_MAX_SIZE);
     }
 
     public int getConnectTimeout() {
-        int connectTimeout = tableOptions.get(SINK_CONNECT_TIMEOUT).intValue();
+        int connectTimeout = tableOptions.get(SINK_CONNECT_TIMEOUT);
         if (connectTimeout < 100) {
             return 100;
         }
-        if (connectTimeout > 60000) {
-            return 60000;
-        }
-        return connectTimeout;
+        return Math.min(connectTimeout, 60000);
+    }
+
+    public int getIoThreadCount() {
+        return tableOptions.get(SINK_IO_THREAD_COUNT);
     }
 
     public long getSinkOfferTimeout() {
-        return tableOptions.get(SINK_BATCH_OFFER_TIMEOUT).longValue();
+        return tableOptions.get(SINK_BATCH_OFFER_TIMEOUT);
     }
 
     public int getSinkHistogramWindowSize() {
@@ -175,7 +195,7 @@ public class StarRocksSinkOptions implements Serializable {
     public static Builder builder() {
         return new Builder();
     }
-    
+
     public StarRocksSinkSemantic getSemantic() {
         return this.sinkSemantic;
     }
@@ -191,7 +211,7 @@ public class StarRocksSinkOptions implements Serializable {
     public StreamLoadFormat getStreamLoadFormat() {
         Map<String, String> loadProsp = getSinkStreamLoadProperties();
         String format = loadProsp.get(FORMAT_KEY);
-        if (null != format && StreamLoadFormat.JSON.name().equalsIgnoreCase(format)) {
+        if (StreamLoadFormat.JSON.name().equalsIgnoreCase(format)) {
             return StreamLoadFormat.JSON;
         }
         return StreamLoadFormat.CSV;
@@ -210,9 +230,9 @@ public class StarRocksSinkOptions implements Serializable {
             for (String host : urlList) {
                 if (host.split(":").length < 2) {
                     throw new ValidationException(String.format(
-                        "Could not parse host '%s' in option '%s'. It should follow the format 'host_name:port'.",
-                        host,
-                        LOAD_URL.key()));
+                            "Could not parse host '%s' in option '%s'. It should follow the format 'host_name:port'.",
+                            host,
+                            LOAD_URL.key()));
                 }
             }
         });
@@ -222,8 +242,8 @@ public class StarRocksSinkOptions implements Serializable {
         tableOptions.getOptional(SINK_SEMANTIC).ifPresent(semantic -> {
             if (!SINK_SEMANTIC_ENUMS.contains(semantic)){
                 throw new ValidationException(
-                    String.format("Unsupported value '%s' for '%s'. Supported values are ['at-least-once', 'exactly-once'].",
-                        semantic, SINK_SEMANTIC.key()));
+                        String.format("Unsupported value '%s' for '%s'. Supported values are ['at-least-once', 'exactly-once'].",
+                                semantic, SINK_SEMANTIC.key()));
             }
         });
         this.sinkSemantic = StarRocksSinkSemantic.fromName(tableOptions.get(SINK_SEMANTIC));
@@ -231,50 +251,50 @@ public class StarRocksSinkOptions implements Serializable {
 
     private void validateParamsRange() {
         tableOptions.getOptional(SINK_MAX_RETRIES).ifPresent(val -> {
-            if (val.intValue() < 0 || val.intValue() > 1000) {
+            if (val < 0 || val > 1000) {
                 throw new ValidationException(
-                    String.format("Unsupported value '%d' for '%s'. Supported value range: [0, 1000].",
-                        val, SINK_MAX_RETRIES.key()));
+                        String.format("Unsupported value '%d' for '%s'. Supported value range: [0, 1000].",
+                                val, SINK_MAX_RETRIES.key()));
             }
         });
         tableOptions.getOptional(SINK_BATCH_FLUSH_INTERVAL).ifPresent(val -> {
-            if (val.longValue() < 1000l || val.longValue() > 3600000l) {
+            if (val < 1000L || val > 3600000L) {
                 throw new ValidationException(
-                    String.format("Unsupported value '%d' for '%s'. Supported value range: [1000, 3600000].",
-                        val, SINK_BATCH_FLUSH_INTERVAL.key()));
+                        String.format("Unsupported value '%d' for '%s'. Supported value range: [1000, 3600000].",
+                                val, SINK_BATCH_FLUSH_INTERVAL.key()));
             }
         });
         tableOptions.getOptional(SINK_BATCH_MAX_ROWS).ifPresent(val -> {
-            if (val.longValue() < 64000 || val.longValue() > 5000000) {
+            if (val < 64000 || val > 5000000) {
                 throw new ValidationException(
-                    String.format("Unsupported value '%d' for '%s'. Supported value range: [64000, 5000000].",
-                        val, SINK_BATCH_MAX_ROWS.key()));
+                        String.format("Unsupported value '%d' for '%s'. Supported value range: [64000, 5000000].",
+                                val, SINK_BATCH_MAX_ROWS.key()));
             }
         });
         tableOptions.getOptional(SINK_BATCH_MAX_SIZE).ifPresent(val -> {
-            if (val.longValue() < 64 * MEGA_BYTES_SCALE || val.longValue() > 10 * GIGA_BYTES_SCALE) {
+            if (val < 64 * MEGA_BYTES_SCALE || val > 10 * GIGA_BYTES_SCALE) {
                 throw new ValidationException(
-                    String.format("Unsupported value '%d' for '%s'. Supported value range: [%d, %d].",
-                        val, SINK_BATCH_MAX_SIZE.key(), 64 * MEGA_BYTES_SCALE, 10 * GIGA_BYTES_SCALE));
+                        String.format("Unsupported value '%d' for '%s'. Supported value range: [%d, %d].",
+                                val, SINK_BATCH_MAX_SIZE.key(), 64 * MEGA_BYTES_SCALE, 10 * GIGA_BYTES_SCALE));
             }
         });
         tableOptions.getOptional(SINK_BATCH_OFFER_TIMEOUT).ifPresent(val -> {
-            if (val.longValue() < 300000 || val.longValue() > Long.MAX_VALUE) {
+            if (val < 300000) {
                 throw new ValidationException(
-                    String.format("Unsupported value '%d' for '%s'. Supported value range: [300000, Long.MAX_VALUE].",
-                        val, SINK_BATCH_OFFER_TIMEOUT.key()));
+                        String.format("Unsupported value '%d' for '%s'. Supported value range: [300000, Long.MAX_VALUE].",
+                                val, SINK_BATCH_OFFER_TIMEOUT.key()));
             }
         });
     }
 
     private void validateRequired() {
         ConfigOption<?>[] configOptions = new ConfigOption[]{
-            USERNAME,
-            PASSWORD,
-            TABLE_NAME,
-            DATABASE_NAME,
-            JDBC_URL,
-            LOAD_URL
+                USERNAME,
+                PASSWORD,
+                TABLE_NAME,
+                DATABASE_NAME,
+                JDBC_URL,
+                LOAD_URL
         };
         int presentCount = 0;
         for (ConfigOption<?> configOption : configOptions) {
@@ -284,22 +304,22 @@ public class StarRocksSinkOptions implements Serializable {
         }
         String[] propertyNames = Arrays.stream(configOptions).map(ConfigOption::key).toArray(String[]::new);
         Preconditions.checkArgument(configOptions.length == presentCount || presentCount == 0,
-            "Either all or none of the following options should be provided:\n" + String.join("\n", propertyNames));
+                "Either all or none of the following options should be provided:\n" + String.join("\n", propertyNames));
     }
 
     private void parseSinkStreamLoadProperties() {
         tableOptionsMap.keySet().stream()
-            .filter(key -> key.startsWith(SINK_PROPERTIES_PREFIX))
-            .forEach(key -> {
-                final String value = tableOptionsMap.get(key);
-                final String subKey = key.substring((SINK_PROPERTIES_PREFIX).length()).toLowerCase();
-                streamLoadProps.put(subKey, value);
-            });
+                .filter(key -> key.startsWith(SINK_PROPERTIES_PREFIX))
+                .forEach(key -> {
+                    final String value = tableOptionsMap.get(key);
+                    final String subKey = key.substring((SINK_PROPERTIES_PREFIX).length()).toLowerCase();
+                    streamLoadProps.put(subKey, value);
+                });
     }
 
     /**
-    * Builder for {@link StarRocksSinkOptions}.
-    */
+     * Builder for {@link StarRocksSinkOptions}.
+     */
     public static final class Builder {
         private final Configuration conf;
         public Builder() {
@@ -314,6 +334,56 @@ public class StarRocksSinkOptions implements Serializable {
         public StarRocksSinkOptions build() {
             return new StarRocksSinkOptions(conf, conf.toMap());
         }
+    }
+
+    public StreamLoadProperties getProperties() {
+        StarRocksSinkTable sinkTable = StarRocksSinkTable.builder()
+                .sinkOptions(this)
+                .build();
+
+        StreamLoadDataFormat dataFormat;
+        if (getStreamLoadFormat() == StarRocksSinkOptions.StreamLoadFormat.CSV) {
+            dataFormat = new StreamLoadDataFormat.CSVFormat(StarRocksDelimiterParser
+                    .parse(getSinkStreamLoadProperties().get("row_delimiter"), "\n"));
+        } else if (getStreamLoadFormat() == StarRocksSinkOptions.StreamLoadFormat.JSON) {
+            dataFormat = StreamLoadDataFormat.JSON;
+        } else {
+            throw new RuntimeException("data format are not support");
+        }
+
+        StreamLoadTableProperties.Builder defaultTablePropertiesBuilder = StreamLoadTableProperties.builder()
+                .database(getDatabaseName())
+                .table(getTableName())
+                .streamLoadDataFormat(dataFormat)
+                .enableUpsertDelete(supportUpsertDelete());
+
+        if (hasColumnMappingProperty()) {
+            defaultTablePropertiesBuilder.columns(streamLoadProps.get("columns"));
+        }
+
+        StreamLoadProperties.Builder builder = StreamLoadProperties.builder()
+                .loadUrls(getLoadUrlList().toArray(new String[0]))
+                .jdbcUrl(getJdbcUrl())
+                .defaultTableProperties(defaultTablePropertiesBuilder.build())
+                .cacheMaxBytes(getSinkMaxBytes())
+                .connectTimeout(getConnectTimeout())
+                .ioThreadCount(getIoThreadCount())
+                .labelPrefix(getLabelPrefix())
+                .username(getUsername())
+                .password(getPassword())
+                .version(sinkTable.getVersion())
+                .expectDelayTime(getSinkMaxFlushInterval())
+                .addHeaders(getSinkStreamLoadProperties());
+
+        for (StreamLoadTableProperties tableProperties : tablePropertiesList) {
+            builder.addTableProperties(tableProperties);
+        }
+
+        if (getSemantic() == StarRocksSinkSemantic.EXACTLY_ONCE) {
+            builder.enableTransaction();
+            log.info("Enable transaction stream load");
+        }
+        return builder.build();
     }
 
 }
