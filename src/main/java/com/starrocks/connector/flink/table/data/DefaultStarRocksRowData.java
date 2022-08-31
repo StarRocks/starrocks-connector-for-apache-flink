@@ -43,21 +43,21 @@ public class DefaultStarRocksRowData implements StarRocksRowData {
 
     @Override
     public String getUniqueKey() {
-        return null;
+        return uniqueKey;
     }
 
     @Override
     public String getDatabase() {
-        return null;
+        return database;
     }
 
     @Override
     public String getTable() {
-        return null;
+        return table;
     }
 
     @Override
     public String getRow() {
-        return null;
+        return row;
     }
 }

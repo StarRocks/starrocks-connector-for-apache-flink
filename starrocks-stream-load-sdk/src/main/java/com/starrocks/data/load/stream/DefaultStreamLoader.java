@@ -273,7 +273,9 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
 
                 String status = streamLoadBody.getStatus();
 
-                if (StreamLoadConstants.RESULT_STATUS_SUCCESS.equals(status) || StreamLoadConstants.RESULT_STATUS_OK.equals(status)) {
+                if (StreamLoadConstants.RESULT_STATUS_SUCCESS.equals(status)
+                        || StreamLoadConstants.RESULT_STATUS_OK.equals(status)
+                        || StreamLoadConstants.RESULT_STATUS_TRANSACTION_PUBLISH_TIMEOUT.equals(status)) {
                     streamLoadResponse.setCostNanoTime(System.nanoTime() - startNanoTime);
                     region.complete(streamLoadResponse);
                 } else if (StreamLoadConstants.RESULT_STATUS_LABEL_EXISTED.equals(status)) {
