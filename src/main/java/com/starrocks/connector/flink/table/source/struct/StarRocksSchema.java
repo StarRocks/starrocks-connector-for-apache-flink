@@ -43,8 +43,8 @@ public class StarRocksSchema {
         schemaMap.put(column.getName(), column);
     }
 
-    public Column get(String colunmName) {
-        return schemaMap.get(colunmName);
+    public Column get(String columnName) {
+        return schemaMap.get(columnName);
     }
 
     public int size() {
@@ -53,7 +53,7 @@ public class StarRocksSchema {
 
     public static StarRocksSchema genSchema(List<TScanColumnDesc> tscanColumnDescs) {
         StarRocksSchema schema = new StarRocksSchema();
-        tscanColumnDescs.stream().forEach(desc -> schema.put(
+        tscanColumnDescs.forEach(desc -> schema.put(
             new Column(desc.getName(), desc.getType().name(), "", 0, 0))
         );
         return schema;
