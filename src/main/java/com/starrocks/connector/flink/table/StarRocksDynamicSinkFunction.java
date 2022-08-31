@@ -66,7 +66,7 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
 
     // state only works with `StarRocksSinkSemantic.EXACTLY_ONCE`
     private transient ListState<Map<String, StarRocksSinkBufferEntity>> checkpointedState;
- 
+
     public StarRocksDynamicSinkFunction(StarRocksSinkOptions sinkOptions, TableSchema schema, StarRocksIRowTransformer<T> rowTransformer) {
         StarRocksJdbcConnectionOptions jdbcOptions = new StarRocksJdbcConnectionOptions(sinkOptions.getJdbcUrl(), sinkOptions.getUsername(), sinkOptions.getPassword());
         StarRocksJdbcConnectionProvider jdbcConnProvider = new StarRocksJdbcConnectionProvider(jdbcOptions);
@@ -79,12 +79,12 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
         this.rowTransformer = rowTransformer;
         this.sinkOptions = sinkOptions;
     }
- 
+
     public StarRocksDynamicSinkFunction(StarRocksSinkOptions sinkOptions) {
         this.sinkManager = new StarRocksSinkManager(sinkOptions, null);
         this.sinkOptions = sinkOptions;
     }
- 
+
     @Override
     public void open(Configuration parameters) throws Exception {
         super.open(parameters);
@@ -130,10 +130,10 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
             byte[] data = new byte[totalSize - headerSize];
             ddlData.getSegments()[0].get(headerSize, data);
             Map<String, String> ddlMap = InstantiationUtil.deserializeObject(data, HashMap.class.getClassLoader());
-            if (null == ddlMap 
-                || "true".equals(ddlMap.get("snapshot"))
-                || Strings.isNullOrEmpty(ddlMap.get("ddl"))
-                || Strings.isNullOrEmpty(ddlMap.get("databaseName"))) {
+            if (null == ddlMap
+                    || "true".equals(ddlMap.get("snapshot"))
+                    || Strings.isNullOrEmpty(ddlMap.get("ddl"))
+                    || Strings.isNullOrEmpty(ddlMap.get("databaseName"))) {
                 return;
             }
             Statement stmt = CCJSqlParserUtil.parse(ddlMap.get("ddl"));
@@ -158,9 +158,9 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
             }
         }
         sinkManager.writeRecords(
-            sinkOptions.getDatabaseName(),
-            sinkOptions.getTableName(),
-            serializer.serialize(rowTransformer.transform(value, sinkOptions.supportUpsertDelete()))
+                sinkOptions.getDatabaseName(),
+                sinkOptions.getTableName(),
+                serializer.serialize(rowTransformer.transform(value, sinkOptions.supportUpsertDelete()))
         );
         totalInvokeRows.inc(1);
         totalInvokeRowsTime.inc(System.nanoTime() - start);
@@ -172,10 +172,10 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
             return;
         }
         ListStateDescriptor<Map<String, StarRocksSinkBufferEntity>> descriptor =
-            new ListStateDescriptor<>(
-                "buffered-rows",
-                TypeInformation.of(new TypeHint<Map<String, StarRocksSinkBufferEntity>>(){})
-            );
+                new ListStateDescriptor<>(
+                        "buffered-rows",
+                        TypeInformation.of(new TypeHint<Map<String, StarRocksSinkBufferEntity>>(){})
+                );
         checkpointedState = context.getOperatorStateStore().getListState(descriptor);
     }
 
