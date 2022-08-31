@@ -34,7 +34,7 @@ public class StarRocksDynamicTableSinkFactory implements DynamicTableSinkFactory
         // validate some special properties
         StarRocksSinkOptions sinkOptions = new StarRocksSinkOptions(options, context.getCatalogTable().getOptions());
         TableSchema physicalSchema = TableSchemaUtils.getPhysicalSchema(context.getCatalogTable().getSchema());
-        return new StarRocksDynamicTableSink(sinkOptions, physicalSchema);
+        return new StarRocksDynamicTableSinkV2(sinkOptions, physicalSchema);
     }
 
     @Override
@@ -65,6 +65,7 @@ public class StarRocksDynamicTableSinkFactory implements DynamicTableSinkFactory
         optionalOptions.add(StarRocksSinkOptions.SINK_BATCH_OFFER_TIMEOUT);
         optionalOptions.add(StarRocksSinkOptions.SINK_LABEL_PREFIX);
         optionalOptions.add(StarRocksSinkOptions.SINK_CONNECT_TIMEOUT);
+        optionalOptions.add(StarRocksSinkOptions.SINK_IO_THREAD_COUNT);
         return optionalOptions;
     }
 }
