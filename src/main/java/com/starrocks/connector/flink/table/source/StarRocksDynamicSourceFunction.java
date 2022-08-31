@@ -14,12 +14,12 @@
 
 package com.starrocks.connector.flink.table.source;
 
-import com.google.common.base.Strings;
-import com.starrocks.connector.flink.table.source.struct.ColunmRichInfo;
 import com.starrocks.connector.flink.table.source.struct.QueryBeXTablets;
 import com.starrocks.connector.flink.table.source.struct.QueryInfo;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
+import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
 
+import com.google.common.base.Strings;
 import org.apache.flink.api.common.typeinfo.TypeHint;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
@@ -27,7 +27,6 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.streaming.api.functions.source.RichParallelSourceFunction;
 import org.apache.flink.table.api.TableSchema;
-
 import org.apache.flink.table.data.RowData;
 
 import java.util.ArrayList;
@@ -40,7 +39,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
     private QueryInfo queryInfo;
     private Long dataCount;
     private final SelectColumn[] selectColumns;
-    private final List<ColunmRichInfo> colunmRichInfos;
+    private final List<ColumnRichInfo> columnRichInfos;
     private List<StarRocksSourceDataReader> dataReaderList;
     
     private StarRocksSourceQueryType queryType;
@@ -51,8 +50,8 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
     public StarRocksDynamicSourceFunction(TableSchema flinkSchema, StarRocksSourceOptions sourceOptions) {
         // StarRocksSourceCommonFunc.validateTableStructure(sourceOptions, flinkSchema);
         this.sourceOptions = sourceOptions;
-        Map<String, ColunmRichInfo> columnMap = StarRocksSourceCommonFunc.genColumnMap(flinkSchema);
-        this.colunmRichInfos = StarRocksSourceCommonFunc.genColunmRichInfo(columnMap);
+        Map<String, ColumnRichInfo> columnMap = StarRocksSourceCommonFunc.genColumnMap(flinkSchema);
+        this.columnRichInfos = StarRocksSourceCommonFunc.genColumnRichInfo(columnMap);
         String SQL = genSQL(sourceOptions);
         if (this.sourceOptions.getColumns().trim().toLowerCase().contains("count(")) {
             this.queryType = StarRocksSourceQueryType.QueryCount;
@@ -60,7 +59,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
             this.selectColumns = null;
         } else {
             this.queryInfo = StarRocksSourceCommonFunc.getQueryInfo(this.sourceOptions, SQL);
-            this.selectColumns = StarRocksSourceCommonFunc.genSelectedColumns(columnMap, sourceOptions, colunmRichInfos);
+            this.selectColumns = StarRocksSourceCommonFunc.genSelectedColumns(columnMap, sourceOptions, columnRichInfos);
         }
         this.dataReaderList = new ArrayList<>();
     }
@@ -69,11 +68,11 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
                                             String filter, long limit, SelectColumn[] selectColumns, String columns, StarRocksSourceQueryType queryType) {
         // StarRocksSourceCommonFunc.validateTableStructure(sourceOptions, flinkSchema);
         this.sourceOptions = sourceOptions;
-        Map<String, ColunmRichInfo> columnMap = StarRocksSourceCommonFunc.genColumnMap(flinkSchema);
-        this.colunmRichInfos = StarRocksSourceCommonFunc.genColunmRichInfo(columnMap);
+        Map<String, ColumnRichInfo> columnMap = StarRocksSourceCommonFunc.genColumnMap(flinkSchema);
+        this.columnRichInfos = StarRocksSourceCommonFunc.genColumnRichInfo(columnMap);
         if (queryType == null) {
             queryType = StarRocksSourceQueryType.QueryAllColumns;
-            this.selectColumns = StarRocksSourceCommonFunc.genSelectedColumns(columnMap, sourceOptions, colunmRichInfos);
+            this.selectColumns = StarRocksSourceCommonFunc.genSelectedColumns(columnMap, sourceOptions, columnRichInfos);
         } else {
             this.selectColumns = selectColumns;
         }
@@ -90,14 +89,12 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
     private String genSQL(StarRocksSourceOptions options) {
         String columns = options.getColumns().isEmpty() ? "*" : options.getColumns();
         String filter = options.getFilter().isEmpty() ? "" : " where " + options.getFilter();
-        StringBuilder sqlSb = new StringBuilder("select ");
-        sqlSb.append(columns);
-        sqlSb.append(" from ");
-        sqlSb.append("`" + sourceOptions.getDatabaseName() + "`");
-        sqlSb.append(".");
-        sqlSb.append("`" + sourceOptions.getTableName() + "`");
-        sqlSb.append(filter);
-        return sqlSb.toString();
+        return "select " + columns +
+                " from " +
+                "`" + sourceOptions.getDatabaseName() + "`" +
+                "." +
+                "`" + sourceOptions.getTableName() + "`" +
+                filter;
     }
 
     private String genSQL(StarRocksSourceQueryType queryType, String columns, String filter, long limit) {
@@ -114,9 +111,9 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
             break;
         }
         sqlSb.append(" from ");
-        sqlSb.append("`" + sourceOptions.getDatabaseName() + "`");
+        sqlSb.append("`").append(sourceOptions.getDatabaseName()).append("`");
         sqlSb.append(".");
-        sqlSb.append("`" + sourceOptions.getTableName() + "`");
+        sqlSb.append("`").append(sourceOptions.getTableName()).append("`");
         if (!Strings.isNullOrEmpty(filter)) {
             sqlSb.append(" where ");
             sqlSb.append(filter);
@@ -143,7 +140,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
         } else {
             List<List<QueryBeXTablets>> lists = StarRocksSourceCommonFunc.splitQueryBeXTablets(getRuntimeContext().getNumberOfParallelSubtasks(), queryInfo);
             lists.get(subTaskId).forEach(beXTablets -> {
-                StarRocksSourceBeReader beReader = new StarRocksSourceBeReader(beXTablets.getBeNode(), colunmRichInfos, selectColumns, sourceOptions);
+                StarRocksSourceBeReader beReader = new StarRocksSourceBeReader(beXTablets.getBeNode(), columnRichInfos, selectColumns, sourceOptions);
                 beReader.openScanner(beXTablets.getTabletIds(), queryInfo.getQueryPlan().getOpaqued_query_plan(), sourceOptions);
                 beReader.startToRead();
                 this.dataReaderList.add(beReader);

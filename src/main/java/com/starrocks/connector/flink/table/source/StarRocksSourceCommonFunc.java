@@ -14,33 +14,33 @@
 
 package com.starrocks.connector.flink.table.source;
 
+import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionOptions;
+import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
+import com.starrocks.connector.flink.manager.StarRocksQueryPlanVisitor;
+import com.starrocks.connector.flink.manager.StarRocksQueryVisitor;
+import com.starrocks.connector.flink.table.source.struct.QueryBeXTablets;
+import com.starrocks.connector.flink.table.source.struct.QueryInfo;
+import com.starrocks.connector.flink.table.source.struct.SelectColumn;
+import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
+
+import org.apache.flink.table.api.TableColumn;
+import org.apache.flink.table.api.TableSchema;
+
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionOptions;
-import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
-import com.starrocks.connector.flink.manager.StarRocksQueryPlanVisitor;
-import com.starrocks.connector.flink.manager.StarRocksQueryVisitor;
-import com.starrocks.connector.flink.table.source.struct.ColunmRichInfo;
-import com.starrocks.connector.flink.table.source.struct.QueryBeXTablets;
-import com.starrocks.connector.flink.table.source.struct.QueryInfo;
-import com.starrocks.connector.flink.table.source.struct.SelectColumn;
-
-import org.apache.flink.table.api.TableColumn;
-import org.apache.flink.table.api.TableSchema;
-
 
 public class StarRocksSourceCommonFunc {
     
-    private static StarRocksQueryVisitor starrocksQueryVisitor;
+    private static volatile StarRocksQueryVisitor starrocksQueryVisitor;
 
-    private static StarRocksQueryPlanVisitor starRocksQueryPlanVisitor;
+    private static volatile StarRocksQueryPlanVisitor starRocksQueryPlanVisitor;
     
 
     private static StarRocksQueryVisitor getStarRocksQueryVisitor(StarRocksSourceOptions sourceOptions) {
@@ -81,7 +81,7 @@ public class StarRocksSourceCommonFunc {
         int beXTabletsListCount = queryInfo.getBeXTablets().size();
         if (subTaskCount == beXTabletsListCount) {
             for (int i = 0; i < beXTabletsListCount; i ++) {
-                curBeXTabletList.set(i, Arrays.asList(queryInfo.getBeXTablets().get(i)));
+                curBeXTabletList.set(i, Collections.singletonList(queryInfo.getBeXTablets().get(i)));
             }
             return curBeXTabletList;
         } 
@@ -96,14 +96,14 @@ public class StarRocksSourceCommonFunc {
         List<QueryBeXTablets> beWithSingleTabletList = new ArrayList<>();
         queryInfo.getBeXTablets().forEach(beXTablets -> {
             beXTablets.getTabletIds().forEach(tabletId -> {
-                QueryBeXTablets beXOnlyOneTablets = new QueryBeXTablets(beXTablets.getBeNode(), Arrays.asList(tabletId));
+                QueryBeXTablets beXOnlyOneTablets = new QueryBeXTablets(beXTablets.getBeNode(), Collections.singletonList(tabletId));
                 beWithSingleTabletList.add(beXOnlyOneTablets);
             });
         });
         double x = (double)beWithSingleTabletList.size()/subTaskCount;
         if (x <= 1) {
             for (int i = 0; i < beWithSingleTabletList.size(); i ++) {
-                curBeXTabletList.set(i, Arrays.asList(beWithSingleTabletList.get(i)));
+                curBeXTabletList.set(i, Collections.singletonList(beWithSingleTabletList.get(i)));
             }
             return curBeXTabletList;
         } 
@@ -159,42 +159,41 @@ public class StarRocksSourceCommonFunc {
         return starrocksQueryVisitor.getQueryCount(SQL);
     }
 
-    public static Map<String, ColunmRichInfo> genColumnMap(TableSchema flinkSchema) {
-        Map<String, ColunmRichInfo> columnMap = new HashMap<>();
+    public static Map<String, ColumnRichInfo> genColumnMap(TableSchema flinkSchema) {
+        Map<String, ColumnRichInfo> columnMap = new HashMap<>();
         List<TableColumn> flinkColumns = flinkSchema.getTableColumns();
         for (int i = 0; i < flinkColumns.size(); i++) {
             TableColumn column = flinkColumns.get(i);
-            ColunmRichInfo colunmRichInfo = new ColunmRichInfo(column.getName(), i, column.getType());
-            columnMap.put(column.getName(), colunmRichInfo);
+            ColumnRichInfo columnRichInfo = new ColumnRichInfo(column.getName(), i, column.getType());
+            columnMap.put(column.getName(), columnRichInfo);
         }
         return columnMap;
     }
 
-    public static List<ColunmRichInfo> genColunmRichInfo(Map<String, ColunmRichInfo> columnMap) {
-        return columnMap.values().stream().collect(Collectors.toList())
-                .stream().sorted(Comparator.comparing(ColunmRichInfo::getColunmIndexInSchema)).collect(Collectors.toList());
+    public static List<ColumnRichInfo> genColumnRichInfo(Map<String, ColumnRichInfo> columnMap) {
+        return columnMap.values().stream().sorted(Comparator.comparing(ColumnRichInfo::getColumnIndexInSchema)).collect(Collectors.toList());
     }
 
-    public static SelectColumn[] genSelectedColumns(Map<String, ColunmRichInfo> columnMap, 
+    public static SelectColumn[] genSelectedColumns(Map<String, ColumnRichInfo> columnMap,
                                                     StarRocksSourceOptions sourceOptions, 
-                                                    List<ColunmRichInfo> colunmRichInfos) {
+                                                    List<ColumnRichInfo> columnRichInfos) {
         List<SelectColumn> selectedColumns = new ArrayList<>();
-        // user selected colums from sourceOptions
+        // user selected columns from sourceOptions
         String selectColumnString = sourceOptions.getColumns();
-        if (selectColumnString.equals("")) {
+        if ("".equals(selectColumnString)) {
             // select *
-            for (int i = 0; i < colunmRichInfos.size(); i ++ ) {
-                selectedColumns.add(new SelectColumn(colunmRichInfos.get(i).getColumnName(), i));
+            for (int i = 0; i < columnRichInfos.size(); i ++ ) {
+                selectedColumns.add(new SelectColumn(columnRichInfos.get(i).getColumnName(), i));
             }
         } else {
-            String[] oPcolumns = selectColumnString.split(",");
-            for (int i = 0; i < oPcolumns.length; i ++) {
-                String cName = oPcolumns[i].trim();
+            String[] oPColumns = selectColumnString.split(",");
+            for (String oPColumn : oPColumns) {
+                String cName = oPColumn.trim();
                 if (!columnMap.containsKey(cName)) {
-                    throw new RuntimeException("Colunm not found in the table schema");
+                    throw new RuntimeException("column not found in the table schema");
                 }
-                ColunmRichInfo colunmRichInfo = columnMap.get(cName);
-                selectedColumns.add(new SelectColumn(colunmRichInfo.getColumnName(), colunmRichInfo.getColunmIndexInSchema()));
+                ColumnRichInfo columnRichInfo = columnMap.get(cName);
+                selectedColumns.add(new SelectColumn(columnRichInfo.getColumnName(), columnRichInfo.getColumnIndexInSchema()));
             }
         }
         return selectedColumns.toArray(new SelectColumn[0]);
