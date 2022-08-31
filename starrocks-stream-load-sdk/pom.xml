@@ -1,191 +1,50 @@
 <?xml version="1.0" encoding="UTF-8"?>
-
-<!--
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
--->
-
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
-    <name>flink-connector-starrocks</name>
-    <description>Flink connector for starrocks.</description>
-    <url>https://github.com/StarRocks/flink-connector-starrocks</url>
-
-    <licenses>
-        <license>
-            <name>The Apache Software License, Version 2.0</name>
-            <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
-        </license>
-    </licenses>
-    <scm>
-        <url>https://github.com/StarRocks/flink-connector-starrocks</url>
-        <connection>https://github.com/StarRocks/flink-connector-starrocks.git</connection>
-    </scm>
-    <developers>
-        <developer>
-            <name>starrocks</name>
-            <id>starrocks</id>
-            <email>open@starrocks.com</email>
-            <roles>
-                <role>Developer</role>
-            </roles>
-            <timezone>+8</timezone>
-        </developer>
-    </developers>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
+
     <groupId>com.starrocks</groupId>
-    <artifactId>flink-connector-starrocks</artifactId>
-    <version>1.2.3_flink-1.13_${scala.version}</version>
+    <artifactId>starrocks-stream-load-sdk</artifactId>
+    <version>1.0-SNAPSHOT</version>
+
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <file_encoding>UTF-8</file_encoding>
-        <maven-enforcer-plugin.version>3.0.0-M3</maven-enforcer-plugin.version>
-        <maven-surefire-plugin.version>3.0.0-M4</maven-surefire-plugin.version>
-        <flink.version>1.13.0</flink.version>
-        <arrow.version>5.0.0</arrow.version>
+
+        <slf4j-api.version>1.7.36</slf4j-api.version>
+        <httpclient.version>4.5.13</httpclient.version>
+        <httpcore.version>4.4.15</httpcore.version>
+        <fastjson.version>1.2.83</fastjson.version>
     </properties>
-    <profiles>
-        <profile>
-            <id>scala-2.11</id>
-            <properties>
-                <scala.version>2.11</scala.version>
-            </properties>
-            <activation>
-                <activeByDefault>true</activeByDefault>
-            </activation>
-        </profile>
-        <profile>
-            <id>scala-2.12</id>
-            <properties>
-                <scala.version>2.12</scala.version>
-            </properties>
-        </profile>
-    </profiles>
+
     <dependencies>
         <dependency>
-            <groupId>com.starrocks</groupId>
-            <artifactId>starrocks-stream-load-sdk</artifactId>
-            <version>1.0-SNAPSHOT</version>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>${slf4j-api.version}</version>
         </dependency>
 
-        <!-- Table ecosystem -->
-        <dependency>
-            <groupId>org.apache.flink</groupId>
-            <artifactId>flink-table-planner-blink_${scala.version}</artifactId>
-            <version>${flink.version}</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.flink</groupId>
-            <artifactId>flink-clients_${scala.version}</artifactId>
-            <version>${flink.version}</version>
-            <scope>provided</scope>
-        </dependency>
-        <!-- other -->
-        <dependency>
-            <groupId>com.google.guava</groupId>
-            <artifactId>guava</artifactId>
-            <version>31.1-jre</version>
-        </dependency>
-        <dependency>
-            <groupId>commons-codec</groupId>
-            <artifactId>commons-codec</artifactId>
-            <version>1.15</version>
-        </dependency>
-        <dependency>
-            <groupId>com.github.jsqlparser</groupId>
-            <artifactId>jsqlparser</artifactId>
-            <version>4.0</version>
-        </dependency>
-        <dependency>
-            <groupId>commons-logging</groupId>
-            <artifactId>commons-logging</artifactId>
-            <version>1.1.1</version>
-        </dependency>
-        <dependency>
-            <groupId>commons-io</groupId>
-            <artifactId>commons-io</artifactId>
-            <version>2.11.0</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.httpcomponents</groupId>
-            <artifactId>httpcore</artifactId>
-            <version>4.4.6</version>
-        </dependency>
         <dependency>
             <groupId>org.apache.httpcomponents</groupId>
             <artifactId>httpclient</artifactId>
-            <version>4.5.13</version>
-        </dependency>
-        <dependency>
-            <groupId>com.alibaba</groupId>
-            <artifactId>fastjson</artifactId>
-            <version>1.2.75</version>
-        </dependency>
-        <dependency>
-            <groupId>mysql</groupId>
-            <artifactId>mysql-connector-java</artifactId>
-            <version>5.1.49</version>
-        </dependency>
-        <dependency>
-            <groupId>com.starrocks</groupId>
-            <artifactId>starrocks-thrift-sdk</artifactId>
-            <version>1.0.1</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.arrow</groupId>
-            <artifactId>arrow-vector</artifactId>
-            <version>${arrow.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.arrow</groupId>
-            <artifactId>arrow-memory-netty</artifactId>
-            <version>${arrow.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.flink</groupId>
-            <artifactId>flink-test-utils_${scala.version}</artifactId>
-            <version>${flink.version}</version>
-            <scope>test</scope>
-            <exclusions>
-                <exclusion>
-                    <artifactId>flink-runtime_${scala.version}</artifactId>
-                    <groupId>org.apache.flink</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>flink-clients_${scala.version}</artifactId>
-                    <groupId>org.apache.flink</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>curator-test</artifactId>
-                    <groupId>org.apache.curator</groupId>
-                </exclusion>
-            </exclusions>
+            <version>${httpclient.version}</version>
         </dependency>
 
         <dependency>
-            <groupId>org.jmockit</groupId>
-            <artifactId>jmockit</artifactId>
-            <version>1.48</version>
-            <scope>test</scope>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpcore</artifactId>
+            <version>${httpcore.version}</version>
         </dependency>
+
         <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <version>4.12</version>
-            <scope>test</scope>
+            <groupId>com.alibaba</groupId>
+            <artifactId>fastjson</artifactId>
+            <version>${fastjson.version}</version>
         </dependency>
     </dependencies>
+
     <build>
         <plugins>
             <plugin>
@@ -256,35 +115,19 @@ limitations under the License.
                             <relocations>
                                 <relocation>
                                     <pattern>com.alibaba</pattern>
-                                    <shadedPattern>com.starrocks.shade.com.alibaba</shadedPattern>
+                                    <shadedPattern>com.starrocks.streamload.shade.com.alibaba</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.apache.hc</pattern>
+                                    <shadedPattern>com.starrocks.streamload.shade.org.apache.hc</shadedPattern>
                                 </relocation>
                                 <relocation>
                                     <pattern>org.apache.http</pattern>
-                                    <shadedPattern>com.starrocks.shade.org.apache.http</shadedPattern>
+                                    <shadedPattern>com.starrocks.streamload.shade.org.apache.http</shadedPattern>
                                 </relocation>
                                 <relocation>
                                     <pattern>org.apache.commons</pattern>
-                                    <shadedPattern>com.starrocks.shade.org.apache.commons</shadedPattern>
-                                </relocation>
-                                <relocation>
-                                    <pattern>org.apache.arrow</pattern>
-                                    <shadedPattern>com.starrocks.shade.org.apache.arrow</shadedPattern>
-                                </relocation>
-                                <relocation>
-                                    <pattern>io.netty</pattern>
-                                    <shadedPattern>com.starrocks.shade.io.netty</shadedPattern>
-                                </relocation>
-                                <relocation>
-                                    <pattern>com.google.flatbuffers</pattern>
-                                    <shadedPattern>com.starrocks.shade.com.google.flatbuffers</shadedPattern>
-                                </relocation>
-                                <relocation>
-                                    <pattern>com.google.common</pattern>
-                                    <shadedPattern>com.starrocks.shade.com.google.common</shadedPattern>
-                                </relocation>
-                                <relocation>
-                                    <pattern>com.fasterxml.jackson.core</pattern>
-                                    <shadedPattern>com.starrocks.shade.com.fasterxml.jackson.core</shadedPattern>
+                                    <shadedPattern>com.starrocks.streamload.shade.org.apache.commons</shadedPattern>
                                 </relocation>
                             </relocations>
                             <artifactSet>
@@ -292,23 +135,14 @@ limitations under the License.
                                     <include>commons-codec:commons-codec</include>
                                     <include>commons-io:commons-io</include>
                                     <include>commons-logging:*</include>
-                                    <include>org.apache.httpcomponents:httpclient</include>
+                                    <include>org.apache.httpcomponents.client5:httpclient5</include>
+                                    <include>org.apache.httpcomponents.core5:httpcore5</include>
+                                    <include>org.apache.httpcomponents.core5:httpcore5-h2</include>
                                     <include>org.apache.httpcomponents:httpcore</include>
+                                    <include>org.apache.httpcomponents:httpcore-nio</include>
+                                    <include>org.apache.httpcomponents:httpclient</include>
+                                    <include>org.apache.httpcomponents:httpasyncclient</include>
                                     <include>com.alibaba:fastjson</include>
-                                    <include>mysql:mysql-connector-java</include>
-                                    <include>com.starrocks:starrocks-stream-load-sdk</include>
-                                    <include>com.starrocks:starrocks-thrift-sdk</include>
-                                    <include>org.apache.arrow:arrow-vector</include>
-                                    <include>org.apache.arrow:arrow-memory-netty</include>
-                                    <include>org.apache.arrow:arrow-memory-core</include>
-                                    <include>org.apache.arrow:arrow-format</include>
-                                    <include>io.netty:netty-buffer</include>
-                                    <include>io.netty:netty-common</include>
-                                    <include>com.google.flatbuffers:flatbuffers-java</include>
-                                    <include>com.google.guava:guava</include>
-                                    <include>com.fasterxml.jackson.core:jackson-annotations</include>
-                                    <include>com.fasterxml.jackson.core:jackson-core</include>
-                                    <include>com.fasterxml.jackson.core:jackson-databind</include>
                                 </includes>
                             </artifactSet>
                             <filters>
@@ -401,6 +235,7 @@ limitations under the License.
             </plugin>
         </plugins>
     </build>
+
     <distributionManagement>
         <snapshotRepository>
             <id>ossrh</id>
