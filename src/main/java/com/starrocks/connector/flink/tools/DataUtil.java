@@ -16,7 +16,7 @@ package com.starrocks.connector.flink.tools;
 
 public class DataUtil {
 
-    public static String ClearBracket(String context) {
+    public static String clearBracket(String context) {
         int head = context.indexOf('(');
         if (head == -1) {
             return context;
