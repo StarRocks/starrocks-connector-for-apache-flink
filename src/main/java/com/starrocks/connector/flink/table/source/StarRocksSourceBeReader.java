@@ -15,10 +15,15 @@
 package com.starrocks.connector.flink.table.source;
 
 import com.starrocks.connector.flink.row.source.StarRocksSourceFlinkRows;
-import com.starrocks.connector.flink.table.source.struct.ColunmRichInfo;
 import com.starrocks.connector.flink.table.source.struct.Const;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 import com.starrocks.connector.flink.table.source.struct.StarRocksSchema;
+import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
+import com.starrocks.shade.org.apache.thrift.TException;
+import com.starrocks.shade.org.apache.thrift.protocol.TBinaryProtocol;
+import com.starrocks.shade.org.apache.thrift.protocol.TProtocol;
+import com.starrocks.shade.org.apache.thrift.transport.TSocket;
+import com.starrocks.shade.org.apache.thrift.transport.TTransportException;
 import com.starrocks.thrift.TScanBatchResult;
 import com.starrocks.thrift.TScanCloseParams;
 import com.starrocks.thrift.TScanNextBatchParams;
@@ -28,14 +33,8 @@ import com.starrocks.thrift.TStarrocksExternalService;
 import com.starrocks.thrift.TStatusCode;
 
 import org.apache.flink.table.data.GenericRowData;
-import com.starrocks.shade.org.apache.thrift.TException;
-import com.starrocks.shade.org.apache.thrift.protocol.TBinaryProtocol;
-import com.starrocks.shade.org.apache.thrift.protocol.TProtocol;
-import com.starrocks.shade.org.apache.thrift.transport.TSocket;
-import com.starrocks.shade.org.apache.thrift.transport.TTransportException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -51,7 +50,7 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
     private TStarrocksExternalService.Client client;
     private final String IP;
     private final int PORT;
-    private final List<ColunmRichInfo> colunmRichInfos;
+    private final List<ColumnRichInfo> columnRichInfos;
     private final SelectColumn[] selectColumns;
     private String contextId;
     private int readerOffset = 0;
@@ -61,14 +60,16 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
     private GenericRowData curData;
 
 
-    public StarRocksSourceBeReader(String beNodeInfo, List<ColunmRichInfo> colunmRichInfos, SelectColumn[] selectColumns, 
-                                        StarRocksSourceOptions sourceOptions) {
+    public StarRocksSourceBeReader(String beNodeInfo,
+                                   List<ColumnRichInfo> columnRichInfos,
+                                   SelectColumn[] selectColumns,
+                                   StarRocksSourceOptions sourceOptions) {
         if (sourceOptions.getBeHostMappingList().length() > 0) {
             String list = sourceOptions.getBeHostMappingList();
             Map<String, String> mappingMap = new HashMap<>();
-            String beHostMappingInfos[] = list.split(";");
+            String[] beHostMappingInfos = list.split(";");
             for (String beHostMappingInfo : beHostMappingInfos) {
-                String mapping[] = beHostMappingInfo.split(",");
+                String[] mapping = beHostMappingInfo.split(",");
                 mappingMap.put(mapping[1].trim(), mapping[0].trim());
             }
             if (!mappingMap.containsKey(beNodeInfo)) {
@@ -79,12 +80,12 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
         } else {
             LOG.info("query data from be by using be-ip");
         }
-        String beNode[] = beNodeInfo.split(":");
+        String[] beNode = beNodeInfo.split(":");
         String ip = beNode[0].trim();
         int port = Integer.parseInt(beNode[1].trim());
         this.IP = ip;
         this.PORT = port;
-        this.colunmRichInfos = colunmRichInfos;
+        this.columnRichInfos = columnRichInfos;
         this.selectColumns = selectColumns;
         TBinaryProtocol.Factory factory = new TBinaryProtocol.Factory();
         TSocket socket = new TSocket(IP, PORT, sourceOptions.getConnectTimeoutMs(), sourceOptions.getConnectTimeoutMs());
@@ -177,7 +178,7 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
     private void handleResult(TScanBatchResult result) {
         StarRocksSourceFlinkRows flinkRows = null;
         try {
-            flinkRows = new StarRocksSourceFlinkRows(result, colunmRichInfos, srSchema, selectColumns).genFlinkRowsFromArrow();
+            flinkRows = new StarRocksSourceFlinkRows(result, columnRichInfos, srSchema, selectColumns).genFlinkRowsFromArrow();
         } catch (IOException e) {
             throw new RuntimeException(e.getMessage());
         } 
