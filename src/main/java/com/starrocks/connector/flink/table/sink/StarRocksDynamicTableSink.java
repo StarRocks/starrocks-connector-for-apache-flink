@@ -15,19 +15,18 @@
 package com.starrocks.connector.flink.table.sink;
 
 import com.starrocks.connector.flink.row.sink.StarRocksTableRowTransformer;
-
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.connector.ChangelogMode;
 import org.apache.flink.table.connector.sink.DynamicTableSink;
 import org.apache.flink.table.connector.sink.SinkFunctionProvider;
 import org.apache.flink.table.data.RowData;
- 
+
 public class StarRocksDynamicTableSink implements DynamicTableSink {
 
     private transient TableSchema flinkSchema;
     private StarRocksSinkOptions sinkOptions;
- 
+
     public StarRocksDynamicTableSink(StarRocksSinkOptions sinkOptions, TableSchema schema) {
         this.flinkSchema = schema;
         this.sinkOptions = sinkOptions;
@@ -43,18 +42,18 @@ public class StarRocksDynamicTableSink implements DynamicTableSink {
     public SinkRuntimeProvider getSinkRuntimeProvider(Context context) {
         final TypeInformation<RowData> rowDataTypeInfo = context.createTypeInformation(flinkSchema.toRowDataType());
         StarRocksDynamicSinkFunction<RowData> starrocksSinkFunction = new StarRocksDynamicSinkFunction<>(
-            sinkOptions,
-            flinkSchema,
-            new StarRocksTableRowTransformer(rowDataTypeInfo)
+                sinkOptions,
+                flinkSchema,
+                new StarRocksTableRowTransformer(rowDataTypeInfo)
         );
         return SinkFunctionProvider.of(starrocksSinkFunction, sinkOptions.getSinkParallelism());
     }
- 
+
     @Override
     public DynamicTableSink copy() {
         return new StarRocksDynamicTableSink(sinkOptions, flinkSchema);
     }
- 
+
     @Override
     public String asSummaryString() {
         return "starrocks_sink";
