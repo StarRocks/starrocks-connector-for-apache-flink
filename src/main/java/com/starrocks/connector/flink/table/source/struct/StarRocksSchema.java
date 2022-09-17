@@ -17,18 +17,29 @@ package com.starrocks.connector.flink.table.source.struct;
 import com.starrocks.thrift.TScanColumnDesc;
 
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 
 public class StarRocksSchema {
 
     private HashMap<String, Column> schemaMap;
+    private List<Column> columns;
 
     public StarRocksSchema() {
         schemaMap = new HashMap<>();
+        columns = new LinkedList<>();
     }
 
     public HashMap<String, Column> getSchema() {
         return schemaMap;
+    }
+
+    public List<Column> getColumns() {
+        return columns;
+    }
+
+    public Column getColumn(int idx) {
+        return columns.get(idx);
     }
 
     public void setSchema(HashMap<String, Column> schema) {
@@ -36,10 +47,13 @@ public class StarRocksSchema {
     }
 
     public void put(String name, String type, String comment, int scale, int precision) {
-        schemaMap.put(name, new Column(name, type, comment, scale, precision));
+        Column column = new Column(name, type, comment, scale, precision);
+        columns.add(column);
+        schemaMap.put(name, column);
     }
 
     public void put(Column column) {
+        columns.add(column);
         schemaMap.put(column.getName(), column);
     }
 
@@ -53,9 +67,9 @@ public class StarRocksSchema {
 
     public static StarRocksSchema genSchema(List<TScanColumnDesc> tscanColumnDescs) {
         StarRocksSchema schema = new StarRocksSchema();
-        tscanColumnDescs.forEach(desc -> schema.put(
-            new Column(desc.getName(), desc.getType().name(), "", 0, 0))
-        );
+        for (TScanColumnDesc tscanColumnDesc : tscanColumnDescs) {
+            schema.put(tscanColumnDesc.getName(), tscanColumnDesc.getType().name(), "", 0, 0);
+        }
         return schema;
     }
 }
