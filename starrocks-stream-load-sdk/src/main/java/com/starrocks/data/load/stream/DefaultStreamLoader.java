@@ -301,13 +301,16 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
     protected String getAvailableHost() {
         String[] hosts = properties.getLoadUrls();
         int size = hosts.length;
-        for (long pos = availableHostPos; pos < pos + size; pos++) {
+        long pos = availableHostPos;
+        while (pos < pos + size) {
             String host = "http://" + hosts[(int) (pos % size)];
             if (testHttpConnection(host)) {
+                pos++;
                 availableHostPos = pos;
                 return host;
             }
         }
+
         return null;
     }
 
