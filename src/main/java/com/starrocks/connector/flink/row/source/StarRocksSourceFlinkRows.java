@@ -38,10 +38,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.NoSuchElementException;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 public class StarRocksSourceFlinkRows {
 
@@ -55,7 +52,7 @@ public class StarRocksSourceFlinkRows {
     private VectorSchemaRoot root;
     private List<FieldVector> fieldVectors;
     private RootAllocator rootAllocator;
-    private final Map<String, ColumnRichInfo> columnRichInfos;
+    private List<ColumnRichInfo> columnRichInfos;
     private final SelectColumn[] selectedColumns;
     private final StarRocksSchema starRocksSchema;
 
@@ -67,13 +64,7 @@ public class StarRocksSourceFlinkRows {
                                     List<ColumnRichInfo> columnRichInfos,
                                     StarRocksSchema srSchema,
                                     SelectColumn[] selectColumns) {
-        this.columnRichInfos = columnRichInfos.stream()
-                .collect(
-                        Collectors.toMap(
-                                ColumnRichInfo::getColumnName,
-                                Function.identity()
-                        )
-                );
+        this.columnRichInfos = columnRichInfos;
         this.selectedColumns = selectColumns;
         this.starRocksSchema = srSchema;
         this.rootAllocator = new RootAllocator(Integer.MAX_VALUE);
@@ -148,10 +139,10 @@ public class StarRocksSourceFlinkRows {
         for (int i = 0; i < fieldVectors.size(); i++) {
             FieldVector fieldVector = fieldVectors.get(i);
             StarRocksToFlinkTrans translators = null;
-            Column column = starRocksSchema.get(fieldVector.getName());
+            Column column = starRocksSchema.getColumn(i);
             boolean nullable = true;
             if (column != null) {
-                ColumnRichInfo richInfo = columnRichInfos.get(fieldVector.getName());
+                ColumnRichInfo richInfo = columnRichInfos.get(selectedColumns[i].getColumnIndexInFlinkTable());
                 nullable = richInfo.getDataType().getLogicalType().isNullable();
                 LogicalTypeRoot flinkTypeRoot = richInfo.getDataType().getLogicalType().getTypeRoot();
                 String srType = DataUtil.clearBracket(column.getType());
@@ -161,6 +152,7 @@ public class StarRocksSourceFlinkRows {
                 }
             }
 
+            // TODO make sure what's going on here
             if (translators == null) {
                 DataType dataType = DataTypeUtils.map(fieldVector.getMinorType());
                 if (dataType == null) {
