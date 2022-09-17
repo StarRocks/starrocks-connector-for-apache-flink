@@ -241,6 +241,7 @@ public class StarRocksToFlinkTranslators {
                 result[rowIndex] = fieldValue;
             }
             return result;
+
         }
 
     }
