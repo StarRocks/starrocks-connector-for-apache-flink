@@ -22,6 +22,8 @@ public class StarRocksSinkTable {
     private final String database;
     private final String table;
 
+    private volatile String version;
+
     private final StarRocksQueryVisitor starRocksQueryVisitor;
 
     private StarRocksSinkTable(Builder builder) {
@@ -39,7 +41,18 @@ public class StarRocksSinkTable {
     }
 
     public String getVersion() {
-        return starRocksQueryVisitor.getStarRocksVersion();
+        if (version == null) {
+            synchronized (this) {
+                if (version == null) {
+                    version = starRocksQueryVisitor.getStarRocksVersion();
+                }
+            }
+        }
+        return version;
+    }
+
+    public boolean isOpAutoProjectionInJson() {
+        return version == null || version.length() > 0 && !version.trim().startsWith("1.");
     }
 
     public void validateTableStructure(StarRocksSinkOptions sinkOptions, TableSchema flinkSchema) {
@@ -93,6 +106,7 @@ public class StarRocksSinkTable {
                 throw new IllegalArgumentException("Fields name or type mismatch for:" + starrocksField);
             }
         }
+        sinkOptions.setTableSchemaFieldNames(flinkSchema.getFieldNames());
     }
 
     public static class Builder {

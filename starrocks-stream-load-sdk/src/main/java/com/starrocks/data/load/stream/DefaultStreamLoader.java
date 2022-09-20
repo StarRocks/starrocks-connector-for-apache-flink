@@ -237,20 +237,6 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
 
             httpPut.setHeaders(defaultHeaders);
 
-            // TODO move to properties
-            if (!httpPut.containsHeader("columns")
-                    && tableProperties.getColumns() != null
-                    && (dataFormat instanceof StreamLoadDataFormat.CSVFormat
-                        || (!properties.isOpAutoProjectionInJson() && tableProperties.isEnableUpsertDelete()))) {
-                String cols = Arrays.stream(tableProperties.getColumns())
-                        .map(f -> String.format("`%s`", f.trim().replace("`", "")))
-                        .collect(Collectors.joining(","));
-                if (cols.length() > 0 && tableProperties.isEnableUpsertDelete()) {
-                    cols += String.format(",%s", "__op");
-                }
-                httpPut.addHeader("columns", cols);
-            }
-
             for (Map.Entry<String, String> entry : tableProperties.getProperties().entrySet()) {
                 httpPut.removeHeaders(entry.getKey());
                 httpPut.addHeader(entry.getKey(), entry.getValue());
