@@ -18,13 +18,17 @@ import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 
 public class StarRocksSerializerFactory {
 
-    private StarRocksSerializerFactory() {}
+    private StarRocksSerializerFactory() {
+    }
 
     public static StarRocksISerializer createSerializer(StarRocksSinkOptions sinkOptions, String[] fieldNames) {
         if (StarRocksSinkOptions.StreamLoadFormat.CSV.equals(sinkOptions.getStreamLoadFormat())) {
             return new StarRocksCsvSerializer(sinkOptions.getSinkStreamLoadProperties().get("column_separator"));
         }
         if (StarRocksSinkOptions.StreamLoadFormat.JSON.equals(sinkOptions.getStreamLoadFormat())) {
+            if (sinkOptions.getSinkWithNoSchema()) {
+                return new StarRocksStringSerializer();
+            }
             if (sinkOptions.supportUpsertDelete()) {
                 String[] tmp = new String[fieldNames.length + 1];
                 System.arraycopy(fieldNames, 0, tmp, 0, fieldNames.length);
@@ -35,5 +39,5 @@ public class StarRocksSerializerFactory {
         }
         throw new RuntimeException("Failed to create row serializer, unsupported `format` from stream load properties.");
     }
-    
+
 }

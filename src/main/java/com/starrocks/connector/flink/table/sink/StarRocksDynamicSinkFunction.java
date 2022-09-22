@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.flink.table.sink;
 
+import com.google.common.base.Strings;
 import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionOptions;
 import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
 import com.starrocks.connector.flink.manager.StarRocksQueryVisitor;
@@ -22,8 +23,6 @@ import com.starrocks.connector.flink.manager.StarRocksSinkManager;
 import com.starrocks.connector.flink.row.sink.StarRocksIRowTransformer;
 import com.starrocks.connector.flink.row.sink.StarRocksISerializer;
 import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
-
-import com.google.common.base.Strings;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.alter.Alter;
@@ -65,25 +64,28 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
 
     // state only works with `StarRocksSinkSemantic.EXACTLY_ONCE`
     private transient ListState<Map<String, StarRocksSinkBufferEntity>> checkpointedState;
- 
+
     public StarRocksDynamicSinkFunction(StarRocksSinkOptions sinkOptions, TableSchema schema, StarRocksIRowTransformer<T> rowTransformer) {
         StarRocksJdbcConnectionOptions jdbcOptions = new StarRocksJdbcConnectionOptions(sinkOptions.getJdbcUrl(), sinkOptions.getUsername(), sinkOptions.getPassword());
         StarRocksJdbcConnectionProvider jdbcConnProvider = new StarRocksJdbcConnectionProvider(jdbcOptions);
         StarRocksQueryVisitor starrocksQueryVisitor = new StarRocksQueryVisitor(jdbcConnProvider, sinkOptions.getDatabaseName(), sinkOptions.getTableName());
-        this.sinkManager = new StarRocksSinkManager(sinkOptions, schema, jdbcConnProvider, starrocksQueryVisitor);
-
+        if (sinkOptions.getSinkWithNoSchema()) {
+            this.sinkManager = new StarRocksSinkManager(sinkOptions, null, jdbcConnProvider, starrocksQueryVisitor);
+        } else {
+            this.sinkManager = new StarRocksSinkManager(sinkOptions, schema, jdbcConnProvider, starrocksQueryVisitor);
+        }
         rowTransformer.setStarRocksColumns(starrocksQueryVisitor.getFieldMapping());
         rowTransformer.setTableSchema(schema);
         this.serializer = StarRocksSerializerFactory.createSerializer(sinkOptions, schema.getFieldNames());
         this.rowTransformer = rowTransformer;
         this.sinkOptions = sinkOptions;
     }
- 
+
     public StarRocksDynamicSinkFunction(StarRocksSinkOptions sinkOptions) {
         this.sinkManager = new StarRocksSinkManager(sinkOptions, null);
         this.sinkOptions = sinkOptions;
     }
- 
+
     @Override
     public void open(Configuration parameters) throws Exception {
         super.open(parameters);
@@ -105,7 +107,7 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
         }
         if (null == serializer) {
             if (value instanceof StarRocksSinkRowDataWithMeta) {
-                StarRocksSinkRowDataWithMeta data = (StarRocksSinkRowDataWithMeta)value;
+                StarRocksSinkRowDataWithMeta data = (StarRocksSinkRowDataWithMeta) value;
                 if (Strings.isNullOrEmpty(data.getDatabase()) || Strings.isNullOrEmpty(data.getTable()) || null == data.getDataRows()) {
                     LOG.warn(String.format("json row data not fullfilled. {database: %s, table: %s, dataRows: %s}", data.getDatabase(), data.getTable(), data.getDataRows()));
                     return;
@@ -113,6 +115,7 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
                 sinkManager.writeRecords(data.getDatabase(), data.getTable(), data.getDataRows());
                 return;
             }
+
             // raw data sink
             sinkManager.writeRecords(sinkOptions.getDatabaseName(), sinkOptions.getTableName(), (String) value);
             totalInvokeRows.inc(1);
@@ -129,10 +132,10 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
             byte[] data = new byte[totalSize - headerSize];
             ddlData.getSegments()[0].get(headerSize, data);
             Map<String, String> ddlMap = InstantiationUtil.deserializeObject(data, HashMap.class.getClassLoader());
-            if (null == ddlMap 
-                || "true".equals(ddlMap.get("snapshot"))
-                || Strings.isNullOrEmpty(ddlMap.get("ddl"))
-                || Strings.isNullOrEmpty(ddlMap.get("databaseName"))) {
+            if (null == ddlMap
+                    || "true".equals(ddlMap.get("snapshot"))
+                    || Strings.isNullOrEmpty(ddlMap.get("ddl"))
+                    || Strings.isNullOrEmpty(ddlMap.get("databaseName"))) {
                 return;
             }
             Statement stmt = CCJSqlParserUtil.parse(ddlMap.get("ddl"));
@@ -147,19 +150,19 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
             }
         }
         if (value instanceof RowData) {
-            if (RowKind.UPDATE_BEFORE.equals(((RowData)value).getRowKind())) {
+            if (RowKind.UPDATE_BEFORE.equals(((RowData) value).getRowKind())) {
                 // do not need update_before, cauz an update action happened on the primary keys will be separated into `delete` and `create`
                 return;
             }
-            if (!sinkOptions.supportUpsertDelete() && RowKind.DELETE.equals(((RowData)value).getRowKind())) {
+            if (!sinkOptions.supportUpsertDelete() && RowKind.DELETE.equals(((RowData) value).getRowKind())) {
                 // let go the UPDATE_AFTER and INSERT rows for tables who have a group of `unique` or `duplicate` keys.
                 return;
             }
         }
         sinkManager.writeRecords(
-            sinkOptions.getDatabaseName(),
-            sinkOptions.getTableName(),
-            serializer.serialize(rowTransformer.transform(value, sinkOptions.supportUpsertDelete()))
+                sinkOptions.getDatabaseName(),
+                sinkOptions.getTableName(),
+                serializer.serialize(rowTransformer.transform(value, sinkOptions.supportUpsertDelete()))
         );
         totalInvokeRows.inc(1);
         totalInvokeRowsTime.inc(System.nanoTime() - start);
@@ -171,10 +174,11 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
             return;
         }
         ListStateDescriptor<Map<String, StarRocksSinkBufferEntity>> descriptor =
-            new ListStateDescriptor<>(
-                "buffered-rows",
-                TypeInformation.of(new TypeHint<Map<String, StarRocksSinkBufferEntity>>(){})
-            );
+                new ListStateDescriptor<>(
+                        "buffered-rows",
+                        TypeInformation.of(new TypeHint<Map<String, StarRocksSinkBufferEntity>>() {
+                        })
+                );
         checkpointedState = context.getOperatorStateStore().getListState(descriptor);
     }
 

@@ -21,6 +21,7 @@ import org.apache.flink.table.connector.sink.DynamicTableSink;
 import org.apache.flink.table.factories.DynamicTableSinkFactory;
 import org.apache.flink.table.factories.FactoryUtil;
 import org.apache.flink.table.utils.TableSchemaUtils;
+
 import java.util.HashSet;
 import java.util.Set;
 
@@ -66,6 +67,7 @@ public class StarRocksDynamicTableSinkFactory implements DynamicTableSinkFactory
         optionalOptions.add(StarRocksSinkOptions.SINK_PARALLELISM);
         optionalOptions.add(StarRocksSinkOptions.SINK_LABEL_PREFIX);
         optionalOptions.add(StarRocksSinkOptions.SINK_CONNECT_TIMEOUT);
+        optionalOptions.add(StarRocksSinkOptions.SINK_WITH_NO_SCHEMA);
         return optionalOptions;
     }
 }
