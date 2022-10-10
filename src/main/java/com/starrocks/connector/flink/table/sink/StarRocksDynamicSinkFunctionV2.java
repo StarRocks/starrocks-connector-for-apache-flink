@@ -33,9 +33,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -52,7 +56,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends RichSinkFunction<T> imple
     private final StarRocksIRowTransformer<T> rowTransformer;
 
     private transient volatile ListState<Tuple2<Long, StreamLoadSnapshot>> snapshotStates;
-    private final Map<Long, StreamLoadSnapshot> snapshotMap = new ConcurrentHashMap<>();
+    private final Map<Long, StreamLoadSnapshot> snapshotMap = new LinkedHashMap<>();
 
     public StarRocksDynamicSinkFunctionV2(StarRocksSinkOptions sinkOptions,
                                           TableSchema schema,
@@ -159,9 +163,11 @@ public class StarRocksDynamicSinkFunctionV2<T> extends RichSinkFunction<T> imple
             rowTransformer.setRuntimeContext(getRuntimeContext());
         }
 
-        for (Tuple2<Long, StreamLoadSnapshot> tuple : snapshotStates.get()) {
-            if (!sinkManager.commit(tuple.f1)) {
-                snapshotMap.put(tuple.f0, tuple.f1);
+        synchronized (snapshotMap) {
+            for (Tuple2<Long, StreamLoadSnapshot> tuple : snapshotStates.get()) {
+                if (!sinkManager.commit(tuple.f1)) {
+                    snapshotMap.put(tuple.f0, tuple.f1);
+                }
             }
         }
 
@@ -195,10 +201,14 @@ public class StarRocksDynamicSinkFunctionV2<T> extends RichSinkFunction<T> imple
         StreamLoadSnapshot snapshot = sinkManager.snapshot();
 
         if (sinkManager.prepare(snapshot)) {
-            snapshotMap.put(functionSnapshotContext.getCheckpointId(), snapshot);
+            synchronized (snapshotMap) {
+                snapshotMap.put(functionSnapshotContext.getCheckpointId(), snapshot);
+            }
 
             snapshotStates.clear();
-            snapshotStates.add(Tuple2.of(functionSnapshotContext.getCheckpointId(), snapshot));
+            for (Map.Entry<Long, StreamLoadSnapshot> entry : snapshotMap.entrySet()) {
+                snapshotStates.add(Tuple2.of(entry.getKey(), entry.getValue()));
+            }
         } else {
             throw new RuntimeException("Snapshot state failed by prepare");
         }
@@ -222,9 +232,29 @@ public class StarRocksDynamicSinkFunctionV2<T> extends RichSinkFunction<T> imple
             return;
         }
 
-        if (sinkManager.commit(snapshot)) {
-            snapshotMap.remove(checkpointId);
-        } else {
+        boolean succeed = true;
+
+        List<Long> removeCheckpointId = new ArrayList<>();
+
+        for (Map.Entry<Long, StreamLoadSnapshot> pending : snapshotMap.entrySet()) {
+            if (pending.getKey() > checkpointId) {
+                break;
+            }
+
+            if (sinkManager.commit(pending.getValue())) {
+                removeCheckpointId.add(pending.getKey());
+            } else {
+                succeed = false;
+            }
+        }
+
+        synchronized (snapshotMap) {
+            for (Long cpId : removeCheckpointId) {
+                snapshotMap.remove(cpId);
+            }
+        }
+
+        if (!succeed) {
             log.error("checkpoint complete failed, id : {}", checkpointId);
             throw new RuntimeException("checkpoint complete failed, id : " + checkpointId);
         }
@@ -233,13 +263,14 @@ public class StarRocksDynamicSinkFunctionV2<T> extends RichSinkFunction<T> imple
 
     @Override
     public void notifyCheckpointAborted(long checkpointId) throws Exception {
-        StreamLoadSnapshot snapshot = snapshotMap.get(checkpointId);
-        if (snapshot == null) {
-            log.warn("Unknown checkpoint id : {}", checkpointId);
-            return;
-        }
-
-        sinkManager.abort(snapshot);
-        snapshotMap.remove(checkpointId);
+        // TODO
+//        StreamLoadSnapshot snapshot = snapshotMap.get(checkpointId);
+//        if (snapshot == null) {
+//            log.warn("Unknown checkpoint id : {}", checkpointId);
+//            return;
+//        }
+//
+//        sinkManager.abort(snapshot);
+//        snapshotMap.remove(checkpointId);
     }
 }
