@@ -1,11 +1,10 @@
 package com.starrocks.data.load.stream;
 
+import com.alibaba.fastjson.JSON;
 import com.starrocks.data.load.stream.exception.StreamLoadFailException;
 import com.starrocks.data.load.stream.http.StreamLoadEntity;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
-
-import com.alibaba.fastjson.JSON;
 import org.apache.http.Header;
 import org.apache.http.HttpHeaders;
 import org.apache.http.client.config.RequestConfig;
@@ -127,8 +126,13 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
     }
 
     @Override
+    public boolean commit(StreamLoadSnapshot.Transaction transaction) {
+        return true;
+    }
+
+    @Override
     public boolean rollback(StreamLoadSnapshot.Transaction transaction) {
-        return false;
+        return true;
     }
 
     @Override
@@ -137,15 +141,15 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
         for (StreamLoadSnapshot.Transaction transaction : snapshot.getTransactions()) {
             boolean prepared = false;
             for (int i = 0; i < 3; i++) {
-                try {
-                    Thread.sleep(i * 1000);
-                } catch (InterruptedException e) {
-                    log.warn("commit interrupted");
-                    return false;
-                }
                 if (prepare(transaction)) {
                     prepared = true;
                     break;
+                }
+                try {
+                    Thread.sleep(i * 1000);
+                } catch (InterruptedException e) {
+                    log.warn("prepare interrupted");
+                    return false;
                 }
             }
             if (!prepared) {
@@ -158,11 +162,6 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
     }
 
     @Override
-    public boolean commit(StreamLoadSnapshot.Transaction transaction) {
-        return true;
-    }
-
-    @Override
     public boolean commit(StreamLoadSnapshot snapshot) {
         boolean committed = true;
         for (StreamLoadSnapshot.Transaction transaction : snapshot.getTransactions()) {
@@ -170,15 +169,15 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
                 continue;
             }
             for (int i = 0; i < 3; i++) {
+                if (commit(transaction)) {
+                    transaction.setFinish(true);
+                    break;
+                }
                 try {
                     Thread.sleep(i * 1000);
                 } catch (InterruptedException e) {
                     log.warn("commit interrupted");
                     return false;
-                }
-                if (commit(transaction)) {
-                    transaction.setFinish(true);
-                    break;
                 }
             }
             if (!transaction.isFinish()) {
