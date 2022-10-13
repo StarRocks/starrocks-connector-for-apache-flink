@@ -21,6 +21,7 @@ import org.apache.flink.table.connector.sink.DynamicTableSink;
 import org.apache.flink.table.factories.DynamicTableSinkFactory;
 import org.apache.flink.table.factories.FactoryUtil;
 import org.apache.flink.table.utils.TableSchemaUtils;
+
 import java.util.HashSet;
 import java.util.Set;
 
@@ -34,7 +35,7 @@ public class StarRocksDynamicTableSinkFactory implements DynamicTableSinkFactory
         // validate some special properties
         StarRocksSinkOptions sinkOptions = new StarRocksSinkOptions(options, context.getCatalogTable().getOptions());
         TableSchema physicalSchema = TableSchemaUtils.getPhysicalSchema(context.getCatalogTable().getSchema());
-        return new StarRocksDynamicTableSinkV2(sinkOptions, physicalSchema);
+        return new StarRocksDynamicTableSink(sinkOptions, physicalSchema);
     }
 
     @Override
@@ -57,6 +58,7 @@ public class StarRocksDynamicTableSinkFactory implements DynamicTableSinkFactory
     @Override
     public Set<ConfigOption<?>> optionalOptions() {
         Set<ConfigOption<?>> optionalOptions = new HashSet<>();
+        optionalOptions.add(StarRocksSinkOptions.SINK_VERSION);
         optionalOptions.add(StarRocksSinkOptions.SINK_BATCH_MAX_SIZE);
         optionalOptions.add(StarRocksSinkOptions.SINK_BATCH_MAX_ROWS);
         optionalOptions.add(StarRocksSinkOptions.SINK_BATCH_FLUSH_INTERVAL);

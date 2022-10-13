@@ -1,5 +1,6 @@
 package com.starrocks.connector.flink.table.sink;
 
+import com.google.common.base.Strings;
 import com.starrocks.connector.flink.manager.StarRocksSinkManagerV2;
 import com.starrocks.connector.flink.manager.StarRocksSinkTable;
 import com.starrocks.connector.flink.row.sink.StarRocksIRowTransformer;
@@ -7,13 +8,10 @@ import com.starrocks.connector.flink.row.sink.StarRocksISerializer;
 import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
 import com.starrocks.connector.flink.table.data.StarRocksRowData;
 import com.starrocks.data.load.stream.StreamLoadSnapshot;
-
-import com.google.common.base.Strings;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.alter.Alter;
 import net.sf.jsqlparser.statement.truncate.Truncate;
-import org.apache.flink.api.common.state.CheckpointListener;
 import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.api.common.typeinfo.TypeHint;
@@ -22,8 +20,6 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.state.FunctionInitializationContext;
 import org.apache.flink.runtime.state.FunctionSnapshotContext;
-import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
-import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.binary.NestedRowData;
@@ -32,7 +28,6 @@ import org.apache.flink.util.InstantiationUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
@@ -40,7 +35,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-public class StarRocksDynamicSinkFunctionV2<T> extends RichSinkFunction<T> implements CheckpointedFunction, CheckpointListener, Serializable {
+public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunctionBase<T> {
 
     private static final Logger log = LoggerFactory.getLogger(StarRocksDynamicSinkFunctionV2.class);
 

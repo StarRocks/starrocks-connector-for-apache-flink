@@ -19,7 +19,6 @@ import com.starrocks.connector.flink.row.sink.StarRocksDelimiterParser;
 import com.starrocks.data.load.stream.StreamLoadDataFormat;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
-
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
@@ -34,10 +33,10 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.List;
 
 public class StarRocksSinkOptions implements Serializable {
 
@@ -69,6 +68,11 @@ public class StarRocksSinkOptions implements Serializable {
             .stringType().noDefaultValue().withDescription("StarRocks user password.");
 
     // optional sink configurations
+    public static final ConfigOption<String > SINK_VERSION = ConfigOptions.key("sink.version")
+            .stringType()
+            .defaultValue(SinkFunctionFactory.SinkVersion.V2.name())
+            .withDescription("Version of the sink");
+
     public static final ConfigOption<String> SINK_LABEL_PREFIX = ConfigOptions.key("sink.label-prefix")
             .stringType().noDefaultValue().withDescription("The prefix of the stream load label. Available values are within [-_A-Za-z0-9]");
     public static final ConfigOption<Integer> SINK_CONNECT_TIMEOUT = ConfigOptions.key("sink.connect.timeout-ms")
@@ -149,6 +153,10 @@ public class StarRocksSinkOptions implements Serializable {
 
     public String getPassword() {
         return tableOptions.get(PASSWORD);
+    }
+
+    public String getSinkVersion() {
+        return tableOptions.get(SINK_VERSION);
     }
 
     public List<String> getLoadUrlList() {
