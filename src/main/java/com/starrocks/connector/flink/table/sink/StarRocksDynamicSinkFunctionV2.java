@@ -1,6 +1,7 @@
 package com.starrocks.connector.flink.table.sink;
 
 import com.google.common.base.Strings;
+import com.starrocks.connector.flink.manager.StarRocksSinkBufferEntity;
 import com.starrocks.connector.flink.manager.StarRocksSinkManagerV2;
 import com.starrocks.connector.flink.manager.StarRocksSinkTable;
 import com.starrocks.connector.flink.row.sink.StarRocksIRowTransformer;
@@ -28,9 +29,12 @@ import org.apache.flink.util.InstantiationUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -48,6 +52,9 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
 
     private transient volatile ListState<Tuple2<Long, StreamLoadSnapshot>> snapshotStates;
     private final Map<Long, StreamLoadSnapshot> snapshotMap = new ConcurrentHashMap<>();
+
+    private transient ListState<Map<String, StarRocksSinkBufferEntity>> legacyState;
+    private transient List<StarRocksSinkBufferEntity> legacyData;
 
     public StarRocksDynamicSinkFunctionV2(StarRocksSinkOptions sinkOptions,
                                           TableSchema schema,
@@ -138,6 +145,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
                 return;
             }
         }
+        flushLegacyData();
         sinkManager.write(
                 null,
                 sinkOptions.getDatabaseName(),
@@ -197,6 +205,10 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
         } else {
             throw new RuntimeException("Snapshot state failed by prepare");
         }
+
+        if (legacyState != null) {
+            legacyState.clear();
+        }
     }
 
     @Override
@@ -207,6 +219,32 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
                         TypeInformation.of(new TypeHint<Tuple2<Long, StreamLoadSnapshot>>() {})
                 );
         snapshotStates = functionInitializationContext.getOperatorStateStore().getListState(descriptor);
+
+        if (sinkOptions.getSemantic() == StarRocksSinkSemantic.EXACTLY_ONCE) {
+            ListStateDescriptor<Map<String, StarRocksSinkBufferEntity>> legacyDescriptor =
+                    new ListStateDescriptor<>(
+                            "buffered-rows",
+                            TypeInformation.of(new TypeHint<Map<String, StarRocksSinkBufferEntity>>(){})
+                    );
+            legacyState = functionInitializationContext.getOperatorStateStore().getListState(legacyDescriptor);
+            legacyData = new ArrayList<>();
+            for (Map<String, StarRocksSinkBufferEntity> entry : legacyState.get()) {
+                legacyData.addAll(entry.values());
+            }
+        }
+    }
+
+    private void flushLegacyData() {
+        if (legacyData.isEmpty()) {
+            return;
+        }
+
+        for (StarRocksSinkBufferEntity entity : legacyData) {
+            for (byte[] data : entity.getBuffer()) {
+                sinkManager.write(null, entity.getDatabase(), entity.getTable(), new String(data, StandardCharsets.UTF_8));
+            }
+        }
+        legacyData.clear();
     }
 
     @Override
@@ -224,6 +262,8 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
             throw new RuntimeException("checkpoint complete failed, id : " + checkpointId);
         }
 
+        // set legacyState to null to avoid clear it in latter snapshotState
+        legacyState = null;
     }
 
     @Override
