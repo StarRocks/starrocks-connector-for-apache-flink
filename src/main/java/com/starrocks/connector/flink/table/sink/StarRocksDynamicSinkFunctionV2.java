@@ -41,6 +41,8 @@ import java.util.stream.Collectors;
 
 public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunctionBase<T> {
 
+    private static final long serialVersionUID = 1L;
+
     private static final Logger log = LoggerFactory.getLogger(StarRocksDynamicSinkFunctionV2.class);
 
     private static final int NESTED_ROW_DATA_HEADER_SIZE = 256;
