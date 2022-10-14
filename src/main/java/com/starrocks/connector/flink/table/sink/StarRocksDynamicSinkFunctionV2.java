@@ -235,6 +235,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
             for (Map<String, StarRocksSinkBufferEntity> entry : legacyState.get()) {
                 legacyData.addAll(entry.values());
             }
+            LOG.info("There are {} items from legacy state", legacyData.size());
         }
     }
 
@@ -247,6 +248,8 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
             for (byte[] data : entity.getBuffer()) {
                 sinkManager.write(null, entity.getDatabase(), entity.getTable(), new String(data, StandardCharsets.UTF_8));
             }
+            LOG.info("Write {} legacy records from table '{}' of database '{}'",
+                    entity.getBuffer().size(), entity.getDatabase(), entity.getTable());
         }
         legacyData.clear();
     }

@@ -99,8 +99,13 @@ public class SinkFunctionFactory {
     public static SinkVersion chooseSinkVersionAutomatically(StarRocksSinkOptions sinkOptions) {
         try {
             boolean supportTransactionLoad = isStarRocksSupportTransactionLoad(sinkOptions);
-            LOG.info("StarRocks support transaction load, and choose sink version V2");
-            return supportTransactionLoad ? SinkVersion.V2 : SinkVersion.V1;
+            if (supportTransactionLoad) {
+                LOG.info("StarRocks supports transaction load, and choose sink version V2");
+                return SinkVersion.V2;
+            } else {
+                LOG.info("StarRocks does not support transaction load, and choose sink version V1");
+                return SinkVersion.V1;
+            }
         } catch (Exception e) {
             LOG.warn("Can't decide whether StarRocks support transaction load, and sink version V2 " +
                     "will be used by default. If your StarRocks does not support transaction load, please " +

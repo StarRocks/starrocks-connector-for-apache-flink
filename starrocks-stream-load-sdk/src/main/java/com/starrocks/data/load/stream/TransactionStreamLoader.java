@@ -99,6 +99,13 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
             JSONObject bodyJson = JSON.parseObject(responseBody);
             String status = bodyJson.getString("Status");
 
+            if (status == null) {
+                String errMsg = "Can't find 'Status' in the response of transaction begin request. " +
+                        "Transaction load is supported since StarRocks 2.4, and please make sure your " +
+                        "StarRocks version support transaction load first. The response json is '" + responseBody + "'";
+                throw new IllegalStateException(errMsg);
+            }
+
             switch (status) {
                 case StreamLoadConstants.RESULT_STATUS_OK:
                     return true;
