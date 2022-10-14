@@ -43,7 +43,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
 
     private static final long serialVersionUID = 1L;
 
-    private static final Logger log = LoggerFactory.getLogger(StarRocksDynamicSinkFunctionV2.class);
+    private static final Logger LOG = LoggerFactory.getLogger(StarRocksDynamicSinkFunctionV2.class);
 
     private static final int NESTED_ROW_DATA_HEADER_SIZE = 256;
 
@@ -87,7 +87,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
                 if (Strings.isNullOrEmpty(data.getDatabase())
                         || Strings.isNullOrEmpty(data.getTable())
                         || data.getDataRows() == null) {
-                    log.warn(String.format("json row data not fulfilled. {database: %s, table: %s, dataRows: %s}",
+                    LOG.warn(String.format("json row data not fulfilled. {database: %s, table: %s, dataRows: %s}",
                             data.getDatabase(), data.getTable(), Arrays.toString(data.getDataRows())));
                     return;
                 }
@@ -98,7 +98,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
                 if (Strings.isNullOrEmpty(data.getDatabase())
                         || Strings.isNullOrEmpty(data.getTable())
                         || data.getRow() == null) {
-                    log.warn(String.format("json row data not fulfilled. {database: %s, table: %s, dataRows: %s}",
+                    LOG.warn(String.format("json row data not fulfilled. {database: %s, table: %s, dataRows: %s}",
                             data.getDatabase(), data.getTable(), data.getRow()));
                     return;
                 }
@@ -179,6 +179,8 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
 
             throw new RuntimeException(String.format("Open failed, some labels are not commit (%s)", labels));
         }
+
+        LOG.info("Open sink function v2");
     }
 
     @Override
@@ -253,14 +255,14 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
     public void notifyCheckpointComplete(long checkpointId) throws Exception {
         StreamLoadSnapshot snapshot = snapshotMap.get(checkpointId);
         if (snapshot == null) {
-            log.warn("Unknown checkpoint id : {}", checkpointId);
+            LOG.warn("Unknown checkpoint id : {}", checkpointId);
             return;
         }
 
         if (sinkManager.commit(snapshot)) {
             snapshotMap.remove(checkpointId);
         } else {
-            log.error("checkpoint complete failed, id : {}", checkpointId);
+            LOG.error("checkpoint complete failed, id : {}", checkpointId);
             throw new RuntimeException("checkpoint complete failed, id : " + checkpointId);
         }
 
@@ -272,7 +274,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
     public void notifyCheckpointAborted(long checkpointId) throws Exception {
         StreamLoadSnapshot snapshot = snapshotMap.get(checkpointId);
         if (snapshot == null) {
-            log.warn("Unknown checkpoint id : {}", checkpointId);
+            LOG.warn("Unknown checkpoint id : {}", checkpointId);
             return;
         }
 

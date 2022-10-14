@@ -70,7 +70,7 @@ public class StarRocksSinkOptions implements Serializable {
     // optional sink configurations
     public static final ConfigOption<String > SINK_VERSION = ConfigOptions.key("sink.version")
             .stringType()
-            .defaultValue(SinkFunctionFactory.SinkVersion.V2.name())
+            .defaultValue(SinkFunctionFactory.SinkVersion.AUTO.name())
             .withDescription("Version of the sink");
 
     public static final ConfigOption<String> SINK_LABEL_PREFIX = ConfigOptions.key("sink.label-prefix")

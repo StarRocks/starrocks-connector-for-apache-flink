@@ -92,6 +92,7 @@ public class StarRocksDynamicSinkFunction<T> extends StarRocksDynamicSinkFunctio
         }
         sinkManager.startScheduler();
         sinkManager.startAsyncFlushing();
+        LOG.info("Open sink function");
     }
 
     @Override
