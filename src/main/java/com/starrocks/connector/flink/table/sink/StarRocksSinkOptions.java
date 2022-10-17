@@ -81,7 +81,7 @@ public class StarRocksSinkOptions implements Serializable {
             .intType().defaultValue(2).withDescription("Stream load thread count");
 
     public static final ConfigOption<Long> SINK_CHUNK_LIMIT = ConfigOptions.key("sink.chunk-limit")
-            .longType().defaultValue(100 * GIGA_BYTES_SCALE).withDescription("Data chunk size in a http request for stream load");
+            .longType().defaultValue(3 * GIGA_BYTES_SCALE).withDescription("Data chunk size in a http request for stream load");
 
     public static final ConfigOption<Long> SINK_SCAN_FREQUENCY = ConfigOptions.key("sink.scan-frequency.ms")
             .longType().defaultValue(50L).withDescription("Scan frequency in milliseconds.");

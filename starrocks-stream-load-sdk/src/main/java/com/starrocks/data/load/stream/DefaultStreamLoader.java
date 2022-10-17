@@ -141,15 +141,15 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
         for (StreamLoadSnapshot.Transaction transaction : snapshot.getTransactions()) {
             boolean prepared = false;
             for (int i = 0; i < 3; i++) {
-                if (prepare(transaction)) {
-                    prepared = true;
-                    break;
-                }
                 try {
                     Thread.sleep(i * 1000);
                 } catch (InterruptedException e) {
                     log.warn("prepare interrupted");
                     return false;
+                }
+                if (prepare(transaction)) {
+                    prepared = true;
+                    break;
                 }
             }
             if (!prepared) {
@@ -169,15 +169,15 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
                 continue;
             }
             for (int i = 0; i < 3; i++) {
-                if (commit(transaction)) {
-                    transaction.setFinish(true);
-                    break;
-                }
                 try {
                     Thread.sleep(i * 1000);
                 } catch (InterruptedException e) {
                     log.warn("commit interrupted");
                     return false;
+                }
+                if (commit(transaction)) {
+                    transaction.setFinish(true);
+                    break;
                 }
             }
             if (!transaction.isFinish()) {

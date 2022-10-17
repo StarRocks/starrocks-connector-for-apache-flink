@@ -69,6 +69,8 @@ public class StarRocksDynamicTableSinkFactory implements DynamicTableSinkFactory
         optionalOptions.add(StarRocksSinkOptions.SINK_LABEL_PREFIX);
         optionalOptions.add(StarRocksSinkOptions.SINK_CONNECT_TIMEOUT);
         optionalOptions.add(StarRocksSinkOptions.SINK_IO_THREAD_COUNT);
+        optionalOptions.add(StarRocksSinkOptions.SINK_CHUNK_LIMIT);
+        optionalOptions.add(StarRocksSinkOptions.SINK_SCAN_FREQUENCY);
         return optionalOptions;
     }
 }
