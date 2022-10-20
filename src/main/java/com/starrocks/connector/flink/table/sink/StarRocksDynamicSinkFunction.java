@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.flink.table.sink;
 
+import com.google.common.base.Strings;
 import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionOptions;
 import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
 import com.starrocks.connector.flink.manager.StarRocksQueryVisitor;
@@ -22,8 +23,6 @@ import com.starrocks.connector.flink.manager.StarRocksSinkManager;
 import com.starrocks.connector.flink.row.sink.StarRocksIRowTransformer;
 import com.starrocks.connector.flink.row.sink.StarRocksISerializer;
 import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
-
-import com.google.common.base.Strings;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.alter.Alter;
@@ -36,8 +35,6 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.runtime.state.FunctionInitializationContext;
 import org.apache.flink.runtime.state.FunctionSnapshotContext;
-import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
-import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.binary.NestedRowData;
@@ -49,7 +46,7 @@ import org.slf4j.LoggerFactory;
 import java.util.HashMap;
 import java.util.Map;
 
-public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> implements CheckpointedFunction {
+public class StarRocksDynamicSinkFunction<T> extends StarRocksDynamicSinkFunctionBase<T> {
 
     private static final long serialVersionUID = 1L;
     private static final Logger LOG = LoggerFactory.getLogger(StarRocksDynamicSinkFunction.class);
@@ -95,6 +92,7 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
         }
         sinkManager.startScheduler();
         sinkManager.startAsyncFlushing();
+        LOG.info("Open sink function");
     }
 
     @Override
@@ -212,5 +210,9 @@ public class StarRocksDynamicSinkFunction<T> extends RichSinkFunction<T> impleme
             sinkManager.flush(null, true);
         }
         checkpointedState.clear();
+    }
+
+    @Override
+    public void notifyCheckpointComplete(long checkpointId) throws Exception {
     }
 }

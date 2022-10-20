@@ -1,9 +1,8 @@
 package com.starrocks.data.load.stream;
 
-import com.starrocks.data.load.stream.properties.StreamLoadProperties;
-
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
+import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import org.apache.http.Header;
 import org.apache.http.HttpHeaders;
 import org.apache.http.client.config.RequestConfig;
@@ -21,6 +20,11 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+
+import static com.starrocks.data.load.stream.StreamLoadConstants.getBeginUrl;
+import static com.starrocks.data.load.stream.StreamLoadConstants.getCommitUrl;
+import static com.starrocks.data.load.stream.StreamLoadConstants.getPrepareUrl;
+import static com.starrocks.data.load.stream.StreamLoadConstants.getRollbackUrl;
 
 public class TransactionStreamLoader extends DefaultStreamLoader {
 
@@ -94,6 +98,13 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
 
             JSONObject bodyJson = JSON.parseObject(responseBody);
             String status = bodyJson.getString("Status");
+
+            if (status == null) {
+                String errMsg = "Can't find 'Status' in the response of transaction begin request. " +
+                        "Transaction load is supported since StarRocks 2.4, and please make sure your " +
+                        "StarRocks version support transaction load first. The response json is '" + responseBody + "'";
+                throw new IllegalStateException(errMsg);
+            }
 
             switch (status) {
                 case StreamLoadConstants.RESULT_STATUS_OK:
@@ -223,38 +234,6 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
 
     @Override
     protected String getSendUrl(String host, String database, String table) {
-        if (host == null) {
-            throw new IllegalArgumentException("None of the hosts in `load_url` could be connected.");
-        }
-        return host + StreamLoadConstants.PATH_TRANSACTION_SEND;
-    }
-
-    protected String getBeginUrl(String host) {
-        if (host == null) {
-            throw new IllegalArgumentException("None of the hosts in `load_url` could be connected.");
-        }
-
-        return host + StreamLoadConstants.PATH_TRANSACTION_BEGIN;
-    }
-
-    protected String getPrepareUrl(String host) {
-        if (host == null) {
-            throw new IllegalArgumentException("None of the hosts in `load_url` could be connected.");
-        }
-        return host + StreamLoadConstants.PATH_TRANSACTION_PRE_COMMIT;
-    }
-
-    protected String getCommitUrl(String host) {
-        if (host == null) {
-            throw new IllegalArgumentException("None of the hosts in `load_url` could be connected.");
-        }
-        return host + StreamLoadConstants.PATH_TRANSACTION_COMMIT;
-    }
-
-    protected String getRollbackUrl(String host) {
-        if (host == null) {
-            throw new IllegalArgumentException("None of the hosts in `load_url` could be connected.");
-        }
-        return host + StreamLoadConstants.PATH_TRANSACTION_ROLLBACK;
+       return StreamLoadConstants.getSendUrl(host);
     }
 }

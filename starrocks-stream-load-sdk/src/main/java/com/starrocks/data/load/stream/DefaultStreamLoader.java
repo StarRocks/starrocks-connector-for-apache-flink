@@ -1,11 +1,10 @@
 package com.starrocks.data.load.stream;
 
+import com.alibaba.fastjson.JSON;
 import com.starrocks.data.load.stream.exception.StreamLoadFailException;
 import com.starrocks.data.load.stream.http.StreamLoadEntity;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
-
-import com.alibaba.fastjson.JSON;
 import org.apache.http.Header;
 import org.apache.http.HttpHeaders;
 import org.apache.http.client.config.RequestConfig;
@@ -127,8 +126,13 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
     }
 
     @Override
+    public boolean commit(StreamLoadSnapshot.Transaction transaction) {
+        return true;
+    }
+
+    @Override
     public boolean rollback(StreamLoadSnapshot.Transaction transaction) {
-        return false;
+        return true;
     }
 
     @Override
@@ -140,7 +144,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
                 try {
                     Thread.sleep(i * 1000);
                 } catch (InterruptedException e) {
-                    log.warn("commit interrupted");
+                    log.warn("prepare interrupted");
                     return false;
                 }
                 if (prepare(transaction)) {
@@ -155,11 +159,6 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
         }
 
         return succeed;
-    }
-
-    @Override
-    public boolean commit(StreamLoadSnapshot.Transaction transaction) {
-        return true;
     }
 
     @Override
