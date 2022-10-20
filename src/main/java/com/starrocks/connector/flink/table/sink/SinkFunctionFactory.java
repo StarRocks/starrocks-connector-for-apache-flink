@@ -45,10 +45,13 @@ public class SinkFunctionFactory {
     private static final Logger LOG = LoggerFactory.getLogger(SinkFunctionFactory.class);
 
     enum SinkVersion {
+        // Implement exactly-once using stream load which has a
+        // poor performance. All versions of StarRocks are supported
         V1,
-
+        // Implement exactly-once using transaction load since StarRocks 2.4
         V2,
-
+        // Select sink version automatically according to whether StarRocks
+        // supports transaction load
         AUTO
     }
 
@@ -107,7 +110,7 @@ public class SinkFunctionFactory {
                 return SinkVersion.V1;
             }
         } catch (Exception e) {
-            LOG.warn("Can't decide whether StarRocks support transaction load, and sink version V2 " +
+            LOG.warn("Can't decide whether StarRocks supports transaction load, and sink version V2 " +
                     "will be used by default. If your StarRocks does not support transaction load, please " +
                     "configure '{}' to 'V1' manually", StarRocksSinkOptions.SINK_VERSION.key());
             return SinkVersion.V2;
@@ -115,7 +118,7 @@ public class SinkFunctionFactory {
     }
 
     public static SinkVersion getSinkVersion(StarRocksSinkOptions sinkOptions) {
-        String sinkTypeOption = sinkOptions.getSinkVersion().trim().toUpperCase();
+        String sinkTypeOption = sinkOptions.getSinkVersion().trim();
         SinkVersion sinkVersion;
         if (SinkVersion.V1.name().equals(sinkTypeOption)) {
             sinkVersion = SinkVersion.V1;
