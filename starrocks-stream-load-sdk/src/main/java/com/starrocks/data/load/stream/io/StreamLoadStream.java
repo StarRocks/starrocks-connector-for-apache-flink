@@ -73,7 +73,6 @@ public class StreamLoadStream extends InputStream {
         cache = null;
         pos = 0;
         endStream = true;
-
     }
 
     private void fillBuffer() {

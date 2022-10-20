@@ -67,12 +67,24 @@ public class StarRocksSinkOptions implements Serializable {
             .stringType().noDefaultValue().withDescription("StarRocks user password.");
 
     // optional sink configurations
+    public static final ConfigOption<String > SINK_VERSION = ConfigOptions.key("sink.version")
+            .stringType()
+            .defaultValue(SinkFunctionFactory.SinkVersion.AUTO.name())
+            .withDescription("Version of the sink");
+
     public static final ConfigOption<String> SINK_LABEL_PREFIX = ConfigOptions.key("sink.label-prefix")
             .stringType().noDefaultValue().withDescription("The prefix of the stream load label. Available values are within [-_A-Za-z0-9]");
     public static final ConfigOption<Integer> SINK_CONNECT_TIMEOUT = ConfigOptions.key("sink.connect.timeout-ms")
             .intType().defaultValue(1000).withDescription("Timeout in millisecond for connecting to the `load-url`.");
     public static final ConfigOption<Integer> SINK_IO_THREAD_COUNT = ConfigOptions.key("sink.io.thread-count")
-            .intType().defaultValue(Runtime.getRuntime().availableProcessors()).withDescription("Stream load thread count");
+            .intType().defaultValue(2).withDescription("Stream load thread count");
+
+    public static final ConfigOption<Long> SINK_CHUNK_LIMIT = ConfigOptions.key("sink.chunk-limit")
+            .longType().defaultValue(3 * GIGA_BYTES_SCALE).withDescription("Data chunk size in a http request for stream load");
+
+    public static final ConfigOption<Long> SINK_SCAN_FREQUENCY = ConfigOptions.key("sink.scan-frequency.ms")
+            .longType().defaultValue(50L).withDescription("Scan frequency in milliseconds.");
+
     public static final ConfigOption<String> SINK_SEMANTIC = ConfigOptions.key("sink.semantic")
             .stringType().defaultValue(StarRocksSinkSemantic.AT_LEAST_ONCE.getName()).withDescription("Fault tolerance guarantee. `at-least-once` or `exactly-once`");
     public static final ConfigOption<Long> SINK_BATCH_MAX_SIZE = ConfigOptions.key("sink.buffer-flush.max-bytes")
@@ -140,6 +152,10 @@ public class StarRocksSinkOptions implements Serializable {
         return tableOptions.get(PASSWORD);
     }
 
+    public String getSinkVersion() {
+        return tableOptions.get(SINK_VERSION);
+    }
+
     public List<String> getLoadUrlList() {
         return tableOptions.getOptional(LOAD_URL).orElse(null);
     }
@@ -174,6 +190,14 @@ public class StarRocksSinkOptions implements Serializable {
 
     public int getIoThreadCount() {
         return tableOptions.get(SINK_IO_THREAD_COUNT);
+    }
+
+    public long getChunkLimit() {
+        return tableOptions.get(SINK_CHUNK_LIMIT);
+    }
+
+    public long getScanFrequency() {
+        return tableOptions.get(SINK_SCAN_FREQUENCY);
     }
 
     public long getSinkOfferTimeout() {
@@ -347,6 +371,7 @@ public class StarRocksSinkOptions implements Serializable {
                 .database(getDatabaseName())
                 .table(getTableName())
                 .streamLoadDataFormat(dataFormat)
+                .chunkLimit(getChunkLimit())
                 .enableUpsertDelete(supportUpsertDelete());
 
         if (hasColumnMappingProperty()) {
@@ -360,6 +385,7 @@ public class StarRocksSinkOptions implements Serializable {
                 .cacheMaxBytes(getSinkMaxBytes())
                 .connectTimeout(getConnectTimeout())
                 .ioThreadCount(getIoThreadCount())
+                .scanningFrequency(getScanFrequency())
                 .labelPrefix(getLabelPrefix())
                 .username(getUsername())
                 .password(getPassword())
