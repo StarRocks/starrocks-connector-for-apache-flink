@@ -36,9 +36,9 @@ public class StreamLoadTableProperties implements Serializable {
                 : builder.dataFormat;
 
         if (dataFormat instanceof StreamLoadDataFormat.JSONFormat) {
-            chunkLimit = Math.max(3221225472L, builder.chunkLimit);
+            chunkLimit = Math.min(3221225472L, builder.chunkLimit);
         } else {
-            chunkLimit = Math.max(10737418240L, builder.chunkLimit);
+            chunkLimit = Math.min(10737418240L, builder.chunkLimit);
         }
         this.properties = builder.properties;
     }
