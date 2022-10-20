@@ -101,6 +101,11 @@ public class SinkFunctionFactory {
 
     public static SinkVersion chooseSinkVersionAutomatically(StarRocksSinkOptions sinkOptions) {
         try {
+            if (StarRocksSinkSemantic.AT_LEAST_ONCE.equals(sinkOptions.getSemantic())) {
+                LOG.info("Choose sink version V2 for at-least-once.");
+                return SinkVersion.V2;
+            }
+
             boolean supportTransactionLoad = isStarRocksSupportTransactionLoad(sinkOptions);
             if (supportTransactionLoad) {
                 LOG.info("StarRocks supports transaction load, and choose sink version V2");

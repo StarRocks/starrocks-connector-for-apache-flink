@@ -25,7 +25,9 @@ import mockit.MockUp;
 import org.apache.flink.configuration.Configuration;
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.assertEquals;
@@ -85,8 +87,32 @@ public class SinkFunctionFactoryTest {
     }
 
     @Test
-    public void testChooseSinkVersionAutomatically() {
-        StarRocksSinkOptions sinkOptions = new StarRocksSinkOptions(new Configuration(), new HashMap<>());
+    public void testChooseSinkVersionAutomaticallyForExactlyOnce() {
+        testChooseSinkVersionAutomaticallyBase(true,
+                Arrays.asList(
+                        SinkFunctionFactory.SinkVersion.V2,
+                        SinkFunctionFactory.SinkVersion.V2,
+                        SinkFunctionFactory.SinkVersion.V1)
+        );
+    }
+
+    @Test
+    public void testChooseSinkVersionAutomaticallyForAtLeastOnce() {
+        testChooseSinkVersionAutomaticallyBase(false,
+                Arrays.asList(
+                        SinkFunctionFactory.SinkVersion.V2,
+                        SinkFunctionFactory.SinkVersion.V2,
+                        SinkFunctionFactory.SinkVersion.V2)
+        );
+    }
+
+    private void testChooseSinkVersionAutomaticallyBase(
+            boolean isExactlyOnce, List<SinkFunctionFactory.SinkVersion> expectedVersions) {
+        Configuration conf = new Configuration();
+        conf.setString(StarRocksSinkOptions.SINK_SEMANTIC.key(),
+                isExactlyOnce ? StarRocksSinkSemantic.EXACTLY_ONCE.getName()
+                        : StarRocksSinkSemantic.AT_LEAST_ONCE.getName());
+        StarRocksSinkOptions sinkOptions = new StarRocksSinkOptions(conf, new HashMap<>());
         AtomicReference<Boolean> supportTransactionLoad = new AtomicReference<>();
         new MockUp<SinkFunctionFactory>() {
             @Mock
@@ -99,16 +125,13 @@ public class SinkFunctionFactoryTest {
         };
 
         supportTransactionLoad.set(null);
-        assertEquals(SinkFunctionFactory.SinkVersion.V2,
-                SinkFunctionFactory.chooseSinkVersionAutomatically(sinkOptions));
+        assertEquals(expectedVersions.get(0), SinkFunctionFactory.chooseSinkVersionAutomatically(sinkOptions));
 
         supportTransactionLoad.set(true);
-        assertEquals(SinkFunctionFactory.SinkVersion.V2,
-                SinkFunctionFactory.chooseSinkVersionAutomatically(sinkOptions));
+        assertEquals(expectedVersions.get(1), SinkFunctionFactory.chooseSinkVersionAutomatically(sinkOptions));
 
         supportTransactionLoad.set(false);
-        assertEquals(SinkFunctionFactory.SinkVersion.V1,
-                SinkFunctionFactory.chooseSinkVersionAutomatically(sinkOptions));
+        assertEquals(expectedVersions.get(2), SinkFunctionFactory.chooseSinkVersionAutomatically(sinkOptions));
     }
 
     @Test
