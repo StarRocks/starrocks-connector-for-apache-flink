@@ -118,7 +118,7 @@ public class SinkFunctionFactory {
     }
 
     public static SinkVersion getSinkVersion(StarRocksSinkOptions sinkOptions) {
-        String sinkTypeOption = sinkOptions.getSinkVersion().trim();
+        String sinkTypeOption = sinkOptions.getSinkVersion().trim().toUpperCase();
         SinkVersion sinkVersion;
         if (SinkVersion.V1.name().equals(sinkTypeOption)) {
             sinkVersion = SinkVersion.V1;
