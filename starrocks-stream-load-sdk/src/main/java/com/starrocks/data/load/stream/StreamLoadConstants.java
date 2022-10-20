@@ -26,4 +26,41 @@ public interface StreamLoadConstants {
     String LABEL_STATE_PREPARE = "PREPARE";
     String LABEL_STATE_ABORTED = "ABORTED";
     String LABEL_STATE_UNKNOWN = "UNKNOWN";
+
+    public static String getBeginUrl(String host) {
+        if (host == null) {
+            throw new IllegalArgumentException("None of the hosts in `load_url` could be connected.");
+        }
+
+        return host + StreamLoadConstants.PATH_TRANSACTION_BEGIN;
+    }
+
+    public static String getSendUrl(String host) {
+        if (host == null) {
+            throw new IllegalArgumentException("None of the hosts in `load_url` could be connected.");
+        }
+
+        return host + StreamLoadConstants.PATH_TRANSACTION_SEND;
+    }
+
+    public static String getPrepareUrl(String host) {
+        if (host == null) {
+            throw new IllegalArgumentException("None of the hosts in `load_url` could be connected.");
+        }
+        return host + StreamLoadConstants.PATH_TRANSACTION_PRE_COMMIT;
+    }
+
+    public static String getCommitUrl(String host) {
+        if (host == null) {
+            throw new IllegalArgumentException("None of the hosts in `load_url` could be connected.");
+        }
+        return host + StreamLoadConstants.PATH_TRANSACTION_COMMIT;
+    }
+
+    public static String getRollbackUrl(String host) {
+        if (host == null) {
+            throw new IllegalArgumentException("None of the hosts in `load_url` could be connected.");
+        }
+        return host + StreamLoadConstants.PATH_TRANSACTION_ROLLBACK;
+    }
 }

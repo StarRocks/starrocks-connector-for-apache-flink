@@ -15,7 +15,6 @@
 package com.starrocks.connector.flink.table.sink;
 
 import com.starrocks.connector.flink.row.sink.StarRocksTableRowTransformer;
-
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.connector.ChangelogMode;
@@ -42,7 +41,7 @@ public class StarRocksDynamicTableSink implements DynamicTableSink {
     @SuppressWarnings("unchecked")
     public SinkRuntimeProvider getSinkRuntimeProvider(Context context) {
         final TypeInformation<RowData> rowDataTypeInfo = context.createTypeInformation(flinkSchema.toRowDataType());
-        StarRocksDynamicSinkFunction<RowData> starrocksSinkFunction = new StarRocksDynamicSinkFunction<>(
+        StarRocksDynamicSinkFunctionBase<RowData> starrocksSinkFunction = SinkFunctionFactory.createSinkFunction(
             sinkOptions,
             flinkSchema,
             new StarRocksTableRowTransformer(rowDataTypeInfo)
