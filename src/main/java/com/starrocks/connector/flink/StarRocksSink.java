@@ -17,9 +17,8 @@ package com.starrocks.connector.flink;
 import com.starrocks.connector.flink.row.sink.StarRocksGenericRowTransformer;
 import com.starrocks.connector.flink.row.sink.StarRocksIRowTransformer;
 import com.starrocks.connector.flink.row.sink.StarRocksSinkRowBuilder;
-import com.starrocks.connector.flink.table.sink.StarRocksDynamicSinkFunctionV2;
+import com.starrocks.connector.flink.table.sink.SinkFunctionFactory;
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
-
 import org.apache.flink.streaming.api.functions.sink.SinkFunction;
 import org.apache.flink.table.api.TableSchema;
 
@@ -44,7 +43,7 @@ public class StarRocksSink {
             StarRocksSinkRowBuilder<T> rowDataTransformer) {
         StarRocksIRowTransformer<T> rowTransformer =
                 new StarRocksGenericRowTransformer<>(rowDataTransformer);
-        return new StarRocksDynamicSinkFunctionV2<>(sinkOptions, flinkTableSchema, rowTransformer);
+        return SinkFunctionFactory.createSinkFunction(sinkOptions, flinkTableSchema, rowTransformer);
     }
 
     /**
@@ -58,7 +57,7 @@ public class StarRocksSink {
      * @return SinkFunction          SinkFunction that could be add to a stream.
      */
     public static SinkFunction<String> sink(StarRocksSinkOptions sinkOptions) {
-        return new StarRocksDynamicSinkFunctionV2<>(sinkOptions);
+        return SinkFunctionFactory.createSinkFunction(sinkOptions);
     }
 
     private StarRocksSink() {}
