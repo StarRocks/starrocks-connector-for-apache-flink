@@ -180,6 +180,27 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
     }
 
     @Test
+    public void testMultiThreadFlush() throws Exception {
+        mockTableStructure();
+        mockStarRocksVersion(null);
+        mockSuccessResponse();
+        String exMsg = "";
+        try {
+            StarRocksSinkManager mgr = new StarRocksSinkManager(OPTIONS, TABLE_SCHEMA);
+            mgr.startAsyncFlushing();
+            mgr.startScheduler();
+            for (int i = 0; i < 10000 ; i++) {
+                mgr.writeRecords("db","table_"+i, "");
+            }
+            mgr.close();
+        } catch (Exception e) {
+            exMsg = e.getMessage();
+            throw e;
+        }
+        assertEquals(0, exMsg.length());
+    }
+
+    @Test
     public void testFlush() throws Exception {
         mockTableStructure();
         mockStarRocksVersion(null);

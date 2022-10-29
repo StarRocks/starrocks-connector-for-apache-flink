@@ -85,6 +85,8 @@ public class StarRocksSinkOptions implements Serializable {
             .longType().defaultValue(300000L).withDescription("Flush interval of the row batch in millisecond.");
     public static final ConfigOption<Integer> SINK_MAX_RETRIES = ConfigOptions.key("sink.max-retries")
             .intType().defaultValue(3).withDescription("Max flushing retry times of the row batch.");
+    public static final ConfigOption<Integer> SINK_FlUSH_THREADS = ConfigOptions.key("sink.flush-threads")
+            .intType().defaultValue(32).withDescription("Flush thread nums for waiting write queue.");
     public static final ConfigOption<Long> SINK_BATCH_OFFER_TIMEOUT = ConfigOptions.key("sink.buffer-flush.enqueue-timeout-ms")
             .longType().defaultValue(600000L).withDescription("Offer to flushQueue timeout in millisecond.");
     public static final ConfigOption<Integer> SINK_METRIC_HISTOGRAM_WINDOW_SIZE = ConfigOptions.key("sink.metric.histogram-window-size")
@@ -154,6 +156,10 @@ public class StarRocksSinkOptions implements Serializable {
 
     public int getSinkMaxRetries() {
         return tableOptions.get(SINK_MAX_RETRIES);
+    }
+
+    public int getSinkFlushThreads() {
+        return tableOptions.get(SINK_FlUSH_THREADS);
     }
 
     public long getSinkMaxFlushInterval() {

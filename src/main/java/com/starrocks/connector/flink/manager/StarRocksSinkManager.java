@@ -19,6 +19,7 @@ import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 import com.starrocks.connector.flink.table.sink.StarRocksSinkSemantic;
 import org.apache.flink.api.common.functions.RuntimeContext;
+import org.apache.flink.calcite.shaded.org.apache.commons.codec.digest.MurmurHash3;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Histogram;
 import org.apache.flink.runtime.metrics.DescriptiveStatisticsHistogram;
@@ -26,7 +27,9 @@ import org.apache.flink.runtime.util.ExecutorThreadFactory;
 import org.apache.flink.table.api.TableColumn;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.api.constraints.UniqueConstraint;
+import org.apache.flink.table.runtime.util.MurmurHashUtil;
 import org.apache.flink.table.types.logical.LogicalTypeRoot;
+import org.apache.flink.util.MathUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,7 +42,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.ScheduledExecutorService;
@@ -57,23 +62,23 @@ public class StarRocksSinkManager implements Serializable {
     private final StarRocksQueryVisitor starrocksQueryVisitor;
     private StarRocksStreamLoadVisitor starrocksStreamLoadVisitor;
     private final StarRocksSinkOptions sinkOptions;
-    final LinkedBlockingDeque<StarRocksSinkBufferEntity> flushQueue = new LinkedBlockingDeque<>(1);
+    private LinkedBlockingDeque<StarRocksSinkBufferEntity>[] flushQueues;
 
     private transient Counter totalFlushBytes;
-    private transient Counter totalFlushRows;
-    private transient Counter totalFlushTime;
-    private transient Counter totalFlushTimeWithoutRetries;
-    private transient Counter totalFlushSucceededTimes;
-    private transient Counter totalFlushFailedTimes;
-    private transient Histogram flushTimeNs;
-    private transient Histogram offerTimeNs;
+    private transient volatile Counter totalFlushRows;
+    private transient volatile Counter totalFlushTime;
+    private transient volatile Counter totalFlushTimeWithoutRetries;
+    private transient volatile Counter totalFlushSucceededTimes;
+    private transient volatile Counter totalFlushFailedTimes;
+    private transient volatile Histogram flushTimeNs;
+    private transient volatile Histogram offerTimeNs;
 
-    private transient Counter totalFilteredRows;
-    private transient Histogram commitAndPublishTimeMs;
-    private transient Histogram streamLoadPutTimeMs;
-    private transient Histogram readDataTimeMs;
-    private transient Histogram writeDataTimeMs;
-    private transient Histogram loadTimeMs;
+    private transient volatile Counter totalFilteredRows;
+    private transient volatile Histogram commitAndPublishTimeMs;
+    private transient volatile Histogram streamLoadPutTimeMs;
+    private transient volatile Histogram readDataTimeMs;
+    private transient volatile Histogram writeDataTimeMs;
+    private transient volatile Histogram loadTimeMs;
 
 
     private static final String COUNTER_TOTAL_FLUSH_BYTES = "totalFlushBytes";
@@ -96,11 +101,12 @@ public class StarRocksSinkManager implements Serializable {
     private final Map<String, StarRocksSinkBufferEntity> bufferMap = new ConcurrentHashMap<>();
     private long FLUSH_QUEUE_POLL_TIMEOUT = 3000;
     private volatile boolean closed = false;
-    private volatile boolean flushThreadAlive = false;
+    private volatile boolean flushThreadAlive = true;
     private volatile Throwable flushException;
-
-    private ScheduledExecutorService scheduler;
-    private ScheduledFuture<?> scheduledFuture;
+    private  ScheduledExecutorService scheduler;
+    private volatile ScheduledFuture<?> scheduledFuture;
+    private ExecutorService flushThreadExecutorService;
+    private ArrayList<CompletableFuture<Boolean>> flushQueuesThreadList;
 
     public StarRocksSinkManager(StarRocksSinkOptions sinkOptions, TableSchema flinkSchema) {
         this.sinkOptions = sinkOptions;
@@ -131,6 +137,10 @@ public class StarRocksSinkManager implements Serializable {
                 null == schema ? new String[]{} : schema.getFieldNames(),
                 version.length() > 0 && !version.trim().startsWith("1.")
         );
+        flushQueues = new LinkedBlockingDeque[sinkOptions.getSinkFlushThreads()];
+        for (int i = 0; i < sinkOptions.getSinkFlushThreads(); i++) {
+            flushQueues[i] =  new LinkedBlockingDeque<StarRocksSinkBufferEntity>(1);
+        }
     }
 
     public void setRuntimeContext(RuntimeContext runtimeCtx) {
@@ -152,53 +162,51 @@ public class StarRocksSinkManager implements Serializable {
     }
 
     public void startAsyncFlushing() {
-        // start flush thread
-        Thread flushThread = new Thread(() -> {
-            while (true) {
-                try {
-                    if (!asyncFlush()) {
-                        LOG.info("StarRocks flush thread is about to exit.");
+        flushThreadExecutorService = Executors.newFixedThreadPool(sinkOptions.getSinkFlushThreads(), new ExecutorThreadFactory("starrocks-flush"));
+        flushQueuesThreadList = new ArrayList<>();
+        for (int i = 0; i < sinkOptions.getSinkFlushThreads(); i++) {
+            int finalI = i;
+            CompletableFuture<Boolean> future = CompletableFuture.supplyAsync(() -> {
+                LinkedBlockingDeque<StarRocksSinkBufferEntity> flushQueue =  flushQueues[finalI];
+                while (true) {
+                    try {
+                        if (!asyncFlush(flushQueue)) {
+                            LOG.info("StarRocks flush thread is about to exit.");
+                            flushThreadAlive = false;
+                            break;
+                        }
+                    } catch (Exception e) {
+                        LOG.error("StarRocks flush thread uncaught exception occurred: " + e.getMessage(), e);
                         flushThreadAlive = false;
-                        break;
+                        flushException = e;
                     }
-                } catch (Exception e) {
-                    flushException = e;
                 }
-            }
-        });
-
-        flushThread.setUncaughtExceptionHandler((t, e) -> {
-            LOG.error("StarRocks flush thread uncaught exception occurred: " + e.getMessage(), e);
-            flushException = e;
-            flushThreadAlive = false;
-        });
-        flushThread.setName("starrocks-flush");
-        flushThread.setDaemon(true);
-        flushThread.start();
-        flushThreadAlive = true;
+                return flushThreadAlive;
+            }, flushThreadExecutorService);
+            flushQueuesThreadList.add(future);
+        }
     }
 
     public void startScheduler() throws IOException {
         if (StarRocksSinkSemantic.EXACTLY_ONCE.equals(sinkOptions.getSemantic())) {
             return;
         }
-        stopScheduler();
         this.scheduler = Executors.newScheduledThreadPool(1, new ExecutorThreadFactory("starrocks-interval-sink"));
-        this.scheduledFuture = this.scheduler.schedule(() -> {
+        this.scheduledFuture = this.scheduler.scheduleWithFixedDelay(() -> {
             synchronized (StarRocksSinkManager.this) {
-                if (!closed) {
-                    try {
-                        LOG.info("StarRocks interval Sinking triggered.");
-                        if (bufferMap.isEmpty()) {
-                            startScheduler();
-                        }
-                        flush(null, false);
-                    } catch (Exception e) {
-                        flushException = e;
+            if (!closed) {
+                try {
+                    LOG.info("StarRocks interval Sinking triggered.");
+                    if (bufferMap.isEmpty()) {
+                        return;
                     }
+                    flush(null, false);
+                } catch (Exception e) {
+                    flushException = e;
                 }
             }
-        }, sinkOptions.getSinkMaxFlushInterval(), TimeUnit.MILLISECONDS);
+            }
+        }, sinkOptions.getSinkMaxFlushInterval(), sinkOptions.getSinkMaxFlushInterval(), TimeUnit.MILLISECONDS);
     }
 
     public void stopScheduler() {
@@ -280,6 +288,9 @@ public class StarRocksSinkManager implements Serializable {
             try {
                 LOG.info("StarRocks Sink is about to close.");
                 flush(null, true);
+                if (flushThreadExecutorService != null) {
+                    flushThreadExecutorService.shutdown();
+                }
             } catch (Exception e) {
                 throw new RuntimeException("Writing records to StarRocks failed.", e);
             } finally {
@@ -306,7 +317,7 @@ public class StarRocksSinkManager implements Serializable {
     /**
      * @return false if met eof and flush thread will exit.
      */
-    private boolean asyncFlush() throws Exception {
+    private boolean asyncFlush(LinkedBlockingDeque<StarRocksSinkBufferEntity> flushQueue) throws Exception {
         StarRocksSinkBufferEntity flushData = flushQueue.poll(FLUSH_QUEUE_POLL_TIMEOUT, TimeUnit.MILLISECONDS);
         if (flushData == null || (0 == flushData.getBatchCount() && !flushData.EOF())) {
             return true;
@@ -314,7 +325,6 @@ public class StarRocksSinkManager implements Serializable {
         if (flushData.EOF()) {
             return false;
         }
-        stopScheduler();
         LOG.info(String.format("Async stream load: db[%s] table[%s] rows[%d] bytes[%d] label[%s].", flushData.getDatabase(), flushData.getTable(), flushData.getBatchCount(), flushData.getBatchSize(), flushData.getLabel()));
         long startWithRetries = System.nanoTime();
         for (int i = 0; i <= sinkOptions.getSinkMaxRetries(); i++) {
@@ -333,7 +343,6 @@ public class StarRocksSinkManager implements Serializable {
                     flushTimeNs.update(System.nanoTime() - start);
                     updateMetricsFromStreamLoadResult(result);
                 }
-                startScheduler();
                 break;
             } catch (Exception e) {
                 if (totalFlushFailedTimes != null) {
@@ -361,8 +370,11 @@ public class StarRocksSinkManager implements Serializable {
 
     private void waitAsyncFlushingDone() throws InterruptedException {
         // wait for previous flushings
-        offer(new StarRocksSinkBufferEntity(null, null, null));
-        offer(new StarRocksSinkBufferEntity(null, null, null));
+        for (int i = 0; i < sinkOptions.getSinkFlushThreads(); i++) {
+            offer(new StarRocksSinkBufferEntity(null, null, null));
+        }
+        // waitAsyncFlushingDone must be waiting for all flush flushQueuesThread had completed.
+        flushQueuesThreadList.forEach(CompletableFuture::join);
         checkFlushException();
     }
 
@@ -373,14 +385,33 @@ public class StarRocksSinkManager implements Serializable {
         }
 
         long start = System.nanoTime();
-        if (!flushQueue.offer(bufferEntity, sinkOptions.getSinkOfferTimeout(), TimeUnit.MILLISECONDS)) {
-            throw new RuntimeException(
-                "Timeout while offering data to flushQueue, exceed " + sinkOptions.getSinkOfferTimeout() + " ms, see " +
-                    StarRocksSinkOptions.SINK_BATCH_OFFER_TIMEOUT.key());
+        if (bufferEntity.EOF() || bufferEntity.getLabel() == null){
+            // All queues to send when received upstream offerEOF or StarRocksSinkBufferEntity is null.
+            for (int i = 0; i < sinkOptions.getSinkFlushThreads(); i++) {
+                LinkedBlockingDeque<StarRocksSinkBufferEntity> flushQueue = flushQueues[i];
+                if (!flushQueue.offer(bufferEntity, sinkOptions.getSinkOfferTimeout(), TimeUnit.MILLISECONDS)) {
+                    throw new RuntimeException(
+                            "Timeout while offering data to flushQueue, exceed " + sinkOptions.getSinkOfferTimeout() + " ms, see " +
+                                    StarRocksSinkOptions.SINK_BATCH_OFFER_TIMEOUT.key());
+                }
+                if (offerTimeNs != null) {
+                    offerTimeNs.update(System.nanoTime() - start);
+                }
+            }
+        } else {
+            // Compute belong to which flush queue.
+            LinkedBlockingDeque<StarRocksSinkBufferEntity> flushQueue = flushQueues[Math.abs(MathUtils.murmurHash(bufferEntity.hashCode()) % flushQueues.length)];
+            if (!flushQueue.offer(bufferEntity, sinkOptions.getSinkOfferTimeout(), TimeUnit.MILLISECONDS)) {
+                throw new RuntimeException(
+                        "Timeout while offering data to flushQueue, exceed " + sinkOptions.getSinkOfferTimeout() + " ms, see " +
+                                StarRocksSinkOptions.SINK_BATCH_OFFER_TIMEOUT.key());
+            }
+            if (offerTimeNs != null) {
+                offerTimeNs.update(System.nanoTime() - start);
+            }
         }
-        if (offerTimeNs != null) {
-            offerTimeNs.update(System.nanoTime() - start);
-        }
+
+
     }
 
     private void offerEOF() {
@@ -389,6 +420,8 @@ public class StarRocksSinkManager implements Serializable {
         } catch (Exception e) {
             LOG.warn("Writing EOF failed.", e);
         }
+        // offerEOF must be waiting for all flush flushQueuesThread had completed.
+        flushQueuesThreadList.forEach(CompletableFuture::join);
     }
 
     private void checkFlushException() {
