@@ -21,6 +21,7 @@ import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.state.FunctionInitializationContext;
 import org.apache.flink.runtime.state.FunctionSnapshotContext;
+import org.apache.flink.streaming.api.operators.util.SimpleVersionedListState;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.binary.NestedRowData;
@@ -210,12 +211,14 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
             return;
         }
 
-        ListStateDescriptor<StarrocksSnapshotState> descriptor =
+        ListStateDescriptor<byte[]> descriptor =
                 new ListStateDescriptor<>(
                         "starrocks-sink-transaction",
-                        TypeInformation.of(new TypeHint<StarrocksSnapshotState>() {})
+                        TypeInformation.of(new TypeHint<byte[]>() {})
                 );
-        snapshotStates = functionInitializationContext.getOperatorStateStore().getListState(descriptor);
+
+        ListState<byte[]> listState = functionInitializationContext.getOperatorStateStore().getListState(descriptor);
+        snapshotStates = new SimpleVersionedListState<>(listState, new StarRocksVersionedSerializer());
 
         // old version
         ListStateDescriptor<Map<String, StarRocksSinkBufferEntity>> legacyDescriptor =
