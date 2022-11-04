@@ -45,7 +45,7 @@ public class StreamLoadSnapshot implements Serializable {
         return false;
     }
 
-    public static class Transaction {
+    public static class Transaction implements Serializable {
         private String database;
         private String table;
         private String label;
