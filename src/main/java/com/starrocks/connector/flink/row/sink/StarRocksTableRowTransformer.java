@@ -40,7 +40,6 @@ import org.apache.flink.table.data.binary.BinaryStringData;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.ArrayType;
 import org.apache.flink.table.types.logical.DecimalType;
-import org.apache.flink.table.types.logical.LocalZonedTimestampType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.LogicalTypeRoot;
 import org.apache.flink.table.types.logical.MapType;
@@ -146,11 +145,9 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
             case DATE:
                 return dateFormatter.format(Date.valueOf(LocalDate.ofEpochDay(record.getInt(pos))));
             case TIMESTAMP_WITHOUT_TIME_ZONE:
+            case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
                 final int timestampPrecision =((TimestampType) type).getPrecision();
                 return record.getTimestamp(pos, timestampPrecision).toLocalDateTime().toString();
-            case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
-                int localZonedTimestampPrecision =((LocalZonedTimestampType) type).getPrecision();
-                return record.getTimestamp(pos, localZonedTimestampPrecision).toLocalDateTime().toString();
             case DECIMAL: // for both largeint and decimal
                 final int decimalPrecision = ((DecimalType) type).getPrecision();
                 final int decimalScale = ((DecimalType) type).getScale();
