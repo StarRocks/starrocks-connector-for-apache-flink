@@ -110,6 +110,7 @@ public class StarRocksSinkOptions implements Serializable {
     private final Map<String, String> tableOptionsMap;
     private StarRocksSinkSemantic sinkSemantic;
     private boolean supportUpsertDelete;
+    private String[] tableSchemaFieldNames;
 
     private final List<StreamLoadTableProperties> tablePropertiesList = new ArrayList<>();
 
@@ -130,6 +131,15 @@ public class StarRocksSinkOptions implements Serializable {
         validateStreamLoadUrl();
         validateSinkSemantic();
         validateParamsRange();
+    }
+
+    public void setTableSchemaFieldNames(String[] fieldNames) {
+        this.tableSchemaFieldNames = new String[fieldNames.length];
+        System.arraycopy(fieldNames, 0, tableSchemaFieldNames, 0, fieldNames.length);
+    }
+
+    public String[] getTableSchemaFieldNames() {
+        return tableSchemaFieldNames;
     }
 
     public String getJdbcUrl() {
@@ -376,6 +386,21 @@ public class StarRocksSinkOptions implements Serializable {
 
         if (hasColumnMappingProperty()) {
             defaultTablePropertiesBuilder.columns(streamLoadProps.get("columns"));
+        } else if (getTableSchemaFieldNames() != null) {
+            if (dataFormat instanceof StreamLoadDataFormat.CSVFormat
+                    || (!sinkTable.isOpAutoProjectionInJson() && supportUpsertDelete())) {
+
+                String[] columns;
+                if (supportUpsertDelete()) {
+                    columns = new String[getTableSchemaFieldNames().length + 1];
+                    System.arraycopy(getTableSchemaFieldNames(), 0, columns, 0, getTableSchemaFieldNames().length);
+                    columns[getTableSchemaFieldNames().length] = "__op";
+                } else {
+                    columns = getTableSchemaFieldNames();
+                }
+
+                defaultTablePropertiesBuilder.columns(columns);
+            }
         }
 
         StreamLoadProperties.Builder builder = StreamLoadProperties.builder()
