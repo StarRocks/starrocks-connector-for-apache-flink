@@ -1,5 +1,6 @@
 package com.starrocks.connector.flink.table.sink;
 
+import com.google.common.base.Strings;
 import com.starrocks.connector.flink.manager.StarRocksSinkBufferEntity;
 import com.starrocks.connector.flink.manager.StarRocksSinkManagerV2;
 import com.starrocks.connector.flink.manager.StarRocksSinkTable;
@@ -8,8 +9,6 @@ import com.starrocks.connector.flink.row.sink.StarRocksISerializer;
 import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
 import com.starrocks.connector.flink.table.data.StarRocksRowData;
 import com.starrocks.data.load.stream.StreamLoadSnapshot;
-
-import com.google.common.base.Strings;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.alter.Alter;
@@ -58,8 +57,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
     @Deprecated
     private transient ListState<Map<String, StarRocksSinkBufferEntity>> legacyState;
     @Deprecated
-    private final transient List<StarRocksSinkBufferEntity> legacyData = new ArrayList<>();
-
+    private transient List<StarRocksSinkBufferEntity> legacyData;
 
     public StarRocksDynamicSinkFunctionV2(StarRocksSinkOptions sinkOptions,
                                           TableSchema schema,
@@ -241,6 +239,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
                 }
             }
 
+            legacyData = new ArrayList<>();
             for (Map<String, StarRocksSinkBufferEntity> entry : legacyState.get()) {
                 legacyData.addAll(entry.values());
             }
@@ -287,7 +286,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
     }
 
     private void flushLegacyData() {
-        if (legacyData.isEmpty()) {
+        if (legacyData == null || legacyData.isEmpty()) {
             return;
         }
 
