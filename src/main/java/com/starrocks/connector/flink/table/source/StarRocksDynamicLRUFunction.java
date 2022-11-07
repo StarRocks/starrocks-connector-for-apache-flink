@@ -14,13 +14,21 @@
 
 package com.starrocks.connector.flink.table.source;
 
+import java.text.SimpleDateFormat;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
+import com.starrocks.connector.flink.table.source.struct.ColunmRichInfo;
+
 import com.starrocks.connector.flink.table.source.struct.QueryBeXTablets;
 import com.starrocks.connector.flink.table.source.struct.QueryInfo;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
-import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
 
-import org.apache.flink.shaded.guava30.com.google.common.cache.Cache;
-import org.apache.flink.shaded.guava30.com.google.common.cache.CacheBuilder;
+
 import org.apache.flink.table.data.DecimalData;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.TimestampData;
@@ -32,24 +40,19 @@ import org.apache.flink.types.Row;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.text.SimpleDateFormat;
-import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.Date;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
+import org.apache.flink.shaded.guava30.com.google.common.cache.Cache;
+import org.apache.flink.shaded.guava30.com.google.common.cache.CacheBuilder;
 
 public class StarRocksDynamicLRUFunction extends TableFunction<RowData> {
 
     private static final Logger LOG = LoggerFactory.getLogger(StarRocksDynamicLRUFunction.class);
     
-    private final ColumnRichInfo[] filterRichInfos;
+    private final ColunmRichInfo[] filterRichInfos;
     private final StarRocksSourceOptions sourceOptions;
     private final ArrayList<String> filterList;
     private QueryInfo queryInfo;
     private final SelectColumn[] selectColumns;
-    private final List<ColumnRichInfo> columnRichInfos;
+    private final List<ColunmRichInfo> columnRichInfos;
     private List<StarRocksSourceDataReader> dataReaderList;
 
     private transient Cache<Row, List<RowData>> cache;
@@ -58,9 +61,10 @@ public class StarRocksDynamicLRUFunction extends TableFunction<RowData> {
     private final int maxRetryTimes;
 
     public StarRocksDynamicLRUFunction(StarRocksSourceOptions sourceOptions, 
-                                       ColumnRichInfo[] filterRichInfos,
-                                       List<ColumnRichInfo> columnRichInfos,
-                                       SelectColumn[] selectColumns) {
+                                          ColunmRichInfo[] filterRichInfos, 
+                                          List<ColunmRichInfo> columnRichInfos,
+                                          SelectColumn[] selectColumns
+                                          ) {
         this.sourceOptions = sourceOptions;
         this.filterRichInfos = filterRichInfos;
         this.columnRichInfos = columnRichInfos;
@@ -77,12 +81,13 @@ public class StarRocksDynamicLRUFunction extends TableFunction<RowData> {
     @Override
     public void open(FunctionContext context) throws Exception {
         super.open(context);
-        this.cache = cacheMaxSize == -1 || cacheExpireMs == -1
-                ? null
-                : CacheBuilder.newBuilder()
-                    .expireAfterWrite(cacheExpireMs, TimeUnit.MILLISECONDS)
-                    .maximumSize(cacheMaxSize)
-                    .build();
+        this.cache =
+                    cacheMaxSize == -1 || cacheExpireMs == -1
+                            ? null
+                            : CacheBuilder.newBuilder()
+                                    .expireAfterWrite(cacheExpireMs, TimeUnit.MILLISECONDS)
+                                    .maximumSize(cacheMaxSize)
+                                    .build();
     }
 
     public void eval(Object... keys) {
@@ -107,8 +112,8 @@ public class StarRocksDynamicLRUFunction extends TableFunction<RowData> {
         this.queryInfo = StarRocksSourceCommonFunc.getQueryInfo(this.sourceOptions, SQL);
         List<List<QueryBeXTablets>> lists = StarRocksSourceCommonFunc.splitQueryBeXTablets(1, queryInfo);
         lists.get(0).forEach(beXTablets -> {
-            StarRocksSourceBeReader beReader = new StarRocksSourceBeReader(beXTablets.getBeNode(),
-                    columnRichInfos,
+            StarRocksSourceBeReader beReader = new StarRocksSourceBeReader(beXTablets.getBeNode(), 
+                                                                           columnRichInfos, 
                                                                            selectColumns, 
                                                                            sourceOptions);
             beReader.openScanner(beXTablets.getTabletIds(), queryInfo.getQueryPlan().getOpaqued_query_plan(), sourceOptions);
@@ -136,8 +141,8 @@ public class StarRocksDynamicLRUFunction extends TableFunction<RowData> {
         }        
     }
 
-    private void getFieldValue(Object obj, ColumnRichInfo columnRichInfo) {
-        LogicalTypeRoot flinkTypeRoot = columnRichInfo.getDataType().getLogicalType().getTypeRoot();
+    private void getFieldValue(Object obj, ColunmRichInfo colunmRichInfo) {
+        LogicalTypeRoot flinkTypeRoot = colunmRichInfo.getDataType().getLogicalType().getTypeRoot();
         String filter = "";
         if (flinkTypeRoot == LogicalTypeRoot.DATE) {
             Calendar c = Calendar.getInstance();
@@ -145,7 +150,7 @@ public class StarRocksDynamicLRUFunction extends TableFunction<RowData> {
             c.add(Calendar.DATE, (int)obj);
             Date d = c.getTime();
             SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-            filter = columnRichInfo.getColumnName() + " = '" + sdf.format(d).toString() + "'";
+            filter = colunmRichInfo.getColumnName() + " = '" + sdf.format(d).toString() + "'";
         }
         if (flinkTypeRoot == LogicalTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE ||
             flinkTypeRoot == LogicalTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE || 
@@ -153,36 +158,36 @@ public class StarRocksDynamicLRUFunction extends TableFunction<RowData> {
             
             DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSS");
             String strDateTime = dtf.format(((TimestampData)obj).toLocalDateTime());
-            filter = columnRichInfo.getColumnName() + " = '" + strDateTime + "'";
+            filter = colunmRichInfo.getColumnName() + " = '" + strDateTime + "'";
         }
         if (flinkTypeRoot == LogicalTypeRoot.CHAR ||
             flinkTypeRoot == LogicalTypeRoot.VARCHAR) {
 
-            filter = columnRichInfo.getColumnName() + " = '" + ((BinaryStringData)obj).toString() + "'";
+            filter = colunmRichInfo.getColumnName() + " = '" + ((BinaryStringData)obj).toString() + "'";
         }
         if (flinkTypeRoot == LogicalTypeRoot.BOOLEAN) {
-            filter = columnRichInfo.getColumnName() + " = " + (boolean) obj;
+            filter = colunmRichInfo.getColumnName() + " = " + (boolean) obj;
         }
         if (flinkTypeRoot == LogicalTypeRoot.TINYINT) {
-            filter = columnRichInfo.getColumnName() + " = " + (byte) obj;
+            filter = colunmRichInfo.getColumnName() + " = " + (byte) obj;
         }
         if (flinkTypeRoot == LogicalTypeRoot.SMALLINT) {
-            filter = columnRichInfo.getColumnName() + " = " + (short) obj;
+            filter = colunmRichInfo.getColumnName() + " = " + (short) obj;
         }
         if (flinkTypeRoot == LogicalTypeRoot.INTEGER) {
-            filter = columnRichInfo.getColumnName() + " = " + (int) obj;
+            filter = colunmRichInfo.getColumnName() + " = " + (int) obj;
         }
         if (flinkTypeRoot == LogicalTypeRoot.BIGINT) {
-            filter = columnRichInfo.getColumnName() + " = " + (long) obj;
+            filter = colunmRichInfo.getColumnName() + " = " + (long) obj;
         }
         if (flinkTypeRoot == LogicalTypeRoot.FLOAT) {
-            filter = columnRichInfo.getColumnName() + " = " + (float) obj;
+            filter = colunmRichInfo.getColumnName() + " = " + (float) obj;
         }
         if (flinkTypeRoot == LogicalTypeRoot.DOUBLE) {
-            filter = columnRichInfo.getColumnName() + " = " + (double) obj;
+            filter = colunmRichInfo.getColumnName() + " = " + (double) obj;
         }
         if (flinkTypeRoot == LogicalTypeRoot.DECIMAL) {
-            filter = columnRichInfo.getColumnName() + " = " + (DecimalData) obj;
+            filter = colunmRichInfo.getColumnName() + " = " + (DecimalData) obj;
         }
 
         if (!filter.equals("")) {

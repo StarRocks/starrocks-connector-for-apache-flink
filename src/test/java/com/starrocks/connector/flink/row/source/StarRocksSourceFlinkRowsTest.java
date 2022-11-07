@@ -14,9 +14,21 @@
 
 package com.starrocks.connector.flink.row.source;
 
+import static org.junit.Assert.assertTrue;
+
+import java.io.BufferedReader;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+
 import com.starrocks.connector.flink.it.source.StarRocksSourceBaseTest;
 import com.starrocks.connector.flink.table.source.StarRocksSourceCommonFunc;
-import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
+import com.starrocks.connector.flink.table.source.struct.ColunmRichInfo;
 import com.starrocks.connector.flink.table.source.struct.Const;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 import com.starrocks.connector.flink.table.source.struct.StarRocksSchema;
@@ -33,27 +45,15 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.BufferedReader;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
-
-import static org.junit.Assert.assertTrue;
-
 public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
     
     protected StarRocksSchema srSchema = new StarRocksSchema();
     protected StarRocksSchema srWrongOrderSchema = new StarRocksSchema();
     protected StarRocksSchema srLessSchema = new StarRocksSchema();
     protected SelectColumn[] selectColumns;
-    protected List<ColumnRichInfo> columnRichInfos;
+    protected List<ColunmRichInfo> colunmRichInfos;
     protected String curPath = System.getProperty("user.dir");
-    protected Map<String, ColumnRichInfo> columnMap;
+    protected Map<String, ColunmRichInfo> columnMap;
 
     @Before
     public void initParams() {  
@@ -62,8 +62,8 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
         srWrongOrderSchema = StarRocksSchema.genSchema(this.wrongOrderList());
         srLessSchema = StarRocksSchema.genSchema(this.lessList());
         columnMap = StarRocksSourceCommonFunc.genColumnMap(TABLE_SCHEMA_NOT_NULL);
-        columnRichInfos = StarRocksSourceCommonFunc.genColumnRichInfo(columnMap);
-        selectColumns = StarRocksSourceCommonFunc.genSelectedColumns(columnMap, OPTIONS, columnRichInfos);
+        colunmRichInfos = StarRocksSourceCommonFunc.genColunmRichInfo(columnMap);
+        selectColumns = StarRocksSourceCommonFunc.genSelectedColumns(columnMap, OPTIONS, colunmRichInfos);
     }
 
     @Test
@@ -86,13 +86,22 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
         TScanBatchResult nextResult = new TScanBatchResult();
         nextResult.setRows(byteArray);
         // generate flinkRows1 with right srSchema
-        StarRocksSourceFlinkRows flinkRows1 = new StarRocksSourceFlinkRows(nextResult, columnRichInfos, srSchema, selectColumns);
+        StarRocksSourceFlinkRows flinkRows1 = new StarRocksSourceFlinkRows(nextResult, colunmRichInfos, srSchema, selectColumns);
         flinkRows1 = flinkRows1.genFlinkRowsFromArrow();
         checkFlinkRows(flinkRows1);
         // generate flinkRows2 with wrong srSchema
-        StarRocksSourceFlinkRows flinkRows2 = new StarRocksSourceFlinkRows(nextResult, columnRichInfos, srWrongOrderSchema, selectColumns);
+        StarRocksSourceFlinkRows flinkRows2 = new StarRocksSourceFlinkRows(nextResult, colunmRichInfos, srWrongOrderSchema, selectColumns);
         flinkRows2 = flinkRows2.genFlinkRowsFromArrow();
         checkFlinkRows(flinkRows2);
+
+        // generate flinkRows3 with less column srSchema
+        try {
+            StarRocksSourceFlinkRows flinkRows3 = new StarRocksSourceFlinkRows(nextResult, colunmRichInfos, srLessSchema, selectColumns);
+            flinkRows3 = flinkRows3.genFlinkRowsFromArrow();
+        } catch (Exception e) {
+            assertTrue(e.getMessage().contains("Can not find StarRocks column info from "));
+        }
+        
     }
 
     public void checkFlinkRows(StarRocksSourceFlinkRows flinkRows) {
@@ -183,7 +192,7 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
         }
         TScanBatchResult nextResult = new TScanBatchResult();
         nextResult.setRows(byteArray);
-        StarRocksSourceFlinkRows flinkRows = new StarRocksSourceFlinkRows(nextResult, columnRichInfos, srSchema, selectColumns);
+        StarRocksSourceFlinkRows flinkRows = new StarRocksSourceFlinkRows(nextResult, colunmRichInfos, srSchema, selectColumns);
         String eMsg = null;
         try {
             flinkRows = flinkRows.genFlinkRowsFromArrow();
