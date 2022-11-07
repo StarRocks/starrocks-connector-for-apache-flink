@@ -14,7 +14,7 @@
 
 package com.starrocks.connector.flink.table.source;
 
-import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
+import com.starrocks.connector.flink.table.source.struct.ColunmRichInfo;
 import com.starrocks.connector.flink.table.source.struct.PushDownHolder;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 
@@ -70,9 +70,9 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
     @Override
     public LookupRuntimeProvider getLookupRuntimeProvider(LookupContext context) {
         int[] projectedFields = Arrays.stream(context.getKeys()).mapToInt(value -> value[0]).toArray();
-        ColumnRichInfo[] filerRichInfo = new ColumnRichInfo[projectedFields.length];
+        ColunmRichInfo filerRichInfo[] = new ColunmRichInfo[projectedFields.length];
         for (int i = 0; i < projectedFields.length; i ++) {
-            ColumnRichInfo columnRichInfo = new ColumnRichInfo(
+            ColunmRichInfo columnRichInfo = new ColunmRichInfo(
                 this.flinkSchema.getFieldName(projectedFields[i]).get(), 
                 projectedFields[i],
                 this.flinkSchema.getFieldDataType(projectedFields[i]).get()
@@ -80,11 +80,11 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
             filerRichInfo[i] = columnRichInfo;
         }
 
-        Map<String, ColumnRichInfo> columnMap = StarRocksSourceCommonFunc.genColumnMap(flinkSchema);
-        List<ColumnRichInfo> ColumnRichInfos = StarRocksSourceCommonFunc.genColumnRichInfo(columnMap);
-        SelectColumn[] selectColumns = StarRocksSourceCommonFunc.genSelectedColumns(columnMap, this.options, ColumnRichInfos);
+        Map<String, ColunmRichInfo> columnMap = StarRocksSourceCommonFunc.genColumnMap(flinkSchema);
+        List<ColunmRichInfo> colunmRichInfos = StarRocksSourceCommonFunc.genColunmRichInfo(columnMap);
+        SelectColumn[] selectColumns = StarRocksSourceCommonFunc.genSelectedColumns(columnMap, this.options, colunmRichInfos);
 
-        StarRocksDynamicLookupFunction tableFunction = new StarRocksDynamicLookupFunction(this.options, filerRichInfo, ColumnRichInfos, selectColumns);
+        StarRocksDynamicLookupFunction tableFunction = new StarRocksDynamicLookupFunction(this.options, filerRichInfo, colunmRichInfos, selectColumns);
         return TableFunctionProvider.of(tableFunction);
     }
 
