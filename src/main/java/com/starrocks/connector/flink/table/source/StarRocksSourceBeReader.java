@@ -15,10 +15,10 @@
 package com.starrocks.connector.flink.table.source;
 
 import com.starrocks.connector.flink.row.source.StarRocksSourceFlinkRows;
+import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
 import com.starrocks.connector.flink.table.source.struct.Const;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 import com.starrocks.connector.flink.table.source.struct.StarRocksSchema;
-import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
 import com.starrocks.shade.org.apache.thrift.TException;
 import com.starrocks.shade.org.apache.thrift.protocol.TBinaryProtocol;
 import com.starrocks.shade.org.apache.thrift.protocol.TProtocol;
@@ -31,7 +31,6 @@ import com.starrocks.thrift.TScanOpenParams;
 import com.starrocks.thrift.TScanOpenResult;
 import com.starrocks.thrift.TStarrocksExternalService;
 import com.starrocks.thrift.TStatusCode;
-
 import org.apache.flink.table.data.GenericRowData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -76,9 +75,9 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
                 throw new RuntimeException("Not find be node info from the be port mappping list");
             }
             beNodeInfo = mappingMap.get(beNodeInfo);
-            LOG.info("query data from be by using be-hostname");
+            LOG.info("query data from be by using be-hostname {}", beNodeInfo);
         } else {
-            LOG.info("query data from be by using be-ip");
+            LOG.info("query data from be by using be-ip {}", beNodeInfo);
         }
         String[] beNode = beNodeInfo.split(":");
         String ip = beNode[0].trim();
@@ -113,7 +112,8 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
             params.setProperties(sourceOptions.getProperties());    
         }
         // params.setLimit(sourceOptions.getLimit());
-        params.setKeep_alive_min((short) sourceOptions.getKeepAliveMin());
+        short keepAliveMin = (short) Math.min(Short.MAX_VALUE, sourceOptions.getKeepAliveMin());
+        params.setKeep_alive_min(keepAliveMin);
         params.setQuery_timeout(sourceOptions.getQueryTimeout());
         params.setMem_limit(sourceOptions.getMemLimit());
         LOG.info("open Scan params.mem_limit {} B", params.getMem_limit());
