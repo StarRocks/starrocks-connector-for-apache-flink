@@ -133,6 +133,8 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
         }
         this.srSchema = StarRocksSchema.genSchema(result.getSelected_columns());
         this.contextId = result.getContext_id();
+        LOG.info("Open scanner for {}:{} with context id {}, and there are {} tablets {}",
+                IP, PORT, contextId, tablets.size(), tablets);
     }
 
     public void startToRead() {
@@ -189,11 +191,13 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
 
     @Override
     public void close() {
+        LOG.info("Close reader for {}:{} with context id {}", IP, PORT, contextId);
         TScanCloseParams tScanCloseParams = new TScanCloseParams();
         tScanCloseParams.setContext_id(this.contextId);
         try {
             this.client.close_scanner(tScanCloseParams);
         } catch (TException e) {
+            LOG.error("Failed to close reader {}:{} with context id {}", IP, PORT, contextId, e);
             throw new RuntimeException(e.getMessage());
         }
     }

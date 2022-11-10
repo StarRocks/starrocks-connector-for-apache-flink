@@ -176,7 +176,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
 
     private void internalClose() {
         if (dataReaderClosed.compareAndSet(false, true)) {
-            LOG.info("Close reader");
+            LOG.info("Close readers");
             this.dataReaderList.parallelStream().forEach(dataReader -> {
                 if (dataReader != null) {
                     dataReader.close();
