@@ -14,12 +14,11 @@
 
 package com.starrocks.connector.flink.table.source;
 
+import com.google.common.base.Strings;
+import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
 import com.starrocks.connector.flink.table.source.struct.QueryBeXTablets;
 import com.starrocks.connector.flink.table.source.struct.QueryInfo;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
-import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
-
-import com.google.common.base.Strings;
 import org.apache.flink.api.common.typeinfo.TypeHint;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
@@ -28,12 +27,17 @@ import org.apache.flink.metrics.Counter;
 import org.apache.flink.streaming.api.functions.source.RichParallelSourceFunction;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.data.RowData;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<RowData> implements ResultTypeQueryable<RowData> {
+
+    private static final Logger LOG = LoggerFactory.getLogger(StarRocksDynamicSourceFunction.class);
 
     private final StarRocksSourceOptions sourceOptions;
     private QueryInfo queryInfo;
@@ -45,6 +49,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
     private StarRocksSourceQueryType queryType;
 
     private transient Counter counterTotalScannedRows;
+    private transient AtomicBoolean dataReaderClosed;
     private static final String TOTAL_SCANNED_ROWS = "totalScannedRows";
 
     public StarRocksDynamicSourceFunction(TableSchema flinkSchema, StarRocksSourceOptions sourceOptions) {
@@ -125,10 +130,10 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
         return sqlSb.toString();
     }
 
-
     @Override
     public void open(Configuration parameters) throws Exception {
         super.open(parameters);
+        this.dataReaderClosed = new AtomicBoolean(false);
         this.counterTotalScannedRows = getRuntimeContext().getMetricGroup().counter(TOTAL_SCANNED_ROWS);
 
         int subTaskId = getRuntimeContext().getIndexOfThisSubtask();
@@ -161,11 +166,23 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
 
     @Override
     public void cancel() {
-        this.dataReaderList.parallelStream().forEach(dataReader -> {
-            if (dataReader != null) {
-                dataReader.close();
-            }
-        });
+        internalClose();
+    }
+
+    @Override
+    public void close() {
+        internalClose();
+    }
+
+    private void internalClose() {
+        if (dataReaderClosed.compareAndSet(false, true)) {
+            LOG.info("Close readers");
+            this.dataReaderList.parallelStream().forEach(dataReader -> {
+                if (dataReader != null) {
+                    dataReader.close();
+                }
+            });
+        }
     }
 
     @Override
