@@ -47,8 +47,11 @@ import org.junit.Before;
 import mockit.Mocked;
 import mockit.Tested;
 import mockit.Expectations;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public abstract class StarRocksSinkBaseTest {
+    private static final Logger LOG = LoggerFactory.getLogger(StarRocksSinkBaseTest.class);
 
     @Mocked
     protected StarRocksQueryVisitor v;
@@ -165,9 +168,12 @@ public abstract class StarRocksSinkBaseTest {
             try {
                 int port = AVAILABLE_HTTP_PORT + i;
                 serverSocket = new ServerSocket(port);
-                LOAD_URL = "127.0.0.1:1;127.0.0.1:" + port;
+                LOAD_URL = "127.0.0.1:" + port;
                 initializeOptions();
-            } catch (IOException e) {}
+                break;
+            } catch (IOException e) {
+                LOG.info("Exception thrown ", e);
+            }
         }
     }
 

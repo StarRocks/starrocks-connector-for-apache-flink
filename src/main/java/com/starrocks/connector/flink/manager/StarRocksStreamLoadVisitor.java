@@ -185,9 +185,9 @@ public class StarRocksStreamLoadVisitor implements Serializable {
         while (pos < tmp) {
             String host = "http://" + hostList.get((int) (pos % hostList.size()));
             if (tryHttpConnection(host)) {
-                pos++;
                 return host;
             }
+            pos++;
         }
 
         return null;

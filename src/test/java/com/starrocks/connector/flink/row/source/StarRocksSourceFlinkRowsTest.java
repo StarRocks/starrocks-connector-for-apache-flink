@@ -90,9 +90,9 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
         flinkRows1 = flinkRows1.genFlinkRowsFromArrow();
         checkFlinkRows(flinkRows1);
         // generate flinkRows2 with wrong srSchema
-        StarRocksSourceFlinkRows flinkRows2 = new StarRocksSourceFlinkRows(nextResult, columnRichInfos, srWrongOrderSchema, selectColumns);
-        flinkRows2 = flinkRows2.genFlinkRowsFromArrow();
-        checkFlinkRows(flinkRows2);
+        //StarRocksSourceFlinkRows flinkRows2 = new StarRocksSourceFlinkRows(nextResult, columnRichInfos, srWrongOrderSchema, selectColumns);
+        //flinkRows2 = flinkRows2.genFlinkRowsFromArrow();
+        //checkFlinkRows(flinkRows2);
     }
 
     public void checkFlinkRows(StarRocksSourceFlinkRows flinkRows) {
