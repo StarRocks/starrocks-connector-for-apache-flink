@@ -5,9 +5,12 @@ import com.starrocks.data.load.stream.StreamLoadUtils;
 import com.alibaba.fastjson.annotation.JSONField;
 
 import java.io.Serializable;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 public class StreamLoadProperties implements Serializable {
     private final String jdbcUrl;
@@ -224,7 +227,15 @@ public class StreamLoadProperties implements Serializable {
         }
 
         public Builder loadUrls(String... loadUrls) {
-            this.loadUrls = loadUrls;
+            this.loadUrls = Arrays.stream(loadUrls)
+                    .filter(Objects::nonNull)
+                    .map(url -> {
+                        if (!url.startsWith("http")) {
+                            return "http://" + url;
+                        }
+                        return url;
+                    })
+                    .toArray(String[]::new);
             return this;
         }
 

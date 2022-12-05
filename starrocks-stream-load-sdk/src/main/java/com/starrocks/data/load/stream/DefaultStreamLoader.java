@@ -286,7 +286,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
         int size = hosts.length;
         long pos = availableHostPos;
         while (pos < pos + size) {
-            String host = "http://" + hosts[(int) (pos % size)];
+            String host = hosts[(int) (pos % size)];
             if (testHttpConnection(host)) {
                 pos++;
                 availableHostPos = pos;
