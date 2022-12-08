@@ -60,7 +60,9 @@ public class StarRocksSourceOptions implements Serializable {
             .intType().defaultValue(1000).withDescription("Connect timeout");
         
     public static final ConfigOption<Integer> SCAN_BATCH_ROWS = ConfigOptions.key("scan.params.batch-rows")
-            .intType().defaultValue(1000).withDescription("Batch rows");
+            .intType().defaultValue(4096).withDescription("Number rows to read from BE in a single request. It controls " +
+                    "the batch_size of StarRocks. Since StarRocks 2.2, the allowed minimum batch size is 4096, and when " +
+                    "setting a batch size smaller than 4096, the StarRocks will reset it to 4096.");
 
     public static final ConfigOption<String> SCAN_PROPERTIES = ConfigOptions.key("scan.params.properties")
             .stringType().noDefaultValue().withDescription("Reserved params for use");
