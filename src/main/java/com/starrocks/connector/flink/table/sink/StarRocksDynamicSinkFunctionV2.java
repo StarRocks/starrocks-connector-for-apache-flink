@@ -64,7 +64,6 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
                                           StarRocksIRowTransformer<T> rowTransformer) {
         this.sinkOptions = sinkOptions;
         this.rowTransformer = rowTransformer;
-        rowTransformer.setTableSchema(schema);
         StarRocksSinkTable sinkTable = StarRocksSinkTable.builder()
                 .sinkOptions(sinkOptions)
                 .build();
@@ -72,6 +71,8 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
         // StarRocksJsonSerializer depends on SinkOptions#supportUpsertDelete which is decided in
         // StarRocksSinkTable#validateTableStructure, so create serializer after validating table structure
         this.serializer = StarRocksSerializerFactory.createSerializer(sinkOptions, schema.getFieldNames());
+        rowTransformer.setStarRocksColumns(sinkTable.getFieldMapping());
+        rowTransformer.setTableSchema(schema);
         this.sinkManager = new StarRocksSinkManagerV2(sinkOptions.getProperties());
     }
 
