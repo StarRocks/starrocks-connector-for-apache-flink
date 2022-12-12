@@ -2,8 +2,8 @@ package com.starrocks.connector.flink.manager;
 
 import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionOptions;
 import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
+import com.starrocks.connector.flink.table.StarRocksDataType;
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
-
 import org.apache.flink.table.api.TableColumn;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.api.constraints.UniqueConstraint;
@@ -53,6 +53,10 @@ public class StarRocksSinkTable {
 
     public boolean isOpAutoProjectionInJson() {
         return version == null || version.length() > 0 && !version.trim().startsWith("1.");
+    }
+
+    public Map<String, StarRocksDataType> getFieldMapping() {
+        return starRocksQueryVisitor.getFieldMapping();
     }
 
     public void validateTableStructure(StarRocksSinkOptions sinkOptions, TableSchema flinkSchema) {
