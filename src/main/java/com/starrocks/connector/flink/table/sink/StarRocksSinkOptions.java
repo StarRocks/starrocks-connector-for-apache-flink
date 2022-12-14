@@ -55,9 +55,9 @@ public class StarRocksSinkOptions implements Serializable {
 
     // required sink configurations
     public static final ConfigOption<String> JDBC_URL = ConfigOptions.key("jdbc-url")
-            .stringType().noDefaultValue().withDescription("Host of the stream load like: `jdbc:mysql://fe_ip1:query_port,fe_ip2:query_port...`.");
+            .stringType().noDefaultValue().withDescription("Url of the jdbc like: `jdbc:mysql://fe_ip1:query_port,fe_ip2:query_port...`.");
     public static final ConfigOption<List<String>> LOAD_URL = ConfigOptions.key("load-url")
-            .stringType().asList().noDefaultValue().withDescription("Host of the stream load like: `fe_ip1:http_port;fe_ip2:http_port;fe_ip3:http_port`.");
+            .stringType().asList().noDefaultValue().withDescription("Url of the stream load, if you you don't specify the http/https prefix, the default http. like: `fe_ip1:http_port;http://fe_ip2:http_port;https://fe_nlb`.");
     public static final ConfigOption<String> DATABASE_NAME = ConfigOptions.key("database-name")
             .stringType().noDefaultValue().withDescription("Database name of the stream load.");
     public static final ConfigOption<String> TABLE_NAME = ConfigOptions.key("table-name")
