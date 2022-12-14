@@ -291,8 +291,8 @@ limitations under the License.
                                     <shadedPattern>com.starrocks.shade.com.google.common</shadedPattern>
                                 </relocation>
                                 <relocation>
-                                    <pattern>com.fasterxml.jackson.core</pattern>
-                                    <shadedPattern>com.starrocks.shade.com.fasterxml.jackson.core</shadedPattern>
+                                    <pattern>com.fasterxml.jackson</pattern>
+                                    <shadedPattern>com.starrocks.shade.com.fasterxml.jackson</shadedPattern>
                                 </relocation>
                             </relocations>
                             <artifactSet>
