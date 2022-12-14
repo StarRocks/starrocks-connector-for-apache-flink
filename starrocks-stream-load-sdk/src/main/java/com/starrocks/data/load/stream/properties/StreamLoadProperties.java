@@ -1,8 +1,7 @@
 package com.starrocks.data.load.stream.properties;
 
-import com.starrocks.data.load.stream.StreamLoadUtils;
-
 import com.alibaba.fastjson.annotation.JSONField;
+import com.starrocks.data.load.stream.StreamLoadUtils;
 
 import java.io.Serializable;
 import java.util.Arrays;
@@ -10,7 +9,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.stream.Collectors;
 
 public class StreamLoadProperties implements Serializable {
     private final String jdbcUrl;
