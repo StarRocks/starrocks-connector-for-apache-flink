@@ -283,8 +283,7 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                     }
                 }
             } catch (ExecutionException | InterruptedException ex) {
-                this.e = ex;
-                throw new RuntimeException(ex);
+                log.warn("Flush get result failed", ex);
             }
         }
         savepoint = false;
