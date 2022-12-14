@@ -258,6 +258,10 @@ limitations under the License.
                                     <pattern>org.apache.commons</pattern>
                                     <shadedPattern>com.starrocks.shade.org.apache.commons</shadedPattern>
                                 </relocation>
+                                <relocation>
+                                    <pattern>com.fasterxml.jackson</pattern>
+                                    <shadedPattern>com.starrocks.shade.com.fasterxml.jackson</shadedPattern>
+                                </relocation>
                             </relocations>
                             <artifactSet>
                                 <includes>
