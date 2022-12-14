@@ -226,13 +226,10 @@ public class StreamTableRegion implements TableRegion, Serializable {
 
     @Override
     public boolean cancel() {
-        if (state.compareAndSet(State.PREPARE, State.ACTIVE)) {
-            if (responseFuture != null && !responseFuture.isDone()) {
-                responseFuture.cancel(true);
-            }
-            return true;
-        }
-        return false;
+        //            if (responseFuture != null && !responseFuture.isDone()) {
+        //                responseFuture.cancel(true);
+        //            }
+        return state.compareAndSet(State.PREPARE, State.ACTIVE);
     }
 
     @Override
