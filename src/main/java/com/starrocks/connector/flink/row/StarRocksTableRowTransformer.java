@@ -14,8 +14,6 @@
 
 package com.starrocks.connector.flink.row;
 
-import com.starrocks.connector.flink.table.StarRocksDataType;
-
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.serializer.JSONSerializer;
 import com.alibaba.fastjson.serializer.ObjectSerializer;
@@ -23,6 +21,7 @@ import com.alibaba.fastjson.serializer.SerializeConfig;
 import com.alibaba.fastjson.serializer.SerializeWriter;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.connector.flink.table.StarRocksDataType;
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
@@ -140,6 +139,12 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
                 if ((starRocksDataType == StarRocksDataType.JSON ||
                         starRocksDataType == StarRocksDataType.UNKNOWN)
                     && (sValue.charAt(0) == '{' || sValue.charAt(0) == '[')) {
+                    // The json string need to be converted to a json object, and to the json string
+                    // again via JSON.toJSONString in StarRocksJsonSerializer#serialize. Otherwise,
+                    // the final json string in stream load will not be correct. For example, the received
+                    // string is "{"a": 1, "b": 2}", and if input it to JSON.toJSONString directly, the
+                    // result will be "{\"a\": 1, \"b\": 2}" which will not be recognized as a json in
+                    // StarRocks
                     return JSON.parse(sValue);
                 }
                 return sValue;

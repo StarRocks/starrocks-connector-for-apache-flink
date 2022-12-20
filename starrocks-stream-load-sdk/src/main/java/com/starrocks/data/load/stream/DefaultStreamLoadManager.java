@@ -1,9 +1,8 @@
 package com.starrocks.data.load.stream;
 
+import com.alibaba.fastjson.JSON;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
-
-import com.alibaba.fastjson.JSON;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,6 +25,8 @@ import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class DefaultStreamLoadManager implements StreamLoadManager, Serializable {
+
+    private static final Logger LOG = LoggerFactory.getLogger(DefaultStreamLoadManager.class);
 
     enum State {
         ACTIVE,
@@ -193,6 +194,10 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         TableRegion region = getCacheRegion(uniqueKey, database, table);
         for (String row : rows) {
             AssertNotException();
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Write uniqueKey {}, database {}, table {}, row {}",
+                        uniqueKey == null ? "null" : uniqueKey, database, table, row);
+            }
             int bytes = region.write(row.getBytes(StandardCharsets.UTF_8));
             if (currentCacheBytes.addAndGet(bytes) >= maxCacheBytes) {
                 int idx = 0;
@@ -278,8 +283,7 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                     }
                 }
             } catch (ExecutionException | InterruptedException ex) {
-                this.e = ex;
-                throw new RuntimeException(ex);
+                log.warn("Flush get result failed", ex);
             }
         }
         savepoint = false;
