@@ -183,7 +183,10 @@ public class StarRocksStreamLoadVisitor implements Serializable {
         List<String> hostList = sinkOptions.getLoadUrlList();
         long tmp = pos + hostList.size();
         while (pos < tmp) {
-            String host = "http://" + hostList.get((int) (pos % hostList.size()));
+            String host = hostList.get((int) (pos % hostList.size()));
+            if (host != null && !host.startsWith("http")) {
+                host = "http://" + host;
+            }
             if (tryHttpConnection(host)) {
                 pos++;
                 return host;
