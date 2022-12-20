@@ -35,8 +35,13 @@ public class ConnectionUtils {
     @Nullable
     public static String selectAvailableHttpHost(List<String> hostList, int connectionTimeout) {
         for (String host : hostList) {
-            String urlStr = "http://" + host;
-            if (testHttpConnection(urlStr, connectionTimeout)) {
+            if (host == null) {
+                continue;
+            }
+            if (!host.startsWith("http")) {
+                host = "http://" + host;
+            }
+            if (testHttpConnection(host, connectionTimeout)) {
                 return host;
             }
         }

@@ -210,7 +210,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
     protected void initDefaultHeaders(StreamLoadProperties properties) {
         Map<String, String> headers = new HashMap<>(properties.getHeaders());
         if (!headers.containsKey("timeout")) {
-            headers.put("timeout", "120");
+            headers.put("timeout", "600");
         }
         headers.put(HttpHeaders.AUTHORIZATION, StreamLoadUtils.getBasicAuthHeader(properties.getUsername(), properties.getPassword()));
         headers.put(HttpHeaders.EXPECT, "100-continue");
@@ -286,7 +286,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
         int size = hosts.length;
         long pos = availableHostPos;
         while (pos < pos + size) {
-            String host = "http://" + hosts[(int) (pos % size)];
+            String host = hosts[(int) (pos % size)];
             if (testHttpConnection(host)) {
                 pos++;
                 availableHostPos = pos;
