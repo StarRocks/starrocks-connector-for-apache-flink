@@ -66,22 +66,6 @@ public final class StarRocksDynamicTableSourceFactory implements DynamicTableSou
     @Override
     public Set<ConfigOption<?>> optionalOptions() {
         final Set<ConfigOption<?>> options = new HashSet<>();
-        //sink
-        options.add(StarRocksSinkOptions.SINK_VERSION);
-        options.add(StarRocksSinkOptions.SINK_BATCH_MAX_SIZE);
-        options.add(StarRocksSinkOptions.SINK_BATCH_MAX_ROWS);
-        options.add(StarRocksSinkOptions.SINK_BATCH_FLUSH_INTERVAL);
-        options.add(StarRocksSinkOptions.SINK_MAX_RETRIES);
-        options.add(StarRocksSinkOptions.SINK_SEMANTIC);
-        options.add(StarRocksSinkOptions.SINK_BATCH_OFFER_TIMEOUT);
-        options.add(StarRocksSinkOptions.SINK_PARALLELISM);
-        options.add(StarRocksSinkOptions.SINK_LABEL_PREFIX);
-        options.add(StarRocksSinkOptions.SINK_CONNECT_TIMEOUT);
-        options.add(StarRocksSinkOptions.SINK_IO_THREAD_COUNT);
-        options.add(StarRocksSinkOptions.SINK_CHUNK_LIMIT);
-        options.add(StarRocksSinkOptions.SINK_SCAN_FREQUENCY);
-
-        //source
         options.add(StarRocksSourceOptions.SCAN_CONNECT_TIMEOUT);
         options.add(StarRocksSourceOptions.SCAN_BATCH_ROWS);
         options.add(StarRocksSourceOptions.SCAN_PROPERTIES);
