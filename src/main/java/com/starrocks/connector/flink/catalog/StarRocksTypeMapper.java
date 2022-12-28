@@ -20,68 +20,68 @@ import org.apache.flink.table.types.DataType;
 public class StarRocksTypeMapper {
 
     // -------------------------number----------------------------
-    private static final String DORIS_TINYINT = "TINYINT";
-    private static final String DORIS_SMALLINT = "SMALLINT";
-    private static final String DORIS_INT = "INT";
-    private static final String DORIS_BIGINT = "BIGINT";
-    private static final String DORIS_LARGEINT = "BIGINT UNSIGNED";
-    private static final String DORIS_DECIMAL = "DECIMAL";
-    private static final String DORIS_FLOAT = "FLOAT";
-    private static final String DORIS_DOUBLE = "DOUBLE";
+    private static final String STARROCKS_TINYINT = "TINYINT";
+    private static final String STARROCKS_SMALLINT = "SMALLINT";
+    private static final String STARROCKS_INT = "INT";
+    private static final String STARROCKS_BIGINT = "BIGINT";
+    private static final String STARROCKS_LARGEINT = "BIGINT UNSIGNED";
+    private static final String STARROCKS_DECIMAL = "DECIMAL";
+    private static final String STARROCKS_FLOAT = "FLOAT";
+    private static final String STARROCKS_DOUBLE = "DOUBLE";
 
     // -------------------------string----------------------------
-    private static final String DORIS_CHAR = "CHAR";
-    private static final String DORIS_VARCHAR = "VARCHAR";
-    private static final String DORIS_STRING = "STRING";
-    private static final String DORIS_TEXT = "TEXT";
+    private static final String STARROCKS_CHAR = "CHAR";
+    private static final String STARROCKS_VARCHAR = "VARCHAR";
+    private static final String STARROCKS_STRING = "STRING";
+    private static final String STARROCKS_TEXT = "TEXT";
 
     // ------------------------------time-------------------------
-    private static final String DORIS_DATE = "DATE";
-    private static final String DORIS_DATETIME = "DATETIME";
+    private static final String STARROCKS_DATE = "DATE";
+    private static final String STARROCKS_DATETIME = "DATETIME";
 
     //------------------------------bool------------------------
-    private static final String DORIS_BOOLEAN = "BOOLEAN";
+    private static final String STARROCKS_BOOLEAN = "BOOLEAN";
 
 
     public static DataType toFlinkType(String columnName, String columnType, int precision, int scale) {
         columnType = columnType.toUpperCase();
         switch (columnType) {
-            case DORIS_BOOLEAN:
+            case STARROCKS_BOOLEAN:
                 return DataTypes.BOOLEAN();
-            case DORIS_TINYINT:
+            case STARROCKS_TINYINT:
                 if (precision == 0) {
                     //The boolean type will become tinyint when queried in information_schema, and precision=0
                     return DataTypes.BOOLEAN();
                 } else {
                     return DataTypes.TINYINT();
                 }
-            case DORIS_SMALLINT:
+            case STARROCKS_SMALLINT:
                 return DataTypes.SMALLINT();
-            case DORIS_INT:
+            case STARROCKS_INT:
                 return DataTypes.INT();
-            case DORIS_BIGINT:
+            case STARROCKS_BIGINT:
                 return DataTypes.BIGINT();
-            case DORIS_DECIMAL:
+            case STARROCKS_DECIMAL:
                 return DataTypes.DECIMAL(precision, scale);
-            case DORIS_FLOAT:
+            case STARROCKS_FLOAT:
                 return DataTypes.FLOAT();
-            case DORIS_DOUBLE:
+            case STARROCKS_DOUBLE:
                 return DataTypes.DOUBLE();
-            case DORIS_CHAR:
+            case STARROCKS_CHAR:
                 return DataTypes.CHAR(precision);
-            case DORIS_LARGEINT:
-            case DORIS_VARCHAR:
-            case DORIS_STRING:
-            case DORIS_TEXT:
+            case STARROCKS_LARGEINT:
+            case STARROCKS_VARCHAR:
+            case STARROCKS_STRING:
+            case STARROCKS_TEXT:
                 return DataTypes.STRING();
-            case DORIS_DATE:
+            case STARROCKS_DATE:
                 return DataTypes.DATE();
-            case DORIS_DATETIME:
+            case STARROCKS_DATETIME:
                 return DataTypes.TIMESTAMP(0);
             default:
                 throw new UnsupportedOperationException(
                         String.format(
-                                "Doesn't support Doris type '%s' on column '%s'", columnType, columnName));
+                                "Doesn't support StarRocks type '%s' on column '%s'", columnType, columnName));
         }
     }
 }

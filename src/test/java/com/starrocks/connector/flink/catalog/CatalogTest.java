@@ -33,7 +33,7 @@ import static org.junit.Assert.assertTrue;
 /** Class for unit tests to run on catalogs. */
 @Ignore
 public class CatalogTest {
-    private static final String TEST_CATALOG_NAME = "doris_catalog";
+    private static final String TEST_CATALOG_NAME = "starrocks_catalog";
     private static final String TEST_FENODES = "127.0.0.1:8030";
     private static final String TEST_JDBCURL = "jdbc:mysql://127.0.0.1:9030";
     private static final String TEST_USERNAME = "root";
@@ -105,7 +105,7 @@ public class CatalogTest {
         catalog = new StarRocksCatalog(TEST_CATALOG_NAME, TEST_JDBCURL, TEST_DB, TEST_USERNAME, TEST_PWD, props);
         this.tEnv = TableEnvironment.create(EnvironmentSettings.inStreamingMode());
         tEnv.getConfig().set(TABLE_EXEC_RESOURCE_DEFAULT_PARALLELISM, 1);
-        // Use doris catalog.
+        // Use starrocks catalog.
         tEnv.registerCatalog(TEST_CATALOG_NAME, catalog);
         tEnv.useCatalog(TEST_CATALOG_NAME);
     }
