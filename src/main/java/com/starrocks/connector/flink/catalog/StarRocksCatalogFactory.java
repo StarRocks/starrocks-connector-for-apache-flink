@@ -12,7 +12,6 @@ import java.util.HashSet;
 import java.util.Set;
 
 import static com.starrocks.connector.flink.catalog.StarRocksCatalogOptions.DEFAULT_DATABASE;
-import static com.starrocks.connector.flink.catalog.StarRocksCatalogOptions.JDBCURL;
 import static com.starrocks.connector.flink.table.StarRocksOptions.DATABASE_NAME;
 import static com.starrocks.connector.flink.table.StarRocksOptions.IDENTIFIER;
 import static com.starrocks.connector.flink.table.StarRocksOptions.JDBC_URL;
@@ -83,7 +82,7 @@ public class StarRocksCatalogFactory implements CatalogFactory {
 
         return new StarRocksCatalog(
                 context.getName(),
-                helper.getOptions().get(JDBCURL),
+                helper.getOptions().get(JDBC_URL),
                 helper.getOptions().get(DEFAULT_DATABASE),
                 helper.getOptions().get(USERNAME),
                 helper.getOptions().get(PASSWORD),

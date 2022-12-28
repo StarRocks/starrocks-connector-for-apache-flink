@@ -71,6 +71,7 @@ import java.util.function.Predicate;
 import static com.starrocks.connector.flink.table.StarRocksOptions.DATABASE_NAME;
 import static com.starrocks.connector.flink.table.StarRocksOptions.FE_NODES;
 import static com.starrocks.connector.flink.table.StarRocksOptions.IDENTIFIER;
+import static com.starrocks.connector.flink.table.StarRocksOptions.JDBC_URL;
 import static com.starrocks.connector.flink.table.StarRocksOptions.PASSWORD;
 import static com.starrocks.connector.flink.table.StarRocksOptions.TABLE_NAME;
 import static com.starrocks.connector.flink.table.StarRocksOptions.USERNAME;
@@ -220,6 +221,7 @@ public class StarRocksCatalog extends AbstractCatalog {
         String tableName = tablePath.getObjectName();
         Map<String, String> props = new HashMap<>(properties);
         props.put(CONNECTOR.key(), IDENTIFIER);
+        props.put(JDBC_URL.key(), jdbcUrl);
         if (!props.containsKey(FE_NODES.key())) {
             props.put(FE_NODES.key(), queryFenodes());
         }

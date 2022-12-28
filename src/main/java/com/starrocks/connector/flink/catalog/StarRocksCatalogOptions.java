@@ -19,6 +19,5 @@ import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.table.catalog.CommonCatalogOptions;
 
 public class StarRocksCatalogOptions {
-    public static final ConfigOption<String> JDBCURL = ConfigOptions.key("jdbc-url").stringType().noDefaultValue().withDescription("starrocks jdbc url.");
     public static final ConfigOption<String> DEFAULT_DATABASE = ConfigOptions.key(CommonCatalogOptions.DEFAULT_DATABASE_KEY).stringType().noDefaultValue();
 }
