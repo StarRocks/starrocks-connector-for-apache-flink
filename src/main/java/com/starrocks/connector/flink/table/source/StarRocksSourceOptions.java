@@ -23,9 +23,12 @@ import org.apache.flink.util.Preconditions;
 import java.io.Serializable;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import com.alibaba.fastjson.JSONObject;
+
+import static com.starrocks.connector.flink.table.StarRocksOptions.*;
 
 public class StarRocksSourceOptions implements Serializable {
 
@@ -33,26 +36,6 @@ public class StarRocksSourceOptions implements Serializable {
     private final ReadableConfig tableOptions;
     private final Map<String, String> tableOptionsMap;
     private final Map<String, String> beScanProps = new HashMap<>();
-
-
-    // required Options
-    public static final ConfigOption<String> SCAN_URL = ConfigOptions.key("scan-url")
-            .stringType().noDefaultValue().withDescription("Hosts of the fe node like: `fe_ip1:http_port,fe_ip2:http_port...`.");
-
-    public static final ConfigOption<String> JDBC_URL = ConfigOptions.key("jdbc-url")
-            .stringType().noDefaultValue().withDescription("Host of the stream load like: `jdbc:mysql://fe_ip1:query_port,fe_ip2:query_port...`.");
-
-    public static final ConfigOption<String> USERNAME = ConfigOptions.key("username")
-            .stringType().noDefaultValue().withDescription("StarRocks user name.");
-
-    public static final ConfigOption<String> PASSWORD = ConfigOptions.key("password")
-            .stringType().noDefaultValue().withDescription("StarRocks user password.");
-
-    public static final ConfigOption<String> DATABASE_NAME = ConfigOptions.key("database-name")
-            .stringType().noDefaultValue().withDescription("Database name");
-
-    public static final ConfigOption<String> TABLE_NAME = ConfigOptions.key("table-name")
-            .stringType().noDefaultValue().withDescription("Table name");
     
     
     // optional Options
@@ -128,7 +111,7 @@ public class StarRocksSourceOptions implements Serializable {
                 PASSWORD,
                 TABLE_NAME,
                 DATABASE_NAME,
-                SCAN_URL,
+                FE_NODES,
                 JDBC_URL,
         };
         int presentCount = 0;
@@ -143,8 +126,8 @@ public class StarRocksSourceOptions implements Serializable {
     }
 
     // required Options
-    public String getScanUrl() {
-        return tableOptions.get(SCAN_URL);
+    public List<String> getFeNodeList() {
+        return tableOptions.get(FE_NODES);
     }
 
     public String getJdbcUrl() {

@@ -42,8 +42,6 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 
-
-
 public class StarRocksQueryPlanVisitor implements Serializable {
 
     private static final long serialVersionUID = 1L;
@@ -60,8 +58,8 @@ public class StarRocksQueryPlanVisitor implements Serializable {
 
     public QueryInfo getQueryInfo(String SQL) throws IOException {
         LOG.info("query sql [{}]", SQL);
-        String[] httpNodes = sourceOptions.getScanUrl().split(",");
-        QueryPlan plan = getQueryPlan(SQL, httpNodes[new Random().nextInt(httpNodes.length)], sourceOptions);
+        List<String> httpNodes = sourceOptions.getFeNodeList();
+        QueryPlan plan = getQueryPlan(SQL, httpNodes.get(new Random().nextInt(httpNodes.size())), sourceOptions);
         Map<String, Set<Long>> beXTablets = transferQueryPlanToBeXTablet(plan);
         List<QueryBeXTablets> queryBeXTabletsList = new ArrayList<>();
         beXTablets.entrySet().stream().forEach(entry -> {

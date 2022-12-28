@@ -27,7 +27,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import com.alibaba.fastjson.JSON;
@@ -45,7 +44,6 @@ import org.junit.After;
 import org.junit.Before;
 
 import mockit.Mocked;
-import mockit.Tested;
 import mockit.Expectations;
 
 public abstract class StarRocksSinkBaseTest {
@@ -56,7 +54,7 @@ public abstract class StarRocksSinkBaseTest {
     protected final int AVAILABLE_QUERY_PORT = 53328;
     protected final String JDBC_URL = "jdbc:mysql://127.0.0.1:53316,127.0.0.1:" + AVAILABLE_QUERY_PORT;
     protected int AVAILABLE_HTTP_PORT = 29591;
-    protected String LOAD_URL;
+    protected String FE_NODES;
     protected final String DATABASE = "test";
     protected final String TABLE = "test_tbl";
     protected final String USERNAME = "root";
@@ -165,7 +163,7 @@ public abstract class StarRocksSinkBaseTest {
             try {
                 int port = AVAILABLE_HTTP_PORT + i;
                 serverSocket = new ServerSocket(port);
-                LOAD_URL = "127.0.0.1:1;127.0.0.1:" + port;
+                FE_NODES = "127.0.0.1:1;127.0.0.1:" + port;
                 initializeOptions();
             } catch (IOException e) {}
         }
@@ -174,7 +172,7 @@ public abstract class StarRocksSinkBaseTest {
     private void initializeOptions() {
         StarRocksSinkOptions.Builder builder = StarRocksSinkOptions.builder()
             .withProperty("jdbc-url", JDBC_URL)
-            .withProperty("load-url", LOAD_URL)
+            .withProperty("load-url", FE_NODES)
             .withProperty("database-name", DATABASE)
             .withProperty("table-name", TABLE)
             .withProperty("username", USERNAME)

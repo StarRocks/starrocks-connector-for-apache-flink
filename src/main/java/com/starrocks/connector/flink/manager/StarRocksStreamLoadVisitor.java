@@ -77,7 +77,7 @@ public class StarRocksStreamLoadVisitor implements Serializable {
     public Map<String, Object> doStreamLoad(StarRocksSinkBufferEntity bufferEntity) throws IOException {
         String host = getAvailableHost();
         if (null == host) {
-            throw new IOException("None of the hosts in `load_url` could be connected.");
+            throw new IOException("None of the hosts in `fe-nodes` could be connected.");
         }
         String loadUrl = new StringBuilder(host)
             .append("/api/")
@@ -180,7 +180,7 @@ public class StarRocksStreamLoadVisitor implements Serializable {
     }
 
     private String getAvailableHost() {
-        List<String> hostList = sinkOptions.getLoadUrlList();
+        List<String> hostList = sinkOptions.getFeNodeList();
         long tmp = pos + hostList.size();
         while (pos < tmp) {
             String host = hostList.get((int) (pos % hostList.size()));

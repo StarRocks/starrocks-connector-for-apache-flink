@@ -31,7 +31,7 @@ Click [HERE](https://search.maven.org/search?q=g:com.starrocks) to get the lates
 
 ```java
 StarRocksSourceOptions options = StarRocksSourceOptions.builder()
-    .withProperty("scan-url", "fe_ip1:8030,fe_ip2:8030,fe_ip3:8030")
+    .withProperty("fe-nodes", "fe_ip1:8030,fe_ip2:8030,fe_ip3:8030")
     .withProperty("jdbc-url", "jdbc:mysql://fe_ip:9030")
     .withProperty("username", "root")
     .withProperty("password", "")
@@ -78,7 +78,7 @@ CREATE TABLE flink_test (
     decimal_1 DECIMAL(27,9)
 ) WITH (
    'connector'='starrocks',
-   'scan-url'='fe_ip1:8030,fe_ip2:8030,fe_ip3:8030',
+   'fe-nodes'='fe_ip1:8030,fe_ip2:8030,fe_ip3:8030',
    'jdbc-url'='jdbc:mysql://fe_ip:9030',
    'username'='root',
    'password'='',
@@ -91,20 +91,20 @@ select date_1, smallint_1 from flink_test where char_1 <> 'A' and int_1 = -126
 
 ### Source options
 
-| Option                      | Required | Default            | Type   | Description                                                  |
-| :-------------------------- | :------- | :----------------- | :----- | :----------------------------------------------------------- |
-| connector                   | YES      | NONE               | String | starrocks                                                    |
-| scan-url                    | YES      | NONE               | String | Hosts of the fe nodes like: `fe_ip1:http_port,fe_ip2:http_port...`. |
-| jdbc-url                    | YES      | NONE               | String | Hosts of the fe nodes like: `fe_ip1:query_port,fe_ip2: query_port...`. |
-| username                    | YES      | NONE               | String | StarRocks user name.                                         |
-| password                    | YES      | NONE               | String | StarRocks user password.                                     |
-| database-name               | YES      | NONE               | String | Database name                                                |
-| table-name                  | YES      | NONE               | String | Table name                                                   |
-| scan.connect.timeout-ms     | NO       | 1000               | String | Connect timeout                                              |
-| scan.params.keep-alive-min  | NO       | 10                 | String | Max keep alive time min                                      |
-| scan.params.query-timeout-s | NO       | 600(5min)          | String | Query timeout for a single query(The value of this parameter needs to be longer than the estimated period of the source) |
-| scan.params.mem-limit-byte  | NO       | 1024*1024*1024(1G) | String | Memory limit for a single query                              |
-| scan.max-retries            | NO       | 1                  | String | Max request retry times.                                     |
+| Option                       | Required | Default            | Type   | Description                                                  |
+|:-----------------------------| :------- | :----------------- | :----- | :----------------------------------------------------------- |
+| connector                    | YES      | NONE               | String | starrocks                                                    |
+| fe-nodes                     | YES      | NONE               | String | Hosts of the fe nodes like: `fe_ip1:http_port,fe_ip2:http_port...`. |
+| jdbc-url                     | YES      | NONE               | String | Hosts of the fe nodes like: `fe_ip1:query_port,fe_ip2: query_port...`. |
+| username                     | YES      | NONE               | String | StarRocks user name.                                         |
+| password                     | YES      | NONE               | String | StarRocks user password.                                     |
+| database-name                | YES      | NONE               | String | Database name                                                |
+| table-name                   | YES      | NONE               | String | Table name                                                   |
+| scan.connect.timeout-ms      | NO       | 1000               | String | Connect timeout                                              |
+| scan.params.keep-alive-min   | NO       | 10                 | String | Max keep alive time min                                      |
+| scan.params.query-timeout-s  | NO       | 600(5min)          | String | Query timeout for a single query(The value of this parameter needs to be longer than the estimated period of the source) |
+| scan.params.mem-limit-byte   | NO       | 1024*1024*1024(1G) | String | Memory limit for a single query                              |
+| scan.max-retries             | NO       | 1                  | String | Max request retry times.                                     |
 
 ### Source metrics
 

@@ -57,9 +57,9 @@ public class SinkFunctionFactory {
 
     public static boolean isStarRocksSupportTransactionLoad(StarRocksSinkOptions sinkOptions) {
         String host = ConnectionUtils.selectAvailableHttpHost(
-                sinkOptions.getLoadUrlList(), sinkOptions.getConnectTimeout());
+                sinkOptions.getFeNodeList(), sinkOptions.getConnectTimeout());
         if (host == null) {
-            throw new RuntimeException("Can't find an available host in " + sinkOptions.getLoadUrlList());
+            throw new RuntimeException("Can't find an available host in " + sinkOptions.getFeNodeList());
         }
 
         String beginUrlStr = "http://" + StreamLoadConstants.getBeginUrl(host);

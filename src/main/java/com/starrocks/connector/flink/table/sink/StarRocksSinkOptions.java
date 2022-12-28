@@ -38,6 +38,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.connector.flink.table.StarRocksOptions.*;
+
 public class StarRocksSinkOptions implements Serializable {
 
     private static final Logger log = LoggerFactory.getLogger(StarRocksSinkOptions.class);
@@ -52,20 +54,6 @@ public class StarRocksSinkOptions implements Serializable {
     }
 
     private static final String FORMAT_KEY = "format";
-
-    // required sink configurations
-    public static final ConfigOption<String> JDBC_URL = ConfigOptions.key("jdbc-url")
-            .stringType().noDefaultValue().withDescription("Url of the jdbc like: `jdbc:mysql://fe_ip1:query_port,fe_ip2:query_port...`.");
-    public static final ConfigOption<List<String>> LOAD_URL = ConfigOptions.key("load-url")
-            .stringType().asList().noDefaultValue().withDescription("Url of the stream load, if you you don't specify the http/https prefix, the default http. like: `fe_ip1:http_port;http://fe_ip2:http_port;https://fe_nlb`.");
-    public static final ConfigOption<String> DATABASE_NAME = ConfigOptions.key("database-name")
-            .stringType().noDefaultValue().withDescription("Database name of the stream load.");
-    public static final ConfigOption<String> TABLE_NAME = ConfigOptions.key("table-name")
-            .stringType().noDefaultValue().withDescription("Table name of the stream load.");
-    public static final ConfigOption<String> USERNAME = ConfigOptions.key("username")
-            .stringType().noDefaultValue().withDescription("StarRocks user name.");
-    public static final ConfigOption<String> PASSWORD = ConfigOptions.key("password")
-            .stringType().noDefaultValue().withDescription("StarRocks user password.");
 
     // optional sink configurations
     public static final ConfigOption<String > SINK_VERSION = ConfigOptions.key("sink.version")
@@ -169,8 +157,8 @@ public class StarRocksSinkOptions implements Serializable {
         return tableOptions.get(SINK_VERSION);
     }
 
-    public List<String> getLoadUrlList() {
-        return tableOptions.getOptional(LOAD_URL).orElse(null);
+    public List<String> getFeNodeList() {
+        return tableOptions.getOptional(FE_NODES).orElse(null);
     }
 
     public String getLabelPrefix() {
@@ -259,13 +247,13 @@ public class StarRocksSinkOptions implements Serializable {
     }
 
     private void validateStreamLoadUrl() {
-        tableOptions.getOptional(LOAD_URL).ifPresent(urlList -> {
+        tableOptions.getOptional(FE_NODES).ifPresent(urlList -> {
             for (String host : urlList) {
                 if (host.split(":").length < 2) {
                     throw new ValidationException(String.format(
                             "Could not parse host '%s' in option '%s'. It should follow the format 'host_name:port'.",
                             host,
-                            LOAD_URL.key()));
+                            FE_NODES.key()));
                 }
             }
         });
@@ -327,7 +315,7 @@ public class StarRocksSinkOptions implements Serializable {
                 TABLE_NAME,
                 DATABASE_NAME,
                 JDBC_URL,
-                LOAD_URL
+                FE_NODES
         };
         int presentCount = 0;
         for (ConfigOption<?> configOption : configOptions) {
@@ -411,7 +399,7 @@ public class StarRocksSinkOptions implements Serializable {
         }
 
         StreamLoadProperties.Builder builder = StreamLoadProperties.builder()
-                .loadUrls(getLoadUrlList().toArray(new String[0]))
+                .loadUrls(getFeNodeList().toArray(new String[0]))
                 .jdbcUrl(getJdbcUrl())
                 .defaultTableProperties(defaultTablePropertiesBuilder.build())
                 .cacheMaxBytes(getSinkMaxBytes())

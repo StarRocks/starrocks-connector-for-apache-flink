@@ -146,7 +146,7 @@ public class StarRocksGenericSinkITTest extends StarRocksSinkBaseTest {
         assertEquals(Long.parseLong(SINK_MAX_BYTES), OPTIONS.getSinkMaxBytes());
         assertEquals(Long.parseLong(SINK_MAX_RETRIES), OPTIONS.getSinkMaxRetries());
         assertEquals(Long.parseLong(SINK_MAX_ROWS), OPTIONS.getSinkMaxRows());
-        assertEquals(LOAD_URL.split(";").length, OPTIONS.getLoadUrlList().size());
+        assertEquals(FE_NODES.split(";").length, OPTIONS.getFeNodeList().size());
         assertEquals(SINK_SEMANTIC, OPTIONS.getSemantic());
         assertEquals(SINK_PROPS.size(), OPTIONS.getSinkStreamLoadProperties().size());
     }

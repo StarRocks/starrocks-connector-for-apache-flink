@@ -2,7 +2,6 @@ package com.starrocks.connector.flink.it.source;
 
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.util.List;
@@ -61,7 +60,7 @@ public class StarRocksDynamicTableSourceITTest extends StarRocksSourceBaseTest {
                     "decimal_1 DECIMAL(10,9)\n"+
                 ") WITH (\n" +
                     "  'connector' = 'starrocks',\n" +
-                    "  'scan-url' = '" + OPTIONS.getScanUrl() + "',\n" +
+                    "  'fe-nodes' = '" + String.join(";", OPTIONS.getFeNodeList()) + "',\n" +
                     "  'scan.connect.timeout-ms' = '5000', " +
                     "  'jdbc-url' = '" + OPTIONS.getJdbcUrl() + "',\n" +
                     "  'username' = '" + OPTIONS.getUsername() + "',\n" +
@@ -117,7 +116,7 @@ public class StarRocksDynamicTableSourceITTest extends StarRocksSourceBaseTest {
                         "decimal_1 DECIMAL(10,9)\n"+
                     ") WITH (\n" +
                         "'connector' = 'starrocks',\n" +
-                        "'scan-url' = '" + OPTIONS.getScanUrl() + "',\n" +
+                        "'fe-nodes' = '" + String.join(";", OPTIONS.getFeNodeList()) + "',\n" +
                         "'scan.connect.timeout-ms' = '5000', " +
                         "'jdbc-url' = '" + OPTIONS.getJdbcUrl() + "',\n" +
                         "'username' = '" + OPTIONS.getUsername() + "',\n" +
@@ -140,7 +139,7 @@ public class StarRocksDynamicTableSourceITTest extends StarRocksSourceBaseTest {
     @Test
     public void testSourceCommonProperties() {
         assertEquals(JDBC_URL, OPTIONS.getJdbcUrl());
-        assertEquals(SCAN_URL, OPTIONS.getScanUrl());
+        assertEquals(SCAN_URL, String.join(";", OPTIONS.getFeNodeList()));
         assertEquals(DATABASE, OPTIONS.getDatabaseName());
         assertEquals(TABLE, OPTIONS.getTableName());
         assertEquals(USERNAME, OPTIONS.getUsername());

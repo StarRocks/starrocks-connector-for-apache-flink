@@ -121,7 +121,7 @@ public class StarRocksDynamicTableSinkITTest extends StarRocksSinkBaseTest {
             ") WITH ( " +
             "'connector' = 'starrocks'," +
             "'jdbc-url'='" + OPTIONS.getJdbcUrl() + "'," +
-            "'load-url'='" + String.join(";", OPTIONS.getLoadUrlList()) + "'," +
+            "'fe-nodes'='" + String.join(";", OPTIONS.getFeNodeList()) + "'," +
             "'database-name' = '" + OPTIONS.getDatabaseName() + "'," +
             "'table-name' = '" + OPTIONS.getTableName() + "'," +
             "'username' = '" + OPTIONS.getUsername() + "'," +

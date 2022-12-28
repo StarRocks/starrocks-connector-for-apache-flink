@@ -20,6 +20,7 @@ package com.starrocks.connector.flink.table.sink;
 
 import com.alibaba.fastjson.JSONObject;
 import com.starrocks.connector.flink.mock.MockFeHttpServer;
+import com.starrocks.connector.flink.table.StarRocksOptions;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.flink.configuration.Configuration;
@@ -45,12 +46,12 @@ public class SinkFunctionFactoryTest {
         try (MockFeHttpServer httpServer = new MockFeHttpServer()) {
             httpServer.start();
             Configuration conf = new Configuration();
-            conf.setString(StarRocksSinkOptions.TABLE_NAME, "test");
-            conf.setString(StarRocksSinkOptions.DATABASE_NAME, "test");
-            conf.setString(StarRocksSinkOptions.LOAD_URL.key(), "127.0.0.1:" + httpServer.getListenPort());
-            conf.setString(StarRocksSinkOptions.JDBC_URL, "jdbc://127.0.0.1:1234");
-            conf.setString(StarRocksSinkOptions.USERNAME, "root");
-            conf.setString(StarRocksSinkOptions.PASSWORD, "");
+            conf.setString(StarRocksOptions.TABLE_NAME, "test");
+            conf.setString(StarRocksOptions.DATABASE_NAME, "test");
+            conf.setString(StarRocksOptions.FE_NODES.key(), "127.0.0.1:" + httpServer.getListenPort());
+            conf.setString(StarRocksOptions.JDBC_URL, "jdbc://127.0.0.1:1234");
+            conf.setString(StarRocksOptions.USERNAME, "root");
+            conf.setString(StarRocksOptions.PASSWORD, "");
             StarRocksSinkOptions sinkOptions = new StarRocksSinkOptions(conf, new HashMap<>());
 
             {

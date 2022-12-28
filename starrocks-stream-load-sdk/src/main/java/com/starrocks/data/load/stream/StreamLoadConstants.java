@@ -29,7 +29,7 @@ public interface StreamLoadConstants {
 
     public static String getBeginUrl(String host) {
         if (host == null) {
-            throw new IllegalArgumentException("None of the hosts in `load_url` could be connected.");
+            throw new IllegalArgumentException("None of the hosts in `fe-nodes` could be connected.");
         }
 
         return host + StreamLoadConstants.PATH_TRANSACTION_BEGIN;
@@ -37,7 +37,7 @@ public interface StreamLoadConstants {
 
     public static String getSendUrl(String host) {
         if (host == null) {
-            throw new IllegalArgumentException("None of the hosts in `load_url` could be connected.");
+            throw new IllegalArgumentException("None of the hosts in `fe-nodes` could be connected.");
         }
 
         return host + StreamLoadConstants.PATH_TRANSACTION_SEND;
@@ -45,21 +45,21 @@ public interface StreamLoadConstants {
 
     public static String getPrepareUrl(String host) {
         if (host == null) {
-            throw new IllegalArgumentException("None of the hosts in `load_url` could be connected.");
+            throw new IllegalArgumentException("None of the hosts in `fe-nodes` could be connected.");
         }
         return host + StreamLoadConstants.PATH_TRANSACTION_PRE_COMMIT;
     }
 
     public static String getCommitUrl(String host) {
         if (host == null) {
-            throw new IllegalArgumentException("None of the hosts in `load_url` could be connected.");
+            throw new IllegalArgumentException("None of the hosts in `fe-nodes` could be connected.");
         }
         return host + StreamLoadConstants.PATH_TRANSACTION_COMMIT;
     }
 
     public static String getRollbackUrl(String host) {
         if (host == null) {
-            throw new IllegalArgumentException("None of the hosts in `load_url` could be connected.");
+            throw new IllegalArgumentException("None of the hosts in `fe-nodes` could be connected.");
         }
         return host + StreamLoadConstants.PATH_TRANSACTION_ROLLBACK;
     }
