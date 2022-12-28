@@ -38,7 +38,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.connector.flink.table.StarRocksOptions.*;
+import static com.starrocks.connector.flink.table.StarRocksOptions.DATABASE_NAME;
+import static com.starrocks.connector.flink.table.StarRocksOptions.FE_NODES;
+import static com.starrocks.connector.flink.table.StarRocksOptions.JDBC_URL;
+import static com.starrocks.connector.flink.table.StarRocksOptions.PASSWORD;
+import static com.starrocks.connector.flink.table.StarRocksOptions.TABLE_NAME;
+import static com.starrocks.connector.flink.table.StarRocksOptions.USERNAME;
 
 public class StarRocksSinkOptions implements Serializable {
 
@@ -64,7 +69,7 @@ public class StarRocksSinkOptions implements Serializable {
     public static final ConfigOption<String> SINK_LABEL_PREFIX = ConfigOptions.key("sink.label-prefix")
             .stringType().noDefaultValue().withDescription("The prefix of the stream load label. Available values are within [-_A-Za-z0-9]");
     public static final ConfigOption<Integer> SINK_CONNECT_TIMEOUT = ConfigOptions.key("sink.connect.timeout-ms")
-            .intType().defaultValue(1000).withDescription("Timeout in millisecond for connecting to the `load-url`.");
+            .intType().defaultValue(1000).withDescription("Timeout in millisecond for connecting to the `fe-nodes`.");
     public static final ConfigOption<Integer> SINK_IO_THREAD_COUNT = ConfigOptions.key("sink.io.thread-count")
             .intType().defaultValue(2).withDescription("Stream load thread count");
 

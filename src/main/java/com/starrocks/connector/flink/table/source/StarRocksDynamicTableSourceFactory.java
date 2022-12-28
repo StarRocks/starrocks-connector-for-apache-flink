@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.flink.table.source;
 
-import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.table.api.TableSchema;
@@ -28,8 +27,13 @@ import java.util.Set;
 
 import com.starrocks.connector.flink.table.source.struct.PushDownHolder;
 
-import static com.starrocks.connector.flink.table.StarRocksOptions.*;
-
+import static com.starrocks.connector.flink.table.StarRocksOptions.DATABASE_NAME;
+import static com.starrocks.connector.flink.table.StarRocksOptions.FE_NODES;
+import static com.starrocks.connector.flink.table.StarRocksOptions.IDENTIFIER;
+import static com.starrocks.connector.flink.table.StarRocksOptions.JDBC_URL;
+import static com.starrocks.connector.flink.table.StarRocksOptions.PASSWORD;
+import static com.starrocks.connector.flink.table.StarRocksOptions.TABLE_NAME;
+import static com.starrocks.connector.flink.table.StarRocksOptions.USERNAME;
 
 public final class StarRocksDynamicTableSourceFactory implements DynamicTableSourceFactory {
 

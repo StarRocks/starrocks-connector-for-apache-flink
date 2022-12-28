@@ -28,7 +28,12 @@ import java.util.Map;
 
 import com.alibaba.fastjson.JSONObject;
 
-import static com.starrocks.connector.flink.table.StarRocksOptions.*;
+import static com.starrocks.connector.flink.table.StarRocksOptions.DATABASE_NAME;
+import static com.starrocks.connector.flink.table.StarRocksOptions.FE_NODES;
+import static com.starrocks.connector.flink.table.StarRocksOptions.JDBC_URL;
+import static com.starrocks.connector.flink.table.StarRocksOptions.PASSWORD;
+import static com.starrocks.connector.flink.table.StarRocksOptions.TABLE_NAME;
+import static com.starrocks.connector.flink.table.StarRocksOptions.USERNAME;
 
 public class StarRocksSourceOptions implements Serializable {
 

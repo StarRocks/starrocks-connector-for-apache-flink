@@ -1,6 +1,5 @@
 package com.starrocks.connector.flink.catalog;
 
-
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 import com.starrocks.connector.flink.table.source.StarRocksSourceOptions;
 import org.apache.flink.configuration.ConfigOption;
@@ -14,7 +13,12 @@ import java.util.Set;
 
 import static com.starrocks.connector.flink.catalog.StarRocksCatalogOptions.DEFAULT_DATABASE;
 import static com.starrocks.connector.flink.catalog.StarRocksCatalogOptions.JDBCURL;
-import static com.starrocks.connector.flink.table.StarRocksOptions.*;
+import static com.starrocks.connector.flink.table.StarRocksOptions.DATABASE_NAME;
+import static com.starrocks.connector.flink.table.StarRocksOptions.IDENTIFIER;
+import static com.starrocks.connector.flink.table.StarRocksOptions.JDBC_URL;
+import static com.starrocks.connector.flink.table.StarRocksOptions.PASSWORD;
+import static com.starrocks.connector.flink.table.StarRocksOptions.TABLE_NAME;
+import static com.starrocks.connector.flink.table.StarRocksOptions.USERNAME;
 
 /**
  * Factory for {@link StarRocksCatalog}.
@@ -33,7 +37,6 @@ public class StarRocksCatalogFactory implements CatalogFactory {
         options.add(PASSWORD);
         options.add(TABLE_NAME);
         options.add(DATABASE_NAME);
-        options.add(FE_NODES);
         options.add(JDBC_URL);
         return options;
     }
