@@ -4,8 +4,10 @@ import com.starrocks.data.load.stream.StreamLoadDataFormat;
 import com.starrocks.data.load.stream.StreamLoadUtils;
 
 import java.io.Serializable;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class StreamLoadTableProperties implements Serializable {
 
@@ -148,7 +150,9 @@ public class StreamLoadTableProperties implements Serializable {
             addProperty("db", database);
             addProperty("table", table);
             if (columns != null && columns.length > 0) {
-                addProperty("columns", String.join(",", columns));
+                String cols = Arrays.stream(columns)
+                        .map(f -> String.format("`%s`", f.trim().replace("`", ""))).collect(Collectors.joining(","));
+                addProperty("columns", cols);
             }
             return new StreamLoadTableProperties(this);
         }
