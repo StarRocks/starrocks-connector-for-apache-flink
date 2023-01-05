@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.flink.table.source;
 
-import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.table.api.TableSchema;
@@ -28,8 +27,13 @@ import java.util.Set;
 
 import com.starrocks.connector.flink.table.source.struct.PushDownHolder;
 
-import static com.starrocks.connector.flink.table.StarRocksOptions.*;
-
+import static com.starrocks.connector.flink.table.StarRocksOptions.DATABASE_NAME;
+import static com.starrocks.connector.flink.table.StarRocksOptions.FE_NODES;
+import static com.starrocks.connector.flink.table.StarRocksOptions.IDENTIFIER;
+import static com.starrocks.connector.flink.table.StarRocksOptions.JDBC_URL;
+import static com.starrocks.connector.flink.table.StarRocksOptions.PASSWORD;
+import static com.starrocks.connector.flink.table.StarRocksOptions.TABLE_NAME;
+import static com.starrocks.connector.flink.table.StarRocksOptions.USERNAME;
 
 public final class StarRocksDynamicTableSourceFactory implements DynamicTableSourceFactory {
 
@@ -66,22 +70,6 @@ public final class StarRocksDynamicTableSourceFactory implements DynamicTableSou
     @Override
     public Set<ConfigOption<?>> optionalOptions() {
         final Set<ConfigOption<?>> options = new HashSet<>();
-        //sink
-        options.add(StarRocksSinkOptions.SINK_VERSION);
-        options.add(StarRocksSinkOptions.SINK_BATCH_MAX_SIZE);
-        options.add(StarRocksSinkOptions.SINK_BATCH_MAX_ROWS);
-        options.add(StarRocksSinkOptions.SINK_BATCH_FLUSH_INTERVAL);
-        options.add(StarRocksSinkOptions.SINK_MAX_RETRIES);
-        options.add(StarRocksSinkOptions.SINK_SEMANTIC);
-        options.add(StarRocksSinkOptions.SINK_BATCH_OFFER_TIMEOUT);
-        options.add(StarRocksSinkOptions.SINK_PARALLELISM);
-        options.add(StarRocksSinkOptions.SINK_LABEL_PREFIX);
-        options.add(StarRocksSinkOptions.SINK_CONNECT_TIMEOUT);
-        options.add(StarRocksSinkOptions.SINK_IO_THREAD_COUNT);
-        options.add(StarRocksSinkOptions.SINK_CHUNK_LIMIT);
-        options.add(StarRocksSinkOptions.SINK_SCAN_FREQUENCY);
-
-        //source
         options.add(StarRocksSourceOptions.SCAN_CONNECT_TIMEOUT);
         options.add(StarRocksSourceOptions.SCAN_BATCH_ROWS);
         options.add(StarRocksSourceOptions.SCAN_PROPERTIES);

@@ -11,3 +11,4 @@
 # limitations under the License.
 
 com.starrocks.connector.flink.table.StarRocksDynamicTableFactory
+com.starrocks.connector.flink.catalog.StarRocksCatalogFactory

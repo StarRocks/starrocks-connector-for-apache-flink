@@ -32,7 +32,7 @@ public class StarRocksSink {
      * </p>
      *
      * @param flinkTableSchema     TableSchema of the all columns with DataType
-     * @param sinkOptions          StarRocksSinkOptions as the document listed, such as jdbc-url, load-url, batch size and maximum retries
+     * @param sinkOptions          StarRocksSinkOptions as the document listed, such as jdbc-url, fe-nodes, batch size and maximum retries
      * @param rowDataTransformer   StarRocksSinkRowBuilder which would be used to transform the upstream record.
      * @param <T>                  type of data in {@link org.apache.flink.streaming.runtime.streamrecord.StreamRecord StreamRecord}.
      * @return SinkFunction        SinkFunction that could be add to a stream.
@@ -53,7 +53,7 @@ public class StarRocksSink {
      * Therefore, objects can not be {@link org.apache.flink.api.common.ExecutionConfig#enableObjectReuse() reused}.
      * </p>
      *
-     * @param sinkOptions            StarRocksSinkOptions as the document listed, such as jdbc-url, load-url, batch size and maximum retries
+     * @param sinkOptions            StarRocksSinkOptions as the document listed, such as jdbc-url, fe-nodes, batch size and maximum retries
      * @return SinkFunction          SinkFunction that could be add to a stream.
      */
     public static SinkFunction<String> sink(StarRocksSinkOptions sinkOptions) {

@@ -25,7 +25,7 @@ public class StarRocksSource {
     /**
      * Create a StarRocks DataStream source.
      *
-     * @param sourceOptions     StarRocksSourceOptions as the document listed, such as http-nodes, load-url, batch size and maximum retries
+     * @param sourceOptions     StarRocksSourceOptions as the document listed, such as http-nodes, fe-nodes, batch size and maximum retries
      * @param flinkSchema       FlinkSchema
      * @return StarRocksDynamicSourceFunction Function of RichParallelSourceFunction
      */

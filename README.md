@@ -153,7 +153,7 @@ fromElements(new String[]{
         // the sink options
         StarRocksSinkOptions.builder()
             .withProperty("jdbc-url", "jdbc:mysql://ip:port,ip:port?xxxxx")
-            .withProperty("load-url", "ip:port;ip:port")
+            .withProperty("fe-nodes", "ip:port;ip:port")
             .withProperty("username", "xxx")
             .withProperty("password", "xxx")
             .withProperty("table-name", "xxx")
@@ -189,7 +189,7 @@ fromElements(
         // the sink options
         StarRocksSinkOptions.builder()
             .withProperty("jdbc-url", "jdbc:mysql://ip:port,ip:port?xxxxx")
-            .withProperty("load-url", "ip:port;ip:port")
+            .withProperty("fe-nodes", "ip:port;ip:port")
             .withProperty("username", "xxx")
             .withProperty("password", "xxx")
             .withProperty("table-name", "xxx")
@@ -220,7 +220,7 @@ tEnv.executeSql(
     ") WITH ( " +
         "'connector' = 'starrocks'," +
         "'jdbc-url'='jdbc:mysql://ip:port,ip:port?xxxxx'," +
-        "'load-url'='ip:port;ip:port'," +
+        "'fe-nodes'='ip:port;ip:port'," +
         "'database-name' = 'xxx'," +
         "'table-name' = 'xxx'," +
         "'username' = 'xxx'," +
@@ -240,7 +240,7 @@ tEnv.executeSql(
 |  :-:  | :-:  | :-:  | :-:  | :-:  |
 | connector | YES | NONE | String |`starrocks`|
 | jdbc-url | YES | NONE | String | this will be used to execute queries in starrocks. |
-| load-url | YES | NONE | String | `fe_ip:http_port;fe_ip:http_port` separated with `;`, which would be used to do the batch sinking. |
+| fe-nodes | YES | NONE | String | `fe_ip:http_port;fe_ip:http_port` separated with `;`, which would be used to do the batch sinking. |
 | database-name | YES | NONE | String | starrocks database name |
 | table-name | YES | NONE | String | starrocks table name |
 | username | YES | NONE | String | starrocks connecting username |
@@ -251,7 +251,7 @@ tEnv.executeSql(
 | sink.buffer-flush.interval-ms | NO | 300000 | String | the flushing time interval, range: `[1000ms, 3600000ms]`. |
 | sink.max-retries | NO | 3 | String | max retry times of the stream load request, range: `[0, 1000]`. |
 | sink.parallelism | NO | NULL | String | Specify the parallelism of the sink individually. Remove it if you want to follow the global parallelism settings. |
-| sink.connect.timeout-ms | NO | 1000 | String | Timeout in millisecond for connecting to the `load-url`, range: `[100, 60000]`. |
+| sink.connect.timeout-ms | NO | 1000 | String | Timeout in millisecond for connecting to the `fe-nodes`, range: `[100, 60000]`. |
 | sink.label-prefix | NO | NO | String | the prefix of the stream load label, available characters are within [-_A-Za-z0-9]. |
 | sink.properties.* | NO | NONE | String | the stream load properties like `'sink.properties.columns' = 'k1, v1'`. |
 

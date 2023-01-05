@@ -1,35 +1,18 @@
-/*
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+package com.starrocks.connector.flink.catalog;
 
-package com.starrocks.connector.flink.table;
-
-import com.starrocks.connector.flink.table.sink.StarRocksDynamicTableSinkFactory;
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
-import com.starrocks.connector.flink.table.source.StarRocksDynamicTableSourceFactory;
 import com.starrocks.connector.flink.table.source.StarRocksSourceOptions;
 import org.apache.flink.configuration.ConfigOption;
-import org.apache.flink.table.connector.sink.DynamicTableSink;
-import org.apache.flink.table.connector.source.DynamicTableSource;
-import org.apache.flink.table.factories.DynamicTableSinkFactory;
-import org.apache.flink.table.factories.DynamicTableSourceFactory;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.table.catalog.Catalog;
+import org.apache.flink.table.factories.CatalogFactory;
 import org.apache.flink.table.factories.FactoryUtil;
 
 import java.util.HashSet;
 import java.util.Set;
 
+import static com.starrocks.connector.flink.catalog.StarRocksCatalogOptions.DEFAULT_DATABASE;
 import static com.starrocks.connector.flink.table.StarRocksOptions.DATABASE_NAME;
-import static com.starrocks.connector.flink.table.StarRocksOptions.FE_NODES;
 import static com.starrocks.connector.flink.table.StarRocksOptions.IDENTIFIER;
 import static com.starrocks.connector.flink.table.StarRocksOptions.JDBC_URL;
 import static com.starrocks.connector.flink.table.StarRocksOptions.PASSWORD;
@@ -37,30 +20,13 @@ import static com.starrocks.connector.flink.table.StarRocksOptions.TABLE_NAME;
 import static com.starrocks.connector.flink.table.StarRocksOptions.USERNAME;
 
 /**
- * The {@link StarRocksDynamicTableFactory} translates the catalog table to a table source.
- *
- * <p>Because the table source requires a decoding format, we are discovering the format using the
- * provided {@link FactoryUtil} for convenience.
+ * Factory for {@link StarRocksCatalog}.
  */
-public final class StarRocksDynamicTableFactory implements DynamicTableSourceFactory, DynamicTableSinkFactory {
-
-    private StarRocksDynamicTableSourceFactory dynamicTableSourceFactory = new StarRocksDynamicTableSourceFactory();
-
-    private StarRocksDynamicTableSinkFactory dynamicTableSinkFactory = new StarRocksDynamicTableSinkFactory();
+public class StarRocksCatalogFactory implements CatalogFactory {
 
     @Override
     public String factoryIdentifier() {
-        return IDENTIFIER; // used for matching to `connector = '...'`
-    }
-
-    @Override
-    public DynamicTableSink createDynamicTableSink(Context context) {
-        return dynamicTableSinkFactory.createDynamicTableSink(context);
-    }
-
-    @Override
-    public DynamicTableSource createDynamicTableSource(Context context) {
-        return dynamicTableSourceFactory.createDynamicTableSource(context);
+        return IDENTIFIER;
     }
 
     @Override
@@ -70,7 +36,6 @@ public final class StarRocksDynamicTableFactory implements DynamicTableSourceFac
         options.add(PASSWORD);
         options.add(TABLE_NAME);
         options.add(DATABASE_NAME);
-        options.add(FE_NODES);
         options.add(JDBC_URL);
         return options;
     }
@@ -107,5 +72,20 @@ public final class StarRocksDynamicTableFactory implements DynamicTableSourceFac
         options.add(StarRocksSourceOptions.LOOKUP_CACHE_MAX_ROWS);
         options.add(StarRocksSourceOptions.LOOKUP_MAX_RETRIES);
         return options;
+    }
+
+    @Override
+    public Catalog createCatalog(Context context) {
+        final FactoryUtil.CatalogFactoryHelper helper =
+                FactoryUtil.createCatalogFactoryHelper(this, context);
+        helper.validateExcept(StarRocksSinkOptions.SINK_PROPERTIES_PREFIX);
+
+        return new StarRocksCatalog(
+                context.getName(),
+                helper.getOptions().get(JDBC_URL),
+                helper.getOptions().get(DEFAULT_DATABASE),
+                helper.getOptions().get(USERNAME),
+                helper.getOptions().get(PASSWORD),
+                ((Configuration) helper.getOptions()).toMap());
     }
 }

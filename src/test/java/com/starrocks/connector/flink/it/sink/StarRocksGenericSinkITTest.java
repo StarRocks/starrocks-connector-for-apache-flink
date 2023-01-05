@@ -114,7 +114,7 @@ public class StarRocksGenericSinkITTest extends StarRocksSinkBaseTest {
         //             .build(),
         //         StarRocksSinkOptions.builder()
         //             .withProperty("jdbc-url", "jdbc:mysql://172.26.92.139:28533")
-        //             .withProperty("load-url", "172.26.92.139:28531;172.26.92.139:28531")
+        //             .withProperty("fe-nodes", "172.26.92.139:28531;172.26.92.139:28531")
         //             .withProperty("database-name", "aa")
         //             .withProperty("table-name", "test")
         //             .withProperty("username", "root")

@@ -172,7 +172,7 @@ public abstract class StarRocksSinkBaseTest {
     private void initializeOptions() {
         StarRocksSinkOptions.Builder builder = StarRocksSinkOptions.builder()
             .withProperty("jdbc-url", JDBC_URL)
-            .withProperty("load-url", FE_NODES)
+            .withProperty("fe-nodes", FE_NODES)
             .withProperty("database-name", DATABASE)
             .withProperty("table-name", TABLE)
             .withProperty("username", USERNAME)
