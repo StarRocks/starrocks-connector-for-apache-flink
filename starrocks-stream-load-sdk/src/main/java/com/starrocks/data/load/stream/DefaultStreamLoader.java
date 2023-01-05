@@ -358,7 +358,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
 
     protected String getSendUrl(String host, String database, String table) {
         if (host == null) {
-            throw new IllegalArgumentException("None of the hosts in `load_url` could be connected.");
+            throw new IllegalArgumentException("None of the hosts in `fe-nodes` could be connected.");
         }
         return host + "/api/" + database + "/" + table + "/_stream_load";
     }

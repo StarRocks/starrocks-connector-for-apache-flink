@@ -11,7 +11,7 @@ public class StreamLoadUtils {
 
     public static String getStreamLoadUrl(String host, String database, String table) {
         if (host == null) {
-            throw new IllegalArgumentException("None of the hosts in `load_url` could be connected.");
+            throw new IllegalArgumentException("None of the hosts in `fe-nodes` could be connected.");
         }
         return host +
                 "/api/" +

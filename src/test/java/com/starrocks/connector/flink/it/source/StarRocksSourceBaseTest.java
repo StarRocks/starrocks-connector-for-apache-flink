@@ -84,7 +84,7 @@ public abstract class StarRocksSourceBaseTest {
 
     private void initializeCommonOptions() {
         StarRocksSourceOptions options = StarRocksSourceOptions.builder()
-                .withProperty("scan-url", SCAN_URL)
+                .withProperty("fe-nodes", SCAN_URL)
                 .withProperty("jdbc-url", JDBC_URL)
                 .withProperty("username", USERNAME)
                 .withProperty("password", PASSWORD)
@@ -96,7 +96,7 @@ public abstract class StarRocksSourceBaseTest {
 
     private void initializeColumnIsCountOptions() {
         StarRocksSourceOptions options = StarRocksSourceOptions.builder()
-                .withProperty("scan-url", SCAN_URL)
+                .withProperty("fe-nodes", SCAN_URL)
                 .withProperty("jdbc-url", JDBC_URL)
                 .withProperty("username", USERNAME)
                 .withProperty("password", PASSWORD)

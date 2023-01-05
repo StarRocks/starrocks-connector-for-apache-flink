@@ -25,6 +25,8 @@ import org.apache.flink.table.utils.TableSchemaUtils;
 import java.util.HashSet;
 import java.util.Set;
 
+import static com.starrocks.connector.flink.table.StarRocksOptions.*;
+
 public class StarRocksDynamicTableSinkFactory implements DynamicTableSinkFactory {
 
     @Override
@@ -40,18 +42,18 @@ public class StarRocksDynamicTableSinkFactory implements DynamicTableSinkFactory
 
     @Override
     public String factoryIdentifier() {
-        return "starrocks";
+        return IDENTIFIER;
     }
 
     @Override
     public Set<ConfigOption<?>> requiredOptions() {
         Set<ConfigOption<?>> requiredOptions = new HashSet<>();
-        requiredOptions.add(StarRocksSinkOptions.JDBC_URL);
-        requiredOptions.add(StarRocksSinkOptions.LOAD_URL);
-        requiredOptions.add(StarRocksSinkOptions.DATABASE_NAME);
-        requiredOptions.add(StarRocksSinkOptions.TABLE_NAME);
-        requiredOptions.add(StarRocksSinkOptions.USERNAME);
-        requiredOptions.add(StarRocksSinkOptions.PASSWORD);
+        requiredOptions.add(JDBC_URL);
+        requiredOptions.add(FE_NODES);
+        requiredOptions.add(DATABASE_NAME);
+        requiredOptions.add(TABLE_NAME);
+        requiredOptions.add(USERNAME);
+        requiredOptions.add(PASSWORD);
         return requiredOptions;
     }
 
