@@ -263,7 +263,9 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
                     region.complete(streamLoadResponse);
                 } else if (StreamLoadConstants.RESULT_STATUS_LABEL_EXISTED.equals(status)) {
                     boolean succeed = checkLabelState(host, region.getDatabase(), label);
-                    if (!succeed) {
+                    if (succeed) {
+                        region.complete(streamLoadResponse);
+                    } else {
                         throw new StreamLoadFailException("Stream load failed");
                     }
                 } else {
