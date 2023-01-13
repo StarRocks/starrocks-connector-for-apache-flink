@@ -349,7 +349,7 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                 region = regions.get(uniqueKey);
                 if (region == null) {
                     StreamLoadTableProperties tableProperties = properties.getTableProperties(uniqueKey);
-                    if (properties.isEnableTransaction() && tableProperties.getDataFormat() instanceof StreamLoadDataFormat.JSONFormat) {
+                    if (useBatchTableRegion(tableProperties.getDataFormat(), properties.isEnableTransaction(), properties.getStarRocksVersion())) {
                         region = new BatchTableRegion(uniqueKey, database, table, this, tableProperties, streamLoader);
                     } else {
                         region = new StreamTableRegion(uniqueKey, database, table, this, tableProperties, streamLoader);
@@ -360,6 +360,28 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
             }
         }
         return region;
+    }
+
+    static boolean useBatchTableRegion(StreamLoadDataFormat format, boolean enableTransaction, StarRocksVersion version) {
+        // csv format always use StreamTableRegion
+        if (format instanceof StreamLoadDataFormat.CSVFormat) {
+            return false;
+        }
+
+        // always use BatchTableRegion in exactly-once mode for json format. In the history,
+        // transaction stream load does not support to send json format data using http chunk
+        if (enableTransaction) {
+            return true;
+        }
+
+        // In at-least-once mode, if starrocks version is unknown, use StreamTableRegion by default
+        if (version == null) {
+            return false;
+        }
+
+        // For starrocks <= 2.2, stream load does not support to send json format data
+        // using http chunk, so should use BatchTableRegion
+        return version.getMajor() < 2 || (version.getMajor() == 2 && version.getMinor() <= 2);
     }
 
     private void printRegionDetails() {
