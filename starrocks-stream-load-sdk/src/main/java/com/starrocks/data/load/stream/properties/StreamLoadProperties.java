@@ -1,6 +1,7 @@
 package com.starrocks.data.load.stream.properties;
 
 import com.alibaba.fastjson.annotation.JSONField;
+import com.starrocks.data.load.stream.StarRocksVersion;
 import com.starrocks.data.load.stream.StreamLoadUtils;
 
 import java.io.Serializable;
@@ -17,6 +18,8 @@ public class StreamLoadProperties implements Serializable {
     @JSONField(serialize = false)
     private final String password;
     private final String version;
+    // can be null
+    private final StarRocksVersion starRocksVersion;
 
     private final String labelPrefix;
 
@@ -70,6 +73,7 @@ public class StreamLoadProperties implements Serializable {
         this.username = builder.username;
         this.password = builder.password;
         this.version = builder.version;
+        this.starRocksVersion = StarRocksVersion.parse(version);
 
         this.enableTransaction = builder.enableTransaction;
 
@@ -116,6 +120,10 @@ public class StreamLoadProperties implements Serializable {
 
     public String getVersion() {
         return version;
+    }
+
+    public StarRocksVersion getStarRocksVersion() {
+        return starRocksVersion;
     }
 
     public boolean isOpAutoProjectionInJson() {
