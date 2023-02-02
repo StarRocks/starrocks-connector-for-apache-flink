@@ -165,8 +165,9 @@ public abstract class StarRocksSinkBaseTest {
             try {
                 int port = AVAILABLE_HTTP_PORT + i;
                 serverSocket = new ServerSocket(port);
-                LOAD_URL = "127.0.0.1:1;127.0.0.1:" + port;
+                LOAD_URL = "127.0.0.1:" + port;
                 initializeOptions();
+                break;
             } catch (IOException e) {}
         }
     }
