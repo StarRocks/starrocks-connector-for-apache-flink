@@ -20,7 +20,7 @@ public class BatchTableRegion implements TableRegion {
         COMMIT
     }
 
-    private static final Logger log = LoggerFactory.getLogger(StreamTableRegion.class);
+    private static final Logger log = LoggerFactory.getLogger(BatchTableRegion.class);
 
     private final StreamLoadManager manager;
     private final StreamLoader streamLoader;

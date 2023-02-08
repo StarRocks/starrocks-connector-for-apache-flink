@@ -26,6 +26,8 @@ import java.util.concurrent.locks.ReentrantLock;
 
 public class DefaultStreamLoadManager implements StreamLoadManager, Serializable {
 
+    private static final long serialVersionUID = 1L;
+
     private static final Logger LOG = LoggerFactory.getLogger(DefaultStreamLoadManager.class);
 
     enum State {
@@ -62,6 +64,8 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
     private final Queue<TableRegion> prepareQ = new LinkedList<>();
     private final Queue<TableRegion> commitQ = new LinkedList<>();
 
+    private transient LoadMetrics loadMetrics;
+
     public DefaultStreamLoadManager(StreamLoadProperties properties) {
         this(properties, new StreamLoadStrategy.DefaultLoadStrategy(properties));
     }
@@ -76,6 +80,7 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
 
     @Override
     public void init() {
+        this.loadMetrics = new LoadMetrics();
         if (state.compareAndSet(State.INACTIVE, State.ACTIVE)) {
             this.manager = new Thread(() -> {
                 Long lastPrintTimestamp = null;
@@ -106,8 +111,10 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                         if (region.isReadable()) {
                             prepareQ.offer(region);
                             iterator.remove();
+                            LOG.debug("Move table region {}.{} from waitQ to prepareQ", region.getDatabase(), region.getTable());
                         } else {
                             region.getAndIncrementAge();
+                            LOG.debug("Increment age of table region {}.{} in waitQ", region.getDatabase(), region.getTable());
                         }
                     }
 
@@ -119,11 +126,13 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                                 region.cancel();
                                 waitQ.offer(region);
                                 iterator.remove();
+                                LOG.debug("Move table region {}.{} from prepareQ to waitQ", region.getDatabase(), region.getTable());
                                 continue;
                             }
                             if (region.prepare()) {
                                 commitQ.offer(region);
                                 iterator.remove();
+                                LOG.debug("Move table region {}.{} from prepareQ to commitQ", region.getDatabase(), region.getTable());
                             }
                         }
                     }
@@ -140,6 +149,8 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                                     flushingCommit = true;
                                 }
                                 iterator.remove();
+                                LOG.debug("Move table region {}.{} from commitQ to waitQ because of savepoint",
+                                        region.getDatabase(), region.getTable());
                             }
                         }
                     } else {
@@ -150,6 +161,8 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                                 if (region.isFlushing()) {
                                     flushingCommit = true;
                                 }
+                                LOG.debug("Move table region {}.{} from commitQ to waitQ for normal",
+                                        region.getDatabase(), region.getTable());
                             }
                         }
                     }
@@ -168,6 +181,8 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                             if (maxFlushRegion.commit()) {
                                 commitQ.remove(maxFlushRegion);
                                 waitQ.offer(maxFlushRegion);
+                                LOG.debug("Move table region {}.{} from commitQ to waitQ for max cache bytes",
+                                        maxFlushRegion.getDatabase(), maxFlushRegion.getTable());
                             }
                         }
                     }
@@ -194,8 +209,8 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         TableRegion region = getCacheRegion(uniqueKey, database, table);
         for (String row : rows) {
             AssertNotException();
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Write uniqueKey {}, database {}, table {}, row {}",
+            if (LOG.isTraceEnabled()) {
+                LOG.trace("Write uniqueKey {}, database {}, table {}, row {}",
                         uniqueKey == null ? "null" : uniqueKey, database, table, row);
             }
             int bytes = region.write(row.getBytes(StandardCharsets.UTF_8));
@@ -250,6 +265,15 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
             }
         }
 
+        if (response.getException() != null) {
+            this.loadMetrics.updateFailedLoad();
+        } else {
+            this.loadMetrics.updateSuccessLoad(response);
+        }
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("{}", loadMetrics);
+        }
     }
 
     @Override
@@ -317,8 +341,8 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
     public void close() {
         if (state.compareAndSet(State.ACTIVE, State.INACTIVE)) {
             log.info("Stream load manger close, current bytes : {}, flush rows : {}" +
-                            ", numberTotalRows : {}, numberLoadRows : {}",
-                    currentCacheBytes.get(), totalFlushRows.get(), numberTotalRows.get(), numberLoadRows.get());
+                            ", numberTotalRows : {}, numberLoadRows : {}, loadMetrics: {}",
+                    currentCacheBytes.get(), totalFlushRows.get(), numberTotalRows.get(), numberLoadRows.get(), loadMetrics);
             printRegionDetails();
             manager.interrupt();
             streamLoader.close();
