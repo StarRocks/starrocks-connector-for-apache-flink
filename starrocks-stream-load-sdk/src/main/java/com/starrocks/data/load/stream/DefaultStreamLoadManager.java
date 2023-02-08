@@ -17,6 +17,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Condition;
@@ -39,7 +40,10 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
 
     private final StreamLoadProperties properties;
     private final StreamLoader streamLoader;
+    // threshold to trigger flush
     private final long maxCacheBytes;
+    // threshold to block write
+    private final long maxWriteBlockCacheBytes;
     private final Map<String, TableRegion> regions = new HashMap<>();
     private final AtomicLong currentCacheBytes = new AtomicLong(0L);
     private final AtomicLong totalFlushRows = new AtomicLong(0L);
@@ -64,6 +68,7 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
     private final Queue<TableRegion> prepareQ = new LinkedList<>();
     private final Queue<TableRegion> commitQ = new LinkedList<>();
 
+    private transient AtomicBoolean writeTriggerFlush;
     private transient LoadMetrics loadMetrics;
 
     public DefaultStreamLoadManager(StreamLoadProperties properties) {
@@ -74,12 +79,14 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         this.properties = properties;
         this.streamLoader = properties.isEnableTransaction() ? new TransactionStreamLoader() : new DefaultStreamLoader();
         this.maxCacheBytes = properties.getMaxCacheBytes();
+        this.maxWriteBlockCacheBytes = 2 * maxCacheBytes;
         this.scanningFrequency = properties.getScanningFrequency();
         this.loadStrategy = loadStrategy;
     }
 
     @Override
     public void init() {
+        this.writeTriggerFlush = new AtomicBoolean(false);
         this.loadMetrics = new LoadMetrics();
         if (state.compareAndSet(State.INACTIVE, State.ACTIVE)) {
             this.manager = new Thread(() -> {
@@ -213,13 +220,15 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                         uniqueKey == null ? "null" : uniqueKey, database, table, row);
             }
             int bytes = region.write(row.getBytes(StandardCharsets.UTF_8));
-            if (currentCacheBytes.addAndGet(bytes) >= maxCacheBytes) {
-                int idx = 0;
+            long cachedBytes = currentCacheBytes.addAndGet(bytes);
+            if (cachedBytes >= maxWriteBlockCacheBytes) {
                 lock.lock();
                 try {
-                    while (currentCacheBytes.get() >= maxCacheBytes) {
+                    int idx = 0;
+                    while (currentCacheBytes.get() >= maxWriteBlockCacheBytes) {
                         AssertNotException();
-                        log.info("Cache full, wait flush, currentBytes :{}", currentCacheBytes.get());
+                        log.info("Cache full, wait flush, currentBytes: {}, maxWriteBlockCacheBytes: {}",
+                                currentCacheBytes.get(), maxWriteBlockCacheBytes);
                         flushable.signal();
                         writable.await(Math.min(++idx, 5), TimeUnit.SECONDS);
                     }
@@ -229,6 +238,14 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                 } finally {
                     lock.unlock();
                 }
+            } else if (cachedBytes >= maxCacheBytes && writeTriggerFlush.compareAndSet(false, true)) {
+                lock.lock();
+                try {
+                    flushable.signal();
+                } finally {
+                    lock.unlock();
+                }
+                LOG.info("Trigger flush, currentBytes: {}, maxCacheBytes: {}", cachedBytes, maxCacheBytes);
             }
         }
     }
@@ -240,6 +257,7 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         if (response.getFlushRows() != null) {
             totalFlushRows.addAndGet(response.getFlushRows());
         }
+        writeTriggerFlush.set(false);
 
         log.info("pre bytes : {}, current bytes : {}, totalFlushRows : {}", currentBytes, currentCacheBytes.get(), totalFlushRows.get());
 
