@@ -17,6 +17,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Condition;
@@ -25,6 +26,8 @@ import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class DefaultStreamLoadManager implements StreamLoadManager, Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     private static final Logger LOG = LoggerFactory.getLogger(DefaultStreamLoadManager.class);
 
@@ -37,7 +40,10 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
 
     private final StreamLoadProperties properties;
     private final StreamLoader streamLoader;
+    // threshold to trigger flush
     private final long maxCacheBytes;
+    // threshold to block write
+    private final long maxWriteBlockCacheBytes;
     private final Map<String, TableRegion> regions = new HashMap<>();
     private final AtomicLong currentCacheBytes = new AtomicLong(0L);
     private final AtomicLong totalFlushRows = new AtomicLong(0L);
@@ -62,6 +68,15 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
     private final Queue<TableRegion> prepareQ = new LinkedList<>();
     private final Queue<TableRegion> commitQ = new LinkedList<>();
 
+    /**
+     * Whether write() has triggered a flush after currentCacheBytes > maxCacheBytes.
+     * This flag is set true after the flush is triggered in writer(), and set false
+     * after the flush completed in callback(). During this period, there is no need
+     * to re-trigger a flush.
+     */
+    private transient AtomicBoolean writeTriggerFlush;
+    private transient LoadMetrics loadMetrics;
+
     public DefaultStreamLoadManager(StreamLoadProperties properties) {
         this(properties, new StreamLoadStrategy.DefaultLoadStrategy(properties));
     }
@@ -70,12 +85,15 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         this.properties = properties;
         this.streamLoader = properties.isEnableTransaction() ? new TransactionStreamLoader() : new DefaultStreamLoader();
         this.maxCacheBytes = properties.getMaxCacheBytes();
+        this.maxWriteBlockCacheBytes = 2 * maxCacheBytes;
         this.scanningFrequency = properties.getScanningFrequency();
         this.loadStrategy = loadStrategy;
     }
 
     @Override
     public void init() {
+        this.writeTriggerFlush = new AtomicBoolean(false);
+        this.loadMetrics = new LoadMetrics();
         if (state.compareAndSet(State.INACTIVE, State.ACTIVE)) {
             this.manager = new Thread(() -> {
                 Long lastPrintTimestamp = null;
@@ -106,8 +124,10 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                         if (region.isReadable()) {
                             prepareQ.offer(region);
                             iterator.remove();
+                            LOG.debug("Move table region {}.{} from waitQ to prepareQ", region.getDatabase(), region.getTable());
                         } else {
                             region.getAndIncrementAge();
+                            LOG.debug("Increment age of table region {}.{} in waitQ", region.getDatabase(), region.getTable());
                         }
                     }
 
@@ -119,11 +139,13 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                                 region.cancel();
                                 waitQ.offer(region);
                                 iterator.remove();
+                                LOG.debug("Move table region {}.{} from prepareQ to waitQ", region.getDatabase(), region.getTable());
                                 continue;
                             }
                             if (region.prepare()) {
                                 commitQ.offer(region);
                                 iterator.remove();
+                                LOG.debug("Move table region {}.{} from prepareQ to commitQ", region.getDatabase(), region.getTable());
                             }
                         }
                     }
@@ -140,6 +162,8 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                                     flushingCommit = true;
                                 }
                                 iterator.remove();
+                                LOG.debug("Move table region {}.{} from commitQ to waitQ because of savepoint",
+                                        region.getDatabase(), region.getTable());
                             }
                         }
                     } else {
@@ -150,13 +174,14 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                                 if (region.isFlushing()) {
                                     flushingCommit = true;
                                 }
+                                LOG.debug("Move table region {}.{} from commitQ to waitQ for normal",
+                                        region.getDatabase(), region.getTable());
                             }
                         }
                     }
 
                     if (!flushingCommit && currentCacheBytes.get() >= maxCacheBytes) {
                         TableRegion maxFlushRegion = commitQ.stream()
-                                .filter(TableRegion::isFlushing)
                                 .max((r1, r2) -> {
                                     if (r1.getFlushBytes() != r2.getFlushBytes()) {
                                         return Long.compare(r2.getFlushBytes(), r1.getFlushBytes());
@@ -168,6 +193,8 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                             if (maxFlushRegion.commit()) {
                                 commitQ.remove(maxFlushRegion);
                                 waitQ.offer(maxFlushRegion);
+                                LOG.debug("Move table region {}.{} from commitQ to waitQ for max cache bytes",
+                                        maxFlushRegion.getDatabase(), maxFlushRegion.getTable());
                             }
                         }
                     }
@@ -194,18 +221,20 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         TableRegion region = getCacheRegion(uniqueKey, database, table);
         for (String row : rows) {
             AssertNotException();
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Write uniqueKey {}, database {}, table {}, row {}",
+            if (LOG.isTraceEnabled()) {
+                LOG.trace("Write uniqueKey {}, database {}, table {}, row {}",
                         uniqueKey == null ? "null" : uniqueKey, database, table, row);
             }
             int bytes = region.write(row.getBytes(StandardCharsets.UTF_8));
-            if (currentCacheBytes.addAndGet(bytes) >= maxCacheBytes) {
-                int idx = 0;
+            long cachedBytes = currentCacheBytes.addAndGet(bytes);
+            if (cachedBytes >= maxWriteBlockCacheBytes) {
                 lock.lock();
                 try {
-                    while (currentCacheBytes.get() >= maxCacheBytes) {
+                    int idx = 0;
+                    while (currentCacheBytes.get() >= maxWriteBlockCacheBytes) {
                         AssertNotException();
-                        log.info("Cache full, wait flush, currentBytes :{}", currentCacheBytes.get());
+                        log.info("Cache full, wait flush, currentBytes: {}, maxWriteBlockCacheBytes: {}",
+                                currentCacheBytes.get(), maxWriteBlockCacheBytes);
                         flushable.signal();
                         writable.await(Math.min(++idx, 5), TimeUnit.SECONDS);
                     }
@@ -215,6 +244,14 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                 } finally {
                     lock.unlock();
                 }
+            } else if (cachedBytes >= maxCacheBytes && writeTriggerFlush.compareAndSet(false, true)) {
+                lock.lock();
+                try {
+                    flushable.signal();
+                } finally {
+                    lock.unlock();
+                }
+                LOG.info("Trigger flush, currentBytes: {}, maxCacheBytes: {}", cachedBytes, maxCacheBytes);
             }
         }
     }
@@ -226,6 +263,7 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         if (response.getFlushRows() != null) {
             totalFlushRows.addAndGet(response.getFlushRows());
         }
+        writeTriggerFlush.set(false);
 
         log.info("pre bytes : {}, current bytes : {}, totalFlushRows : {}", currentBytes, currentCacheBytes.get(), totalFlushRows.get());
 
@@ -250,6 +288,15 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
             }
         }
 
+        if (response.getException() != null) {
+            this.loadMetrics.updateFailedLoad();
+        } else {
+            this.loadMetrics.updateSuccessLoad(response);
+        }
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("{}", loadMetrics);
+        }
     }
 
     @Override
@@ -317,8 +364,8 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
     public void close() {
         if (state.compareAndSet(State.ACTIVE, State.INACTIVE)) {
             log.info("Stream load manger close, current bytes : {}, flush rows : {}" +
-                            ", numberTotalRows : {}, numberLoadRows : {}",
-                    currentCacheBytes.get(), totalFlushRows.get(), numberTotalRows.get(), numberLoadRows.get());
+                            ", numberTotalRows : {}, numberLoadRows : {}, loadMetrics: {}",
+                    currentCacheBytes.get(), totalFlushRows.get(), numberTotalRows.get(), numberLoadRows.get(), loadMetrics);
             printRegionDetails();
             manager.interrupt();
             streamLoader.close();
@@ -349,11 +396,7 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                 region = regions.get(uniqueKey);
                 if (region == null) {
                     StreamLoadTableProperties tableProperties = properties.getTableProperties(uniqueKey);
-                    if (useBatchTableRegion(tableProperties.getDataFormat(), properties.isEnableTransaction(), properties.getStarRocksVersion())) {
-                        region = new BatchTableRegion(uniqueKey, database, table, this, tableProperties, streamLoader);
-                    } else {
-                        region = new StreamTableRegion(uniqueKey, database, table, this, tableProperties, streamLoader);
-                    }
+                    region = new BatchTableRegion(uniqueKey, database, table, this, tableProperties, streamLoader);
                     regions.put(uniqueKey, region);
                     waitQ.offer(region);
                 }

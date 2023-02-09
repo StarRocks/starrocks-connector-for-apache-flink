@@ -226,8 +226,6 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
             String sendUrl = getSendUrl(host, region.getDatabase(), region.getTable());
             String label = region.getLabel();
 
-            log.info("Stream loading, label : {}, region : {}", label, region.getUniqueKey());
-
             HttpPut httpPut = new HttpPut(sendUrl);
             httpPut.setConfig(RequestConfig.custom().setExpectContinueEnabled(true).setRedirectsEnabled(true).build());
             httpPut.setEntity(new StreamLoadEntity(region, dataFormat, region.getEntityMeta()));
@@ -241,11 +239,13 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
 
             httpPut.addHeader("label", label);
 
+            log.info("Stream loading, label : {}, region : {}, request : {}", label, region.getUniqueKey(), httpPut);
             try (CloseableHttpClient client = clientBuilder.build()) {
-                log.info("Stream loading, label : {}, request : {}", label, httpPut);
-                long startNanoTime = System.currentTimeMillis();
-                CloseableHttpResponse response = client.execute(httpPut);
-                String responseBody = EntityUtils.toString(response.getEntity());
+                long startNanoTime = System.nanoTime();
+                String responseBody;
+                try (CloseableHttpResponse response = client.execute(httpPut)) {
+                    responseBody = EntityUtils.toString(response.getEntity());
+                }
 
                 log.info("Stream load completed, label : {}, database : {}, table : {}, body : {}",
                         label, region.getDatabase(), region.getTable(), responseBody);
@@ -264,6 +264,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
                 } else if (StreamLoadConstants.RESULT_STATUS_LABEL_EXISTED.equals(status)) {
                     boolean succeed = checkLabelState(host, region.getDatabase(), label);
                     if (succeed) {
+                        streamLoadResponse.setCostNanoTime(System.nanoTime() - startNanoTime);
                         region.complete(streamLoadResponse);
                     } else {
                         throw new StreamLoadFailException("Stream load failed");
