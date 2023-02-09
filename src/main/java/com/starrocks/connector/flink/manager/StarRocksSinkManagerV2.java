@@ -11,6 +11,8 @@ import java.io.Serializable;
 
 public class StarRocksSinkManagerV2 extends DefaultStreamLoadManager implements Serializable {
 
+    private static final long serialVersionUID = 1L;
+
     private StarRocksSinkRuntimeContext runtimeContext;
 
     public StarRocksSinkManagerV2(StreamLoadProperties properties) {
