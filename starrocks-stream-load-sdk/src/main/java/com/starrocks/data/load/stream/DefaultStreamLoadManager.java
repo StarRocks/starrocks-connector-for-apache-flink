@@ -169,7 +169,6 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
 
                     if (!flushingCommit && currentCacheBytes.get() >= maxCacheBytes) {
                         TableRegion maxFlushRegion = commitQ.stream()
-                                .filter(TableRegion::isFlushing)
                                 .max((r1, r2) -> {
                                     if (r1.getFlushBytes() != r2.getFlushBytes()) {
                                         return Long.compare(r2.getFlushBytes(), r1.getFlushBytes());
@@ -373,11 +372,7 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                 region = regions.get(uniqueKey);
                 if (region == null) {
                     StreamLoadTableProperties tableProperties = properties.getTableProperties(uniqueKey);
-                    if (useBatchTableRegion(tableProperties.getDataFormat(), properties.isEnableTransaction(), properties.getStarRocksVersion())) {
-                        region = new BatchTableRegion(uniqueKey, database, table, this, tableProperties, streamLoader);
-                    } else {
-                        region = new StreamTableRegion(uniqueKey, database, table, this, tableProperties, streamLoader);
-                    }
+                    region = new BatchTableRegion(uniqueKey, database, table, this, tableProperties, streamLoader);
                     regions.put(uniqueKey, region);
                     waitQ.offer(region);
                 }
