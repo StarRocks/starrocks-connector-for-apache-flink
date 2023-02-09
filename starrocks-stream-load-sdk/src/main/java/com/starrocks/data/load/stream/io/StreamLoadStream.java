@@ -59,10 +59,7 @@ public class StreamLoadStream extends InputStream {
 
         int size = len - off;
         int ws = Math.min(size, buffer.remaining());
-
-        for (int pos = off; pos < off + ws; pos++) {
-            b[pos] = buffer.get();
-        }
+        buffer.get(b, off, ws);
 
         return ws;
     }
