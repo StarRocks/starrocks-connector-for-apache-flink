@@ -102,6 +102,8 @@ public class StarRocksSinkManager implements Serializable {
     private ScheduledExecutorService scheduler;
     private ScheduledFuture<?> scheduledFuture;
 
+    private transient long startTimeNano;
+
     public StarRocksSinkManager(StarRocksSinkOptions sinkOptions, TableSchema flinkSchema) {
         this.sinkOptions = sinkOptions;
         StarRocksJdbcConnectionOptions jdbcOptions = new StarRocksJdbcConnectionOptions(sinkOptions.getJdbcUrl(), sinkOptions.getUsername(), sinkOptions.getPassword());
@@ -134,6 +136,7 @@ public class StarRocksSinkManager implements Serializable {
     }
 
     public void setRuntimeContext(RuntimeContext runtimeCtx) {
+        startTimeNano = System.nanoTime();
         totalFlushBytes = runtimeCtx.getMetricGroup().counter(COUNTER_TOTAL_FLUSH_BYTES);
         totalFlushRows = runtimeCtx.getMetricGroup().counter(COUNTER_TOTAL_FLUSH_ROWS);
         totalFlushTime = runtimeCtx.getMetricGroup().counter(COUNTER_TOTAL_FLUSH_COST_TIME);
@@ -263,7 +266,8 @@ public class StarRocksSinkManager implements Serializable {
     public synchronized void close() {
         if (!closed) {
             closed = true;
-
+            LOG.info("StarRocks Sink is about to close, loadMetrics: {}.", metricsToString());
+            this.bufferMap.clear();
             if (scheduledFuture != null) {
                 scheduledFuture.cancel(false);
                 scheduler.shutdown();
@@ -378,8 +382,10 @@ public class StarRocksSinkManager implements Serializable {
                 "Timeout while offering data to flushQueue, exceed " + sinkOptions.getSinkOfferTimeout() + " ms, see " +
                     StarRocksSinkOptions.SINK_BATCH_OFFER_TIMEOUT.key());
         }
+        long offerTime = System.nanoTime() - start;
+        LOG.debug("Offer wait time {} nanos", offerTime);
         if (offerTimeNs != null) {
-            offerTimeNs.update(System.nanoTime() - start);
+            offerTimeNs.update(offerTime);
         }
     }
 
@@ -462,6 +468,10 @@ public class StarRocksSinkManager implements Serializable {
             updateHisto(result, "LoadTimeMs", this.loadTimeMs);
             updateCounter(result, "NumberFilteredRows", this.totalFilteredRows);
         }
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("{}", metricsToString());
+        }
     }
 
     private void updateCounter(Map<String, Object> result, String key, Counter counter) {
@@ -490,6 +500,17 @@ public class StarRocksSinkManager implements Serializable {
                 }
             }
         }
+    }
+
+    private String metricsToString() {
+        return "LoadMetrics{" +
+                "startTimeNano=" + startTimeNano +
+                ", totalRunningTimeNano=" + (System.nanoTime() - startTimeNano) +
+                ", numberOfSuccessLoad=" + totalFlushSucceededTimes.getCount() +
+                ", totalSuccessLoadBytes=" + totalFlushBytes.getCount() +
+                ", totalSuccessLoadRows=" + totalFlushRows.getCount() +
+                ", totalSuccessLoadTimeNano=" + totalFlushTime.getCount() +
+                '}';
     }
 
     private static final Map<String, List<LogicalTypeRoot>> typesMap = new HashMap<>();
