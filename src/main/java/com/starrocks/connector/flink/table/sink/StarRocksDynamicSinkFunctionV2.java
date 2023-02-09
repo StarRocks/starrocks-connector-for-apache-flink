@@ -168,6 +168,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
             rowTransformer.setRuntimeContext(getRuntimeContext());
         }
         notifyCheckpointComplete(Long.MAX_VALUE);
+        log.info("Open sink function v2");
     }
 
     @Override
