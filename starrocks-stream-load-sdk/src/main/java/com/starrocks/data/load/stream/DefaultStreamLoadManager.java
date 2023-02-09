@@ -68,6 +68,12 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
     private final Queue<TableRegion> prepareQ = new LinkedList<>();
     private final Queue<TableRegion> commitQ = new LinkedList<>();
 
+    /**
+     * Whether write() has triggered a flush after currentCacheBytes > maxCacheBytes.
+     * This flag is set true after the flush is triggered in writer(), and set false
+     * after the flush completed in callback(). During this period, there is no need
+     * to re-trigger a flush.
+     */
     private transient AtomicBoolean writeTriggerFlush;
     private transient LoadMetrics loadMetrics;
 
