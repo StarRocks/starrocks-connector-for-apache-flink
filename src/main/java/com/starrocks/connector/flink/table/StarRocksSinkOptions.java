@@ -399,7 +399,10 @@ public class StarRocksSinkOptions implements Serializable {
                     columns = getTableSchemaFieldNames();
                 }
 
-                defaultTablePropertiesBuilder.columns(columns);
+                String cols = Arrays.stream(columns)
+                        .map(f -> String.format("`%s`", f.trim().replace("`", "")))
+                        .collect(Collectors.joining(","));
+                defaultTablePropertiesBuilder.columns(cols);
             }
         }
 
