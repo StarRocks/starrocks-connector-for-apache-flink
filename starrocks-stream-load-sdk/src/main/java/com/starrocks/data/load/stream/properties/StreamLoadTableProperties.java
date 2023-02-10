@@ -4,18 +4,14 @@ import com.starrocks.data.load.stream.StreamLoadDataFormat;
 import com.starrocks.data.load.stream.StreamLoadUtils;
 
 import java.io.Serializable;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 public class StreamLoadTableProperties implements Serializable {
 
     private final String uniqueKey;
     private final String database;
     private final String table;
-
-    private final String[] columns;
     private final StreamLoadDataFormat dataFormat;
     private final Map<String, String> properties;
 
@@ -29,8 +25,6 @@ public class StreamLoadTableProperties implements Serializable {
         this.uniqueKey = builder.uniqueKey == null
                 ? StreamLoadUtils.getTableUniqueKey(database, table)
                 : builder.uniqueKey;
-
-        this.columns = builder.columns;
 
         this.enableUpsertDelete = builder.enableUpsertDelete;
         this.dataFormat = builder.dataFormat == null
@@ -57,10 +51,6 @@ public class StreamLoadTableProperties implements Serializable {
         return table;
     }
 
-    public String[] getColumns() {
-        return columns;
-    }
-
     public boolean isEnableUpsertDelete() {
         return enableUpsertDelete;
     }
@@ -85,7 +75,7 @@ public class StreamLoadTableProperties implements Serializable {
         private String uniqueKey;
         private String database;
         private String table;
-        private String[] columns;
+        private String columns;
 
         private boolean enableUpsertDelete;
         private StreamLoadDataFormat dataFormat;
@@ -112,7 +102,7 @@ public class StreamLoadTableProperties implements Serializable {
             return this;
         }
 
-        public Builder columns(String... columns) {
+        public Builder columns(String columns) {
             this.columns = columns;
             return this;
         }
@@ -149,10 +139,8 @@ public class StreamLoadTableProperties implements Serializable {
 
             addProperty("db", database);
             addProperty("table", table);
-            if (columns != null && columns.length > 0) {
-                String cols = Arrays.stream(columns)
-                        .map(f -> String.format("`%s`", f.trim().replace("`", ""))).collect(Collectors.joining(","));
-                addProperty("columns", cols);
+            if (columns != null) {
+                addProperty("columns", columns);
             }
             return new StreamLoadTableProperties(this);
         }
