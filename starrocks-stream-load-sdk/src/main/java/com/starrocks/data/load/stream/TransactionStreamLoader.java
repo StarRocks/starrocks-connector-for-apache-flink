@@ -154,7 +154,12 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
                     return checkLabelState(host, transaction.getDatabase(), transaction.getLabel());
             }
 
-            log.error("Transaction commit failed, db : {}, label : {}", transaction.getDatabase(), transaction.getLabel());
+            String errorLog = "";
+            if (streamLoadBody.getErrorURL() != null) {
+                errorLog = getErrorLog(streamLoadBody.getErrorURL());
+            }
+            log.error("Transaction prepare failed, db: {}, table: {}, label: {}, \nresponseBody: {}\nerrorLog: {}",
+                    transaction.getDatabase(), transaction.getTable(), transaction.getLabel(), responseBody, errorLog);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -195,7 +200,12 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
                     return checkLabelState(host, transaction.getDatabase(), transaction.getLabel());
             }
 
-            log.error("Transaction commit failed, db : {}, label : {}", transaction.getDatabase(), transaction.getLabel());
+            String errorLog = "";
+            if (streamLoadBody.getErrorURL() != null) {
+                errorLog = getErrorLog(streamLoadBody.getErrorURL());
+            }
+            log.error("Transaction commit failed, db: {}, table: {}, label: {}, \nresponseBody: {}\nerrorLog: {}",
+                    transaction.getDatabase(), transaction.getTable(), transaction.getLabel(), responseBody, errorLog);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
