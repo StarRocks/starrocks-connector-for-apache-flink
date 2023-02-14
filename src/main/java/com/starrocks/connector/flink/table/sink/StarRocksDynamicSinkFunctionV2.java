@@ -177,10 +177,16 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
 
     @Override
     public void close() {
-        sinkManager.flush();
-        StreamLoadSnapshot snapshot = sinkManager.snapshot();
-        sinkManager.abort(snapshot);
-        sinkManager.close();
+        try {
+            sinkManager.flush();
+        } catch (Exception e) {
+            log.error("Failed to flush when closing", e);
+            throw e;
+        } finally {
+            StreamLoadSnapshot snapshot = sinkManager.snapshot();
+            sinkManager.abort(snapshot);
+            sinkManager.close();
+        }
     }
 
     @Override
@@ -198,6 +204,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
             snapshotStates.clear();
             snapshotStates.add(StarrocksSnapshotState.of(snapshotMap));
         } else {
+            sinkManager.abort(snapshot);
             throw new RuntimeException("Snapshot state failed by prepare");
         }
 
