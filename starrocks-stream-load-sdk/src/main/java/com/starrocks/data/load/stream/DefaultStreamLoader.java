@@ -275,10 +275,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
                                 String.format("Stream load failed because label existed, label: %s", label));
                     }
                 } else {
-                    String errorLog = "";
-                    if (streamLoadBody.getErrorURL() != null) {
-                        errorLog = getErrorLog(streamLoadBody.getErrorURL());
-                    }
+                    String errorLog = getErrorLog(streamLoadBody.getErrorURL());
                     String errorMsg = String.format("Stream load failed, label: %s, \nresponseBody: %s\nerrorLog: %s",
                             label, responseBody, errorLog);
                     log.error(errorMsg);
