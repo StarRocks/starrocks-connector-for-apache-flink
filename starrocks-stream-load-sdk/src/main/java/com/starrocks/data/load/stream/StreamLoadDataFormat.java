@@ -13,6 +13,7 @@ public interface StreamLoadDataFormat {
 
     class CSVFormat implements StreamLoadDataFormat, Serializable {
 
+        private static final byte[] EMPTY_DELIMITER = new byte[0];
         private static final String DEFAULT_LINE_DELIMITER = "\n";
         private final byte[] delimiter;
 
@@ -30,7 +31,7 @@ public interface StreamLoadDataFormat {
 
         @Override
         public byte[] first() {
-            return null;
+            return EMPTY_DELIMITER;
         }
 
         @Override
@@ -40,7 +41,7 @@ public interface StreamLoadDataFormat {
 
         @Override
         public byte[] end() {
-            return null;
+            return EMPTY_DELIMITER;
         }
 
     }
