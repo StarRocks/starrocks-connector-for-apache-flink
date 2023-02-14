@@ -13,11 +13,11 @@ public interface StreamLoadDataFormat {
 
     class CSVFormat implements StreamLoadDataFormat, Serializable {
 
-        private static final byte[] NEW_LINE = "\n".getBytes(StandardCharsets.UTF_8);
+        private static final String DEFAULT_LINE_DELIMITER = "\n";
         private final byte[] delimiter;
 
         public CSVFormat() {
-            this("\n");
+            this(DEFAULT_LINE_DELIMITER);
         }
 
         public CSVFormat(String rowDelimiter) {
@@ -30,7 +30,7 @@ public interface StreamLoadDataFormat {
 
         @Override
         public byte[] first() {
-            return NEW_LINE;
+            return null;
         }
 
         @Override
@@ -40,7 +40,7 @@ public interface StreamLoadDataFormat {
 
         @Override
         public byte[] end() {
-            return NEW_LINE;
+            return null;
         }
 
     }
