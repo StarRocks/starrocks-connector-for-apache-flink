@@ -6,6 +6,7 @@ import com.starrocks.data.load.stream.http.StreamLoadEntity;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
 import org.apache.http.Header;
+import org.apache.http.HttpEntity;
 import org.apache.http.HttpHeaders;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -36,6 +37,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class DefaultStreamLoader implements StreamLoader, Serializable {
 
     private static final Logger log = LoggerFactory.getLogger(DefaultStreamLoader.class);
+
+    private static final int ERROR_LOG_MAX_LENGTH = 3000;
 
     private StreamLoadProperties properties;
     private StreamLoadManager manager;
@@ -267,14 +270,20 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
                         streamLoadResponse.setCostNanoTime(System.nanoTime() - startNanoTime);
                         region.complete(streamLoadResponse);
                     } else {
-                        throw new StreamLoadFailException("Stream load failed");
+                        log.error("Stream load failed because label existed, label: {}", label);
+                        throw new StreamLoadFailException(
+                                String.format("Stream load failed because label existed, label: %s", label));
                     }
                 } else {
-                    throw new StreamLoadFailException(responseBody, streamLoadBody);
+                    String errorLog = getErrorLog(streamLoadBody.getErrorURL());
+                    String errorMsg = String.format("Stream load failed, label: %s, \nresponseBody: %s\nerrorLog: %s",
+                            label, responseBody, errorLog);
+                    log.error(errorMsg);
+                    throw new StreamLoadFailException(errorMsg, streamLoadBody);
                 }
                 return streamLoadResponse;
             } catch (Exception e) {
-                log.error("Stream load failed unknown, label : " + label, e);
+                log.error("Stream load failed unknown, label: {}", label, e);
                 throw e;
             }
         } catch (Exception e) {
@@ -356,6 +365,37 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
                     }
                 }
             }
+        }
+    }
+
+    protected String getErrorLog(String errorUrl) {
+        if (errorUrl == null || !errorUrl.startsWith("http")) {
+            return null;
+        }
+
+        try (CloseableHttpClient httpclient = HttpClients.createDefault()) {
+            HttpGet httpGet = new HttpGet(errorUrl);
+            try (CloseableHttpResponse resp = httpclient.execute(httpGet)) {
+                int code = resp.getStatusLine().getStatusCode();
+                if (200 != code) {
+                    log.warn("Request error log failed with error code: {}, errorUrl: {}", code, errorUrl);
+                    return null;
+                }
+
+                HttpEntity respEntity = resp.getEntity();
+                if (respEntity == null) {
+                    log.warn("Request error log failed with null entity, errorUrl: {}", errorUrl);
+                    return null;
+                }
+                String errorLog = EntityUtils.toString(respEntity);
+                if (errorLog != null && errorLog.length() > ERROR_LOG_MAX_LENGTH) {
+                    errorLog = errorLog.substring(0, ERROR_LOG_MAX_LENGTH);
+                }
+                return errorLog;
+            }
+        } catch (Exception e) {
+            log.warn("Failed to get error log: {}.", errorUrl, e);
+            return String.format("Failed to get error log: %s, exception message: %s", errorUrl, e.getMessage());
         }
     }
 

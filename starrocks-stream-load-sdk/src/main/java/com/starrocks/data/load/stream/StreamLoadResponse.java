@@ -201,5 +201,9 @@ public class StreamLoadResponse implements Serializable {
         public Long getNumberFilteredRows() {
             return numberFilteredRows;
         }
+
+        public String getErrorURL() {
+            return errorURL;
+        }
     }
 }
