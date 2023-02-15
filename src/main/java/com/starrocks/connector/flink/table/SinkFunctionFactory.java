@@ -62,7 +62,7 @@ public class SinkFunctionFactory {
             throw new RuntimeException("Can't find an available host in " + sinkOptions.getLoadUrlList());
         }
 
-        String beginUrlStr = "http://" + StreamLoadConstants.getBeginUrl(host);
+        String beginUrlStr = StreamLoadConstants.getBeginUrl(host);
         HttpPost httpPost = new HttpPost(beginUrlStr);
         httpPost.addHeader(HttpHeaders.AUTHORIZATION,
                 StreamLoadUtils.getBasicAuthHeader(sinkOptions.getUsername(), sinkOptions.getPassword()));
