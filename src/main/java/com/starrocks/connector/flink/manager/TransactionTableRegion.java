@@ -1,8 +1,31 @@
-package com.starrocks.data.load.stream;
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
+package com.starrocks.connector.flink.manager;
+
+import com.starrocks.data.load.stream.StreamLoadDataFormat;
+import com.starrocks.data.load.stream.StreamLoadManager;
+import com.starrocks.data.load.stream.StreamLoadResponse;
+import com.starrocks.data.load.stream.StreamLoadSnapshot;
+import com.starrocks.data.load.stream.StreamLoader;
+import com.starrocks.data.load.stream.TableRegion;
 import com.starrocks.data.load.stream.http.StreamLoadEntityMeta;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,14 +36,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
-public class BatchTableRegion implements TableRegion {
+public class TransactionTableRegion implements TableRegion {
+
     enum State {
         ACTIVE,
-        PREPARE,
-        COMMIT
+        FLUSHING,
+        COMMITTING
     }
 
-    private static final Logger log = LoggerFactory.getLogger(BatchTableRegion.class);
+    private static final Logger LOG = LoggerFactory.getLogger(TransactionTableRegion.class);
 
     private final StreamLoadManager manager;
     private final StreamLoader streamLoader;
@@ -49,7 +73,9 @@ public class BatchTableRegion implements TableRegion {
     private volatile long lastWriteTimeMillis = Long.MAX_VALUE;
     private volatile boolean flushing;
 
-    public BatchTableRegion(String uniqueKey,
+    private volatile long lastCommitTimeMills;
+
+    public TransactionTableRegion(String uniqueKey,
                             String database,
                             String table,
                             StreamLoadManager manager,
@@ -63,6 +89,7 @@ public class BatchTableRegion implements TableRegion {
         this.dataFormat = properties.getDataFormat();
         this.streamLoader = streamLoader;
         this.state = new AtomicReference<>(State.ACTIVE);
+        this.lastCommitTimeMills = System.currentTimeMillis();
     }
 
     @Override
@@ -185,41 +212,62 @@ public class BatchTableRegion implements TableRegion {
     }
 
     @Override
-    public boolean testPrepare() {
-        return state.compareAndSet(State.ACTIVE, State.PREPARE);
-    }
-
-    @Override
-    public boolean prepare() {
-        return state.get() == State.PREPARE;
+    public boolean isFlushing() {
+        return state.get() == State.FLUSHING;
     }
 
     @Override
     public boolean flush() {
-        if (state.compareAndSet(State.PREPARE, State.COMMIT)) {
+        if (state.compareAndSet(State.ACTIVE, State.FLUSHING)) {
             for (;;) {
                 if (ctl.compareAndSet(false, true)) {
-                    log.info("uk : {}, label : {}, bytes : {} commit", uniqueKey, label, cacheBytes.get());
-
+                    LOG.info("uniqueKey : {}, label : {}, bytes : {} commit", uniqueKey, label, cacheBytes.get());
                     inBuffer = outBuffer;
                     outBuffer = null;
                     ctl.set(false);
                     break;
                 }
             }
-            resetAge();
-            streamLoad();
-            return true;
+            if (inBuffer != null && !inBuffer.isEmpty()) {
+                streamLoad();
+                return true;
+            } else {
+                state.compareAndSet(State.FLUSHING, State.ACTIVE);
+                return false;
+            }
         }
         return false;
     }
 
-    @Override
-    public boolean cancel() {
-        //            if (responseFuture != null && !responseFuture.isDone()) {
-        //                responseFuture.cancel(true);
-        //            }
-        return state.compareAndSet(State.PREPARE, State.ACTIVE);
+    public void commit() {
+        if (!state.compareAndSet(State.ACTIVE, State.COMMITTING)) {
+            return;
+        }
+
+        if (label != null) {
+            StreamLoadSnapshot.Transaction transaction = new StreamLoadSnapshot.Transaction(database, table, label);
+            if (!streamLoader.prepare(transaction)) {
+                String errorMsg = "Failed to prepare transaction " + transaction;
+                LOG.error(errorMsg);
+                callback(new RuntimeException(errorMsg));
+                return;
+            }
+
+            if (!streamLoader.commit(transaction)) {
+                String errorMsg = "Failed to commit transaction " + transaction;
+                LOG.error(errorMsg);
+                callback(new RuntimeException(errorMsg));
+                return;
+            }
+            label = null;
+            long commitTime = System.currentTimeMillis();
+            long commitDuration = commitTime - lastCommitTimeMills;
+            lastCommitTimeMills = commitTime;
+            resetAge();
+            LOG.info("Success to commit transaction {}, duration: {}", transaction, commitDuration);
+        }
+
+        state.compareAndSet(State.COMMITTING, State.ACTIVE);
     }
 
     @Override
@@ -238,14 +286,14 @@ public class BatchTableRegion implements TableRegion {
         response.setFlushRows(flushRows.get());
         callback(response);
 
-        log.info("Stream load flushed, label : {}", label);
+        LOG.info("Stream load flushed, uniqueKey: {}, label : {}", uniqueKey, label);
         if (!inBuffer.isEmpty()) {
-            log.info("Stream load continue");
+            LOG.info("Stream load continue, uniqueKey: {}, label : {}", uniqueKey, label);
             streamLoad();
             return;
         }
-        if (state.compareAndSet(State.COMMIT, State.ACTIVE)) {
-            log.info("Stream load completed");
+        if (state.compareAndSet(State.FLUSHING, State.ACTIVE)) {
+            LOG.info("Stream load completed, uniqueKey: {}, label : {}", uniqueKey, label);
         }
     }
 
@@ -259,16 +307,6 @@ public class BatchTableRegion implements TableRegion {
         return responseFuture;
     }
 
-    @Override
-    public boolean isReadable() {
-        return cacheBytes.get() > 0;
-    }
-
-    @Override
-    public boolean isFlushing() {
-        return flushing;
-    }
-
     protected void flip() {
         flushBytes.set(0L);
         flushRows.set(0L);
@@ -276,7 +314,7 @@ public class BatchTableRegion implements TableRegion {
 
         StreamLoadEntityMeta chunkMeta = genEntityMeta();
         this.entityMeta = chunkMeta;
-        log.info("total rows : {}, part rows : {}, part bytes : {}", inBuffer.size(), chunkMeta.getRows(), chunkMeta.getBytes());
+        LOG.info("total rows : {}, part rows : {}, part bytes : {}", inBuffer.size(), chunkMeta.getRows(), chunkMeta.getBytes());
     }
 
     protected void streamLoad() {
@@ -312,5 +350,25 @@ public class BatchTableRegion implements TableRegion {
         }
 
         return new StreamLoadEntityMeta(chunkBytes, chunkRows);
+    }
+
+    @Override
+    public boolean testPrepare() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean prepare() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean cancel() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean isReadable() {
+        throw new UnsupportedOperationException();
     }
 }
