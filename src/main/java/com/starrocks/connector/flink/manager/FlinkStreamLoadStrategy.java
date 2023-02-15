@@ -28,7 +28,6 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Queue;
 import java.util.stream.StreamSupport;
 
 public class FlinkStreamLoadStrategy implements StreamLoadStrategy {
@@ -52,7 +51,6 @@ public class FlinkStreamLoadStrategy implements StreamLoadStrategy {
         this.regionBufferRatio = properties.getRegionBufferRatio();
         log.info("Load Strategy properties : {}", JSON.toJSONString(this));
     }
-
 
     @Override
     public List<TableRegion> select(Iterable<TableRegion> regions) {
@@ -87,20 +85,11 @@ public class FlinkStreamLoadStrategy implements StreamLoadStrategy {
         }
 
         if (waitFlushRegions.isEmpty()) {
-            TableRegion maxFlushRegion = StreamSupport.stream(regions.spliterator(), false)
-                    .max((r1, r2) -> {
-                        if (r1.getFlushBytes() != r2.getFlushBytes()) {
-                            return Long.compare(r2.getFlushBytes(), r1.getFlushBytes());
-                        }
-                        return Long.compare(r2.getCacheBytes(), r1.getCacheBytes());
-                    })
-                    .orElse(null);
-            if (maxFlushRegion != null) {
-                waitFlushRegions.add(maxFlushRegion);
-            }
+            StreamSupport.stream(regions.spliterator(), false)
+                    .max(Comparator.comparingLong(TableRegion::getCacheBytes))
+                    .ifPresent(waitFlushRegions::add);
         }
 
-        waitFlushRegions.sort(Comparator.comparingLong(TableRegion::getCacheBytes).reversed());
         return waitFlushRegions;
     }
 
