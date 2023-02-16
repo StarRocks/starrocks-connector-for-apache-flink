@@ -32,7 +32,9 @@ import java.util.stream.StreamSupport;
 
 public class FlinkStreamLoadStrategy implements StreamLoadStrategy {
 
-    private static final Logger log = LoggerFactory.getLogger(FlinkStreamLoadStrategy.class);
+    private static final long serialVersionUID = 1L;
+
+    private static final Logger LOG = LoggerFactory.getLogger(FlinkStreamLoadStrategy.class);
 
     private final long oldAge;
     private final long youngAge;
@@ -49,7 +51,7 @@ public class FlinkStreamLoadStrategy implements StreamLoadStrategy {
         this.cacheLimitBytes = cacheMaxBytes * 0.8F;
         this.writingThreshold = properties.getWritingThreshold();
         this.regionBufferRatio = properties.getRegionBufferRatio();
-        log.info("Load Strategy properties : {}", JSON.toJSONString(this));
+        LOG.info("Load Strategy properties : {}", JSON.toJSONString(this));
     }
 
     @Override

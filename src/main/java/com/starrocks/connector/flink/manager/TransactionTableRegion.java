@@ -286,14 +286,14 @@ public class TransactionTableRegion implements TableRegion {
         response.setFlushRows(flushRows.get());
         callback(response);
 
-        LOG.info("Stream load flushed, uniqueKey: {}, label : {}", uniqueKey, label);
+        LOG.info("Stream load flushed, db: {}, table: {}, label : {}", database, table, label);
         if (!inBuffer.isEmpty()) {
-            LOG.info("Stream load continue, uniqueKey: {}, label : {}", uniqueKey, label);
+            LOG.info("Stream load continue, db: {}, table: {}, label : {}", database, table, label);
             streamLoad();
             return;
         }
         if (state.compareAndSet(State.FLUSHING, State.ACTIVE)) {
-            LOG.info("Stream load completed, uniqueKey: {}, label : {}", uniqueKey, label);
+            LOG.info("Stream load completed, db: {}, table: {}, label : {}", database, table, label);
         }
     }
 
@@ -314,7 +314,8 @@ public class TransactionTableRegion implements TableRegion {
 
         StreamLoadEntityMeta chunkMeta = genEntityMeta();
         this.entityMeta = chunkMeta;
-        LOG.info("total rows : {}, part rows : {}, part bytes : {}", inBuffer.size(), chunkMeta.getRows(), chunkMeta.getBytes());
+        LOG.info("Generate entity meta, db: {}, table: {}, total rows : {}, entity rows : {}, entity bytes : {}",
+                database, table, inBuffer.size(), chunkMeta.getRows(), chunkMeta.getBytes());
     }
 
     protected void streamLoad() {

@@ -90,7 +90,7 @@ public class StarRocksSinkManagerV2 implements StreamLoadManager, Serializable {
         this.properties = properties;
         this.enableAutoCommit = enableAutoCommit;
         this.streamLoader = properties.isEnableTransaction() ? new TransactionStreamLoader() : new DefaultStreamLoader();
-        Preconditions.checkArgument(enableAutoCommit || !properties.isEnableTransaction(),
+        Preconditions.checkArgument(enableAutoCommit || properties.isEnableTransaction(),
                 "Normal stream load only support auto-commit mode");
         this.maxCacheBytes = properties.getMaxCacheBytes();
         this.maxWriteBlockCacheBytes = 2 * maxCacheBytes;
@@ -139,7 +139,7 @@ public class StarRocksSinkManagerV2 implements StreamLoadManager, Serializable {
                                 // savepoint makes sure no more data is written, so these conditions
                                 // can guarantee commit after all data has been written to StarRocks
                                 if (region.getCacheBytes() == 0 && !region.isFlushing()) {
-                                    region.flush();
+                                    ((TransactionTableRegion) region).commit();
                                     commitedRegions += 1;
                                     LOG.debug("Commit region {} for savepoint", region.getUniqueKey());
                                 }
@@ -229,14 +229,14 @@ public class StarRocksSinkManagerV2 implements StreamLoadManager, Serializable {
 
     @Override
     public void callback(StreamLoadResponse response) {
-
-        long currentBytes = response.getFlushBytes() != null ? currentCacheBytes.getAndAdd(-response.getFlushBytes()) : currentCacheBytes.get();
+        long cacheByteBeforeFlush = response.getFlushBytes() != null ? currentCacheBytes.getAndAdd(-response.getFlushBytes()) : currentCacheBytes.get();
         if (response.getFlushRows() != null) {
             totalFlushRows.addAndGet(response.getFlushRows());
         }
         writeTriggerFlush.set(false);
 
-        LOG.info("pre bytes : {}, current bytes : {}, totalFlushRows : {}", currentBytes, currentCacheBytes.get(), totalFlushRows.get());
+        LOG.info("Receive load response, cacheByteBeforeFlush: {}, currentCacheBytes: {}, totalFlushRows : {}",
+                cacheByteBeforeFlush, currentCacheBytes.get(), totalFlushRows.get());
 
         lock.lock();
         try {
