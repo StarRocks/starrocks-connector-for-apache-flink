@@ -60,7 +60,7 @@ public class StarRocksSinkManagerV2 implements StreamLoadManager, Serializable {
     private final AtomicLong numberTotalRows = new AtomicLong(0L);
     private final AtomicLong numberLoadRows = new AtomicLong(0L);
 
-    private final FlinkStreamLoadStrategy loadStrategy;
+    private final FlushAndCommitStrategy flushAndCommitStrategy;
     private final long scanningFrequency;
     private Thread current;
     private Thread manager;
@@ -95,7 +95,7 @@ public class StarRocksSinkManagerV2 implements StreamLoadManager, Serializable {
         this.maxCacheBytes = properties.getMaxCacheBytes();
         this.maxWriteBlockCacheBytes = 2 * maxCacheBytes;
         this.scanningFrequency = properties.getScanningFrequency();
-        this.loadStrategy = new FlinkStreamLoadStrategy(properties);
+        this.flushAndCommitStrategy = new FlushAndCommitStrategy(properties);
     }
 
     @Override
@@ -120,9 +120,9 @@ public class StarRocksSinkManagerV2 implements StreamLoadManager, Serializable {
                         lock.unlock();
                     }
 
-                    if (lastPrintTimestamp == -1 || System.currentTimeMillis() - lastPrintTimestamp > 4999) {
-                        LOG.info("manager report, current Bytes : {}, flushQ : {}", currentCacheBytes.get(), flushQ.size());
+                    if (lastPrintTimestamp == -1 || System.currentTimeMillis() - lastPrintTimestamp > 10000) {
                         lastPrintTimestamp = System.currentTimeMillis();
+                        LOG.debug("Audit information: {}, {}", loadMetrics, flushAndCommitStrategy);
                     }
 
                     if (savepoint) {
@@ -134,38 +134,43 @@ public class StarRocksSinkManagerV2 implements StreamLoadManager, Serializable {
 
                         // should ensure all data is committed for auto-commit mode
                         if (enableAutoCommit) {
-                            int commitedRegions = 0;
+                            int committedRegions = 0;
                             for (TableRegion region : flushQ) {
                                 // savepoint makes sure no more data is written, so these conditions
                                 // can guarantee commit after all data has been written to StarRocks
                                 if (region.getCacheBytes() == 0 && !region.isFlushing()) {
-                                    ((TransactionTableRegion) region).commit();
-                                    commitedRegions += 1;
-                                    LOG.debug("Commit region {} for savepoint", region.getUniqueKey());
+                                    boolean success = ((TransactionTableRegion) region).commit();
+                                    if (success) {
+                                        committedRegions += 1;
+                                        region.resetAge();
+                                    }
+                                    LOG.debug("Commit region {} for savepoint, success: {}", region.getUniqueKey(), success);
                                 }
                             }
 
-                            if (commitedRegions == flushQ.size()) {
+                            if (committedRegions == flushQ.size()) {
                                 allRegionsCommitted = true;
-                                LOG.info("All regions committed for savepoint, number of regions: {}", commitedRegions);
+                                LOG.info("All regions committed for savepoint, number of regions: {}", committedRegions);
                             }
                         }
                         LockSupport.unpark(current);
                     } else {
                         for (TableRegion region : flushQ) {
                             region.getAndIncrementAge();
-                            if (enableAutoCommit && loadStrategy.shouldCommit(region)) {
-                                ((TransactionTableRegion) region).commit();
-                                LOG.debug("Commit region {} for normal", region.getUniqueKey());
+                            if (enableAutoCommit && flushAndCommitStrategy.shouldCommit(region)) {
+                                boolean success = ((TransactionTableRegion) region).commit();
+                                if (success) {
+                                    region.resetAge();
+                                }
+                                LOG.debug("Commit region {} for normal, success: {}", region.getUniqueKey(), success);
                             }
                         }
 
-                        if (currentCacheBytes.get() >= maxCacheBytes) {
-                            for (TableRegion region : loadStrategy.select(flushQ)) {
-                                boolean flush = region.flush();
-                                LOG.debug("Trigger flush table region {} because of selection, region cache bytes: {}," +
-                                        " flush: {}", region.getUniqueKey(), region.getCacheBytes(), flush);
-                            }
+                        boolean forceFlush = currentCacheBytes.get() >= maxCacheBytes;
+                        for (TableRegion region : flushAndCommitStrategy.selectFlushRegions(flushQ, forceFlush)) {
+                            boolean flush = region.flush();
+                            LOG.debug("Trigger flush table region {} because of selection, region cache bytes: {}," +
+                                    " flush: {}", region.getUniqueKey(), region.getCacheBytes(), flush);
                         }
                     }
                 }
@@ -199,6 +204,7 @@ public class StarRocksSinkManagerV2 implements StreamLoadManager, Serializable {
             int bytes = region.write(row.getBytes(StandardCharsets.UTF_8));
             long cachedBytes = currentCacheBytes.addAndGet(bytes);
             if (cachedBytes >= maxWriteBlockCacheBytes) {
+                long startTime = System.nanoTime();
                 lock.lock();
                 try {
                     int idx = 0;
@@ -215,6 +221,7 @@ public class StarRocksSinkManagerV2 implements StreamLoadManager, Serializable {
                 } finally {
                     lock.unlock();
                 }
+                loadMetrics.updateWriteBlock(1, System.nanoTime() - startTime);
             } else if (cachedBytes >= maxCacheBytes && writeTriggerFlush.compareAndSet(false, true)) {
                 lock.lock();
                 try {
@@ -222,6 +229,7 @@ public class StarRocksSinkManagerV2 implements StreamLoadManager, Serializable {
                 } finally {
                     lock.unlock();
                 }
+                loadMetrics.updateWriteTriggerFlush(1);
                 LOG.info("Trigger flush, currentBytes: {}, maxCacheBytes: {}", cachedBytes, maxCacheBytes);
             }
         }
@@ -341,9 +349,8 @@ public class StarRocksSinkManagerV2 implements StreamLoadManager, Serializable {
     @Override
     public void close() {
         if (state.compareAndSet(State.ACTIVE, State.INACTIVE)) {
-            LOG.info("Stream load manger close, current bytes : {}, flush rows : {}" +
-                            ", numberTotalRows : {}, numberLoadRows : {}, loadMetrics: {}",
-                    currentCacheBytes.get(), totalFlushRows.get(), numberTotalRows.get(), numberLoadRows.get(), loadMetrics);
+            LOG.info("StarRocksSinkManagerV2 close, loadMetrics: {}, flushAndCommit: {}",
+                    loadMetrics, flushAndCommitStrategy);
             manager.interrupt();
             streamLoader.close();
         }

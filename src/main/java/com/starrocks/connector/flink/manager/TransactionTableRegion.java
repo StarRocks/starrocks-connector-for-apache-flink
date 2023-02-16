@@ -239,9 +239,9 @@ public class TransactionTableRegion implements TableRegion {
         return false;
     }
 
-    public void commit() {
+    public boolean commit() {
         if (!state.compareAndSet(State.ACTIVE, State.COMMITTING)) {
-            return;
+            return false;
         }
 
         if (label != null) {
@@ -250,24 +250,24 @@ public class TransactionTableRegion implements TableRegion {
                 String errorMsg = "Failed to prepare transaction " + transaction;
                 LOG.error(errorMsg);
                 callback(new RuntimeException(errorMsg));
-                return;
+                return false;
             }
 
             if (!streamLoader.commit(transaction)) {
                 String errorMsg = "Failed to commit transaction " + transaction;
                 LOG.error(errorMsg);
                 callback(new RuntimeException(errorMsg));
-                return;
+                return false;
             }
             label = null;
             long commitTime = System.currentTimeMillis();
             long commitDuration = commitTime - lastCommitTimeMills;
             lastCommitTimeMills = commitTime;
-            resetAge();
             LOG.info("Success to commit transaction {}, duration: {}", transaction, commitDuration);
         }
 
         state.compareAndSet(State.COMMITTING, State.ACTIVE);
+        return true;
     }
 
     @Override
