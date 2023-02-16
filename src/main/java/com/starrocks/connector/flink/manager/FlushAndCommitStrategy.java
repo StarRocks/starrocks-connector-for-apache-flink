@@ -18,7 +18,6 @@
 
 package com.starrocks.connector.flink.manager;
 
-import com.alibaba.fastjson.JSON;
 import com.starrocks.data.load.stream.StreamLoadStrategy;
 import com.starrocks.data.load.stream.TableRegion;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
@@ -48,7 +47,6 @@ public class FlushAndCommitStrategy implements StreamLoadStrategy {
         this.expectDelayTime = properties.getExpectDelayTime();
         this.scanFrequency = properties.getScanningFrequency();
         this.ageThreshold = expectDelayTime / scanFrequency;
-        LOG.info("Load Strategy properties : {}", JSON.toJSONString(this));
     }
 
     @Override

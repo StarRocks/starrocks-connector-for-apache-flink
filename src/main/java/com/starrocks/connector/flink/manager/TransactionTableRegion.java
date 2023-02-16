@@ -221,7 +221,7 @@ public class TransactionTableRegion implements TableRegion {
         if (state.compareAndSet(State.ACTIVE, State.FLUSHING)) {
             for (;;) {
                 if (ctl.compareAndSet(false, true)) {
-                    LOG.info("uniqueKey : {}, label : {}, bytes : {} commit", uniqueKey, label, cacheBytes.get());
+                    LOG.info("Flush uniqueKey : {}, label : {}, bytes : {}", uniqueKey, label, cacheBytes.get());
                     inBuffer = outBuffer;
                     outBuffer = null;
                     ctl.set(false);
@@ -263,7 +263,7 @@ public class TransactionTableRegion implements TableRegion {
             long commitTime = System.currentTimeMillis();
             long commitDuration = commitTime - lastCommitTimeMills;
             lastCommitTimeMills = commitTime;
-            LOG.info("Success to commit transaction {}, duration: {}", transaction, commitDuration);
+            LOG.info("Success to commit transaction: {}, duration: {} ms", transaction, commitDuration);
         }
 
         state.compareAndSet(State.COMMITTING, State.ACTIVE);
