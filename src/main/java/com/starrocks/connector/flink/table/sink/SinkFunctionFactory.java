@@ -99,26 +99,33 @@ public class SinkFunctionFactory {
         }
     }
 
-    public static SinkVersion chooseSinkVersionAutomatically(StarRocksSinkOptions sinkOptions) {
+    public static void detectStarRocksFeature(StarRocksSinkOptions sinkOptions) {
         try {
-            if (StarRocksSinkSemantic.AT_LEAST_ONCE.equals(sinkOptions.getSemantic())) {
-                LOG.info("Choose sink version V2 for at-least-once.");
-                return SinkVersion.V2;
-            }
-
             boolean supportTransactionLoad = isStarRocksSupportTransactionLoad(sinkOptions);
+            sinkOptions.setSupportTransactionStreamLoad(supportTransactionLoad);
             if (supportTransactionLoad) {
-                LOG.info("StarRocks supports transaction load, and choose sink version V2");
-                return SinkVersion.V2;
+                LOG.info("StarRocks supports transaction load");
             } else {
-                LOG.info("StarRocks does not support transaction load, and choose sink version V1");
-                return SinkVersion.V1;
+                LOG.info("StarRocks does not support transaction load");
             }
         } catch (Exception e) {
-            LOG.warn("Can't decide whether StarRocks supports transaction load, and sink version V2 " +
-                    "will be used by default. If your StarRocks does not support transaction load, please " +
-                    "configure '{}' to 'V1' manually", StarRocksSinkOptions.SINK_VERSION.key());
+            LOG.warn("Can't decide whether StarRocks supports transaction load, and enable it by default.");
+            sinkOptions.setSupportTransactionStreamLoad(true);
+        }
+    }
+
+    public static SinkVersion chooseSinkVersionAutomatically(StarRocksSinkOptions sinkOptions) {
+        if (StarRocksSinkSemantic.AT_LEAST_ONCE.equals(sinkOptions.getSemantic())) {
+            LOG.info("Choose sink version V2 for at-least-once.");
             return SinkVersion.V2;
+        }
+
+        if (sinkOptions.isSupportTransactionStreamLoad()) {
+            LOG.info("StarRocks supports transaction load, and choose sink version V2");
+            return SinkVersion.V2;
+        } else {
+            LOG.info("StarRocks does not support transaction load, and choose sink version V1");
+            return SinkVersion.V1;
         }
     }
 
@@ -140,6 +147,7 @@ public class SinkFunctionFactory {
 
     public static <T> StarRocksDynamicSinkFunctionBase<T> createSinkFunction(
             StarRocksSinkOptions sinkOptions, TableSchema schema, StarRocksIRowTransformer<T> rowTransformer) {
+        detectStarRocksFeature(sinkOptions);
         SinkVersion sinkVersion = getSinkVersion(sinkOptions);
         switch (sinkVersion) {
             case V1:
@@ -152,6 +160,7 @@ public class SinkFunctionFactory {
     }
 
     public static <T> StarRocksDynamicSinkFunctionBase<T> createSinkFunction(StarRocksSinkOptions sinkOptions) {
+        detectStarRocksFeature(sinkOptions);
         SinkVersion sinkVersion = getSinkVersion(sinkOptions);
         switch (sinkVersion) {
             case V1:
