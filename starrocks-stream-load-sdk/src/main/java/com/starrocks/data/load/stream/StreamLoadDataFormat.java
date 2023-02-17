@@ -41,7 +41,14 @@ public interface StreamLoadDataFormat {
 
         @Override
         public byte[] end() {
-            return EMPTY_DELIMITER;
+            // For transaction stream load, need to append the row delimiter to the end of each
+            // load, and separate the data in multiple loads. For example, there are 3 columns,
+            // column delimiter ",", row delimiter "\n". There are 2 rows (1, 2, 3), (4, 5, 6),
+            // and send them in two loads. If not append the end delimiter, the data received by
+            // StarRocks will be "1,2,34,5,6", the two rows are not separated by row delimiter, and
+            // StarRocks will parse it as one line with 5 columns. After appending the end delimiter,
+            // it will be "1,2,3\n4,5,6", which will be parsed correctly
+            return delimiter;
         }
 
     }
