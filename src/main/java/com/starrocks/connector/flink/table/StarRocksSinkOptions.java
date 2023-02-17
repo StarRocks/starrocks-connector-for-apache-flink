@@ -112,6 +112,8 @@ public class StarRocksSinkOptions implements Serializable {
     private boolean supportUpsertDelete;
     private String[] tableSchemaFieldNames;
 
+    private boolean supportTransactionStreamLoad = false;
+
     private final List<StreamLoadTableProperties> tablePropertiesList = new ArrayList<>();
 
     public StarRocksSinkOptions(ReadableConfig options, Map<String, String> optionsMap) {
@@ -249,6 +251,14 @@ public class StarRocksSinkOptions implements Serializable {
 
     public boolean supportUpsertDelete() {
         return supportUpsertDelete;
+    }
+
+    public void setSupportTransactionStreamLoad(boolean supportTransactionStreamLoad) {
+        this.supportTransactionStreamLoad = supportTransactionStreamLoad;
+    }
+
+    public boolean isSupportTransactionStreamLoad() {
+        return supportTransactionStreamLoad;
     }
 
     private void validateStreamLoadUrl() {
@@ -425,7 +435,7 @@ public class StarRocksSinkOptions implements Serializable {
             builder.addTableProperties(tableProperties);
         }
 
-        if (getSemantic() == StarRocksSinkSemantic.EXACTLY_ONCE) {
+        if (isSupportTransactionStreamLoad()) {
             builder.enableTransaction();
             log.info("Enable transaction stream load");
         }

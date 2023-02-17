@@ -156,7 +156,7 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                         while (iterator.hasNext()) {
                             TableRegion region = iterator.next();
                             region.getAndIncrementAge();
-                            if (region.commit()) {
+                            if (region.flush()) {
                                 waitQ.offer(region);
                                 if (region.isFlushing()) {
                                     flushingCommit = true;
@@ -168,7 +168,7 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                         }
                     } else {
                         for (TableRegion region : loadStrategy.select(commitQ)) {
-                            if (region.commit()) {
+                            if (region.flush()) {
                                 waitQ.offer(region);
                                 commitQ.remove(region);
                                 if (region.isFlushing()) {
@@ -190,7 +190,7 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                                 })
                                 .orElse(null);
                         if (maxFlushRegion != null) {
-                            if (maxFlushRegion.commit()) {
+                            if (maxFlushRegion.flush()) {
                                 commitQ.remove(maxFlushRegion);
                                 waitQ.offer(maxFlushRegion);
                                 LOG.debug("Move table region {}.{} from commitQ to waitQ for max cache bytes",

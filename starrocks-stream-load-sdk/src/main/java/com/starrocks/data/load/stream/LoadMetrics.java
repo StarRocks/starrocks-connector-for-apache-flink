@@ -34,6 +34,10 @@ public class LoadMetrics {
     private final AtomicLong totalSuccessLoadTimeNano = new AtomicLong();
     private final AtomicLong numberOfFailedLoad = new AtomicLong();
 
+    private final AtomicLong numberWriteTriggerFlush = new AtomicLong();
+    private final AtomicLong numberWriteBlock = new AtomicLong();
+    private final AtomicLong totalWriteBlockTimeNano = new AtomicLong();
+
     public LoadMetrics() {
         this.startTimeNano = System.nanoTime();
     }
@@ -55,6 +59,15 @@ public class LoadMetrics {
         numberOfFailedLoad.incrementAndGet();
     }
 
+    public void updateWriteTriggerFlush(int number) {
+        numberWriteTriggerFlush.addAndGet(number);
+    }
+
+    public void updateWriteBlock(int number, long timeNano) {
+        numberWriteBlock.addAndGet(number);
+        totalWriteBlockTimeNano.addAndGet(timeNano);
+    }
+
     @Override
     public String toString() {
         return "LoadMetrics{" +
@@ -65,6 +78,9 @@ public class LoadMetrics {
                 ", totalSuccessLoadRows=" + totalSuccessLoadRows +
                 ", totalSuccessLoadTimeNano=" + totalSuccessLoadTimeNano +
                 ", numberOfFailedLoad=" + numberOfFailedLoad +
+                ", numberWriteTriggerFlush=" + numberWriteTriggerFlush +
+                ", numberWriteBlock=" + numberWriteBlock +
+                ", totalWriteBlockTimeNano=" + totalWriteBlockTimeNano +
                 '}';
     }
 }
