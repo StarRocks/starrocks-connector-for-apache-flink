@@ -127,6 +127,11 @@ public class StreamTableRegion implements TableRegion, Serializable {
     }
 
     @Override
+    public long getAge() {
+        return age.get();
+    }
+
+    @Override
     public int write(byte[] row) {
         try {
             buffer.put(row);
@@ -213,7 +218,7 @@ public class StreamTableRegion implements TableRegion, Serializable {
     }
 
     @Override
-    public boolean commit() {
+    public boolean flush() {
         if (state.compareAndSet(State.PREPARE, State.COMMIT)) {
             write(END_STREAM);
             resetAge();
