@@ -270,24 +270,27 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
                         streamLoadResponse.setCostNanoTime(System.nanoTime() - startNanoTime);
                         region.complete(streamLoadResponse);
                     } else {
-                        log.error("Stream load failed because label existed, label: {}", label);
-                        throw new StreamLoadFailException(
-                                String.format("Stream load failed because label existed, label: %s", label));
+                        String errorMsage = String.format("Stream load failed because label existed, " +
+                                "db: %s, table: %s, label: %s", region.getDatabase(), region.getTable(), label);
+                        throw new StreamLoadFailException(errorMsage);
                     }
                 } else {
                     String errorLog = getErrorLog(streamLoadBody.getErrorURL());
-                    String errorMsg = String.format("Stream load failed, label: %s, \nresponseBody: %s\nerrorLog: %s",
-                            label, responseBody, errorLog);
-                    log.error(errorMsg);
-                    throw new StreamLoadFailException(errorMsg, streamLoadBody);
+                    String errorMsg = String.format("Stream load failed because of error, db: %s, table: %s, label: %s, " +
+                                    "\nresponseBody: %s\nerrorLog: %s", region.getDatabase(), region.getTable(), label,
+                                    responseBody, errorLog);
+                    throw new StreamLoadFailException(errorMsg);
                 }
                 return streamLoadResponse;
-            } catch (Exception e) {
-                log.error("Stream load failed unknown, label: {}", label, e);
+            } catch (StreamLoadFailException e) {
                 throw e;
+            }  catch (Exception e) {
+                String errorMsg = String.format("Stream load failed because of unknown exception, db: %s, table: %s, " +
+                        "label: %s", region.getDatabase(), region.getTable(), label);
+                throw new StreamLoadFailException(errorMsg, e);
             }
         } catch (Exception e) {
-            log.error("Stream load failed, thread : " + Thread.currentThread().getName(), e);
+            log.error("Exception happens when sending data, thread: {}", Thread.currentThread().getName(), e);
             region.callback(e);
         }
         return null;

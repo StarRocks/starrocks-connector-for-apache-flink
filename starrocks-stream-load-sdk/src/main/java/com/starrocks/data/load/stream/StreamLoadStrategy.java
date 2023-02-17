@@ -1,8 +1,7 @@
 package com.starrocks.data.load.stream;
 
-import com.starrocks.data.load.stream.properties.StreamLoadProperties;
-
 import com.alibaba.fastjson.JSON;
+import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -11,11 +10,14 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
-public interface StreamLoadStrategy {
+public interface StreamLoadStrategy extends Serializable {
 
     List<TableRegion> select(Iterable<TableRegion> regions);
 
-    class DefaultLoadStrategy implements StreamLoadStrategy, Serializable {
+    class DefaultLoadStrategy implements StreamLoadStrategy {
+
+        private static final long serialVersionUID = 1L;
+
         private static final Logger log = LoggerFactory.getLogger(DefaultLoadStrategy.class);
 
         private final long oldAge;

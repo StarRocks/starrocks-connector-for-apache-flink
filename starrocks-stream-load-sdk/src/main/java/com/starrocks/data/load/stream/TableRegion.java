@@ -22,13 +22,14 @@ public interface TableRegion {
 
     void resetAge();
     long getAndIncrementAge();
+    long getAge();
 
     int write(byte[] row);
     byte[] read();
 
     boolean testPrepare();
     boolean prepare();
-    boolean commit();
+    boolean flush();
     boolean cancel();
 
     void callback(StreamLoadResponse response);
