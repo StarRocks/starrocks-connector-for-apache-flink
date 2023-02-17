@@ -229,7 +229,8 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
             if (StreamLoadConstants.RESULT_STATUS_SUCCESS.equals(status)) {
                 return true;
             }
-            log.error("Transaction rollback failed, db : {}, label : {}", transaction.getDatabase(), transaction.getLabel());
+            log.error("Transaction rollback failed, db: {}, table: {}, label : {}",
+                    transaction.getDatabase(), transaction.getTable(), transaction.getLabel());
             return false;
         } catch (IOException e) {
             throw new RuntimeException(e);
