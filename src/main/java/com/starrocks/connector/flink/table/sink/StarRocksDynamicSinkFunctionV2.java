@@ -73,12 +73,14 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
         this.serializer = StarRocksSerializerFactory.createSerializer(sinkOptions, schema.getFieldNames());
         rowTransformer.setStarRocksColumns(sinkTable.getFieldMapping());
         rowTransformer.setTableSchema(schema);
-        this.sinkManager = new StarRocksSinkManagerV2(sinkOptions.getProperties());
+        this.sinkManager = new StarRocksSinkManagerV2(sinkOptions.getProperties(),
+                sinkOptions.getSemantic() == StarRocksSinkSemantic.AT_LEAST_ONCE);
     }
 
     public StarRocksDynamicSinkFunctionV2(StarRocksSinkOptions sinkOptions) {
         this.sinkOptions = sinkOptions;
-        this.sinkManager = new StarRocksSinkManagerV2(sinkOptions.getProperties());
+        this.sinkManager = new StarRocksSinkManagerV2(sinkOptions.getProperties(),
+                sinkOptions.getSemantic() == StarRocksSinkSemantic.AT_LEAST_ONCE);
         this.serializer = null;
         this.rowTransformer = null;
     }
@@ -288,11 +290,6 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
         }
         // set legacyState to null to avoid clear it in latter snapshotState
         legacyState = null;
-    }
-
-    @Override
-    public void notifyCheckpointAborted(long checkpointId) throws Exception {
-        // TODO
     }
 
     private void flushLegacyData() {
