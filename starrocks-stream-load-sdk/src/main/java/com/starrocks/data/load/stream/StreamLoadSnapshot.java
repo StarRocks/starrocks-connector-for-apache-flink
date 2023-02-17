@@ -89,6 +89,16 @@ public class StreamLoadSnapshot implements Serializable {
         public void setFinish(boolean finish) {
             this.finish = finish;
         }
+
+        @Override
+        public String toString() {
+            return "Transaction{" +
+                    "database='" + database + '\'' +
+                    ", table='" + table + '\'' +
+                    ", label='" + label + '\'' +
+                    ", finish=" + finish +
+                    '}';
+        }
     }
 
     public static StreamLoadSnapshot snapshot(Iterable<TableRegion> regions) {
