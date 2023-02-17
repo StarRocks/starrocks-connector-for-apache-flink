@@ -87,6 +87,44 @@ public class SinkFunctionFactoryTest {
     }
 
     @Test
+    public void testDetectStarRocksFeature() {
+        AtomicReference<Boolean> supportTransactionLoad = new AtomicReference<>();
+        new MockUp<SinkFunctionFactory>() {
+            @Mock
+            public boolean isStarRocksSupportTransactionLoad(StarRocksSinkOptions sinkOptions) {
+                if (supportTransactionLoad.get() == null) {
+                    throw new NullPointerException();
+                }
+                return supportTransactionLoad.get();
+            }
+        };
+
+        {
+            StarRocksSinkOptions sinkOptions = new StarRocksSinkOptions(new Configuration(), new HashMap<>());
+            supportTransactionLoad.set(null);
+            assertFalse(sinkOptions.isSupportTransactionStreamLoad());
+            SinkFunctionFactory.detectStarRocksFeature(sinkOptions);
+            assertTrue(sinkOptions.isSupportTransactionStreamLoad());
+        }
+
+        {
+            StarRocksSinkOptions sinkOptions = new StarRocksSinkOptions(new Configuration(), new HashMap<>());
+            supportTransactionLoad.set(true);
+            assertFalse(sinkOptions.isSupportTransactionStreamLoad());
+            SinkFunctionFactory.detectStarRocksFeature(sinkOptions);
+            assertTrue(sinkOptions.isSupportTransactionStreamLoad());
+        }
+
+        {
+            StarRocksSinkOptions sinkOptions = new StarRocksSinkOptions(new Configuration(), new HashMap<>());
+            supportTransactionLoad.set(false);
+            assertFalse(sinkOptions.isSupportTransactionStreamLoad());
+            SinkFunctionFactory.detectStarRocksFeature(sinkOptions);
+            assertFalse(sinkOptions.isSupportTransactionStreamLoad());
+        }
+    }
+
+    @Test
     public void testChooseSinkVersionAutomaticallyForExactlyOnce() {
         testChooseSinkVersionAutomaticallyBase(true,
                 Arrays.asList(
@@ -113,24 +151,11 @@ public class SinkFunctionFactoryTest {
                 isExactlyOnce ? StarRocksSinkSemantic.EXACTLY_ONCE.getName()
                         : StarRocksSinkSemantic.AT_LEAST_ONCE.getName());
         StarRocksSinkOptions sinkOptions = new StarRocksSinkOptions(conf, new HashMap<>());
-        AtomicReference<Boolean> supportTransactionLoad = new AtomicReference<>();
-        new MockUp<SinkFunctionFactory>() {
-            @Mock
-            public boolean isStarRocksSupportTransactionLoad(StarRocksSinkOptions sinkOptions) {
-                if (supportTransactionLoad.get() == null) {
-                    throw new NullPointerException();
-                }
-                return supportTransactionLoad.get();
-            }
-        };
 
-        supportTransactionLoad.set(null);
+        sinkOptions.setSupportTransactionStreamLoad(true);
         assertEquals(expectedVersions.get(0), SinkFunctionFactory.chooseSinkVersionAutomatically(sinkOptions));
 
-        supportTransactionLoad.set(true);
-        assertEquals(expectedVersions.get(1), SinkFunctionFactory.chooseSinkVersionAutomatically(sinkOptions));
-
-        supportTransactionLoad.set(false);
+        sinkOptions.setSupportTransactionStreamLoad(false);
         assertEquals(expectedVersions.get(2), SinkFunctionFactory.chooseSinkVersionAutomatically(sinkOptions));
     }
 
