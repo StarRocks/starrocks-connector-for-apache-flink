@@ -77,7 +77,7 @@ public class StreamLoadResponse implements Serializable {
         private Long loadBytes;
         private Long loadTimeMs;
         private Long beginTxnTimeMs;
-        private Long streamLoadPutTimeMs;
+        private Long streamLoadPlanTimeMs;
         private Long readDataTimeMs;
         private Long writeDataTimeMs;
         private Long commitAndPublishTimeMs;
@@ -150,8 +150,8 @@ public class StreamLoadResponse implements Serializable {
             this.beginTxnTimeMs = beginTxnTimeMs;
         }
 
-        public void setStreamLoadPutTimeMs(Long streamLoadPutTimeMs) {
-            this.streamLoadPutTimeMs = streamLoadPutTimeMs;
+        public void setStreamLoadPlanTimeMs(Long streamLoadPlanTimeMs) {
+            this.streamLoadPlanTimeMs = streamLoadPlanTimeMs;
         }
 
         public void setReadDataTimeMs(Long readDataTimeMs) {
@@ -182,8 +182,8 @@ public class StreamLoadResponse implements Serializable {
             return commitAndPublishTimeMs;
         }
 
-        public Long getStreamLoadPutTimeMs() {
-            return streamLoadPutTimeMs;
+        public Long getStreamLoadPlanTimeMs() {
+            return streamLoadPlanTimeMs;
         }
 
         public Long getReadDataTimeMs() {
