@@ -21,7 +21,7 @@ public class StarRocksSinkRuntimeContext {
 
     private transient Counter totalFilteredRows;
     private transient Histogram commitAndPublishTimeMs;
-    private transient Histogram streamLoadPutTimeMs;
+    private transient Histogram streamLoadPlanTimeMs;
     private transient Histogram readDataTimeMs;
     private transient Histogram writeDataTimeMs;
     private transient Histogram loadTimeMs;
@@ -38,7 +38,7 @@ public class StarRocksSinkRuntimeContext {
 
         totalFilteredRows = context.getMetricGroup().counter(COUNTER_NUMBER_FILTERED_ROWS);
         commitAndPublishTimeMs = context.getMetricGroup().histogram(HISTOGRAM_COMMIT_AND_PUBLISH_TIME_MS, new DescriptiveStatisticsHistogram(sinkOptions.getSinkHistogramWindowSize()));
-        streamLoadPutTimeMs = context.getMetricGroup().histogram(HISTOGRAM_STREAM_LOAD_PUT_TIME_MS, new DescriptiveStatisticsHistogram(sinkOptions.getSinkHistogramWindowSize()));
+        streamLoadPlanTimeMs = context.getMetricGroup().histogram(HISTOGRAM_STREAM_LOAD_PLAN_TIME_MS, new DescriptiveStatisticsHistogram(sinkOptions.getSinkHistogramWindowSize()));
         readDataTimeMs = context.getMetricGroup().histogram(HISTOGRAM_READ_DATA_TIME_MS, new DescriptiveStatisticsHistogram(sinkOptions.getSinkHistogramWindowSize()));
         writeDataTimeMs = context.getMetricGroup().histogram(HISTOGRAM_WRITE_DATA_TIME_MS, new DescriptiveStatisticsHistogram(sinkOptions.getSinkHistogramWindowSize()));
         loadTimeMs = context.getMetricGroup().histogram(HISTOGRAM_LOAD_TIME_MS, new DescriptiveStatisticsHistogram(sinkOptions.getSinkHistogramWindowSize()));
@@ -72,8 +72,8 @@ public class StarRocksSinkRuntimeContext {
         if (responseBody.getCommitAndPublishTimeMs() != null) {
             commitAndPublishTimeMs.update(responseBody.getCommitAndPublishTimeMs());
         }
-        if (responseBody.getStreamLoadPutTimeMs() != null) {
-            streamLoadPutTimeMs.update(responseBody.getStreamLoadPutTimeMs());
+        if (responseBody.getStreamLoadPlanTimeMs() != null) {
+            streamLoadPlanTimeMs.update(responseBody.getStreamLoadPlanTimeMs());
         }
         if (responseBody.getReadDataTimeMs() != null) {
             readDataTimeMs.update(responseBody.getReadDataTimeMs());
@@ -111,7 +111,8 @@ public class StarRocksSinkRuntimeContext {
     // from stream load result
     private static final String COUNTER_NUMBER_FILTERED_ROWS = "totalFilteredRows";
     private static final String HISTOGRAM_COMMIT_AND_PUBLISH_TIME_MS = "commitAndPublishTimeMs";
-    private static final String HISTOGRAM_STREAM_LOAD_PUT_TIME_MS = "streamLoadPutTimeMs";
+    // No change of the metric name to ensure compatibility.
+    private static final String HISTOGRAM_STREAM_LOAD_PLAN_TIME_MS = "streamLoadPutTimeMs";
     private static final String HISTOGRAM_READ_DATA_TIME_MS = "readDataTimeMs";
     private static final String HISTOGRAM_WRITE_DATA_TIME_MS = "writeDataTimeMs";
     private static final String HISTOGRAM_LOAD_TIME_MS = "loadTimeMs";
