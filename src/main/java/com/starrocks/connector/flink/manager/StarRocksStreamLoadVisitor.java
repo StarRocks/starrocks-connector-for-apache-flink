@@ -186,8 +186,8 @@ public class StarRocksStreamLoadVisitor implements Serializable {
             if (host != null && !host.startsWith("http")) {
                 host = "http://" + host;
             }
+            pos++;
             if (tryHttpConnection(host)) {
-                pos++;
                 return host;
             }
         }
