@@ -300,10 +300,11 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
         String[] hosts = properties.getLoadUrls();
         int size = hosts.length;
         long pos = availableHostPos;
-        while (pos < pos + size) {
+        long tmp = pos + size;
+        while (pos < tmp) {
             String host = hosts[(int) (pos % size)];
+            pos++;
             if (testHttpConnection(host)) {
-                pos++;
                 availableHostPos = pos;
                 return host;
             }
