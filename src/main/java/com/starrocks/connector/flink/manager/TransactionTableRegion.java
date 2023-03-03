@@ -24,6 +24,7 @@ import com.starrocks.data.load.stream.StreamLoadResponse;
 import com.starrocks.data.load.stream.StreamLoadSnapshot;
 import com.starrocks.data.load.stream.StreamLoader;
 import com.starrocks.data.load.stream.TableRegion;
+import com.starrocks.data.load.stream.exception.StreamLoadFailException;
 import com.starrocks.data.load.stream.http.StreamLoadEntityMeta;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
 import org.slf4j.Logger;
@@ -246,19 +247,22 @@ public class TransactionTableRegion implements TableRegion {
 
         if (label != null) {
             StreamLoadSnapshot.Transaction transaction = new StreamLoadSnapshot.Transaction(database, table, label);
-            if (!streamLoader.prepare(transaction)) {
-                String errorMsg = "Failed to prepare transaction " + transaction;
-                LOG.error(errorMsg);
-                callback(new RuntimeException(errorMsg));
+            try {
+                if (!streamLoader.prepare(transaction)) {
+                    String errorMsg = "Failed to prepare transaction, please check taskmanager log for details, " + transaction;
+                    throw new StreamLoadFailException(errorMsg);
+                }
+
+                if (!streamLoader.commit(transaction)) {
+                    String errorMsg = "Failed to commit transaction, please check taskmanager log for details, " + transaction;
+                    throw new StreamLoadFailException(errorMsg);
+                }
+            } catch (Exception e) {
+                LOG.error("TransactionTableRegion commit failed, db: {}, table: {}, label: {}", database, table, label, e);
+                callback(e);
                 return false;
             }
 
-            if (!streamLoader.commit(transaction)) {
-                String errorMsg = "Failed to commit transaction " + transaction;
-                LOG.error(errorMsg);
-                callback(new RuntimeException(errorMsg));
-                return false;
-            }
             label = null;
             long commitTime = System.currentTimeMillis();
             long commitDuration = commitTime - lastCommitTimeMills;
