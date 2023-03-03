@@ -223,13 +223,14 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
             log.error("Transaction commit failed, db: {}, table: {}, label: {}, label state: {}, \nresponseBody: {}\nerrorLog: {}",
                     transaction.getDatabase(), transaction.getTable(), transaction.getLabel(), labelState, responseBody, errorLog);
 
-            String exceptionMsg = String.format("Transaction commit failed, db: %s, table: %s, label: %s, commit status: %s," +
+            String exceptionMsg = String.format("Transaction commit failed, db: %s, table: %s, label: %s, commit response status: %s," +
                    " label state: %s", transaction.getDatabase(), transaction.getTable(), transaction.getLabel(), status, labelState);
             // transaction not exist often happens after transaction timeouts
-            if (StreamLoadConstants.RESULT_STATUS_TRANSACTION_NOT_EXISTED.equals(status)) {
-                exceptionMsg += ", TXN_NOT_EXISTS often happens when transaction timeouts, and please check StarRocks FE leader" +
-                        " log to confirm it. You can find the transaction id for the label in the FE log first, and search" +
-                        " with the transaction id and the keyword 'expired'";
+            if (StreamLoadConstants.RESULT_STATUS_TRANSACTION_NOT_EXISTED.equals(status) ||
+                StreamLoadConstants.LABEL_STATE_UNKNOWN.equals(labelState)) {
+                exceptionMsg += ". commit response status with TXN_NOT_EXISTS or label state with UNKNOWN often happens when transaction" +
+                        " timeouts, and please check StarRocks FE leader's log to confirm it. You can find the transaction id for the label" +
+                        " in the FE log first, and search with the transaction id and the keyword 'expired'";
             }
             throw new StreamLoadFailException(exceptionMsg);
         } catch (Exception e) {
