@@ -24,8 +24,10 @@ import org.slf4j.LoggerFactory;
 import java.io.Serializable;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -265,13 +267,13 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
                     streamLoadResponse.setCostNanoTime(System.nanoTime() - startNanoTime);
                     region.complete(streamLoadResponse);
                 } else if (StreamLoadConstants.RESULT_STATUS_LABEL_EXISTED.equals(status)) {
-                    boolean succeed = checkLabelState(host, region.getDatabase(), label);
-                    if (succeed) {
+                    String labelState = getLabelState(host, region.getDatabase(), label, Collections.singleton(StreamLoadConstants.LABEL_STATE_PREPARE));
+                    if (StreamLoadConstants.LABEL_STATE_COMMITTED.equals(labelState) || StreamLoadConstants.LABEL_STATE_VISIBLE.equals(labelState)) {
                         streamLoadResponse.setCostNanoTime(System.nanoTime() - startNanoTime);
                         region.complete(streamLoadResponse);
                     } else {
                         String errorMsage = String.format("Stream load failed because label existed, " +
-                                "db: %s, table: %s, label: %s", region.getDatabase(), region.getTable(), label);
+                                "db: %s, table: %s, label: %s, label state: %s", region.getDatabase(), region.getTable(), label, labelState);
                         throw new StreamLoadFailException(errorMsage);
                     }
                 } else {
@@ -327,7 +329,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
         }
     }
 
-    protected boolean checkLabelState(String host, String database, String label) throws Exception {
+    protected String getLabelState(String host, String database, String label, Set<String> retryStates) throws Exception {
         int idx = 0;
         for (;;) {
             TimeUnit.SECONDS.sleep(Math.min(++idx, 5));
@@ -337,36 +339,29 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
                 httpGet.addHeader("Authorization", StreamLoadUtils.getBasicAuthHeader(properties.getUsername(), properties.getPassword()));
                 httpGet.setHeader("Connection", "close");
                 try (CloseableHttpResponse response = client.execute(httpGet)) {
+                    int responseStatusCode = response.getStatusLine().getStatusCode();
                     String entityContent = EntityUtils.toString(response.getEntity());
-
-                    if (response.getStatusLine().getStatusCode() != 200) {
-                        throw new StreamLoadFailException("Failed to flush data to StarRocks, Error " +
-                                "could not get the final state of label : `" + label + "`, body : " + entityContent);
+                    log.info("Response for get_load_state, label: {}, response status code: {}, response body : {}",
+                            label, responseStatusCode, entityContent);
+                    if (responseStatusCode != 200) {
+                        throw new StreamLoadFailException(String.format("Could not get load state because of incorrect response status code %s, " +
+                                "label: %s, response body: %s", responseStatusCode, label, entityContent));
                     }
 
-                    log.info("Label `{}` check, body : {}", label, entityContent);
                     StreamLoadResponse.StreamLoadResponseBody responseBody =
                             JSON.parseObject(entityContent, StreamLoadResponse.StreamLoadResponseBody.class);
                     String state = responseBody.getState();
                     if (state == null) {
-                        log.error("Get label state failed, body : {}", JSON.toJSONString(responseBody));
-                        throw new StreamLoadFailException(String.format("Failed to flush data to StarRocks, Error " +
-                                "could not get the final state of label[%s]. response[%s]\n", label, entityContent));
+                        log.error("Fail to get load state, label: {}, load information: {}", label, JSON.toJSONString(responseBody));
+                        throw new StreamLoadFailException(String.format("Could not get load state because of state is null," +
+                                "label: %s, load information: %s", label, entityContent));
                     }
-                    switch (state) {
-                        case StreamLoadConstants.LABEL_STATE_VISIBLE:
-                        case StreamLoadConstants.LABEL_STATE_PREPARED:
-                        case StreamLoadConstants.LABEL_STATE_COMMITTED:
-                            return true;
-                        case StreamLoadConstants.LABEL_STATE_PREPARE:
-                            continue;
-                        case StreamLoadConstants.LABEL_STATE_ABORTED:
-                            return false;
-                        case StreamLoadConstants.LABEL_STATE_UNKNOWN:
-                        default:
-                            throw new StreamLoadFailException(String.format("Failed to flush data to StarRocks, Error " +
-                                    "label[%s] state[%s]\n", label, state));
+
+                    if (retryStates.contains(state)) {
+                        continue;
                     }
+
+                    return state;
                 }
             }
         }
