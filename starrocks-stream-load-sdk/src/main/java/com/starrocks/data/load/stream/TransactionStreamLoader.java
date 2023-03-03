@@ -2,6 +2,7 @@ package com.starrocks.data.load.stream;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
+import com.starrocks.data.load.stream.exception.StreamLoadFailException;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import org.apache.http.Header;
 import org.apache.http.HttpHeaders;
@@ -18,6 +19,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -150,8 +152,20 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
                 case StreamLoadConstants.RESULT_STATUS_OK:
                     manager.callback(streamLoadResponse);
                     return true;
-                case StreamLoadConstants.RESULT_STATUS_TRANSACTION_NOT_EXISTED:
-                    return checkLabelState(host, transaction.getDatabase(), transaction.getLabel());
+                case StreamLoadConstants.RESULT_STATUS_TRANSACTION_NOT_EXISTED: {
+                    // currently this could happen after timeout which is specified in http header,
+                    // but as a protection we check the state again
+                    String labelState = getLabelState(host, transaction.getDatabase(), transaction.getLabel(),
+                            Collections.singleton(StreamLoadConstants.LABEL_STATE_PREPARE));
+                    if (!StreamLoadConstants.LABEL_STATE_PREPARED.equals(labelState)) {
+                       String errMsg = String.format("Transaction prepare failed because of unexpected state, " +
+                                       "label: %s, state: %s", transaction.getLabel(), labelState);
+                       log.error(errMsg);
+                       throw new StreamLoadFailException(errMsg);
+                    } else {
+                        return true;
+                    }
+                }
             }
 
             String errorLog = getErrorLog(streamLoadBody.getErrorURL());
@@ -189,21 +203,38 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
             streamLoadResponse.setBody(streamLoadBody);
             String status = streamLoadBody.getStatus();
 
-            switch (status) {
-                case StreamLoadConstants.RESULT_STATUS_OK:
-                    manager.callback(streamLoadResponse);
-                    return true;
-                case StreamLoadConstants.RESULT_STATUS_TRANSACTION_NOT_EXISTED:
-                    return checkLabelState(host, transaction.getDatabase(), transaction.getLabel());
+            if (StreamLoadConstants.RESULT_STATUS_OK.equals(status)) {
+                manager.callback(streamLoadResponse);
+                return true;
+            }
+
+            // there are many corner cases that can lead to non-ok status. some of them are
+            // 1. TXN_NOT_EXISTS: transaction timeout and the label is cleanup up
+            // 2. Failed: the error message can be "has no backend", The case is that FE leader restarts, and after
+            //    that commit the transaction repeatedly because flink job continues failover for some reason , but
+            //    the transaction actually success, and this commit should be successful
+            // To reduce the dependency for the returned status type, always check the label state
+            String labelState = getLabelState(host, transaction.getDatabase(), transaction.getLabel(), Collections.emptySet());
+            if (StreamLoadConstants.LABEL_STATE_COMMITTED.equals(labelState) || StreamLoadConstants.LABEL_STATE_VISIBLE.equals(labelState)) {
+                return true;
             }
 
             String errorLog = getErrorLog(streamLoadBody.getErrorURL());
-            log.error("Transaction commit failed, db: {}, table: {}, label: {}, \nresponseBody: {}\nerrorLog: {}",
-                    transaction.getDatabase(), transaction.getTable(), transaction.getLabel(), responseBody, errorLog);
+            log.error("Transaction commit failed, db: {}, table: {}, label: {}, label state: {}, \nresponseBody: {}\nerrorLog: {}",
+                    transaction.getDatabase(), transaction.getTable(), transaction.getLabel(), labelState, responseBody, errorLog);
+
+            String exceptionMsg = String.format("Transaction commit failed, db: %s, table: %s, label: %s, commit status: %s," +
+                   " label state: %s", transaction.getDatabase(), transaction.getTable(), transaction.getLabel(), status, labelState);
+            // transaction not exist often happens after transaction timeouts
+            if (StreamLoadConstants.RESULT_STATUS_TRANSACTION_NOT_EXISTED.equals(status)) {
+                exceptionMsg += ", TXN_NOT_EXISTS often happens when transaction timeouts, and please check StarRocks FE leader" +
+                        " log to confirm it. You can find the transaction id for the label in the FE log first, and search" +
+                        " with the transaction id and the keyword 'expired'";
+            }
+            throw new StreamLoadFailException(exceptionMsg);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-        return false;
     }
 
     @Override

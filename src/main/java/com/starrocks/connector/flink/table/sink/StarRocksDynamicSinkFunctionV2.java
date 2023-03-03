@@ -271,24 +271,26 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
                 .collect(Collectors.toList());
 
         for (Long cpId : commitCheckpointIds) {
-
-            for (StreamLoadSnapshot snapshot : snapshotMap.get(cpId)) {
-                if (!sinkManager.commit(snapshot)) {
-                    succeed = false;
-                    break;
+            try {
+                for (StreamLoadSnapshot snapshot : snapshotMap.get(cpId)) {
+                    if (!sinkManager.commit(snapshot)) {
+                        succeed = false;
+                        break;
+                    }
                 }
+
+                if (!succeed) {
+                    throw new RuntimeException(String.format("Failed to commit some transactions for snapshot %s, " +
+                            "please check taskmanager logs for details", cpId));
+                }
+            } catch (Exception e) {
+                log.error("Failed to notify checkpoint complete, checkpoint id : {}", checkpointId, e);
+                throw new RuntimeException("Failed to notify checkpoint complete for checkpoint id " + checkpointId, e);
             }
 
-            if (!succeed) {
-                break;
-            }
             snapshotMap.remove(cpId);
         }
 
-        if (!succeed) {
-            log.error("checkpoint complete failed, id : {}", checkpointId);
-            throw new RuntimeException("checkpoint complete failed, id : " + checkpointId);
-        }
         // set legacyState to null to avoid clear it in latter snapshotState
         legacyState = null;
     }
