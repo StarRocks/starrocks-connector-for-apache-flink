@@ -14,7 +14,6 @@ import org.apache.http.impl.client.DefaultRedirectStrategy;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.message.BasicHeader;
-import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -91,21 +90,27 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
 
         httpPost.setConfig(RequestConfig.custom().setExpectContinueEnabled(true).setRedirectsEnabled(true).build());
 
-        log.info("Transaction start, request : {}", httpPost);
+        String db = region.getDatabase();
+        String table = region.getTable();
+        log.info("Transaction start, db: {}, table: {}, label: {}, request : {}", db, table, label, httpPost);
 
         try (CloseableHttpClient client = clientBuilder.build()) {
-            CloseableHttpResponse response = client.execute(httpPost);
-            String responseBody = EntityUtils.toString(response.getEntity());
-            log.info("Transaction started,  body : {}", responseBody);
+            String responseBody;
+            try (CloseableHttpResponse response = client.execute(httpPost)) {
+                responseBody = parseHttpResponse("begin transaction", region.getDatabase(), region.getTable(), label, response);
+            }
+            log.info("Transaction started, db: {}, table: {}, label: {}, body : {}", db, table, label, responseBody);
 
             JSONObject bodyJson = JSON.parseObject(responseBody);
             String status = bodyJson.getString("Status");
 
             if (status == null) {
-                String errMsg = "Can't find 'Status' in the response of transaction begin request. " +
+                String errMsg = String.format("Can't find 'Status' in the response of transaction begin request. " +
                         "Transaction load is supported since StarRocks 2.4, and please make sure your " +
-                        "StarRocks version support transaction load first. The response json is '" + responseBody + "'";
-                throw new IllegalStateException(errMsg);
+                        "StarRocks version support transaction load first. db: %s, table: %s, label: %s, response: %s",
+                        db, table, label, responseBody);
+                log.error(errMsg);
+                throw new StreamLoadFailException(errMsg);
             }
 
             switch (status) {
@@ -117,7 +122,7 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
                     log.error("Transaction start failed, db : {}, label : {}", region.getDatabase(), label);
                     return false;
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
@@ -139,14 +144,22 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
         log.info("Transaction prepare, label : {}, request : {}", transaction.getLabel(), httpPost);
 
         try (CloseableHttpClient client = clientBuilder.build()) {
-            CloseableHttpResponse response = client.execute(httpPost);
-            String responseBody = EntityUtils.toString(response.getEntity());
-            log.info("Transaction prepared,  body : {}", responseBody);
+            String responseBody;
+            try (CloseableHttpResponse response = client.execute(httpPost)) {
+                responseBody = parseHttpResponse("prepare transaction", transaction.getDatabase(), transaction.getTable(),
+                        transaction.getLabel(), response);
+            }
+            log.info("Transaction prepared, label : {}, body : {}", transaction.getLabel(), responseBody);
 
             StreamLoadResponse streamLoadResponse = new StreamLoadResponse();
             StreamLoadResponse.StreamLoadResponseBody streamLoadBody = JSON.parseObject(responseBody, StreamLoadResponse.StreamLoadResponseBody.class);
             streamLoadResponse.setBody(streamLoadBody);
             String status = streamLoadBody.getStatus();
+            if (status == null) {
+                throw new StreamLoadFailException(String.format("Prepare transaction status is null. db: %s, table: %s, " +
+                        "label: %s, response body: %s", transaction.getDatabase(), transaction.getTable(), transaction.getLabel(),
+                        responseBody));
+            }
 
             switch (status) {
                 case StreamLoadConstants.RESULT_STATUS_OK:
@@ -191,17 +204,26 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
         httpPost.setConfig(RequestConfig.custom().setExpectContinueEnabled(true).setRedirectsEnabled(true).build());
 
 
-        log.info("Transaction commit, label : {}, request : {}", transaction.getLabel(), httpPost);
+        log.info("Transaction commit, label: {}, request : {}", transaction.getLabel(), httpPost);
 
         try (CloseableHttpClient client = clientBuilder.build()) {
-            CloseableHttpResponse response = client.execute(httpPost);
-            String responseBody = EntityUtils.toString(response.getEntity());
-            log.info("Transaction committed,  body : {}", responseBody);
+            String responseBody;
+            try (CloseableHttpResponse response = client.execute(httpPost)) {
+                responseBody = parseHttpResponse("commit transaction", transaction.getDatabase(), transaction.getTable(),
+                        transaction.getLabel(), response);
+            }
+            log.info("Transaction committed, lable: {}, body : {}", transaction.getLabel(), responseBody);
 
             StreamLoadResponse streamLoadResponse = new StreamLoadResponse();
             StreamLoadResponse.StreamLoadResponseBody streamLoadBody = JSON.parseObject(responseBody, StreamLoadResponse.StreamLoadResponseBody.class);
             streamLoadResponse.setBody(streamLoadBody);
             String status = streamLoadBody.getStatus();
+            if (status == null) {
+                throw new StreamLoadFailException(String.format("Commit transaction status is null. db: %s, table: %s, " +
+                                "label: %s, response body: %s", transaction.getDatabase(), transaction.getTable(), transaction.getLabel(),
+                                        responseBody));
+            }
+
 
             if (StreamLoadConstants.RESULT_STATUS_OK.equals(status)) {
                 manager.callback(streamLoadResponse);
@@ -251,12 +273,21 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
         httpPost.addHeader("table", transaction.getTable());
 
         try (CloseableHttpClient client = clientBuilder.build()) {
-            CloseableHttpResponse response = client.execute(httpPost);
-            String responseBody = EntityUtils.toString(response.getEntity());
-            log.info("Transaction rollback,  body : {}", responseBody);
+            String responseBody;
+            try (CloseableHttpResponse response = client.execute(httpPost)) {
+                responseBody = parseHttpResponse("abort transaction", transaction.getDatabase(), transaction.getTable(),
+                        transaction.getLabel(), response);
+            }
+            log.info("Transaction rollback, label: {}, body : {}", transaction.getLabel(), responseBody);
 
             JSONObject bodyJson = JSON.parseObject(responseBody);
             String status = bodyJson.getString("Status");
+            if (status == null) {
+                String errMsg = String.format("Abort transaction status is null. db: %s, table: %s, label: %s, response: %s",
+                        transaction.getDatabase(), transaction.getTable(), transaction.getLabel(), responseBody);
+                log.error(errMsg);
+                throw new StreamLoadFailException(errMsg);
+            }
 
             if (StreamLoadConstants.RESULT_STATUS_SUCCESS.equals(status)) {
                 return true;
