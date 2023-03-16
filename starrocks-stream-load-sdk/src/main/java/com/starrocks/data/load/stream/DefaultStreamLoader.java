@@ -249,7 +249,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
                 long startNanoTime = System.nanoTime();
                 String responseBody;
                 try (CloseableHttpResponse response = client.execute(httpPut)) {
-                    responseBody = EntityUtils.toString(response.getEntity());
+                    responseBody = parseHttpResponse("load", region.getDatabase(), region.getTable(), label, response);
                 }
 
                 log.info("Stream load completed, label : {}, database : {}, table : {}, body : {}",
@@ -258,8 +258,11 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
                 StreamLoadResponse streamLoadResponse = new StreamLoadResponse();
                 StreamLoadResponse.StreamLoadResponseBody streamLoadBody = JSON.parseObject(responseBody, StreamLoadResponse.StreamLoadResponseBody.class);
                 streamLoadResponse.setBody(streamLoadBody);
-
                 String status = streamLoadBody.getStatus();
+                if (status == null) {
+                    throw new StreamLoadFailException(String.format("Stream load status is null. db: %s, table: %s, " +
+                            "label: %s, response body: %s", region.getDatabase(), region.getTable(), label, responseBody));
+                }
 
                 if (StreamLoadConstants.RESULT_STATUS_SUCCESS.equals(status)
                         || StreamLoadConstants.RESULT_STATUS_OK.equals(status)
@@ -326,6 +329,34 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
         } catch (Exception e) {
             log.warn("Failed to connect to address:{}", host, e);
             return false;
+        }
+    }
+
+    protected String parseHttpResponse(String requestType, String db, String table, String label, CloseableHttpResponse response) throws StreamLoadFailException {
+        int code = response.getStatusLine().getStatusCode();
+        if (200 != code) {
+            String errorMsg = String.format("Request %s failed because http response code is not 200. db: %s, table: %s," +
+                    "label: %s, response status line: %s", requestType, db, table, label, response.getStatusLine());
+            log.error("{}", errorMsg);
+            throw new StreamLoadFailException(errorMsg);
+        }
+
+        HttpEntity respEntity = response.getEntity();
+        if (respEntity == null) {
+            String errorMsg = String.format("Request %s failed because response entity is null. db: %s, table: %s," +
+                    "label: %s, response status line: %s", requestType, db, table, label, response.getStatusLine());
+            log.error("{}", errorMsg);
+            throw new StreamLoadFailException(errorMsg);
+        }
+
+        try {
+            return EntityUtils.toString(respEntity);
+        } catch (Exception e) {
+            String errorMsg = String.format("Request %s failed because fail to convert response entity to string. " +
+                    "db: %s, table: %s, label: %s, response status line: %s, response entity: %s", requestType, db,
+                    table, label, response.getStatusLine(), response.getEntity());
+            log.error("{}", errorMsg, e);
+            throw new StreamLoadFailException(errorMsg, e);
         }
     }
 
