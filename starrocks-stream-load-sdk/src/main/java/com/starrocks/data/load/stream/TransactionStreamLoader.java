@@ -289,7 +289,7 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
                 throw new StreamLoadFailException(errMsg);
             }
 
-            if (StreamLoadConstants.RESULT_STATUS_SUCCESS.equals(status)) {
+            if (StreamLoadConstants.RESULT_STATUS_SUCCESS.equals(status) || StreamLoadConstants.RESULT_STATUS_OK.equals(status)) {
                 return true;
             }
             log.error("Transaction rollback failed, db: {}, table: {}, label : {}",
