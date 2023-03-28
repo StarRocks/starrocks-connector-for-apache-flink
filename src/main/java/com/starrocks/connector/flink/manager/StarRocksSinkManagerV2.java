@@ -95,7 +95,7 @@ public class StarRocksSinkManagerV2 implements StreamLoadManager, Serializable {
         this.maxCacheBytes = properties.getMaxCacheBytes();
         this.maxWriteBlockCacheBytes = 2 * maxCacheBytes;
         this.scanningFrequency = properties.getScanningFrequency();
-        this.flushAndCommitStrategy = new FlushAndCommitStrategy(properties);
+        this.flushAndCommitStrategy = new FlushAndCommitStrategy(properties, enableAutoCommit);
     }
 
     @Override
@@ -157,7 +157,7 @@ public class StarRocksSinkManagerV2 implements StreamLoadManager, Serializable {
                     } else {
                         for (TableRegion region : flushQ) {
                             region.getAndIncrementAge();
-                            if (enableAutoCommit && flushAndCommitStrategy.shouldCommit(region)) {
+                            if (flushAndCommitStrategy.shouldCommit(region)) {
                                 boolean success = ((TransactionTableRegion) region).commit();
                                 if (success) {
                                     region.resetAge();
@@ -166,8 +166,7 @@ public class StarRocksSinkManagerV2 implements StreamLoadManager, Serializable {
                             }
                         }
 
-                        boolean forceFlush = currentCacheBytes.get() >= maxCacheBytes;
-                        for (TableRegion region : flushAndCommitStrategy.selectFlushRegions(flushQ, forceFlush)) {
+                        for (TableRegion region : flushAndCommitStrategy.selectFlushRegions(flushQ, currentCacheBytes.get())) {
                             boolean flush = region.flush();
                             LOG.debug("Trigger flush table region {} because of selection, region cache bytes: {}," +
                                     " flush: {}", region.getUniqueKey(), region.getCacheBytes(), flush);
