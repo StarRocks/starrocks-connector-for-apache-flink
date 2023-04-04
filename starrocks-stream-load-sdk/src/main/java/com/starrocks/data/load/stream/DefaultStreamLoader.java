@@ -17,6 +17,7 @@ import org.apache.http.impl.client.DefaultRedirectStrategy;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.message.BasicHeader;
+import org.apache.http.protocol.HttpRequestExecutor;
 import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -69,6 +70,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
             initDefaultHeaders(properties);
 
             this.clientBuilder  = HttpClients.custom()
+                    .setRequestExecutor(new HttpRequestExecutor(properties.getWaitForContinueTimeoutMs()))
                     .setRedirectStrategy(new DefaultRedirectStrategy() {
                         @Override
                         protected boolean isRedirectable(String method) {
@@ -334,7 +336,14 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
 
     protected String parseHttpResponse(String requestType, String db, String table, String label, CloseableHttpResponse response) throws StreamLoadFailException {
         int code = response.getStatusLine().getStatusCode();
-        if (200 != code) {
+        if (307 == code) {
+            String errorMsg = String.format("Request %s failed because http response code is 307 which means 'Temporary Redirect'. " +
+                    "This can happen when FE responds the request slowly , you should find the reason first. The reason may be " +
+                    "StarRocks FE/Flink GC, network delay, or others. db: %s, table: %s, label: %s, response status line: %s",
+                    requestType, db, table, label, response.getStatusLine());
+            log.error("{}", errorMsg);
+            throw new StreamLoadFailException(errorMsg);
+        } else if (200 != code) {
             String errorMsg = String.format("Request %s failed because http response code is not 200. db: %s, table: %s," +
                     "label: %s, response status line: %s", requestType, db, table, label, response.getStatusLine());
             log.error("{}", errorMsg);
