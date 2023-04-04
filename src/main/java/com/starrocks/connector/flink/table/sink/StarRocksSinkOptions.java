@@ -38,6 +38,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static org.apache.http.protocol.HttpRequestExecutor.DEFAULT_WAIT_FOR_CONTINUE;
+
 public class StarRocksSinkOptions implements Serializable {
 
     private static final Logger log = LoggerFactory.getLogger(StarRocksSinkOptions.class);
@@ -77,6 +79,8 @@ public class StarRocksSinkOptions implements Serializable {
             .stringType().noDefaultValue().withDescription("The prefix of the stream load label. Available values are within [-_A-Za-z0-9]");
     public static final ConfigOption<Integer> SINK_CONNECT_TIMEOUT = ConfigOptions.key("sink.connect.timeout-ms")
             .intType().defaultValue(1000).withDescription("Timeout in millisecond for connecting to the `load-url`.");
+    public static final ConfigOption<Integer> SINK_WAIT_FOR_CONTINUE_TIMEOUT = ConfigOptions.key("sink.wait-for-continue.timeout-ms")
+            .intType().defaultValue(10000).withDescription("Timeout in millisecond to wait for 100-continue response for http client.");
     public static final ConfigOption<Integer> SINK_IO_THREAD_COUNT = ConfigOptions.key("sink.io.thread-count")
             .intType().defaultValue(2).withDescription("Stream load thread count");
 
@@ -201,6 +205,14 @@ public class StarRocksSinkOptions implements Serializable {
             return 100;
         }
         return Math.min(connectTimeout, 60000);
+    }
+
+    public int getWaitForContinueTimeout() {
+        int waitForContinueTimeoutMs = tableOptions.get(SINK_WAIT_FOR_CONTINUE_TIMEOUT);
+        if (waitForContinueTimeoutMs < DEFAULT_WAIT_FOR_CONTINUE) {
+            return DEFAULT_WAIT_FOR_CONTINUE;
+        }
+        return Math.min(waitForContinueTimeoutMs, 60000);
     }
 
     public int getIoThreadCount() {
@@ -429,6 +441,7 @@ public class StarRocksSinkOptions implements Serializable {
                 .defaultTableProperties(defaultTablePropertiesBuilder.build())
                 .cacheMaxBytes(getSinkMaxBytes())
                 .connectTimeout(getConnectTimeout())
+                .waitForContinueTimeoutMs(getWaitForContinueTimeout())
                 .ioThreadCount(getIoThreadCount())
                 .scanningFrequency(getScanFrequency())
                 .labelPrefix(getLabelPrefix())
