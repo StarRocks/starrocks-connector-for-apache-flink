@@ -11,6 +11,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
+import static org.apache.http.protocol.HttpRequestExecutor.DEFAULT_WAIT_FOR_CONTINUE;
+
 public class StreamLoadProperties implements Serializable {
     private final String jdbcUrl;
     private final String[] loadUrls;
@@ -50,6 +52,7 @@ public class StreamLoadProperties implements Serializable {
      */
     private final int connectTimeout;
     private final int socketTimeout;
+    private final int waitForContinueTimeoutMs;
     private final int ioThreadCount;
 
     // default strategy settings
@@ -88,6 +91,7 @@ public class StreamLoadProperties implements Serializable {
 
         this.connectTimeout = builder.connectTimeout;
         this.socketTimeout = builder.socketTimeout;
+        this.waitForContinueTimeoutMs = builder.waitForContinueTimeoutMs;
         this.ioThreadCount = builder.ioThreadCount;
 
         this.writingThreshold = builder.writingThreshold;
@@ -166,6 +170,10 @@ public class StreamLoadProperties implements Serializable {
         return connectTimeout;
     }
 
+    public int getWaitForContinueTimeoutMs() {
+        return waitForContinueTimeoutMs;
+    }
+
     public int getSocketTimeout() {
         return socketTimeout;
     }
@@ -218,6 +226,7 @@ public class StreamLoadProperties implements Serializable {
 
         private int connectTimeout = 60000;
         private int socketTimeout;
+        private int waitForContinueTimeoutMs = DEFAULT_WAIT_FOR_CONTINUE;
         private int ioThreadCount = Runtime.getRuntime().availableProcessors();
 
         private long writingThreshold = 50L;
@@ -315,6 +324,15 @@ public class StreamLoadProperties implements Serializable {
                 throw new IllegalArgumentException("connectTimeout `" + connectTimeout + "ms` set failed, must range in [100, 60000]");
             }
             this.connectTimeout = connectTimeout;
+            return this;
+        }
+
+        public Builder waitForContinueTimeoutMs(int waitForContinueTimeoutMs) {
+            if (waitForContinueTimeoutMs < DEFAULT_WAIT_FOR_CONTINUE || waitForContinueTimeoutMs > 60000) {
+                throw new IllegalArgumentException("waitForContinueTimeoutMs `" + waitForContinueTimeoutMs +
+                        "ms` set failed, must be in range in [100, 60000]");
+            }
+            this.waitForContinueTimeoutMs = waitForContinueTimeoutMs;
             return this;
         }
 
