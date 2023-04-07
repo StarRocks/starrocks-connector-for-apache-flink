@@ -31,7 +31,9 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
 
     private static final Logger log = LoggerFactory.getLogger(TransactionStreamLoader.class);
 
-    private Header[] txHeaders;
+    private Header[] defaultTxnHeaders;
+
+    private Header[] beginTxnHeader;
 
     private HttpClientBuilder clientBuilder;
 
@@ -40,7 +42,18 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
     protected void initTxHeaders(StreamLoadProperties properties) {
         Map<String, String> headers = new HashMap<>();
         headers.put(HttpHeaders.AUTHORIZATION, StreamLoadUtils.getBasicAuthHeader(properties.getUsername(), properties.getPassword()));
-        this.txHeaders = headers.entrySet().stream()
+        this.defaultTxnHeaders = headers.entrySet().stream()
+                .map(entry -> new BasicHeader(entry.getKey(), entry.getValue()))
+                .toArray(Header[]::new);
+
+        Map<String, String> beginHeaders = new HashMap<>(headers);
+        String timeout = properties.getHeaders().get("timeout");
+        if (timeout == null) {
+            beginHeaders.put("timeout", "600");
+        } else {
+            beginHeaders.put("timeout", timeout);
+        }
+        this.beginTxnHeader = beginHeaders.entrySet().stream()
                 .map(entry -> new BasicHeader(entry.getKey(), entry.getValue()))
                 .toArray(Header[]::new);
     }
@@ -83,7 +96,7 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
         log.info("Transaction start, label : {}", label);
 
         HttpPost httpPost = new HttpPost(beginUrl);
-        httpPost.setHeaders(txHeaders);
+        httpPost.setHeaders(beginTxnHeader);
         httpPost.addHeader("label", label);
         httpPost.addHeader("db", region.getDatabase());
         httpPost.addHeader("table", region.getTable());
@@ -133,7 +146,7 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
         String prepareUrl = getPrepareUrl(host);
 
         HttpPost httpPost = new HttpPost(prepareUrl);
-        httpPost.setHeaders(txHeaders);
+        httpPost.setHeaders(defaultTxnHeaders);
         httpPost.addHeader("label", transaction.getLabel());
         httpPost.addHeader("db", transaction.getDatabase());
         httpPost.addHeader("table", transaction.getTable());
@@ -196,7 +209,7 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
         String commitUrl = getCommitUrl(host);
 
         HttpPost httpPost = new HttpPost(commitUrl);
-        httpPost.setHeaders(txHeaders);
+        httpPost.setHeaders(defaultTxnHeaders);
         httpPost.addHeader("label", transaction.getLabel());
         httpPost.addHeader("db", transaction.getDatabase());
         httpPost.addHeader("table", transaction.getTable());
@@ -267,7 +280,7 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
         log.info("Transaction rollback, label : {}", transaction.getLabel());
 
         HttpPost httpPost = new HttpPost(rollbackUrl);
-        httpPost.setHeaders(txHeaders);
+        httpPost.setHeaders(defaultTxnHeaders);
         httpPost.addHeader("label", transaction.getLabel());
         httpPost.addHeader("db", transaction.getDatabase());
         httpPost.addHeader("table", transaction.getTable());
