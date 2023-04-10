@@ -14,11 +14,11 @@
 
 package com.starrocks.connector.flink.manager;
 
+import com.alibaba.fastjson.JSON;
 import com.starrocks.connector.flink.row.sink.StarRocksDelimiterParser;
 import com.starrocks.connector.flink.row.sink.StarRocksSinkOP;
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
-
-import com.alibaba.fastjson.JSON;
+import com.starrocks.data.load.stream.exception.StreamLoadFailException;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.config.RequestConfig;
@@ -105,17 +105,29 @@ public class StarRocksStreamLoadVisitor implements Serializable {
         } else if (RESULT_LABEL_EXISTED.equals(loadResult.get(keyStatus))) {
             LOG.error(String.format("Stream Load response: \n%s\n", JSON.toJSONString(loadResult)));
             // has to block-checking the state to get the final result
-            checkLabelState(host, bufferEntity.getLabel());
+            int timeoutSecond = 600;
+            String configuredTimeout = sinkOptions.getSinkStreamLoadProperties().get("timeout");
+            if (configuredTimeout != null) {
+                timeoutSecond = Integer.parseInt(configuredTimeout);
+            }
+            checkLabelState(host, bufferEntity.getLabel(), timeoutSecond);
         }
         return loadResult;
     }
 
     @SuppressWarnings("unchecked")
-    private void checkLabelState(String host, String label) throws IOException {
-        int idx = 0;
-        while(true) {
+    private void checkLabelState(String host, String label, int timeoutSecond) throws IOException {
+        int totalSleepSecond = 0;
+        String lastState = null;
+        for (int sleepSecond = 0;;sleepSecond++) {
+            if (totalSleepSecond >= timeoutSecond) {
+                LOG.error("Fail to get expected load state because of timeout, label: {}, current state {}", label, lastState);
+                throw new StreamLoadFailException(String.format("Could not get expected load state because of timeout, " +
+                                "label: %s, current state: %s", label, lastState));
+            }
+            totalSleepSecond += sleepSecond;
             try {
-                TimeUnit.SECONDS.sleep(Math.min(++idx, 5));
+                TimeUnit.SECONDS.sleep(Math.min(sleepSecond, 5));
             } catch (InterruptedException ex) {
                 break;
             }
@@ -137,6 +149,7 @@ public class StarRocksStreamLoadVisitor implements Serializable {
                                 "could not get the final state of label[%s]. response[%s]\n", label, EntityUtils.toString(respEntity)), null);
                     }
                     LOG.info(String.format("Checking label[%s] state[%s]\n", label, labelState));
+                    lastState = labelState;
                     switch(labelState) {
                         case LAEBL_STATE_VISIBLE:
                         case LAEBL_STATE_COMMITTED:
