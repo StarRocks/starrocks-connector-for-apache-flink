@@ -272,7 +272,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
                     streamLoadResponse.setCostNanoTime(System.nanoTime() - startNanoTime);
                     region.complete(streamLoadResponse);
                 } else if (StreamLoadConstants.RESULT_STATUS_LABEL_EXISTED.equals(status)) {
-                    String labelState = getLabelState(host, region.getDatabase(), label, Collections.singleton(StreamLoadConstants.LABEL_STATE_PREPARE));
+                    String labelState = getLabelState(host, region.getDatabase(), region.getTable(), label, Collections.singleton(StreamLoadConstants.LABEL_STATE_PREPARE));
                     if (StreamLoadConstants.LABEL_STATE_COMMITTED.equals(labelState) || StreamLoadConstants.LABEL_STATE_VISIBLE.equals(labelState)) {
                         streamLoadResponse.setCostNanoTime(System.nanoTime() - startNanoTime);
                         region.complete(streamLoadResponse);
@@ -369,10 +369,18 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
         }
     }
 
-    protected String getLabelState(String host, String database, String label, Set<String> retryStates) throws Exception {
-        int idx = 0;
-        for (;;) {
-            TimeUnit.SECONDS.sleep(Math.min(++idx, 5));
+    protected String getLabelState(String host, String database, String table, String label, Set<String> retryStates) throws Exception {
+        int totalSleepSecond = 0;
+        String lastState = null;
+        for (int sleepSecond = 0;;sleepSecond++) {
+            if (totalSleepSecond >= 60) {
+                log.error("Fail to get expected load state because of timeout, db: {}, table: {}, label: {}, current state {}",
+                        database, table, label, lastState);
+                throw new StreamLoadFailException(String.format("Could not get expected load state because of timeout, " +
+                        "db: %s, table: %s, label: %s", database, table, label));
+            }
+            TimeUnit.SECONDS.sleep(Math.min(sleepSecond, 5));
+            totalSleepSecond += sleepSecond;
             try (CloseableHttpClient client = HttpClients.createDefault()) {
                 String url = host + "/api/" + database + "/get_load_state?label=" + label;
                 HttpGet httpGet = new HttpGet(url);
@@ -397,6 +405,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
                                 "label: %s, load information: %s", label, entityContent));
                     }
 
+                    lastState = state;
                     if (retryStates.contains(state)) {
                         continue;
                     }
