@@ -60,6 +60,7 @@ public class StarRocksStreamLoadVisitor implements Serializable {
     private final String[] fieldNames;
     private long pos;
     private boolean __opAutoProjectionInJson;
+    private long checkLabelTimeoutSecond;
     private static final String RESULT_FAILED = "Fail";
     private static final String RESULT_LABEL_EXISTED = "Label Already Exists";
     private static final String LAEBL_STATE_VISIBLE = "VISIBLE";
@@ -72,6 +73,12 @@ public class StarRocksStreamLoadVisitor implements Serializable {
         this.fieldNames = fieldNames;
         this.sinkOptions = sinkOptions;
         this.__opAutoProjectionInJson = __opAutoProjectionInJson;
+        String configuredTimeout = sinkOptions.getSinkStreamLoadProperties().get("timeout");
+        if (configuredTimeout != null) {
+            this.checkLabelTimeoutSecond = Integer.parseInt(configuredTimeout);
+        } else {
+            this.checkLabelTimeoutSecond = 600;
+        }
     }
 
     public Map<String, Object> doStreamLoad(StarRocksSinkBufferEntity bufferEntity) throws IOException {
@@ -105,22 +112,17 @@ public class StarRocksStreamLoadVisitor implements Serializable {
         } else if (RESULT_LABEL_EXISTED.equals(loadResult.get(keyStatus))) {
             LOG.error(String.format("Stream Load response: \n%s\n", JSON.toJSONString(loadResult)));
             // has to block-checking the state to get the final result
-            int timeoutSecond = 600;
-            String configuredTimeout = sinkOptions.getSinkStreamLoadProperties().get("timeout");
-            if (configuredTimeout != null) {
-                timeoutSecond = Integer.parseInt(configuredTimeout);
-            }
-            checkLabelState(host, bufferEntity.getLabel(), timeoutSecond);
+            checkLabelState(host, bufferEntity.getLabel());
         }
         return loadResult;
     }
 
     @SuppressWarnings("unchecked")
-    private void checkLabelState(String host, String label, int timeoutSecond) throws IOException {
+    private void checkLabelState(String host, String label) throws IOException {
         int totalSleepSecond = 0;
         String lastState = null;
         for (int sleepSecond = 0;;sleepSecond++) {
-            if (totalSleepSecond >= timeoutSecond) {
+            if (totalSleepSecond >= checkLabelTimeoutSecond) {
                 LOG.error("Fail to get expected load state because of timeout, label: {}, current state {}", label, lastState);
                 throw new StreamLoadFailException(String.format("Could not get expected load state because of timeout, " +
                                 "label: %s, current state: %s", label, lastState));
