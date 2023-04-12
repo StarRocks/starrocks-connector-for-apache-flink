@@ -181,7 +181,7 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
                 case StreamLoadConstants.RESULT_STATUS_TRANSACTION_NOT_EXISTED: {
                     // currently this could happen after timeout which is specified in http header,
                     // but as a protection we check the state again
-                    String labelState = getLabelState(host, transaction.getDatabase(), transaction.getLabel(),
+                    String labelState = getLabelState(host, transaction.getDatabase(), transaction.getTable(), transaction.getLabel(),
                             Collections.singleton(StreamLoadConstants.LABEL_STATE_PREPARE));
                     if (!StreamLoadConstants.LABEL_STATE_PREPARED.equals(labelState)) {
                        String errMsg = String.format("Transaction prepare failed because of unexpected state, " +
@@ -249,7 +249,7 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
             //    that commit the transaction repeatedly because flink job continues failover for some reason , but
             //    the transaction actually success, and this commit should be successful
             // To reduce the dependency for the returned status type, always check the label state
-            String labelState = getLabelState(host, transaction.getDatabase(), transaction.getLabel(), Collections.emptySet());
+            String labelState = getLabelState(host, transaction.getDatabase(), transaction.getTable(), transaction.getLabel(), Collections.emptySet());
             if (StreamLoadConstants.LABEL_STATE_COMMITTED.equals(labelState) || StreamLoadConstants.LABEL_STATE_VISIBLE.equals(labelState)) {
                 return true;
             }
