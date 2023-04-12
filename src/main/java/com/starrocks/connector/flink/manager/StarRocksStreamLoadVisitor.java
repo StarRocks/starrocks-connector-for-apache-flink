@@ -18,6 +18,7 @@ import com.alibaba.fastjson.JSON;
 import com.starrocks.connector.flink.row.StarRocksDelimiterParser;
 import com.starrocks.connector.flink.row.StarRocksSinkOP;
 import com.starrocks.connector.flink.table.StarRocksSinkOptions;
+import com.starrocks.data.load.stream.exception.StreamLoadFailException;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.config.RequestConfig;
@@ -59,6 +60,7 @@ public class StarRocksStreamLoadVisitor implements Serializable {
     private final String[] fieldNames;
     private long pos;
     private boolean __opAutoProjectionInJson;
+    private long checkLabelTimeoutSecond;
     private static final String RESULT_FAILED = "Fail";
     private static final String RESULT_LABEL_EXISTED = "Label Already Exists";
     private static final String LAEBL_STATE_VISIBLE = "VISIBLE";
@@ -71,6 +73,12 @@ public class StarRocksStreamLoadVisitor implements Serializable {
         this.fieldNames = fieldNames;
         this.sinkOptions = sinkOptions;
         this.__opAutoProjectionInJson = __opAutoProjectionInJson;
+        String configuredTimeout = sinkOptions.getSinkStreamLoadProperties().get("timeout");
+        if (configuredTimeout != null) {
+            this.checkLabelTimeoutSecond = Integer.parseInt(configuredTimeout);
+        } else {
+            this.checkLabelTimeoutSecond = 600;
+        }
     }
 
     public Map<String, Object> doStreamLoad(StarRocksSinkBufferEntity bufferEntity) throws IOException {
@@ -111,10 +119,17 @@ public class StarRocksStreamLoadVisitor implements Serializable {
 
     @SuppressWarnings("unchecked")
     private void checkLabelState(String host, String label) throws IOException {
-        int idx = 0;
-        while(true) {
+        int totalSleepSecond = 0;
+        String lastState = null;
+        for (int sleepSecond = 0;;sleepSecond++) {
+            if (totalSleepSecond >= checkLabelTimeoutSecond) {
+                LOG.error("Fail to get expected load state because of timeout, label: {}, current state {}", label, lastState);
+                throw new StreamLoadFailException(String.format("Could not get expected load state because of timeout, " +
+                                "label: %s, current state: %s", label, lastState));
+            }
+            totalSleepSecond += sleepSecond;
             try {
-                TimeUnit.SECONDS.sleep(Math.min(++idx, 5));
+                TimeUnit.SECONDS.sleep(Math.min(sleepSecond, 5));
             } catch (InterruptedException ex) {
                 break;
             }
@@ -136,6 +151,7 @@ public class StarRocksStreamLoadVisitor implements Serializable {
                                 "could not get the final state of label[%s]. response[%s]\n", label, EntityUtils.toString(respEntity)), null);
                     }
                     LOG.info(String.format("Checking label[%s] state[%s]\n", label, labelState));
+                    lastState = labelState;
                     switch(labelState) {
                         case LAEBL_STATE_VISIBLE:
                         case LAEBL_STATE_COMMITTED:
