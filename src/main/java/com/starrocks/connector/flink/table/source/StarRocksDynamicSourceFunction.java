@@ -19,6 +19,7 @@ import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
 import com.starrocks.connector.flink.table.source.struct.QueryBeXTablets;
 import com.starrocks.connector.flink.table.source.struct.QueryInfo;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
+import com.starrocks.connector.flink.tools.EnvUtils;
 import org.apache.flink.api.common.typeinfo.TypeHint;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
@@ -151,6 +152,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
                 this.dataReaderList.add(beReader);
             });
         }
+        LOG.info("Open source function. {}", EnvUtils.getGitInformation());
     }
 
     @Override
