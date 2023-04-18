@@ -18,7 +18,7 @@ import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
 import com.starrocks.connector.flink.table.source.struct.QueryBeXTablets;
 import com.starrocks.connector.flink.table.source.struct.QueryInfo;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
-
+import com.starrocks.connector.flink.tools.EnvUtils;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.functions.FunctionContext;
@@ -73,6 +73,7 @@ public class StarRocksDynamicLookupFunction extends TableFunction<RowData> {
     @Override
     public void open(FunctionContext context) throws Exception {
         super.open(context);
+        LOG.info("Open lookup function. {}", EnvUtils.getGitInformation());
     }
 
     public void eval(Object... keys) {
