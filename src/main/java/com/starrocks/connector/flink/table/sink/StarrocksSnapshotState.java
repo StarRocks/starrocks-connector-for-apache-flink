@@ -1,6 +1,6 @@
 package com.starrocks.connector.flink.table.sink;
 
-import com.starrocks.connector.flink.tools.SRFCUtils;
+import com.starrocks.connector.flink.tools.EnvUtils;
 import com.starrocks.data.load.stream.StreamLoadSnapshot;
 
 import java.io.Serializable;
@@ -13,7 +13,7 @@ public class StarrocksSnapshotState implements Serializable {
 
     public static StarrocksSnapshotState of(Map<Long, List<StreamLoadSnapshot>> data) {
         StarrocksSnapshotState starrocksSnapshotState = new StarrocksSnapshotState();
-        starrocksSnapshotState.version = SRFCUtils.getSRFCVersion();
+        starrocksSnapshotState.version = EnvUtils.getSRFCVersion();
         starrocksSnapshotState.data = data;
         return starrocksSnapshotState;
     }
