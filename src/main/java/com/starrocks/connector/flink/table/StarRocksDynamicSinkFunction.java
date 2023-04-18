@@ -23,6 +23,7 @@ import com.starrocks.connector.flink.manager.StarRocksSinkManager;
 import com.starrocks.connector.flink.row.StarRocksIRowTransformer;
 import com.starrocks.connector.flink.row.StarRocksISerializer;
 import com.starrocks.connector.flink.row.StarRocksSerializerFactory;
+import com.starrocks.connector.flink.tools.EnvUtils;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.alter.Alter;
@@ -92,7 +93,7 @@ public class StarRocksDynamicSinkFunction<T> extends StarRocksDynamicSinkFunctio
         }
         sinkManager.startScheduler();
         sinkManager.startAsyncFlushing();
-        LOG.info("Open sink function");
+        LOG.info("Open sink function. {}", EnvUtils.getGitInformation());
     }
 
     @Override

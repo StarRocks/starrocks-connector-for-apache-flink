@@ -8,6 +8,7 @@ import com.starrocks.connector.flink.row.StarRocksIRowTransformer;
 import com.starrocks.connector.flink.row.StarRocksISerializer;
 import com.starrocks.connector.flink.row.StarRocksSerializerFactory;
 import com.starrocks.connector.flink.table.data.StarRocksRowData;
+import com.starrocks.connector.flink.tools.EnvUtils;
 import com.starrocks.data.load.stream.StreamLoadSnapshot;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
@@ -170,7 +171,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
             rowTransformer.setRuntimeContext(getRuntimeContext());
         }
         notifyCheckpointComplete(Long.MAX_VALUE);
-        log.info("Open sink function v2");
+        log.info("Open sink function v2. {}", EnvUtils.getGitInformation());
     }
 
     public void finish() {
