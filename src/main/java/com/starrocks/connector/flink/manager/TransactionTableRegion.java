@@ -245,8 +245,7 @@ public class TransactionTableRegion implements TableRegion {
             return false;
         }
 
-        String lastLabel = label;
-        if (lastLabel != null) {
+        if (label != null) {
             StreamLoadSnapshot.Transaction transaction = new StreamLoadSnapshot.Transaction(database, table, label);
             try {
                 if (!streamLoader.prepare(transaction)) {
@@ -272,7 +271,7 @@ public class TransactionTableRegion implements TableRegion {
         }
 
         state.compareAndSet(State.COMMITTING, State.ACTIVE);
-        return lastLabel != null;
+        return true;
     }
 
     @Override
