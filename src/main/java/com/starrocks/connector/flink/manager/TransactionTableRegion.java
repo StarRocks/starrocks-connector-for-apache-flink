@@ -245,6 +245,7 @@ public class TransactionTableRegion implements TableRegion {
             return false;
         }
 
+        boolean commitSuccess;
         if (label != null) {
             StreamLoadSnapshot.Transaction transaction = new StreamLoadSnapshot.Transaction(database, table, label);
             try {
@@ -267,11 +268,16 @@ public class TransactionTableRegion implements TableRegion {
             long commitTime = System.currentTimeMillis();
             long commitDuration = commitTime - lastCommitTimeMills;
             lastCommitTimeMills = commitTime;
+            commitSuccess = true;
             LOG.info("Success to commit transaction: {}, duration: {} ms", transaction, commitDuration);
+        } else {
+            // if the data has never been flushed (label == null), the commit should fail so that StarRocksSinkManagerV2#init
+            // will schedule to flush the data first, and then trigger commit again
+            commitSuccess = cacheBytes.get() == 0;
         }
 
         state.compareAndSet(State.COMMITTING, State.ACTIVE);
-        return true;
+        return commitSuccess;
     }
 
     @Override
