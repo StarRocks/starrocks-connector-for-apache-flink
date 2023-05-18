@@ -66,6 +66,7 @@ public class StarRocksDynamicTableSinkFactory implements DynamicTableSinkFactory
         optionalOptions.add(StarRocksSinkOptions.SINK_SEMANTIC);
         optionalOptions.add(StarRocksSinkOptions.SINK_BATCH_OFFER_TIMEOUT);
         optionalOptions.add(StarRocksSinkOptions.SINK_METRIC_HISTOGRAM_WINDOW_SIZE);
+        optionalOptions.add(StarRocksSinkOptions.SINK_AT_LEAST_ONCE_USE_TRANSACTION_LOAD);
         optionalOptions.add(StarRocksSinkOptions.SINK_PARALLELISM);
         optionalOptions.add(StarRocksSinkOptions.SINK_LABEL_PREFIX);
         optionalOptions.add(StarRocksSinkOptions.SINK_CONNECT_TIMEOUT);

@@ -98,6 +98,10 @@ public class StarRocksSinkOptions implements Serializable {
             .longType().defaultValue(500000L).withDescription("Max row count of the flush.");
     public static final ConfigOption<Long> SINK_BATCH_FLUSH_INTERVAL = ConfigOptions.key("sink.buffer-flush.interval-ms")
             .longType().defaultValue(300000L).withDescription("Flush interval of the row batch in millisecond.");
+
+    public static final ConfigOption<Boolean> SINK_AT_LEAST_ONCE_USE_TRANSACTION_LOAD = ConfigOptions.key("sink.at-least-once.use-transaction-stream-load")
+            .booleanType().defaultValue(true).withDescription("Whether to use transaction stream load for at-least-once when it's available.");
+
     public static final ConfigOption<Integer> SINK_MAX_RETRIES = ConfigOptions.key("sink.max-retries")
             .intType().defaultValue(3).withDescription("Max flushing retry times of the row batch.");
     public static final ConfigOption<Long> SINK_BATCH_OFFER_TIMEOUT = ConfigOptions.key("sink.buffer-flush.enqueue-timeout-ms")
@@ -245,6 +249,10 @@ public class StarRocksSinkOptions implements Serializable {
 
     public StarRocksSinkSemantic getSemantic() {
         return this.sinkSemantic;
+    }
+
+    public boolean getSinkAtLeastOnceUseTransactionStreamLoad() {
+        return tableOptions.get(SINK_AT_LEAST_ONCE_USE_TRANSACTION_LOAD);
     }
 
     public Map<String, String> getSinkStreamLoadProperties() {
@@ -455,7 +463,9 @@ public class StarRocksSinkOptions implements Serializable {
             builder.addTableProperties(tableProperties);
         }
 
-        if (isSupportTransactionStreamLoad()) {
+        if (isSupportTransactionStreamLoad() &&
+                (getSemantic() == StarRocksSinkSemantic.EXACTLY_ONCE
+                        || getSinkAtLeastOnceUseTransactionStreamLoad())) {
             builder.enableTransaction();
             log.info("Enable transaction stream load");
         }
