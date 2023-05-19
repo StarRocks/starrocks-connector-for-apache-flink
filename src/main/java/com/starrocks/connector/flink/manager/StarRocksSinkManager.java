@@ -65,8 +65,11 @@ public class StarRocksSinkManager implements Serializable {
     private transient Counter totalFlushTimeWithoutRetries;
     private transient Counter totalFlushSucceededTimes;
     private transient Counter totalFlushFailedTimes;
+    private transient Histogram flushTimeNsWithRetry;
     private transient Histogram flushTimeNs;
     private transient Histogram offerTimeNs;
+    private transient Counter totalFlushRetry;
+    private transient Histogram flushRetry;
 
     private transient Counter totalFilteredRows;
     private transient Histogram commitAndPublishTimeMs;
@@ -82,8 +85,11 @@ public class StarRocksSinkManager implements Serializable {
     private static final String COUNTER_TOTAL_FLUSH_COST_TIME = "totalFlushTimeNs";
     private static final String COUNTER_TOTAL_FLUSH_SUCCEEDED_TIMES = "totalFlushSucceededTimes";
     private static final String COUNTER_TOTAL_FLUSH_FAILED_TIMES = "totalFlushFailedTimes";
+    private static final String HISTOGRAM_FLUSH_TIME_WITH_RETRY = "flushTimeNsWithRetry";
     private static final String HISTOGRAM_FLUSH_TIME= "flushTimeNs";
     private static final String HISTOGRAM_OFFER_TIME_NS = "offerTimeNs";
+    private static final String COUNTER_TOTAL_FLUSH_RETRY = "totalFlushRetry";
+    private static final String HISTOGRAM_FLUSH_RETRY = "flushRetry";
 
     // from stream load result
     private static final String COUNTER_NUMBER_FILTERED_ROWS = "totalFilteredRows";
@@ -143,8 +149,12 @@ public class StarRocksSinkManager implements Serializable {
         totalFlushTimeWithoutRetries = runtimeCtx.getMetricGroup().counter(COUNTER_TOTAL_FLUSH_COST_TIME_WITHOUT_RETRIES);
         totalFlushSucceededTimes = runtimeCtx.getMetricGroup().counter(COUNTER_TOTAL_FLUSH_SUCCEEDED_TIMES);
         totalFlushFailedTimes = runtimeCtx.getMetricGroup().counter(COUNTER_TOTAL_FLUSH_FAILED_TIMES);
+        flushTimeNsWithRetry = runtimeCtx.getMetricGroup().histogram(HISTOGRAM_FLUSH_TIME_WITH_RETRY,
+                new DescriptiveStatisticsHistogram(sinkOptions.getSinkHistogramWindowSize()));
         flushTimeNs = runtimeCtx.getMetricGroup().histogram(HISTOGRAM_FLUSH_TIME, new DescriptiveStatisticsHistogram(sinkOptions.getSinkHistogramWindowSize()));
         offerTimeNs = runtimeCtx.getMetricGroup().histogram(HISTOGRAM_OFFER_TIME_NS, new DescriptiveStatisticsHistogram(sinkOptions.getSinkHistogramWindowSize()));
+        totalFlushRetry = runtimeCtx.getMetricGroup().counter(COUNTER_TOTAL_FLUSH_RETRY);
+        flushRetry = runtimeCtx.getMetricGroup().histogram(HISTOGRAM_FLUSH_RETRY, new DescriptiveStatisticsHistogram(sinkOptions.getSinkHistogramWindowSize()));
 
         totalFilteredRows = runtimeCtx.getMetricGroup().counter(COUNTER_NUMBER_FILTERED_ROWS);
         commitAndPublishTimeMs = runtimeCtx.getMetricGroup().histogram(HISTOGRAM_COMMIT_AND_PUBLISH_TIME_MS, new DescriptiveStatisticsHistogram(sinkOptions.getSinkHistogramWindowSize()));
@@ -325,6 +335,9 @@ public class StarRocksSinkManager implements Serializable {
                     totalFlushTimeWithoutRetries.inc(System.nanoTime() - start);
                     totalFlushSucceededTimes.inc();
                     flushTimeNs.update(System.nanoTime() - start);
+                    flushTimeNsWithRetry.update(System.nanoTime() - startWithRetries);
+                    totalFlushRetry.inc(i);
+                    flushRetry.update(i);
                     updateMetricsFromStreamLoadResult(result);
                 }
                 startScheduler();
