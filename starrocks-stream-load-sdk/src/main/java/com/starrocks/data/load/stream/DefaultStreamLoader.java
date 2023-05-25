@@ -272,13 +272,13 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
                     streamLoadResponse.setCostNanoTime(System.nanoTime() - startNanoTime);
                     region.complete(streamLoadResponse);
                 } else if (StreamLoadConstants.RESULT_STATUS_LABEL_EXISTED.equals(status)) {
-                    String labelState = getLabelState(host, region.getDatabase(), region.getTable(), label, Collections.singleton(StreamLoadConstants.LABEL_STATE_PREPARE));
-                    if (StreamLoadConstants.LABEL_STATE_COMMITTED.equals(labelState) || StreamLoadConstants.LABEL_STATE_VISIBLE.equals(labelState)) {
+                    String existingJobStatus = streamLoadBody.getExistingJobStatus();
+                    if (StreamLoadConstants.EXISTING_JOB_STATUS_FINISHED.equals(existingJobStatus)) {
                         streamLoadResponse.setCostNanoTime(System.nanoTime() - startNanoTime);
                         region.complete(streamLoadResponse);
                     } else {
                         String errorMsage = String.format("Stream load failed because label existed, " +
-                                "db: %s, table: %s, label: %s, label state: %s", region.getDatabase(), region.getTable(), label, labelState);
+                                "db: %s, table: %s, label: %s, existingJobStatus: %s", region.getDatabase(), region.getTable(), label, existingJobStatus);
                         throw new StreamLoadFailException(errorMsage);
                     }
                 } else {
