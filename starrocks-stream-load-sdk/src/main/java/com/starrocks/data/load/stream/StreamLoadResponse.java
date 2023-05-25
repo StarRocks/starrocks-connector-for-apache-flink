@@ -174,6 +174,10 @@ public class StreamLoadResponse implements Serializable {
             return status;
         }
 
+        public String getExistingJobStatus() {
+            return this.existingJobStatus;
+        }
+
         public String getMsg() {
             return msg;
         }
