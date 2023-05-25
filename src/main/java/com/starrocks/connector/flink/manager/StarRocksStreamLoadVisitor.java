@@ -63,8 +63,8 @@ public class StarRocksStreamLoadVisitor implements Serializable {
     private long checkLabelTimeoutSecond;
     private static final String RESULT_FAILED = "Fail";
     private static final String RESULT_LABEL_EXISTED = "Label Already Exists";
-    private static final String LAEBL_STATE_VISIBLE = "VISIBLE";
-    private static final String LAEBL_STATE_COMMITTED = "COMMITTED";
+    private static final String LABEL_STATE_VISIBLE = "VISIBLE";
+    private static final String LABEL_STATE_COMMITTED = "COMMITTED";
     private static final String RESULT_LABEL_PREPARE = "PREPARE";
     private static final String RESULT_LABEL_ABORTED = "ABORTED";
     private static final String RESULT_LABEL_UNKNOWN = "UNKNOWN";
@@ -153,8 +153,8 @@ public class StarRocksStreamLoadVisitor implements Serializable {
                     LOG.info(String.format("Checking label[%s] state[%s]\n", label, labelState));
                     lastState = labelState;
                     switch(labelState) {
-                        case LAEBL_STATE_VISIBLE:
-                        case LAEBL_STATE_COMMITTED:
+                        case LABEL_STATE_VISIBLE:
+                        case LABEL_STATE_COMMITTED:
                             return;
                         case RESULT_LABEL_PREPARE:
                             continue;
