@@ -389,10 +389,6 @@ public class StarRocksSinkManager implements Serializable {
 
     private void checkFlushException() {
         if (flushException != null) {
-            StackTraceElement[] stack = Thread.currentThread().getStackTrace();
-            for (int i = 0; i < stack.length; i++) {
-                LOG.info(stack[i].getClassName() + "." + stack[i].getMethodName() + " line:" + stack[i].getLineNumber());
-            }
             throw new RuntimeException("Writing records to StarRocks failed.", flushException);
         }
     }
