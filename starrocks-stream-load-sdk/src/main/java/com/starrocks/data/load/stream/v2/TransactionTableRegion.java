@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package com.starrocks.connector.flink.manager;
+package com.starrocks.data.load.stream.v2;
 
 import com.starrocks.data.load.stream.StreamLoadDataFormat;
 import com.starrocks.data.load.stream.StreamLoadManager;

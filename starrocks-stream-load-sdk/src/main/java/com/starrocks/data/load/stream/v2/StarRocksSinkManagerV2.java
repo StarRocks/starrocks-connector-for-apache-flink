@@ -1,7 +1,24 @@
-package com.starrocks.connector.flink.manager;
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.starrocks.data.load.stream.v2;
 
 import com.alibaba.fastjson.JSON;
-import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 import com.starrocks.data.load.stream.DefaultStreamLoader;
 import com.starrocks.data.load.stream.LoadMetrics;
 import com.starrocks.data.load.stream.StreamLoadManager;
@@ -13,8 +30,6 @@ import com.starrocks.data.load.stream.TableRegion;
 import com.starrocks.data.load.stream.TransactionStreamLoader;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
-import org.apache.flink.api.common.functions.RuntimeContext;
-import org.apache.flink.util.Preconditions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -84,14 +99,15 @@ public class StarRocksSinkManagerV2 implements StreamLoadManager, Serializable {
      */
     private transient AtomicBoolean writeTriggerFlush;
     private transient LoadMetrics loadMetrics;
-    private transient StarRocksSinkRuntimeContext runtimeContext;
+    private transient StreamLoadListener streamLoadListener;
 
     public StarRocksSinkManagerV2(StreamLoadProperties properties, boolean enableAutoCommit) {
         this.properties = properties;
         this.enableAutoCommit = enableAutoCommit;
         this.streamLoader = properties.isEnableTransaction() ? new TransactionStreamLoader() : new DefaultStreamLoader();
-        Preconditions.checkArgument(enableAutoCommit || properties.isEnableTransaction(),
-                "Normal stream load only support auto-commit mode");
+        if (!(enableAutoCommit || properties.isEnableTransaction())) {
+            throw new IllegalArgumentException("You must enable auto commit, or use transaction stream load");
+        }
         this.maxCacheBytes = properties.getMaxCacheBytes();
         this.maxWriteBlockCacheBytes = 2 * maxCacheBytes;
         this.scanningFrequency = properties.getScanningFrequency();
@@ -187,8 +203,8 @@ public class StarRocksSinkManagerV2 implements StreamLoadManager, Serializable {
         }
     }
 
-    public void setRuntimeContext(RuntimeContext runtimeContext, StarRocksSinkOptions sinkOptions) {
-        this.runtimeContext = new StarRocksSinkRuntimeContext(runtimeContext, sinkOptions);
+    public void setStreamLoadListener(StreamLoadListener streamLoadListener) {
+        this.streamLoadListener = streamLoadListener;
     }
 
     @Override
@@ -272,10 +288,8 @@ public class StarRocksSinkManagerV2 implements StreamLoadManager, Serializable {
             this.loadMetrics.updateSuccessLoad(response);
         }
 
-        if (response.getException() != null) {
-            StarRocksSinkRuntimeContext.flushFailedRecord(runtimeContext);
-        } else {
-            StarRocksSinkRuntimeContext.flushSucceedRecord(runtimeContext, response);
+        if (streamLoadListener != null) {
+            streamLoadListener.onResponse(response);
         }
 
         if (LOG.isDebugEnabled()) {

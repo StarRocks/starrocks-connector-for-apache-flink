@@ -2,14 +2,15 @@ package com.starrocks.connector.flink.table.sink;
 
 import com.google.common.base.Strings;
 import com.starrocks.connector.flink.manager.StarRocksSinkBufferEntity;
-import com.starrocks.connector.flink.manager.StarRocksSinkManagerV2;
 import com.starrocks.connector.flink.manager.StarRocksSinkTable;
+import com.starrocks.connector.flink.manager.StarRocksStreamLoadListener;
 import com.starrocks.connector.flink.row.sink.StarRocksIRowTransformer;
 import com.starrocks.connector.flink.row.sink.StarRocksISerializer;
 import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
 import com.starrocks.connector.flink.table.data.StarRocksRowData;
 import com.starrocks.connector.flink.tools.EnvUtils;
 import com.starrocks.data.load.stream.StreamLoadSnapshot;
+import com.starrocks.data.load.stream.v2.StarRocksSinkManagerV2;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.alter.Alter;
@@ -54,6 +55,8 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
 
     private transient volatile ListState<StarrocksSnapshotState> snapshotStates;
     private final Map<Long, List<StreamLoadSnapshot>> snapshotMap = new ConcurrentHashMap<>();
+
+    private transient StarRocksStreamLoadListener streamLoadListener;
 
     @Deprecated
     private transient ListState<Map<String, StarRocksSinkBufferEntity>> legacyState;
@@ -166,7 +169,8 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
     @Override
     public void open(Configuration parameters) throws Exception {
         sinkManager.init();
-        sinkManager.setRuntimeContext(getRuntimeContext(), sinkOptions);
+        this.streamLoadListener = new StarRocksStreamLoadListener(getRuntimeContext(), sinkOptions);
+        sinkManager.setStreamLoadListener(streamLoadListener);
         if (rowTransformer != null) {
             rowTransformer.setRuntimeContext(getRuntimeContext());
         }
