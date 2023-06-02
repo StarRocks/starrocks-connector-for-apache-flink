@@ -10,7 +10,7 @@ import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
 import com.starrocks.connector.flink.table.data.StarRocksRowData;
 import com.starrocks.connector.flink.tools.EnvUtils;
 import com.starrocks.data.load.stream.StreamLoadSnapshot;
-import com.starrocks.data.load.stream.v2.StarRocksSinkManagerV2;
+import com.starrocks.data.load.stream.v2.StreamLoadManagerV2;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.alter.Alter;
@@ -49,7 +49,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
     private static final int NESTED_ROW_DATA_HEADER_SIZE = 256;
 
     private final StarRocksSinkOptions sinkOptions;
-    private final StarRocksSinkManagerV2 sinkManager;
+    private final StreamLoadManagerV2 sinkManager;
     private final StarRocksISerializer serializer;
     private final StarRocksIRowTransformer<T> rowTransformer;
 
@@ -77,13 +77,13 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
         this.serializer = StarRocksSerializerFactory.createSerializer(sinkOptions, schema.getFieldNames());
         rowTransformer.setStarRocksColumns(sinkTable.getFieldMapping());
         rowTransformer.setTableSchema(schema);
-        this.sinkManager = new StarRocksSinkManagerV2(sinkOptions.getProperties(),
+        this.sinkManager = new StreamLoadManagerV2(sinkOptions.getProperties(),
                 sinkOptions.getSemantic() == StarRocksSinkSemantic.AT_LEAST_ONCE);
     }
 
     public StarRocksDynamicSinkFunctionV2(StarRocksSinkOptions sinkOptions) {
         this.sinkOptions = sinkOptions;
-        this.sinkManager = new StarRocksSinkManagerV2(sinkOptions.getProperties(),
+        this.sinkManager = new StreamLoadManagerV2(sinkOptions.getProperties(),
                 sinkOptions.getSemantic() == StarRocksSinkSemantic.AT_LEAST_ONCE);
         this.serializer = null;
         this.rowTransformer = null;

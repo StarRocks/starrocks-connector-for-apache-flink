@@ -50,9 +50,23 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class StarRocksSinkManagerV2 implements StreamLoadManager, Serializable {
+/**
+ * An implementation of {@link StreamLoadManager}. In this manager, you can use normal stream load or
+ * transaction stream load to load data to StarRocks. You can control which to use when constructing
+ * the manager with parameter **properties**. If {@link StreamLoadProperties#isEnableTransaction()}
+ * is true, transaction stream load will be used, otherwise the normal stream load. You can also control
+ * how to commit the transaction stream load by parameter **enableAutoCommit**. If it's true, the
+ * manager will commit the load automatically, otherwise you need to commit the load manually. Note that
+ * this parameter should always be true for the normal stream load currently.
+ * The usage for manual commit should like this
+ *     manager.write(); // write some recodes
+ *     manager.flush();    // ensure the data is flushed to StarRocks, and the transaction is prepared
+ *     manager.snapshot(); // take a snapshot the current transactions, mainly recording the labels
+ *     manager.commit();   // commit those snapshots
+ */
+public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
 
-    private static final Logger LOG = LoggerFactory.getLogger(StarRocksSinkManagerV2.class);
+    private static final Logger LOG = LoggerFactory.getLogger(StreamLoadManagerV2.class);
 
     private static final long serialVersionUID = 1L;
 
@@ -100,8 +114,7 @@ public class StarRocksSinkManagerV2 implements StreamLoadManager, Serializable {
     private transient AtomicBoolean writeTriggerFlush;
     private transient LoadMetrics loadMetrics;
     private transient StreamLoadListener streamLoadListener;
-
-    public StarRocksSinkManagerV2(StreamLoadProperties properties, boolean enableAutoCommit) {
+    public StreamLoadManagerV2(StreamLoadProperties properties, boolean enableAutoCommit) {
         this.properties = properties;
         this.enableAutoCommit = enableAutoCommit;
         this.streamLoader = properties.isEnableTransaction() ? new TransactionStreamLoader() : new DefaultStreamLoader();
@@ -362,7 +375,7 @@ public class StarRocksSinkManagerV2 implements StreamLoadManager, Serializable {
     @Override
     public void close() {
         if (state.compareAndSet(State.ACTIVE, State.INACTIVE)) {
-            LOG.info("StarRocksSinkManagerV2 close, loadMetrics: {}, flushAndCommit: {}",
+            LOG.info("StreamLoadManagerV2 close, loadMetrics: {}, flushAndCommit: {}",
                     loadMetrics, flushAndCommitStrategy);
             manager.interrupt();
             streamLoader.close();
