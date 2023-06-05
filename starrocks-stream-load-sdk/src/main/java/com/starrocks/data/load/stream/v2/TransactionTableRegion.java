@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package com.starrocks.connector.flink.manager;
+package com.starrocks.data.load.stream.v2;
 
 import com.starrocks.data.load.stream.StreamLoadDataFormat;
 import com.starrocks.data.load.stream.StreamLoadManager;
@@ -271,7 +271,7 @@ public class TransactionTableRegion implements TableRegion {
             commitSuccess = true;
             LOG.info("Success to commit transaction: {}, duration: {} ms", transaction, commitDuration);
         } else {
-            // if the data has never been flushed (label == null), the commit should fail so that StarRocksSinkManagerV2#init
+            // if the data has never been flushed (label == null), the commit should fail so that StreamLoadManagerV2#init
             // will schedule to flush the data first, and then trigger commit again
             commitSuccess = cacheBytes.get() == 0;
         }

@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package com.starrocks.connector.flink.manager;
+package com.starrocks.data.load.stream.v2;
 
 import com.starrocks.data.load.stream.StreamLoadStrategy;
 import com.starrocks.data.load.stream.TableRegion;
