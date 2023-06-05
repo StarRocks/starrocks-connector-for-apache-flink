@@ -2,13 +2,13 @@ package com.starrocks.connector.flink.manager;
 
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 import com.starrocks.data.load.stream.StreamLoadResponse;
-
+import com.starrocks.data.load.stream.v2.StreamLoadListener;
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Histogram;
 import org.apache.flink.runtime.metrics.DescriptiveStatisticsHistogram;
 
-public class StarRocksSinkRuntimeContext {
+public class StarRocksStreamLoadListener implements StreamLoadListener {
 
     private transient Counter totalFlushBytes;
     private transient Counter totalFlushRows;
@@ -26,7 +26,7 @@ public class StarRocksSinkRuntimeContext {
     private transient Histogram writeDataTimeMs;
     private transient Histogram loadTimeMs;
 
-    public StarRocksSinkRuntimeContext(RuntimeContext context, StarRocksSinkOptions sinkOptions) {
+    public StarRocksStreamLoadListener(RuntimeContext context, StarRocksSinkOptions sinkOptions) {
         totalFlushBytes = context.getMetricGroup().counter(COUNTER_TOTAL_FLUSH_BYTES);
         totalFlushRows = context.getMetricGroup().counter(COUNTER_TOTAL_FLUSH_ROWS);
         totalFlushTime = context.getMetricGroup().counter(COUNTER_TOTAL_FLUSH_COST_TIME);
@@ -44,10 +44,12 @@ public class StarRocksSinkRuntimeContext {
         loadTimeMs = context.getMetricGroup().histogram(HISTOGRAM_LOAD_TIME_MS, new DescriptiveStatisticsHistogram(sinkOptions.getSinkHistogramWindowSize()));
     }
 
-    public static void flushSucceedRecord(StarRocksSinkRuntimeContext context,
-                                          StreamLoadResponse response) {
-        if (context != null) {
-            context.flushSucceedRecord(response);
+    @Override
+    public void onResponse(StreamLoadResponse response) {
+        if (response.getException() != null) {
+            flushFailedRecord();
+        } else {
+            flushSucceedRecord(response);
         }
     }
 
@@ -89,7 +91,7 @@ public class StarRocksSinkRuntimeContext {
         }
     }
 
-    public static void flushFailedRecord(StarRocksSinkRuntimeContext context) {
+    public static void flushFailedRecord(StarRocksStreamLoadListener context) {
         if (context != null) {
             context.flushFailedRecord();
         }
