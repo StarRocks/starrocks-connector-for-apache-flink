@@ -270,12 +270,18 @@ public class StarRocksStreamLoadVisitor implements Serializable {
             for (Map.Entry<String,String> entry : props.entrySet()) {
                 httpPut.setHeader(entry.getKey(), entry.getValue());
             }
-            if (!props.containsKey("columns") && ((sinkOptions.supportUpsertDelete() && !__opAutoProjectionInJson) || StarRocksSinkOptions.StreamLoadFormat.CSV.equals(sinkOptions.getStreamLoadFormat()))) {
-                String cols = String.join(",", Arrays.asList(fieldNames).stream().map(f -> String.format("`%s`", f.trim().replace("`", ""))).collect(Collectors.toList()));
-                if (cols.length() > 0 && sinkOptions.supportUpsertDelete()) {
-                    cols += String.format(",%s", StarRocksSinkOP.COLUMN_KEY);
+
+            if (!props.containsKey("columns")) {
+                boolean addColumns = (sinkOptions.supportUpsertDelete() && !__opAutoProjectionInJson) ||
+                        (StarRocksSinkOptions.StreamLoadFormat.CSV.equals(sinkOptions.getStreamLoadFormat()) && sinkOptions.getAddColumnsHeader());
+                if (addColumns) {
+                    String cols = String.join(",", Arrays.asList(fieldNames).stream()
+                            .map(f -> String.format("`%s`", f.trim().replace("`", ""))).collect(Collectors.toList()));
+                    if (cols.length() > 0 && sinkOptions.supportUpsertDelete()) {
+                        cols += String.format(",%s", StarRocksSinkOP.COLUMN_KEY);
+                    }
+                    httpPut.setHeader("columns", cols);
                 }
-                httpPut.setHeader("columns", cols);
             }
             if (!httpPut.containsHeader("timeout")) {
                 httpPut.setHeader("timeout", "60");

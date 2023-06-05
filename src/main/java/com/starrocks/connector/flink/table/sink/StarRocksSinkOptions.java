@@ -98,6 +98,12 @@ public class StarRocksSinkOptions implements Serializable {
             .longType().defaultValue(500000L).withDescription("Max row count of the flush.");
     public static final ConfigOption<Long> SINK_BATCH_FLUSH_INTERVAL = ConfigOptions.key("sink.buffer-flush.interval-ms")
             .longType().defaultValue(300000L).withDescription("Flush interval of the row batch in millisecond.");
+
+    public static final ConfigOption<Boolean> SINK_ADD_COLUMNS_HEADER = ConfigOptions.key("sink.add.columns-header")
+            .booleanType().defaultValue(true).withDescription("Whether to add columns header. You can disable this flag " +
+                    "if you are writing to a none primary key table and the columns in flink and starrocks have the same " +
+                    "names and positions.");
+
     public static final ConfigOption<Integer> SINK_MAX_RETRIES = ConfigOptions.key("sink.max-retries")
             .intType().defaultValue(3).withDescription("Max flushing retry times of the row batch.");
     public static final ConfigOption<Long> SINK_BATCH_OFFER_TIMEOUT = ConfigOptions.key("sink.buffer-flush.enqueue-timeout-ms")
@@ -237,6 +243,10 @@ public class StarRocksSinkOptions implements Serializable {
 
     public Integer getSinkParallelism() {
         return tableOptions.getOptional(SINK_PARALLELISM).orElse(null);
+    }
+
+    public boolean getAddColumnsHeader() {
+        return tableOptions.get(SINK_ADD_COLUMNS_HEADER);
     }
 
     public static Builder builder() {
@@ -416,8 +426,9 @@ public class StarRocksSinkOptions implements Serializable {
         if (hasColumnMappingProperty()) {
             defaultTablePropertiesBuilder.columns(streamLoadProps.get("columns"));
         } else if (getTableSchemaFieldNames() != null) {
-            if (dataFormat instanceof StreamLoadDataFormat.CSVFormat
-                    || (!sinkTable.isOpAutoProjectionInJson() && supportUpsertDelete())) {
+            boolean addColumns = (!sinkTable.isOpAutoProjectionInJson() && supportUpsertDelete()) ||
+                    (dataFormat instanceof StreamLoadDataFormat.CSVFormat && getAddColumnsHeader());
+            if (addColumns) {
 
                 String[] columns;
                 if (supportUpsertDelete()) {
