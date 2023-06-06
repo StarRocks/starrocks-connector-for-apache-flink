@@ -63,6 +63,8 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
     @Deprecated
     private transient List<StarRocksSinkBufferEntity> legacyData;
 
+    private transient long totalReceivedRows;
+
     public StarRocksDynamicSinkFunctionV2(StarRocksSinkOptions sinkOptions,
                                           TableSchema schema,
                                           StarRocksIRowTransformer<T> rowTransformer) {
@@ -158,16 +160,23 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
             }
         }
         flushLegacyData();
+        String serializedValue = serializer.serialize(rowTransformer.transform(value, sinkOptions.supportUpsertDelete()));
         sinkManager.write(
                 null,
                 sinkOptions.getDatabaseName(),
                 sinkOptions.getTableName(),
-                serializer.serialize(rowTransformer.transform(value, sinkOptions.supportUpsertDelete()))
-        );
+                serializedValue);
+
+        totalReceivedRows += 1;
+        if (totalReceivedRows % 100 == 1) {
+            log.debug("Received raw record: {}", value);
+            log.debug("Received serialized record: {}", serializedValue);
+        }
     }
 
     @Override
     public void open(Configuration parameters) throws Exception {
+        totalReceivedRows = 0;
         sinkManager.init();
         this.streamLoadListener = new StarRocksStreamLoadListener(getRuntimeContext(), sinkOptions);
         sinkManager.setStreamLoadListener(streamLoadListener);
