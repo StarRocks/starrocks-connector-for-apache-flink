@@ -24,6 +24,8 @@ public interface TableRegion {
     long getAndIncrementAge();
     long getAge();
 
+    int write(Record record);
+
     int write(byte[] row);
     byte[] read();
 

@@ -18,6 +18,9 @@
 
 package com.starrocks.data.load.stream.v2;
 
+import com.starrocks.data.load.stream.CommitListener;
+import com.starrocks.data.load.stream.Meta;
+import com.starrocks.data.load.stream.Record;
 import com.starrocks.data.load.stream.StreamLoadDataFormat;
 import com.starrocks.data.load.stream.StreamLoadManager;
 import com.starrocks.data.load.stream.StreamLoadResponse;
@@ -30,6 +33,7 @@ import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.concurrent.Future;
@@ -65,6 +69,14 @@ public class TransactionTableRegion implements TableRegion {
     private final AtomicReference<State> state;
     private final AtomicBoolean ctl = new AtomicBoolean(false);
 
+    private CommitListener commitListener;
+    // TODO: 需要volatile吗？
+    //    outMetas表示尚未开启事务的meta数据
+    //    inMetas表示已经开启事务的meta数据
+    //    每做一次flush，outMetas的数据会迁移到inMetas
+    //    当事务终止时(成功或者失败)，inMetas会被清空
+    private volatile LinkedList<Meta> outMetas;
+    private volatile LinkedList<Meta> inMetas;
     private volatile Queue<byte[]> outBuffer = new LinkedList<>();
     private volatile Queue<byte[]> inBuffer;
     private volatile StreamLoadEntityMeta entityMeta;
@@ -81,7 +93,8 @@ public class TransactionTableRegion implements TableRegion {
                             String table,
                             StreamLoadManager manager,
                             StreamLoadTableProperties properties,
-                            StreamLoader streamLoader) {
+                            StreamLoader streamLoader,
+                            CommitListener commitListener) {
         this.uniqueKey = uniqueKey;
         this.database = database;
         this.table = table;
@@ -91,6 +104,7 @@ public class TransactionTableRegion implements TableRegion {
         this.streamLoader = streamLoader;
         this.state = new AtomicReference<>(State.ACTIVE);
         this.lastCommitTimeMills = System.currentTimeMillis();
+        this.commitListener = commitListener;
     }
 
     @Override
@@ -159,6 +173,27 @@ public class TransactionTableRegion implements TableRegion {
     }
 
     @Override
+    public int write(Record record) {
+        if (record == null) {
+            return 0;
+        }
+
+        int c;
+        if (ctl.compareAndSet(false, true)) {
+            c = write0(record);
+        } else {
+            for (;;) {
+                if (ctl.compareAndSet(false, true)) {
+                    c = write0(record);
+                    break;
+                }
+            }
+        }
+        ctl.set(false);
+        return c;
+    }
+
+    @Override
     public int write(byte[] row) {
         if (row == null) {
             return 0;
@@ -177,6 +212,14 @@ public class TransactionTableRegion implements TableRegion {
         }
         ctl.set(false);
         return c;
+    }
+
+    protected int write0(Record record) {
+        if (outMetas == null) {
+            outMetas = new LinkedList<>();
+        }
+        outMetas.offer(record.getMeta());
+        return write0(record.getRow().getBytes(StandardCharsets.UTF_8));
     }
 
     protected int write0(byte[] row) {
@@ -225,6 +268,14 @@ public class TransactionTableRegion implements TableRegion {
                     LOG.info("Flush uniqueKey : {}, label : {}, bytes : {}", uniqueKey, label, cacheBytes.get());
                     inBuffer = outBuffer;
                     outBuffer = null;
+                    if (outMetas != null) {
+                        if (inMetas == null) {
+                            inMetas = outMetas;
+                        } else {
+                            inMetas.addAll(outMetas);
+                        }
+                        outMetas = null;
+                    }
                     ctl.set(false);
                     break;
                 }
@@ -260,6 +311,9 @@ public class TransactionTableRegion implements TableRegion {
                 }
             } catch (Exception e) {
                 LOG.error("TransactionTableRegion commit failed, db: {}, table: {}, label: {}", database, table, label, e);
+                if (inMetas != null) {
+                    inMetas.clear();
+                }
                 callback(e);
                 return false;
             }
@@ -269,6 +323,10 @@ public class TransactionTableRegion implements TableRegion {
             long commitDuration = commitTime - lastCommitTimeMills;
             lastCommitTimeMills = commitTime;
             commitSuccess = true;
+            if (commitListener != null && inMetas != null) {
+                commitListener.afterCommit(inMetas);
+                inMetas.clear();
+            }
             LOG.info("Success to commit transaction: {}, duration: {} ms", transaction, commitDuration);
         } else {
             // if the data has never been flushed (label == null), the commit should fail so that StreamLoadManagerV2#init

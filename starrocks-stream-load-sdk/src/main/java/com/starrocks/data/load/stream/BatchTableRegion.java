@@ -131,6 +131,11 @@ public class BatchTableRegion implements TableRegion {
     }
 
     @Override
+    public int write(Record record) {
+        throw new RuntimeException("DefaultStreamLoadManager does not support this method");
+    }
+
+    @Override
     public int write(byte[] row) {
         if (row == null) {
             return 0;

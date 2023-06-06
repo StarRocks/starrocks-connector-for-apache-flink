@@ -4,6 +4,7 @@ public interface StreamLoadManager {
 
     void init();
     void write(String uniqueKey, String database, String table, String... rows);
+    void write(String uniqueKey, String database, String table, Record... records);
     void callback(StreamLoadResponse response);
     void callback(Throwable e);
     void flush();

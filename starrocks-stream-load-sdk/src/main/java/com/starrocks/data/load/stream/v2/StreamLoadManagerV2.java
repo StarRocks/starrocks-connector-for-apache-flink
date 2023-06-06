@@ -19,8 +19,10 @@
 package com.starrocks.data.load.stream.v2;
 
 import com.alibaba.fastjson.JSON;
+import com.starrocks.data.load.stream.CommitListener;
 import com.starrocks.data.load.stream.DefaultStreamLoader;
 import com.starrocks.data.load.stream.LoadMetrics;
+import com.starrocks.data.load.stream.Record;
 import com.starrocks.data.load.stream.StreamLoadManager;
 import com.starrocks.data.load.stream.StreamLoadResponse;
 import com.starrocks.data.load.stream.StreamLoadSnapshot;
@@ -114,7 +116,8 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
     private transient AtomicBoolean writeTriggerFlush;
     private transient LoadMetrics loadMetrics;
     private transient StreamLoadListener streamLoadListener;
-    public StreamLoadManagerV2(StreamLoadProperties properties, boolean enableAutoCommit) {
+    private CommitListener commitListener;
+    public StreamLoadManagerV2(StreamLoadProperties properties, boolean enableAutoCommit, CommitListener commitListener) {
         this.properties = properties;
         this.enableAutoCommit = enableAutoCommit;
         this.streamLoader = properties.isEnableTransaction() ? new TransactionStreamLoader() : new DefaultStreamLoader();
@@ -125,6 +128,7 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
         this.maxWriteBlockCacheBytes = 2 * maxCacheBytes;
         this.scanningFrequency = properties.getScanningFrequency();
         this.flushAndCommitStrategy = new FlushAndCommitStrategy(properties, enableAutoCommit);
+        this.commitListener = commitListener;
     }
 
     @Override
@@ -218,6 +222,54 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
 
     public void setStreamLoadListener(StreamLoadListener streamLoadListener) {
         this.streamLoadListener = streamLoadListener;
+    }
+
+
+//    TODO: 两个write函数的逻辑几乎一致，想办法重构一下
+    public void write(String uniqueKey, String database, String table, Record... records) {
+        TableRegion region = getCacheRegion(uniqueKey, database, table);
+        for (Record record : records) {
+            AssertNotException();
+            if (LOG.isTraceEnabled()) {
+                LOG.trace("Write uniqueKey {}, database {}, table {}, record {}",
+                        uniqueKey == null ? "null" : uniqueKey, database, table, record);
+            }
+            // TODO: 现在的问题是谁持有meta，以便在最后做commit的时候可以拿到meta容器
+//            region提供write接口，那肯定是region持有，但是这里有两个问题
+//            1. 在region内部将会有一个容器存储meta，那这个容器的增删改查如何做，而且还有同步问题
+//            2. region持有meta，meta容器可以传给Listener函数吗
+            int bytes = region.write(record);
+            long cachedBytes = currentCacheBytes.addAndGet(bytes);
+            if (cachedBytes >= maxWriteBlockCacheBytes) {
+                long startTime = System.nanoTime();
+                lock.lock();
+                try {
+                    int idx = 0;
+                    while (currentCacheBytes.get() >= maxWriteBlockCacheBytes) {
+                        AssertNotException();
+                        LOG.info("Cache full, wait flush, currentBytes: {}, maxWriteBlockCacheBytes: {}",
+                                currentCacheBytes.get(), maxWriteBlockCacheBytes);
+                        flushable.signal();
+                        writable.await(Math.min(++idx, 5), TimeUnit.SECONDS);
+                    }
+                } catch (InterruptedException ex) {
+                    this.e = ex;
+                    throw new RuntimeException(ex);
+                } finally {
+                    lock.unlock();
+                }
+                loadMetrics.updateWriteBlock(1, System.nanoTime() - startTime);
+            } else if (cachedBytes >= maxCacheBytes && writeTriggerFlush.compareAndSet(false, true)) {
+                lock.lock();
+                try {
+                    flushable.signal();
+                } finally {
+                    lock.unlock();
+                }
+                loadMetrics.updateWriteTriggerFlush(1);
+                LOG.info("Trigger flush, currentBytes: {}, maxCacheBytes: {}", cachedBytes, maxCacheBytes);
+            }
+        }
     }
 
     @Override
@@ -406,7 +458,7 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
                 region = regions.get(uniqueKey);
                 if (region == null) {
                     StreamLoadTableProperties tableProperties = properties.getTableProperties(uniqueKey);
-                    region = new TransactionTableRegion(uniqueKey, database, table, this, tableProperties, streamLoader);
+                    region = new TransactionTableRegion(uniqueKey, database, table, this, tableProperties, streamLoader, commitListener);
                     regions.put(uniqueKey, region);
                     flushQ.offer(region);
                 }

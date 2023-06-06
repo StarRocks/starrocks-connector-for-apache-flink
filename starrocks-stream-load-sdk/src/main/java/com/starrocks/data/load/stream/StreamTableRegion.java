@@ -132,6 +132,11 @@ public class StreamTableRegion implements TableRegion, Serializable {
     }
 
     @Override
+    public int write(Record record) {
+        throw new RuntimeException("DefaultStreamLoadManager does not support this method");
+    }
+
+    @Override
     public int write(byte[] row) {
         try {
             buffer.put(row);

@@ -257,6 +257,11 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
     }
 
     @Override
+    public void write(String uniqueKey, String database, String table, Record... records) {
+        throw new RuntimeException("DefaultStreamLoadManager does not support this method");
+    }
+
+    @Override
     public void callback(StreamLoadResponse response) {
 
         long currentBytes = response.getFlushBytes() != null ? currentCacheBytes.getAndAdd(-response.getFlushBytes()) : currentCacheBytes.get();
