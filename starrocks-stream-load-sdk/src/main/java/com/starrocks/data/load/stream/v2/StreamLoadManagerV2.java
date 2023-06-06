@@ -117,7 +117,8 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
     private transient LoadMetrics loadMetrics;
     private transient StreamLoadListener streamLoadListener;
     private CommitListener commitListener;
-    public StreamLoadManagerV2(StreamLoadProperties properties, boolean enableAutoCommit, CommitListener commitListener) {
+
+    public StreamLoadManagerV2(StreamLoadProperties properties, boolean enableAutoCommit) {
         this.properties = properties;
         this.enableAutoCommit = enableAutoCommit;
         this.streamLoader = properties.isEnableTransaction() ? new TransactionStreamLoader() : new DefaultStreamLoader();
@@ -128,6 +129,10 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
         this.maxWriteBlockCacheBytes = 2 * maxCacheBytes;
         this.scanningFrequency = properties.getScanningFrequency();
         this.flushAndCommitStrategy = new FlushAndCommitStrategy(properties, enableAutoCommit);
+    }
+
+    public StreamLoadManagerV2(StreamLoadProperties properties, boolean enableAutoCommit, CommitListener commitListener) {
+        this(properties, enableAutoCommit);
         this.commitListener = commitListener;
     }
 
