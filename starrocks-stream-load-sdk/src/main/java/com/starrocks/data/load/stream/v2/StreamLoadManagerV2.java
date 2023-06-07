@@ -373,6 +373,10 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
         this.e = e;
     }
 
+    public Throwable getException() {
+        return e;
+    }
+
     @Override
     public void flush() {
         LOG.info("Stream load manager flush");
