@@ -80,7 +80,7 @@ public class StarRocksSinkOptions implements Serializable {
     public static final ConfigOption<Integer> SINK_CONNECT_TIMEOUT = ConfigOptions.key("sink.connect.timeout-ms")
             .intType().defaultValue(1000).withDescription("Timeout in millisecond for connecting to the `load-url`.");
     public static final ConfigOption<Integer> SINK_WAIT_FOR_CONTINUE_TIMEOUT = ConfigOptions.key("sink.wait-for-continue.timeout-ms")
-            .intType().defaultValue(10000).withDescription("Timeout in millisecond to wait for 100-continue response for http client.");
+            .intType().defaultValue(30000).withDescription("Timeout in millisecond to wait for 100-continue response for http client.");
     public static final ConfigOption<Integer> SINK_IO_THREAD_COUNT = ConfigOptions.key("sink.io.thread-count")
             .intType().defaultValue(2).withDescription("Stream load thread count");
 
@@ -216,7 +216,7 @@ public class StarRocksSinkOptions implements Serializable {
         if (waitForContinueTimeoutMs < DEFAULT_WAIT_FOR_CONTINUE) {
             return DEFAULT_WAIT_FOR_CONTINUE;
         }
-        return Math.min(waitForContinueTimeoutMs, 60000);
+        return Math.min(waitForContinueTimeoutMs, 600000);
     }
 
     public int getIoThreadCount() {
