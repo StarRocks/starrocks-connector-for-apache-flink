@@ -80,7 +80,7 @@ public class SinkFunctionFactory {
         try (CloseableHttpClient client = clientBuilder.build()) {
             CloseableHttpResponse response = client.execute(httpPost);
             String responseBody = EntityUtils.toString(response.getEntity());
-            LOG.info("Transaction load probe response {}", responseBody);
+            LOG.debug("Transaction load probe response {}", responseBody);
 
             JSONObject bodyJson = JSON.parseObject(responseBody);
             String status = bodyJson.getString("status");

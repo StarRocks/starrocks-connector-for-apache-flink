@@ -1,5 +1,6 @@
 package com.starrocks.connector.flink.manager;
 
+import com.google.common.collect.Ordering;
 import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionOptions;
 import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
 import com.starrocks.connector.flink.table.StarRocksDataType;
@@ -15,7 +16,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 public class StarRocksSinkTable {
 
@@ -25,6 +25,13 @@ public class StarRocksSinkTable {
     private volatile String version;
 
     private final StarRocksQueryVisitor starRocksQueryVisitor;
+
+    // Whether the columns in the schema of flink and starrocks are aligned, that's, they
+    // have the same number of columns, column names and positions are the same, and the
+    // types are compatible. false indicates that they are not aligned or unknown. Note
+    // that primary key table has an implicit __op column when loading, so flink and starrocks
+    // schema always are unaligned for primary key table.
+    private boolean flinkAndStarRocksSchemaAligned = false;
 
     private StarRocksSinkTable(Builder builder) {
         this.database = builder.database;
@@ -38,6 +45,10 @@ public class StarRocksSinkTable {
 
     public static StarRocksSinkTable.Builder builder() {
         return new StarRocksSinkTable.Builder();
+    }
+
+    public boolean isFlinkAndStarRocksColumnsAligned() {
+        return flinkAndStarRocksSchemaAligned;
     }
 
     public String getVersion() {
@@ -64,6 +75,7 @@ public class StarRocksSinkTable {
             return;
         }
 
+        // 1. verify the pk constraint if it's a primary key table
         Optional<UniqueConstraint> constraint = flinkSchema.getPrimaryKey();
         List<Map<String, Object>> rows = starRocksQueryVisitor.getTableColumnsMetaData();
         if (rows == null || rows.isEmpty()) {
@@ -92,25 +104,44 @@ public class StarRocksSinkTable {
         if (sinkOptions.hasColumnMappingProperty()) {
             return;
         }
-        if (flinkSchema.getFieldCount() != rows.size()) {
-            throw new IllegalArgumentException("Fields count of "+ sinkOptions.getTableName() + " mismatch. \nflinkSchema["
-                    +flinkSchema.getFieldNames().length+"]:"
-                    + String.join(",", flinkSchema.getFieldNames())
-                    +"\n realTab["+rows.size()+"]:"
-                    +rows.stream().map((r)-> String.valueOf(r.get("COLUMN_NAME"))).collect(Collectors.joining(",")));
-        }
-        List<TableColumn> flinkCols = flinkSchema.getTableColumns();
+
+        // 2. verify the columns of flink are contained in the starrocks schema
+        // and the type is compatible
+        Map<String, Map<String, Object>> starrocksColumnMapping = new HashMap<>();
         for (Map<String, Object> row : rows) {
-            String starrocksField = row.get("COLUMN_NAME").toString().toLowerCase();
-            String starrocksType = row.get("DATA_TYPE").toString().toLowerCase();
-            List<TableColumn> matchedFlinkCols = flinkCols.stream()
-                    .filter(col -> col.getName().toLowerCase().equals(starrocksField) && (!typesMap.containsKey(starrocksType) || typesMap.get(starrocksType).contains(col.getType().getLogicalType().getTypeRoot())))
-                    .collect(Collectors.toList());
-            if (matchedFlinkCols.isEmpty()) {
-                throw new IllegalArgumentException("Fields name or type mismatch for:" + starrocksField);
+            String name = row.get("COLUMN_NAME").toString().toLowerCase();
+            starrocksColumnMapping.put(name, row);
+        }
+
+        // the position where a flink column is in the schema of starrocks
+        List<Long> columnPositionInStarRocksSchema = new ArrayList<>();
+        for (TableColumn column : flinkSchema.getTableColumns()) {
+            Map<String, Object> srColumn = starrocksColumnMapping.get(column.getName().toLowerCase());
+            if (srColumn == null) {
+                throw new IllegalArgumentException("StarRocks does not have column " + column.getName());
             }
+
+            String srType = srColumn.get("DATA_TYPE").toString().toLowerCase();
+            boolean typeMatched = typesMap.containsKey(srType) &&
+                    typesMap.get(srType).contains(column.getType().getLogicalType().getTypeRoot());
+            if (!typeMatched) {
+                throw new IllegalArgumentException(
+                        String.format("Flink and StarRocks types are not matched for column %s, " +
+                                "flink type is %s, starrocks type is %s", column.getName(), column.getType(), srType));
+            }
+            columnPositionInStarRocksSchema.add((long) srColumn.get("ORDINAL_POSITION"));
         }
         sinkOptions.setTableSchemaFieldNames(flinkSchema.getFieldNames());
+
+        // 3. decide whether the schemas of flink and starrocks are aligned
+        if (!primaryKeys.isEmpty()) {
+            // always unaligned for primary key tale
+            flinkAndStarRocksSchemaAligned = false;
+        } else {
+            // aligned if the number of columns is same, and the positions are ordered
+            flinkAndStarRocksSchemaAligned = flinkSchema.getTableColumns().size() == starrocksColumnMapping.size() &&
+                    Ordering.natural().isOrdered(columnPositionInStarRocksSchema);
+        }
     }
 
     public static class Builder {

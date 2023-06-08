@@ -155,13 +155,18 @@ public class StarRocksDynamicSinkFunction<T> extends StarRocksDynamicSinkFunctio
                 return;
             }
         }
+        String serializedValue = serializer.serialize(rowTransformer.transform(value, sinkOptions.supportUpsertDelete()));
         sinkManager.writeRecords(
                 sinkOptions.getDatabaseName(),
                 sinkOptions.getTableName(),
-                serializer.serialize(rowTransformer.transform(value, sinkOptions.supportUpsertDelete()))
+                serializedValue
         );
         totalInvokeRows.inc(1);
         totalInvokeRowsTime.inc(System.nanoTime() - start);
+        if (totalInvokeRows.getCount() % 100 == 1) {
+            LOG.debug("Received raw record: {}", value);
+            LOG.debug("Received serialized record: {}", serializedValue);
+        }
     }
 
     @Override
