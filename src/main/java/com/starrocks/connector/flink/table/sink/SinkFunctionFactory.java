@@ -67,7 +67,7 @@ public class SinkFunctionFactory {
         httpPost.addHeader(HttpHeaders.AUTHORIZATION,
                 StreamLoadUtils.getBasicAuthHeader(sinkOptions.getUsername(), sinkOptions.getPassword()));
         httpPost.setConfig(RequestConfig.custom().setExpectContinueEnabled(true).setRedirectsEnabled(true).build());
-        LOG.info("Transaction load probe post {}", httpPost);
+        LOG.debug("Transaction load probe post {}", httpPost);
 
         HttpClientBuilder clientBuilder = HttpClients.custom()
                 .setRedirectStrategy(new DefaultRedirectStrategy() {
