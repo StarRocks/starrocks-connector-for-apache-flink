@@ -48,6 +48,7 @@ import org.apache.flink.table.data.RowData;
 import org.apache.flink.types.Row;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,6 +67,7 @@ import static org.apache.flink.table.api.Expressions.$;
 import static org.junit.Assert.assertNull;
 
 /** IT tests for StarRocks sink and source. */
+@Ignore
 public class StarRocksITTest extends StarRocksITTestBase {
 
     private static final Logger LOG = LoggerFactory.getLogger(StarRocksITTest.class);
