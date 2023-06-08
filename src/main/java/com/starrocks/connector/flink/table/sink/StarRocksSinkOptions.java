@@ -37,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import javax.annotation.Nullable;
 
 import static org.apache.http.protocol.HttpRequestExecutor.DEFAULT_WAIT_FOR_CONTINUE;
 
@@ -399,10 +400,13 @@ public class StarRocksSinkOptions implements Serializable {
         }
     }
 
-    public StreamLoadProperties getProperties() {
-        StarRocksSinkTable sinkTable = StarRocksSinkTable.builder()
-                .sinkOptions(this)
-                .build();
+    public StreamLoadProperties getProperties(@Nullable StarRocksSinkTable table) {
+        StarRocksSinkTable sinkTable = table;
+        if (sinkTable == null) {
+            sinkTable = StarRocksSinkTable.builder()
+                    .sinkOptions(this)
+                    .build();
+        }
 
         StreamLoadDataFormat dataFormat;
         if (getStreamLoadFormat() == StarRocksSinkOptions.StreamLoadFormat.CSV) {
@@ -424,9 +428,17 @@ public class StarRocksSinkOptions implements Serializable {
         if (hasColumnMappingProperty()) {
             defaultTablePropertiesBuilder.columns(streamLoadProps.get("columns"));
         } else if (getTableSchemaFieldNames() != null) {
-            if (dataFormat instanceof StreamLoadDataFormat.CSVFormat
-                    || (!sinkTable.isOpAutoProjectionInJson() && supportUpsertDelete())) {
+            // don't need to add "columns" header in following cases
+            // 1. use csv format but the flink and starrocks schemas are aligned
+            // 2. use json format, except that it's loading o a primary key table for StarRocks 1.x
+            boolean noNeedAddColumnsHeader;
+            if (dataFormat instanceof StreamLoadDataFormat.CSVFormat) {
+                noNeedAddColumnsHeader = sinkTable.isFlinkAndStarRocksColumnsAligned();
+            } else {
+                noNeedAddColumnsHeader = !supportUpsertDelete() || sinkTable.isOpAutoProjectionInJson();
+            }
 
+            if (!noNeedAddColumnsHeader) {
                 String[] columns;
                 if (supportUpsertDelete()) {
                     columns = new String[getTableSchemaFieldNames().length + 1];
