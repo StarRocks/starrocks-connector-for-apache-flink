@@ -25,7 +25,7 @@ public class StreamLoadStream extends InputStream {
         this.dataFormat = dataFormat;
 
         buffer = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE);
-        buffer.position(buffer.capacity());
+        ((java.nio.Buffer) buffer).position(buffer.capacity());
     }
 
 

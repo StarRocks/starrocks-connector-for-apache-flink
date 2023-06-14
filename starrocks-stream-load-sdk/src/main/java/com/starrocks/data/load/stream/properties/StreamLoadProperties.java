@@ -2,7 +2,6 @@ package com.starrocks.data.load.stream.properties;
 
 import com.alibaba.fastjson.annotation.JSONField;
 import com.starrocks.data.load.stream.StarRocksVersion;
-import com.starrocks.data.load.stream.StreamLoadUtils;
 
 import java.io.Serializable;
 import java.util.Arrays;
@@ -142,12 +141,22 @@ public class StreamLoadProperties implements Serializable {
         return defaultTableProperties;
     }
 
-    public StreamLoadTableProperties getTableProperties(String database, String table) {
-        return getTableProperties(StreamLoadUtils.getTableUniqueKey(database, table));
-    }
-
     public StreamLoadTableProperties getTableProperties(String uniqueKey) {
         return tablePropertiesMap.getOrDefault(uniqueKey, defaultTableProperties);
+    }
+
+    public StreamLoadTableProperties getTableProperties(String uniqueKey, String table) {
+        if (tablePropertiesMap.containsKey(uniqueKey)) {
+            return tablePropertiesMap.get(uniqueKey);
+        }
+        StreamLoadTableProperties.Builder tablePropertiesBuilder = StreamLoadTableProperties.builder()
+                .database(defaultTableProperties.getDatabase())
+                .table(table)
+                .streamLoadDataFormat(defaultTableProperties.getDataFormat())
+                .chunkLimit(defaultTableProperties.getChunkLimit());
+        StreamLoadTableProperties tableProperties = tablePropertiesBuilder.build();
+        tablePropertiesMap.put(uniqueKey, tableProperties);
+        return tableProperties;
     }
 
     public Map<String, StreamLoadTableProperties> getTablePropertiesMap() {

@@ -466,7 +466,7 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
             synchronized (regions) {
                 region = regions.get(uniqueKey);
                 if (region == null) {
-                    StreamLoadTableProperties tableProperties = properties.getTableProperties(uniqueKey);
+                    StreamLoadTableProperties tableProperties = properties.getTableProperties(uniqueKey, table);
                     region = new TransactionTableRegion(uniqueKey, database, table, this, tableProperties, streamLoader, commitListener);
                     regions.put(uniqueKey, region);
                     flushQ.offer(region);
