@@ -30,6 +30,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static com.starrocks.data.load.stream.StreamLoadUtils.isStarRocksSupportTransactionLoad;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -59,7 +60,7 @@ public class SinkFunctionFactoryTest {
                 jsonObject.put("status", "FAILED");
                 jsonObject.put("msg", "Not implemented");
                 httpServer.addJsonResponse(jsonObject.toJSONString());
-                boolean support = SinkFunctionFactory.isStarRocksSupportTransactionLoad(sinkOptions);
+                boolean support = probeTransactionStreamLoad(sinkOptions);
                 assertFalse(support);
             }
 
@@ -69,7 +70,7 @@ public class SinkFunctionFactoryTest {
                 jsonObject.put("Status", "INVALID_ARGUMENT");
                 jsonObject.put("Message", "empty label");
                 httpServer.addJsonResponse(jsonObject.toJSONString());
-                boolean support = SinkFunctionFactory.isStarRocksSupportTransactionLoad(sinkOptions);
+                boolean support = probeTransactionStreamLoad(sinkOptions);
                 assertTrue(support);
             }
 
@@ -77,13 +78,18 @@ public class SinkFunctionFactoryTest {
                 httpServer.addJsonResponse("");
                 httpServer.addJsonResponse(MockFeHttpServer.NULL_RESPONSE);
                 try {
-                    SinkFunctionFactory.isStarRocksSupportTransactionLoad(sinkOptions);
+                    probeTransactionStreamLoad(sinkOptions);
                     fail();
                 } catch (Exception e) {
                     // ignore
                 }
             }
         }
+    }
+
+    private boolean probeTransactionStreamLoad(StarRocksSinkOptions sinkOptions) {
+        return isStarRocksSupportTransactionLoad(
+                sinkOptions.getLoadUrlList(), sinkOptions.getConnectTimeout(), sinkOptions.getUsername(), sinkOptions.getPassword());
     }
 
     @Test
