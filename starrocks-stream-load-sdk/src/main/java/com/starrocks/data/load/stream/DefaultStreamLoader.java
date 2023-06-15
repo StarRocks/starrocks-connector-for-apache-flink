@@ -244,6 +244,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
             }
 
             httpPut.addHeader("label", label);
+            httpPut.addHeader("format", dataFormat.toString());
 
             log.info("Stream loading, label : {}, region : {}, request : {}", label, region.getUniqueKey(), httpPut);
             try (CloseableHttpClient client = clientBuilder.build()) {

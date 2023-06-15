@@ -11,6 +11,8 @@ public interface StreamLoadDataFormat {
     byte[] delimiter();
     byte[] end();
 
+    String toString();
+
     class CSVFormat implements StreamLoadDataFormat, Serializable {
 
         private static final byte[] EMPTY_DELIMITER = new byte[0];
@@ -51,6 +53,10 @@ public interface StreamLoadDataFormat {
             return delimiter;
         }
 
+        @Override
+        public String toString() {
+            return "CSV";
+        }
     }
 
     class JSONFormat implements StreamLoadDataFormat, Serializable {
@@ -71,6 +77,11 @@ public interface StreamLoadDataFormat {
         @Override
         public byte[] end() {
             return end;
+        }
+
+        @Override
+        public String toString() {
+            return "JSON";
         }
 
     }
