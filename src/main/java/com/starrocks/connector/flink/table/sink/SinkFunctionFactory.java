@@ -18,26 +18,12 @@
 
 package com.starrocks.connector.flink.table.sink;
 
-import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.JSONObject;
 import com.starrocks.connector.flink.row.sink.StarRocksIRowTransformer;
-import com.starrocks.connector.flink.tools.ConnectionUtils;
-import com.starrocks.data.load.stream.StreamLoadConstants;
-import com.starrocks.data.load.stream.StreamLoadUtils;
 import org.apache.flink.table.api.TableSchema;
-import org.apache.http.HttpHeaders;
-import org.apache.http.client.config.RequestConfig;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.DefaultRedirectStrategy;
-import org.apache.http.impl.client.HttpClientBuilder;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
+import static com.starrocks.data.load.stream.StreamLoadUtils.isStarRocksSupportTransactionLoad;
 
 /** Create sink function according to the configuration. */
 public class SinkFunctionFactory {
@@ -55,53 +41,10 @@ public class SinkFunctionFactory {
         AUTO
     }
 
-    public static boolean isStarRocksSupportTransactionLoad(StarRocksSinkOptions sinkOptions) {
-        String host = ConnectionUtils.selectAvailableHttpHost(
-                sinkOptions.getLoadUrlList(), sinkOptions.getConnectTimeout());
-        if (host == null) {
-            throw new RuntimeException("Can't find an available host in " + sinkOptions.getLoadUrlList());
-        }
-
-        String beginUrlStr = StreamLoadConstants.getBeginUrl(host);
-        HttpPost httpPost = new HttpPost(beginUrlStr);
-        httpPost.addHeader(HttpHeaders.AUTHORIZATION,
-                StreamLoadUtils.getBasicAuthHeader(sinkOptions.getUsername(), sinkOptions.getPassword()));
-        httpPost.setConfig(RequestConfig.custom().setExpectContinueEnabled(true).setRedirectsEnabled(true).build());
-        LOG.debug("Transaction load probe post {}", httpPost);
-
-        HttpClientBuilder clientBuilder = HttpClients.custom()
-                .setRedirectStrategy(new DefaultRedirectStrategy() {
-                    @Override
-                    protected boolean isRedirectable(String method) {
-                        return true;
-                    }
-                });
-
-        try (CloseableHttpClient client = clientBuilder.build()) {
-            CloseableHttpResponse response = client.execute(httpPost);
-            String responseBody = EntityUtils.toString(response.getEntity());
-            LOG.debug("Transaction load probe response {}", responseBody);
-
-            JSONObject bodyJson = JSON.parseObject(responseBody);
-            String status = bodyJson.getString("status");
-            String msg = bodyJson.getString("msg");
-
-            // If StarRocks does not support transaction load, FE's NotFoundAction#executePost
-            // will be called where you can know how the response json is constructed
-            if ("FAILED".equals(status) && "Not implemented".equals(msg)) {
-                return false;
-            }
-            return true;
-        } catch (IOException e) {
-            String errMsg = "Failed to probe transaction load for " + host;
-            LOG.warn("{}", errMsg, e);
-            throw new RuntimeException(errMsg, e);
-        }
-    }
-
     public static void detectStarRocksFeature(StarRocksSinkOptions sinkOptions) {
         try {
-            boolean supportTransactionLoad = isStarRocksSupportTransactionLoad(sinkOptions);
+            boolean supportTransactionLoad = isStarRocksSupportTransactionLoad(
+                    sinkOptions.getLoadUrlList(), sinkOptions.getConnectTimeout(), sinkOptions.getUsername(), sinkOptions.getPassword());
             sinkOptions.setSupportTransactionStreamLoad(supportTransactionLoad);
             if (supportTransactionLoad) {
                 LOG.info("StarRocks supports transaction load");
