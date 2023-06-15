@@ -5,6 +5,7 @@ import com.starrocks.data.load.stream.TableRegion;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 
 public class StreamLoadStream extends InputStream {
@@ -14,7 +15,7 @@ public class StreamLoadStream extends InputStream {
     private final TableRegion region;
     private final StreamLoadDataFormat dataFormat;
 
-    private ByteBuffer buffer;
+    private Buffer buffer;
     private byte[] cache;
     private int pos;
     private boolean endStream = false;
@@ -25,7 +26,7 @@ public class StreamLoadStream extends InputStream {
         this.dataFormat = dataFormat;
 
         buffer = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE);
-        ((java.nio.Buffer) buffer).position(buffer.capacity());
+        buffer.position(buffer.capacity());
     }
 
 
@@ -59,7 +60,7 @@ public class StreamLoadStream extends InputStream {
 
         int size = len - off;
         int ws = Math.min(size, buffer.remaining());
-        buffer.get(b, off, ws);
+        ((java.nio.ByteBuffer) buffer).get(b, off, ws);
 
         return ws;
     }
@@ -104,7 +105,7 @@ public class StreamLoadStream extends InputStream {
         int remain = buffer.remaining();
 
         int ws = Math.min(size, remain);
-        buffer.put(bytes, pos, ws);
+        ((java.nio.ByteBuffer) buffer).put(bytes, pos, ws);
         if (size > remain) {
             this.cache = bytes;
             this.pos = pos + ws;
