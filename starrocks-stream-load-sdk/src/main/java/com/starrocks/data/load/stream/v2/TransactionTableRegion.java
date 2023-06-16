@@ -70,11 +70,6 @@ public class TransactionTableRegion implements TableRegion {
     private final AtomicBoolean ctl = new AtomicBoolean(false);
 
     private CommitListener commitListener;
-    // TODO: 需要volatile吗？
-    //    outMetas表示尚未开启事务的meta数据
-    //    inMetas表示已经开启事务的meta数据
-    //    每做一次flush，outMetas的数据会迁移到inMetas
-    //    当事务终止时(成功或者失败)，inMetas会被清空
     private volatile LinkedList<Meta> outMetas;
     private volatile LinkedList<Meta> inMetas;
     private volatile Queue<byte[]> outBuffer = new LinkedList<>();

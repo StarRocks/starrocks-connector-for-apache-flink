@@ -230,7 +230,6 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
     }
 
 
-//    TODO: 两个write函数的逻辑几乎一致，想办法重构一下
     public void write(String uniqueKey, String database, String table, Record... records) {
         TableRegion region = getCacheRegion(uniqueKey, database, table);
         for (Record record : records) {
@@ -239,10 +238,6 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
                 LOG.trace("Write uniqueKey {}, database {}, table {}, record {}",
                         uniqueKey == null ? "null" : uniqueKey, database, table, record);
             }
-            // TODO: 现在的问题是谁持有meta，以便在最后做commit的时候可以拿到meta容器
-//            region提供write接口，那肯定是region持有，但是这里有两个问题
-//            1. 在region内部将会有一个容器存储meta，那这个容器的增删改查如何做，而且还有同步问题
-//            2. region持有meta，meta容器可以传给Listener函数吗
             int bytes = region.write(record);
             long cachedBytes = currentCacheBytes.addAndGet(bytes);
             if (cachedBytes >= maxWriteBlockCacheBytes) {
