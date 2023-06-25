@@ -20,6 +20,7 @@ package com.starrocks.data.load.stream.v2;
 
 import com.alibaba.fastjson.JSON;
 import com.starrocks.data.load.stream.DefaultStreamLoader;
+import com.starrocks.data.load.stream.EnvUtils;
 import com.starrocks.data.load.stream.LoadMetrics;
 import com.starrocks.data.load.stream.StreamLoadManager;
 import com.starrocks.data.load.stream.StreamLoadResponse;
@@ -209,8 +210,8 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
                 LOG.error("StarRocks-Sink-Manager error", ee);
                 e = ee;
             });
-            LOG.info("Flink-StarRocks-Sink-Manager start, enableAutoCommit: {}, streamLoader: {}",
-                    enableAutoCommit, streamLoader.getClass().getName());
+            LOG.info("Flink-StarRocks-Sink-Manager start, enableAutoCommit: {}, streamLoader: {}, {}",
+                    enableAutoCommit, streamLoader.getClass().getName(), EnvUtils.getGitInformation());
 
             streamLoader.start(properties, this);
         }
