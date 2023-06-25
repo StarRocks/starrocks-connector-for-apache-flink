@@ -210,7 +210,7 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                 log.error("StarRocks-Sink-Manager error", ee);
                 e = ee;
             });
-            log.info("StarRocks-Sink-Manager start");
+            log.info("StarRocks-Sink-Manager start, {}", EnvUtils.getGitInformation());
 
             streamLoader.start(properties, this);
         }
