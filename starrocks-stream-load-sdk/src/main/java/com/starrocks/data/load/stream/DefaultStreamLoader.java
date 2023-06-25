@@ -99,7 +99,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
     public void close() {
         if (start.compareAndSet(true, false)) {
             executorService.shutdownNow();
-            log.warn("Default Stream loader closed");
+            log.info("Default Stream loader closed");
         }
     }
 
