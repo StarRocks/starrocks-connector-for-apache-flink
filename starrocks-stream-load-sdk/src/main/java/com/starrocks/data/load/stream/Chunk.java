@@ -31,8 +31,8 @@ public class Chunk {
 
     private final StreamLoadDataFormat format;
     private final LinkedList<byte[]> buffer;
-    private AtomicLong rowBytes;
-    private AtomicLong chunkBytes;
+    private final AtomicLong rowBytes;
+    private final AtomicLong chunkBytes;
 
     public Chunk(StreamLoadDataFormat format) {
         this.format = format;
@@ -59,6 +59,10 @@ public class Chunk {
 
     public long chunkBytes() {
         return chunkBytes.get();
+    }
+
+    public long estimateChunkSize(byte[] data) {
+        return chunkBytes.get() + data.length + format.delimiter().length;
     }
 
     public Iterator<byte[]> iterator() {

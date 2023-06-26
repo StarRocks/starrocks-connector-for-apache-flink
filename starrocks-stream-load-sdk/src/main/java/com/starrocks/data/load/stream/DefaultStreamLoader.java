@@ -24,7 +24,6 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.starrocks.data.load.stream.exception.StreamLoadFailException;
-import com.starrocks.data.load.stream.http.StreamLoadEntity;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
 import org.apache.http.Header;
@@ -157,7 +156,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
             StreamLoadTableProperties tableProperties = properties.getTableProperties(region.getUniqueKey());
             return executorService.submit(() -> send(tableProperties, region));
         } else {
-            region.callback(new StreamLoadFailException("Transaction start failed, db : " + region.getDatabase()));
+            region.fail(new StreamLoadFailException("Transaction start failed, db : " + region.getDatabase()));
         }
 
         return null;
@@ -266,14 +265,13 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
 
     protected StreamLoadResponse send(StreamLoadTableProperties tableProperties, TableRegion region) {
         try {
-            StreamLoadDataFormat dataFormat = tableProperties.getDataFormat();
             String host = getAvailableHost();
             String sendUrl = getSendUrl(host, region.getDatabase(), region.getTable());
             String label = region.getLabel();
 
             HttpPut httpPut = new HttpPut(sendUrl);
             httpPut.setConfig(RequestConfig.custom().setExpectContinueEnabled(true).setRedirectsEnabled(true).build());
-            httpPut.setEntity(new StreamLoadEntity(region, dataFormat, region.getEntityMeta()));
+            httpPut.setEntity(region.getHttpEntity());
 
             httpPut.setHeaders(defaultHeaders);
 
@@ -337,7 +335,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
             }
         } catch (Exception e) {
             log.error("Exception happens when sending data, thread: {}", Thread.currentThread().getName(), e);
-            region.callback(e);
+            region.fail(e);
         }
         return null;
     }
