@@ -19,7 +19,6 @@
 package com.starrocks.data.load.stream.v2;
 
 import com.starrocks.data.load.stream.Chunk;
-import com.starrocks.data.load.stream.StreamLoadDataFormat;
 import com.starrocks.data.load.stream.StreamLoadManager;
 import com.starrocks.data.load.stream.StreamLoadResponse;
 import com.starrocks.data.load.stream.StreamLoadSnapshot;
@@ -50,13 +49,10 @@ public class TransactionTableRegion implements TableRegion {
 
     private final StreamLoadManager manager;
     private final StreamLoader streamLoader;
-
     private final String uniqueKey;
     private final String database;
     private final String table;
     private final StreamLoadTableProperties properties;
-    private final StreamLoadDataFormat dataFormat;
-
     private final AtomicLong age = new AtomicLong(0L);
     private final AtomicLong cacheBytes = new AtomicLong();
     private final AtomicReference<State> state;
@@ -65,26 +61,31 @@ public class TransactionTableRegion implements TableRegion {
     private final ConcurrentLinkedQueue<Chunk> inactiveChunks = new ConcurrentLinkedQueue<>();
     private volatile String label;
     private volatile Future<?> responseFuture;
-    private volatile long lastWriteTimeMillis = Long.MAX_VALUE;
-
     private volatile long lastCommitTimeMills;
+    private final int maxRetries;
+    private final int retryIntervalInMs;
+    private volatile int numRetries;
+    private volatile long lastFailTimeMs;
 
     public TransactionTableRegion(String uniqueKey,
                             String database,
                             String table,
                             StreamLoadManager manager,
                             StreamLoadTableProperties properties,
-                            StreamLoader streamLoader) {
+                            StreamLoader streamLoader,
+                            int maxRetries,
+                            int retryIntervalInMs) {
         this.uniqueKey = uniqueKey;
         this.database = database;
         this.table = table;
         this.manager = manager;
         this.properties = properties;
-        this.dataFormat = properties.getDataFormat();
         this.streamLoader = streamLoader;
         this.state = new AtomicReference<>(State.ACTIVE);
         this.lastCommitTimeMills = System.currentTimeMillis();
-        this.activeChunk = new Chunk(dataFormat);
+        this.activeChunk = new Chunk(properties.getDataFormat());
+        this.maxRetries = maxRetries;
+        this.retryIntervalInMs = retryIntervalInMs;
     }
 
     @Override
@@ -120,11 +121,6 @@ public class TransactionTableRegion implements TableRegion {
     @Override
     public long getCacheBytes() {
         return cacheBytes.get();
-    }
-
-    @Override
-    public long getLastWriteTimeMillis() {
-        return lastWriteTimeMillis;
     }
 
     @Override
@@ -168,21 +164,16 @@ public class TransactionTableRegion implements TableRegion {
             return;
         }
         inactiveChunks.add(activeChunk);
-        activeChunk = new Chunk(dataFormat);
+        activeChunk = new Chunk(properties.getDataFormat());
     }
 
     protected int write0(byte[] row) {
-        if (activeChunk == null) {
-            activeChunk = new Chunk(dataFormat);
-        }
-
         if (activeChunk.estimateChunkSize(row) > properties.getChunkLimit()) {
             switchChunk();
         }
 
         activeChunk.addRow(row);
         cacheBytes.addAndGet(row.length);
-        lastWriteTimeMillis = System.currentTimeMillis();
         return row.length;
     }
 
@@ -205,7 +196,7 @@ public class TransactionTableRegion implements TableRegion {
                 }
             }
             if (!inactiveChunks.isEmpty()) {
-                streamLoad();
+                streamLoad(0);
                 return true;
             } else {
                 state.compareAndSet(State.FLUSHING, State.ACTIVE);
@@ -257,7 +248,16 @@ public class TransactionTableRegion implements TableRegion {
 
     @Override
     public void fail(Throwable e) {
-        manager.callback(e);
+        if (numRetries >= maxRetries) {
+            manager.callback(e);
+            return;
+        }
+        responseFuture = null;
+        numRetries += 1;
+        lastFailTimeMs = System.currentTimeMillis();
+        LOG.warn("Failed to flush data for db: {}, table: {}, and will retry for {} times after {} ms",
+                database, table, numRetries, retryIntervalInMs, e);
+        streamLoad(retryIntervalInMs);
     }
 
     @Override
@@ -267,11 +267,12 @@ public class TransactionTableRegion implements TableRegion {
         response.setFlushBytes(chunk.rowBytes());
         response.setFlushRows(chunk.numRows());
         manager.callback(response);
+        numRetries = 0;
 
         LOG.info("Stream load flushed, db: {}, table: {}, label : {}", database, table, label);
         if (!inactiveChunks.isEmpty()) {
             LOG.info("Stream load continue, db: {}, table: {}, label : {}", database, table, label);
-            streamLoad();
+            streamLoad(0);
             return;
         }
         if (state.compareAndSet(State.FLUSHING, State.ACTIVE)) {
@@ -284,12 +285,12 @@ public class TransactionTableRegion implements TableRegion {
         return responseFuture;
     }
 
-    protected void streamLoad() {
+    protected void streamLoad(int delayMs) {
         try {
             Chunk chunk = inactiveChunks.peek();
             LOG.info("Stream load chunk, db: {}, table: {}, numRows: {}, rowBytes: {}, chunkBytes: {}",
                     database, table, chunk.numRows(), chunk.rowBytes(), chunk.chunkBytes());
-            responseFuture = streamLoader.send(this);
+            responseFuture = streamLoader.send(this, delayMs);
         } catch (Exception e) {
             fail(e);
         }
@@ -298,6 +299,11 @@ public class TransactionTableRegion implements TableRegion {
     @Override
     public HttpEntity getHttpEntity() {
         return new ChunkHttpEntity(uniqueKey, inactiveChunks.peek());
+    }
+
+    @Override
+    public long getLastWriteTimeMillis() {
+        throw new UnsupportedOperationException();
     }
 
     @Override

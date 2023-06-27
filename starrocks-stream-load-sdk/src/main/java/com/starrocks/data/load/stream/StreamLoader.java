@@ -32,6 +32,8 @@ public interface StreamLoader {
     boolean begin(TableRegion region);
     Future<StreamLoadResponse> send(TableRegion region);
 
+    Future<StreamLoadResponse> send(TableRegion region, int delayMs);
+
     boolean prepare(StreamLoadSnapshot.Transaction transaction);
     boolean commit(StreamLoadSnapshot.Transaction transaction);
     boolean rollback(StreamLoadSnapshot.Transaction transaction);
