@@ -24,6 +24,7 @@
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
             <version>${slf4j-api.version}</version>
+            <scope>provided</scope>
         </dependency>
 
         <dependency>
@@ -119,6 +120,8 @@
                         </goals>
                         <configuration>
                             <createDependencyReducedPom>true</createDependencyReducedPom>
+                            <shadedArtifactAttached>true</shadedArtifactAttached>
+                            <shadedClassifierName>jar-with-dependencies</shadedClassifierName>
                             <relocations>
                                 <relocation>
                                     <pattern>com.alibaba</pattern>
