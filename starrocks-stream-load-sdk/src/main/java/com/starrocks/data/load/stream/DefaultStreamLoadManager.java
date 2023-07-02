@@ -1,6 +1,5 @@
 package com.starrocks.data.load.stream;
 
-import com.alibaba.fastjson.JSON;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
 import org.slf4j.Logger;
@@ -275,7 +274,7 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         }
 
         if (response.getException() != null) {
-            log.error("Stream load failed, body : " + JSON.toJSONString(response.getBody()), response.getException());
+            log.error("Stream load failed", response.getException());
             this.e = response.getException();
         }
 
@@ -366,7 +365,6 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
             log.info("Stream load manger close, current bytes : {}, flush rows : {}" +
                             ", numberTotalRows : {}, numberLoadRows : {}, loadMetrics: {}",
                     currentCacheBytes.get(), totalFlushRows.get(), numberTotalRows.get(), numberLoadRows.get(), loadMetrics);
-            printRegionDetails();
             manager.interrupt();
             streamLoader.close();
         }
@@ -425,15 +423,5 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         // For starrocks <= 2.2, stream load does not support to send json format data
         // using http chunk, so should use BatchTableRegion
         return version.getMajor() < 2 || (version.getMajor() == 2 && version.getMinor() <= 2);
-    }
-
-    private void printRegionDetails() {
-        StringBuilder builder = new StringBuilder();
-
-        for (TableRegion region : regions.values()) {
-            builder.append(JSON.toJSONString(region));
-        }
-
-        log.info("Regions details : {}", builder);
     }
 }
