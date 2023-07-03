@@ -17,6 +17,7 @@
         <httpclient.version>4.5.13</httpclient.version>
         <httpcore.version>4.4.15</httpcore.version>
         <fastjson.version>1.2.83</fastjson.version>
+        <fasterxml.version>2.12.4</fasterxml.version>
     </properties>
 
     <dependencies>
@@ -40,9 +41,21 @@
         </dependency>
 
         <dependency>
-            <groupId>com.alibaba</groupId>
-            <artifactId>fastjson</artifactId>
-            <version>${fastjson.version}</version>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${fasterxml.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+            <version>${fasterxml.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+            <version>${fasterxml.version}</version>
         </dependency>
 
         <dependency>
@@ -71,6 +84,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.8.1</version>
                 <configuration>
                     <source>1.8</source>
                     <target>1.8</target>
@@ -85,7 +99,7 @@
                         <fileset>
                             <directory>./target/</directory>
                             <includes>
-                                <include>${artifactId}*.jar</include>
+                                <include>${project.artifactId}*.jar</include>
                             </includes>
                             <followSymlinks>false</followSymlinks>
                         </fileset>
@@ -95,6 +109,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
+                <version>2.4</version>
                 <executions>
                     <execution>
                         <phase>package</phase>
@@ -124,10 +139,6 @@
                             <shadedClassifierName>jar-with-dependencies</shadedClassifierName>
                             <relocations>
                                 <relocation>
-                                    <pattern>com.alibaba</pattern>
-                                    <shadedPattern>com.starrocks.streamload.shade.com.alibaba</shadedPattern>
-                                </relocation>
-                                <relocation>
                                     <pattern>org.apache.hc</pattern>
                                     <shadedPattern>com.starrocks.streamload.shade.org.apache.hc</shadedPattern>
                                 </relocation>
@@ -138,6 +149,10 @@
                                 <relocation>
                                     <pattern>org.apache.commons</pattern>
                                     <shadedPattern>com.starrocks.streamload.shade.org.apache.commons</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.fasterxml.jackson</pattern>
+                                    <shadedPattern>com.starrocks.streamload.shade.com.fasterxml.jackson</shadedPattern>
                                 </relocation>
                             </relocations>
                             <artifactSet>
@@ -152,7 +167,7 @@
                                     <include>org.apache.httpcomponents:httpcore-nio</include>
                                     <include>org.apache.httpcomponents:httpclient</include>
                                     <include>org.apache.httpcomponents:httpasyncclient</include>
-                                    <include>com.alibaba:fastjson</include>
+                                    <include>com.fasterxml.jackson.core:*</include>
                                 </includes>
                             </artifactSet>
                             <filters>

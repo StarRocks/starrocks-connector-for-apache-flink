@@ -1,7 +1,6 @@
 package com.starrocks.data.load.stream;
 
-import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.JSONObject;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.starrocks.data.load.stream.exception.StreamLoadFailException;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import org.apache.http.Header;
@@ -114,8 +113,9 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
             }
             log.info("Transaction started, db: {}, table: {}, label: {}, body : {}", db, table, label, responseBody);
 
-            JSONObject bodyJson = JSON.parseObject(responseBody);
-            String status = bodyJson.getString("Status");
+            JsonNode node = objectMapper.readTree(responseBody);
+            JsonNode statusNode = node.get("Status");
+            String status = statusNode == null ? null : statusNode.asText();
 
             if (status == null) {
                 String errMsg = String.format("Can't find 'Status' in the response of transaction begin request. " +
@@ -165,7 +165,8 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
             log.info("Transaction prepared, label : {}, body : {}", transaction.getLabel(), responseBody);
 
             StreamLoadResponse streamLoadResponse = new StreamLoadResponse();
-            StreamLoadResponse.StreamLoadResponseBody streamLoadBody = JSON.parseObject(responseBody, StreamLoadResponse.StreamLoadResponseBody.class);
+            StreamLoadResponse.StreamLoadResponseBody streamLoadBody =
+                    objectMapper.readValue(responseBody, StreamLoadResponse.StreamLoadResponseBody.class);
             streamLoadResponse.setBody(streamLoadBody);
             String status = streamLoadBody.getStatus();
             if (status == null) {
@@ -228,7 +229,8 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
             log.info("Transaction committed, lable: {}, body : {}", transaction.getLabel(), responseBody);
 
             StreamLoadResponse streamLoadResponse = new StreamLoadResponse();
-            StreamLoadResponse.StreamLoadResponseBody streamLoadBody = JSON.parseObject(responseBody, StreamLoadResponse.StreamLoadResponseBody.class);
+            StreamLoadResponse.StreamLoadResponseBody streamLoadBody =
+                    objectMapper.readValue(responseBody, StreamLoadResponse.StreamLoadResponseBody.class);
             streamLoadResponse.setBody(streamLoadBody);
             String status = streamLoadBody.getStatus();
             if (status == null) {
@@ -293,8 +295,10 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
             }
             log.info("Transaction rollback, label: {}, body : {}", transaction.getLabel(), responseBody);
 
-            JSONObject bodyJson = JSON.parseObject(responseBody);
-            String status = bodyJson.getString("Status");
+            JsonNode node = objectMapper.readTree(responseBody);
+            JsonNode statusNode = node.get("Status");
+            String status = statusNode == null ? null : statusNode.asText();
+
             if (status == null) {
                 String errMsg = String.format("Abort transaction status is null. db: %s, table: %s, label: %s, response: %s",
                         transaction.getDatabase(), transaction.getTable(), transaction.getLabel(), responseBody);

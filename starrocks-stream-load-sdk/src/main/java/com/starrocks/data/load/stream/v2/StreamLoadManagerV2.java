@@ -18,7 +18,6 @@
 
 package com.starrocks.data.load.stream.v2;
 
-import com.alibaba.fastjson.JSON;
 import com.starrocks.data.load.stream.DefaultStreamLoader;
 import com.starrocks.data.load.stream.EnvUtils;
 import com.starrocks.data.load.stream.LoadMetrics;
@@ -283,7 +282,7 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
         }
 
         if (response.getException() != null) {
-            LOG.error("Stream load failed, body : " + JSON.toJSONString(response.getBody()), response.getException());
+            LOG.error("Stream load failed", response.getException());
             this.e = response.getException();
         }
 
