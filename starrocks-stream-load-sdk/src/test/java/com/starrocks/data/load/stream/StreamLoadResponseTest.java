@@ -1,6 +1,8 @@
 package com.starrocks.data.load.stream;
 
-import com.alibaba.fastjson.JSON;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.MapperFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -8,7 +10,7 @@ import org.junit.Test;
 public class StreamLoadResponseTest {
 
     @Test
-    public void testDeserialize() {
+    public void testDeserialize() throws Exception {
         String entityContent = "{\n" +
                 "    \"TxnId\": 22736752,\n" +
                 "    \"Label\": \"119d4ca5-a920-4dbb-84ad-64e062a449c5\",\n" +
@@ -27,8 +29,13 @@ public class StreamLoadResponseTest {
                 "    \"CommitAndPublishTimeMs\": 86\n" +
                 "}";
 
+        ObjectMapper objectMapper = new ObjectMapper();
+        // StreamLoadResponseBody does not contain all fields returned by StarRocks
+        objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        // filed names in StreamLoadResponseBody are case-insensitive
+        objectMapper.configure(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES, true);
         StreamLoadResponse.StreamLoadResponseBody responseBody =
-                JSON.parseObject(entityContent, StreamLoadResponse.StreamLoadResponseBody.class);
+                objectMapper.readValue(entityContent, StreamLoadResponse.StreamLoadResponseBody.class);
 
         Assert.assertNotNull(responseBody.getStreamLoadPlanTimeMs());
     }

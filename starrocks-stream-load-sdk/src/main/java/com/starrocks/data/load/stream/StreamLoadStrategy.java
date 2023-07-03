@@ -1,6 +1,5 @@
 package com.starrocks.data.load.stream;
 
-import com.alibaba.fastjson.JSON;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,7 +34,7 @@ public interface StreamLoadStrategy extends Serializable {
             this.cacheLimitBytes = cacheMaxBytes * 0.8F;
             this.writingThreshold = properties.getWritingThreshold();
             this.regionBufferRatio = properties.getRegionBufferRatio();
-            log.info("Load Strategy properties : {}", JSON.toJSONString(this));
+            log.info("Load Strategy properties : {}", this);
         }
 
         @Override
@@ -92,6 +91,18 @@ public interface StreamLoadStrategy extends Serializable {
 
         public float getRegionBufferRatio() {
             return regionBufferRatio;
+        }
+
+        @Override
+        public String toString() {
+            return "DefaultLoadStrategy{" +
+                    "oldAge=" + oldAge +
+                    ", youngAge=" + youngAge +
+                    ", cacheMaxBytes=" + cacheMaxBytes +
+                    ", writingThreshold=" + writingThreshold +
+                    ", regionBufferRatio=" + regionBufferRatio +
+                    ", cacheLimitBytes=" + cacheLimitBytes +
+                    '}';
         }
     }
 }

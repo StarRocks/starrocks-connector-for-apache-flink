@@ -1,6 +1,8 @@
 package com.starrocks.data.load.stream;
 
-import com.alibaba.fastjson.JSON;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.MapperFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.starrocks.data.load.stream.exception.StreamLoadFailException;
 import com.starrocks.data.load.stream.http.StreamLoadEntity;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
@@ -56,6 +58,8 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
 
     private final AtomicBoolean start = new AtomicBoolean(false);
 
+    protected volatile ObjectMapper objectMapper;
+
     protected void enableTransaction() {
         this.enableTransaction = true;
     }
@@ -63,6 +67,12 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
     @Override
     public void start(StreamLoadProperties properties, StreamLoadManager manager) {
         if (start.compareAndSet(false, true)) {
+            this.objectMapper = new ObjectMapper();
+            // StreamLoadResponseBody does not contain all fields returned by StarRocks
+            objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+            // filed names in StreamLoadResponseBody are case-insensitive
+            objectMapper.configure(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES, true);
+
             this.properties = properties;
             this.manager = manager;
 
@@ -90,8 +100,17 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
             threadPoolExecutor.allowCoreThreadTimeOut(true);
             this.executorService = threadPoolExecutor;
 
+            String propertiesStr = "";
+            String headerStr = "";
+            try {
+                propertiesStr = objectMapper.writeValueAsString(properties);
+                headerStr = objectMapper.writeValueAsString(defaultHeaders);
+            } catch (Exception e) {
+                log.warn("Failed to convert properties and headers to json", e);
+            }
+
             log.info("Default Stream Loader start, properties : {}, defaultHeaders : {}",
-                    JSON.toJSONString(properties), JSON.toJSONString(defaultHeaders));
+                    propertiesStr, headerStr);
         }
     }
 
@@ -257,7 +276,8 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
                         label, region.getDatabase(), region.getTable(), responseBody);
 
                 StreamLoadResponse streamLoadResponse = new StreamLoadResponse();
-                StreamLoadResponse.StreamLoadResponseBody streamLoadBody = JSON.parseObject(responseBody, StreamLoadResponse.StreamLoadResponseBody.class);
+                StreamLoadResponse.StreamLoadResponseBody streamLoadBody =
+                        objectMapper.readValue(responseBody, StreamLoadResponse.StreamLoadResponseBody.class);
                 streamLoadResponse.setBody(streamLoadBody);
                 String status = streamLoadBody.getStatus();
                 if (status == null) {
@@ -396,10 +416,10 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
                     }
 
                     StreamLoadResponse.StreamLoadResponseBody responseBody =
-                            JSON.parseObject(entityContent, StreamLoadResponse.StreamLoadResponseBody.class);
+                            objectMapper.readValue(entityContent, StreamLoadResponse.StreamLoadResponseBody.class);
                     String state = responseBody.getState();
                     if (state == null) {
-                        log.error("Fail to get load state, label: {}, load information: {}", label, JSON.toJSONString(responseBody));
+                        log.error("Fail to get load state, label: {}, load information: {}", label, entityContent);
                         throw new StreamLoadFailException(String.format("Could not get load state because of state is null," +
                                 "label: %s, load information: %s", label, entityContent));
                     }
