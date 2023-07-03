@@ -1,6 +1,6 @@
 package com.starrocks.data.load.stream.properties;
 
-import com.alibaba.fastjson.annotation.JSONField;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.starrocks.data.load.stream.StarRocksVersion;
 import com.starrocks.data.load.stream.StreamLoadUtils;
 
@@ -17,7 +17,7 @@ public class StreamLoadProperties implements Serializable {
     private final String jdbcUrl;
     private final String[] loadUrls;
     private final String username;
-    @JSONField(serialize = false)
+    @JsonIgnore
     private final String password;
     private final String version;
     // can be null

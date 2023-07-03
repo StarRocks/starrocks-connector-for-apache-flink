@@ -1,5 +1,7 @@
 package com.starrocks.data.load.stream;
 
+import com.fasterxml.jackson.annotation.JsonValue;
+
 import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
 
@@ -51,6 +53,15 @@ public interface StreamLoadDataFormat {
             return delimiter;
         }
 
+        @JsonValue
+        @Override
+        public String toString() {
+            return "CsvFormat{" +
+                    "first=" + new String(EMPTY_DELIMITER) +
+                    ", delimiter=" + new String(delimiter) +
+                    ", end=" + new String(delimiter) +
+                    '}';
+        }
     }
 
     class JSONFormat implements StreamLoadDataFormat, Serializable {
@@ -73,5 +84,14 @@ public interface StreamLoadDataFormat {
             return end;
         }
 
+        @JsonValue
+        @Override
+        public String toString() {
+            return "JsonFormat{" +
+                    "first=" + new String(first) +
+                    ", delimiter=" + new String(delimiter) +
+                    ", end=" + new String(end) +
+                    '}';
+        }
     }
 }
