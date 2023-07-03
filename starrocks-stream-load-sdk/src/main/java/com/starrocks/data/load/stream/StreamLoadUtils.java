@@ -1,7 +1,7 @@
 package com.starrocks.data.load.stream;
 
-import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.JSONObject;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.http.HttpHeaders;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -73,9 +73,12 @@ public class StreamLoadUtils {
             String responseBody = EntityUtils.toString(response.getEntity());
             LOG.debug("Transaction load probe response {}", responseBody);
 
-            JSONObject bodyJson = JSON.parseObject(responseBody);
-            String status = bodyJson.getString("status");
-            String msg = bodyJson.getString("msg");
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode node = mapper.readTree(responseBody);
+            JsonNode statusNode = node.get("status");
+            String status = statusNode == null ? null : statusNode.asText();
+            JsonNode msgNode = node.get("msg");
+            String msg = msgNode == null ? null : msgNode.asText();
 
             // If StarRocks does not support transaction load, FE's NotFoundAction#executePost
             // will be called where you can know how the response json is constructed
