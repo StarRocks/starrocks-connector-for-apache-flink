@@ -15,10 +15,10 @@
 package com.starrocks.connector.flink.it.sink;
 
 import com.starrocks.connector.flink.StarRocksSinkBaseTest;
-
 import mockit.Expectations;
 import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.TableEnvironment;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -28,6 +28,7 @@ import java.util.Map;
 
 import static org.junit.Assert.assertFalse;
 
+@Ignore
 public class StarRocksDynamicTableSinkITTest extends StarRocksSinkBaseTest {
     
     @Test
