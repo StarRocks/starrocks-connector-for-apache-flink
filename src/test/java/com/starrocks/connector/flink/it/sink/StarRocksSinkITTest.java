@@ -30,92 +30,16 @@ import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import org.apache.flink.table.connector.ChangelogMode;
 import org.apache.flink.types.Row;
 import org.apache.flink.types.RowKind;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
 import org.junit.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.StringJoiner;
-import java.util.UUID;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assume.assumeTrue;
+import static com.starrocks.connector.flink.it.sink.StarRocksTableUtils.scanTable;
+import static com.starrocks.connector.flink.it.sink.StarRocksTableUtils.verifyResult;
 
-public class StarRocksSinkITTest {
-
-    private static final Logger LOG = LoggerFactory.getLogger(StarRocksSinkITTest.class);
-
-    private static String DB_NAME;
-    private static String HTTP_URLS = null; // "127.0.0.1:11901";
-    private static String JDBC_URLS = null; // "jdbc:mysql://127.0.0.1:11903";
-
-    private static String getHttpUrls() {
-        return HTTP_URLS;
-    }
-
-    private static String getJdbcUrl() {
-        return JDBC_URLS;
-    }
-
-    private static Connection DB_CONNECTION;
-
-    @BeforeClass
-    public static void setUp() throws Exception {
-        HTTP_URLS = System.getProperty("http_urls");
-        JDBC_URLS = System.getProperty("jdbc_urls");
-        assumeTrue(HTTP_URLS != null && JDBC_URLS != null);
-
-        DB_NAME = "sr_sink_test_" + genRandomUuid();
-        try {
-            DB_CONNECTION = DriverManager.getConnection(getJdbcUrl(), "root", "");
-            LOG.info("Success to create db connection via jdbc {}", getJdbcUrl());
-        } catch (Exception e) {
-            LOG.error("Failed to create db connection via jdbc {}", getJdbcUrl(), e);
-            throw e;
-        }
-
-        try {
-            String createDb = "CREATE DATABASE " + DB_NAME;
-            executeSRDDLSQL(createDb);
-            LOG.info("Successful to create database {}", DB_NAME);
-        } catch (Exception e) {
-            LOG.error("Failed to create database {}", DB_NAME, e);
-            throw e;
-        }
-    }
-
-    @AfterClass
-    public static void tearDown() throws Exception {
-        if (DB_CONNECTION != null) {
-            try {
-                String dropDb = String.format("DROP DATABASE IF EXISTS %s FORCE", DB_NAME);
-                executeSRDDLSQL(dropDb);
-                LOG.info("Successful to drop database {}", DB_NAME);
-            } catch (Exception e) {
-                LOG.error("Failed to drop database {}", DB_NAME, e);
-            }
-            DB_CONNECTION.close();
-        }
-    }
-
-    private static String genRandomUuid() {
-        return UUID.randomUUID().toString().replace("-", "_");
-    }
-
-    private static void executeSRDDLSQL(String sql) throws Exception {
-        try (PreparedStatement statement = DB_CONNECTION.prepareStatement(sql)) {
-            statement.execute();
-        }
-    }
+public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
 
     @Test
     public void testDupKeyWriteFullColumnsInOrder() throws Exception {
@@ -234,7 +158,7 @@ public class StarRocksSinkITTest {
         Table in = tEnv.fromDataStream(srcDs);
         tEnv.createTemporaryView("src", in);
         tEnv.executeSql("INSERT INTO sink SELECT * FROM src").await();
-        List<List<Object>> actualData = scanTable(DB_NAME, tableName);
+        List<List<Object>> actualData = scanTable(DB_CONNECTION, DB_NAME, tableName);
         verifyResult(expectedData, actualData);
     }
 
@@ -356,7 +280,7 @@ public class StarRocksSinkITTest {
         Table in = tEnv.fromDataStream(srcDs);
         tEnv.createTemporaryView("src", in);
         tEnv.executeSql("INSERT INTO sink SELECT * FROM src").await();
-        List<List<Object>> actualData = scanTable(DB_NAME, tableName);
+        List<List<Object>> actualData = scanTable(DB_CONNECTION, DB_NAME, tableName);
         verifyResult(expectedData, actualData);
     }
 
@@ -422,48 +346,7 @@ public class StarRocksSinkITTest {
             Arrays.asList(1, 3.0f, "row3"),
             Arrays.asList(3, 3.0f, "row3")
         );
-        List<List<Object>> actualData = scanTable(DB_NAME, tableName);
+        List<List<Object>> actualData = scanTable(DB_CONNECTION, DB_NAME, tableName);
         verifyResult(expectedData, actualData);
-    }
-
-    // Scan table, and returns a collection of rows
-    private static List<List<Object>> scanTable(String db, String table) throws SQLException {
-        try (PreparedStatement statement = DB_CONNECTION.prepareStatement(String.format("SELECT * FROM `%s`.`%s`", db, table))) {
-            try (ResultSet resultSet = statement.executeQuery()) {
-                List<List<Object>> results = new ArrayList<>();
-                int numColumns = resultSet.getMetaData().getColumnCount();
-                while (resultSet.next()) {
-                    List<Object> row = new ArrayList<>();
-                    for (int i = 1; i <= numColumns; i++) {
-                        row.add(resultSet.getObject(i));
-                    }
-                    results.add(row);
-                }
-                return results;
-            }
-        }
-    }
-
-    private static void verifyResult(List<List<Object>> expected, List<List<Object>> actual) {
-        List<String> expectedRows = new ArrayList<>();
-        List<String> actualRows = new ArrayList<>();
-        for (List<Object> row : expected) {
-            StringJoiner joiner = new StringJoiner(",");
-            for (Object col : row) {
-                joiner.add(col == null ? "null" : col.toString());
-            }
-            expectedRows.add(joiner.toString());
-        }
-        expectedRows.sort(String::compareTo);
-
-        for (List<Object> row : actual) {
-            StringJoiner joiner = new StringJoiner(",");
-            for (Object col : row) {
-                joiner.add(col == null ? "null" : col.toString());
-            }
-            actualRows.add(joiner.toString());
-        }
-        actualRows.sort(String::compareTo);
-        assertArrayEquals(expectedRows.toArray(), actualRows.toArray());
     }
 }
