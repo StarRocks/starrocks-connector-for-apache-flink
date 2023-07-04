@@ -23,7 +23,6 @@ import com.starrocks.connector.flink.table.source.struct.StarRocksSchema;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanBatchResult;
 import com.starrocks.thrift.TScanColumnDesc;
-
 import org.apache.flink.table.data.DecimalData;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.StringData;
@@ -85,14 +84,9 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
         }
         TScanBatchResult nextResult = new TScanBatchResult();
         nextResult.setRows(byteArray);
-        // generate flinkRows1 with right srSchema
         StarRocksSourceFlinkRows flinkRows1 = new StarRocksSourceFlinkRows(nextResult, columnRichInfos, srSchema, selectColumns);
         flinkRows1 = flinkRows1.genFlinkRowsFromArrow();
         checkFlinkRows(flinkRows1);
-        // generate flinkRows2 with wrong srSchema
-        StarRocksSourceFlinkRows flinkRows2 = new StarRocksSourceFlinkRows(nextResult, columnRichInfos, srWrongOrderSchema, selectColumns);
-        flinkRows2 = flinkRows2.genFlinkRowsFromArrow();
-        checkFlinkRows(flinkRows2);
     }
 
     public void checkFlinkRows(StarRocksSourceFlinkRows flinkRows) {

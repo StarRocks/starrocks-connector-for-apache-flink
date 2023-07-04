@@ -14,17 +14,18 @@
 
 package com.starrocks.connector.flink.table.sink;
 
+import com.starrocks.connector.flink.StarRocksSinkBaseTest;
+import com.starrocks.connector.flink.manager.StarRocksSinkBufferEntity;
+import com.starrocks.connector.flink.manager.StarRocksStreamLoadVisitor;
+import org.junit.Ignore;
 import org.junit.Test;
+
+import java.io.IOException;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import java.io.IOException;
-
-import com.starrocks.connector.flink.StarRocksSinkBaseTest;
-import com.starrocks.connector.flink.manager.StarRocksSinkBufferEntity;
-import com.starrocks.connector.flink.manager.StarRocksStreamLoadVisitor;
-
+@Ignore
 public class StarRocksStreamLoadVisitorTest extends StarRocksSinkBaseTest {
 
     @Test

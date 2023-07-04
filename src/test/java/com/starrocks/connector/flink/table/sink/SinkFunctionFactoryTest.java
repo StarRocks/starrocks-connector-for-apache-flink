@@ -20,6 +20,7 @@ package com.starrocks.connector.flink.table.sink;
 
 import com.alibaba.fastjson.JSONObject;
 import com.starrocks.connector.flink.mock.MockFeHttpServer;
+import com.starrocks.data.load.stream.StreamLoadUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.flink.configuration.Configuration;
@@ -95,9 +96,9 @@ public class SinkFunctionFactoryTest {
     @Test
     public void testDetectStarRocksFeature() {
         AtomicReference<Boolean> supportTransactionLoad = new AtomicReference<>();
-        new MockUp<SinkFunctionFactory>() {
+        new MockUp<StreamLoadUtils>() {
             @Mock
-            public boolean isStarRocksSupportTransactionLoad(StarRocksSinkOptions sinkOptions) {
+            public boolean isStarRocksSupportTransactionLoad(List<String> httpUrls, int connectTimeout, String userName, String password) {
                 if (supportTransactionLoad.get() == null) {
                     throw new NullPointerException();
                 }
