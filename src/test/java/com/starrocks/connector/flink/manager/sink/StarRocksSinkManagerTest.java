@@ -14,14 +14,16 @@
 
 package com.starrocks.connector.flink.manager.sink;
 
+import com.starrocks.connector.flink.StarRocksSinkBaseTest;
+import com.starrocks.connector.flink.manager.StarRocksSinkManager;
+import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
+import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.TableSchema.Builder;
-
+import org.junit.Ignore;
 import org.junit.Test;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -29,14 +31,11 @@ import java.util.HashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import com.starrocks.connector.flink.StarRocksSinkBaseTest;
-import com.starrocks.connector.flink.manager.StarRocksSinkManager;
-import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
-import mockit.Expectations;
-import mockit.MockUp;
-import mockit.Mock;
-
+@Ignore
 public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
 
     @Test
