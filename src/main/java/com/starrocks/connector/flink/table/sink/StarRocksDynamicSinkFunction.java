@@ -146,7 +146,8 @@ public class StarRocksDynamicSinkFunction<T> extends StarRocksDynamicSinkFunctio
             }
         }
         if (value instanceof RowData) {
-            if (RowKind.UPDATE_BEFORE.equals(((RowData)value).getRowKind()) && sinkOptions.getIgnoreUpdateBefore()) {
+            if (RowKind.UPDATE_BEFORE.equals(((RowData)value).getRowKind()) &&
+                    (!sinkOptions.supportUpsertDelete() || sinkOptions.getIgnoreUpdateBefore())) {
                 return;
             }
             if (!sinkOptions.supportUpsertDelete() && RowKind.DELETE.equals(((RowData)value).getRowKind())) {
