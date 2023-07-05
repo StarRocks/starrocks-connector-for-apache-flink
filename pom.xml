@@ -387,6 +387,46 @@ limitations under the License.
                 </configuration>
             </plugin>
             <plugin>
+                <groupId>org.apache.rat</groupId>
+                <artifactId>apache-rat-plugin</artifactId>
+                <version>0.13</version>
+                <inherited>false</inherited>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <consoleOutput>true</consoleOutput>
+                    <excludeSubProjects>false</excludeSubProjects>
+                    <numUnapprovedLicenses>0</numUnapprovedLicenses>
+                    <licenses>
+                        <license implementation="org.apache.rat.analysis.license.SimplePatternBasedLicense">
+                            <licenseFamilyCategory>AL2 </licenseFamilyCategory>
+                            <licenseFamilyName>Apache License 2.0</licenseFamilyName>
+                            <notes />
+                            <patterns>
+                                <pattern>Licensed to the Apache Software Foundation (ASF) under one</pattern>
+                            </patterns>
+                        </license>
+                    </licenses>
+                    <licenseFamilies>
+                        <licenseFamily implementation="org.apache.rat.license.SimpleLicenseFamily">
+                            <familyName>Apache License 2.0</familyName>
+                        </licenseFamily>
+                    </licenseFamilies>
+                    <excludes>
+                        <exclude>src/test/resources/data/**</exclude>
+                        <exclude>**/target/**</exclude>
+                        <exclude>README.md</exclude>
+                        <exclude>.github/**</exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
                 <version>3.2.1</version>
