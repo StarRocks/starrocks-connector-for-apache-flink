@@ -110,6 +110,15 @@ public class StarRocksSinkOptions implements Serializable {
     public static final ConfigOption<Integer> SINK_METRIC_HISTOGRAM_WINDOW_SIZE = ConfigOptions.key("sink.metric.histogram-window-size")
             .intType().defaultValue(100).withDescription("Window size of histogram metrics.");
 
+    public static final ConfigOption<Boolean> SINK_IGNORE_UPDATE_BEFORE = ConfigOptions.key("sink.ignore.update-before")
+            .booleanType().defaultValue(true).withDescription("Whether to ignore update_before records. In general, update_before " +
+                    "and update_after have the same primary key, and appear in pair, so we only need to write the update_after " +
+                    "record to StarRocks, and ignore the update_before. But that hasn't always been the case, for example, if the " +
+                    "user updates one row with the primary key changed in the OLTP, and Flink cdc will generate a before and after" +
+                    "records, but they have the different primary keys. The connector should delete the update_before row, and " +
+                    "insert the update_after row in StarRocks, and this options should be set false for this case. Note that how " +
+                    "to set this options depends on the user case.");
+
     public static final ConfigOption<Integer> SINK_PARALLELISM = FactoryUtil.SINK_PARALLELISM;
 
     // Sink semantic
@@ -242,6 +251,10 @@ public class StarRocksSinkOptions implements Serializable {
 
     public Integer getSinkParallelism() {
         return tableOptions.getOptional(SINK_PARALLELISM).orElse(null);
+    }
+
+    public boolean getIgnoreUpdateBefore() {
+        return tableOptions.get(SINK_IGNORE_UPDATE_BEFORE);
     }
 
     public static Builder builder() {

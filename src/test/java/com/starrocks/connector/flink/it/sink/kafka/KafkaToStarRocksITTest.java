@@ -135,6 +135,91 @@ public class KafkaToStarRocksITTest extends KafkaTableTestBase {
         deleteTestTopic(topic);
     }
 
+    @Test
+    public void testUpdateWithPkChanged() throws Exception {
+        // create kafka topic and write data
+        final String topic = "update_with_pk_changed_topic";
+        createTestTopic(topic, 1, 1);
+        List<String> lines = readLines("data/debezium-update-with-pk-changed.txt");
+        try {
+            writeRecordsToKafka(topic, lines);
+        } catch (Exception e) {
+            throw new Exception("Failed to write debezium data to Kafka.", e);
+        }
+
+        // create SR table
+        String tableName = "testUpsertAndDelete_" + genRandomUuid();
+        String createStarRocksTable =
+                String.format(
+                        "CREATE TABLE `%s`.`%s` (" +
+                                "c0 INT," +
+                                "c1 FLOAT," +
+                                "c2 STRING" +
+                                ") ENGINE = OLAP " +
+                                "PRIMARY KEY(c0) " +
+                                "DISTRIBUTED BY HASH (c0) BUCKETS 8 " +
+                                "PROPERTIES (" +
+                                "\"replication_num\" = \"1\"" +
+                                ")",
+                        SR_DB_NAME, tableName);
+        executeSrSQL(createStarRocksTable);
+
+        // ---------- Produce an event time stream into Kafka -------------------
+        String bootstraps = getBootstrapServers();
+        String sourceDDL =
+                String.format(
+                        "CREATE TABLE debezium_source ("
+                                + " c0 INT NOT NULL,"
+                                + " c1 FLOAT,"
+                                + " c2 STRING,"
+                                + " PRIMARY KEY (c0) NOT ENFORCED"
+                                + ") WITH ("
+                                + " 'connector' = 'kafka',"
+                                + " 'topic' = '%s',"
+                                + " 'properties.bootstrap.servers' = '%s',"
+                                + " 'scan.startup.mode' = 'earliest-offset',"
+                                + " 'value.format' = 'debezium-json'"
+                                + ")",
+                        topic, bootstraps);
+        String sinkDDL =
+                String.format(
+                        "CREATE TABLE sink("
+                                + "c0 INT,"
+                                + "c1 FLOAT,"
+                                + "c2 STRING,"
+                                + "PRIMARY KEY (`c0`) NOT ENFORCED"
+                                + ") WITH ( "
+                                + "'connector' = 'starrocks',"
+                                + "'jdbc-url'='%s',"
+                                + "'load-url'='%s',"
+                                + "'database-name' = '%s',"
+                                + "'table-name' = '%s',"
+                                + "'username' = '%s',"
+                                + "'password' = '%s',"
+                                + "'sink.buffer-flush.interval-ms' = '1000'"
+                                + ")",
+                        getSrJdbcUrl(), getSrHttpUrls(), SR_DB_NAME, tableName, "root", "");
+
+        tEnv.executeSql(sourceDDL);
+        tEnv.executeSql(sinkDDL);
+        TableResult tableResult = tEnv.executeSql("INSERT INTO sink SELECT * FROM debezium_source");
+        // TODO find an elegant way to wait for the result
+        try {
+            Thread.sleep(10000);
+        } catch (Exception e) {
+            // ignore
+        }
+        tableResult.getJobClient().get().cancel().get(); // stop the job
+
+        List<List<Object>> expectedData = Arrays.asList(
+                Arrays.asList(2, 2.0f, "row2")
+        );
+        List<List<Object>> actualData = scanTable(SR_DB_CONNECTION, SR_DB_NAME, tableName);
+        verifyResult(expectedData, actualData);
+
+        deleteTestTopic(topic);
+    }
+
     private void writeRecordsToKafka(String topic, List<String> lines) throws Exception {
         DataStreamSource<String> stream = env.fromCollection(lines);
         SerializationSchema<String> serSchema = new SimpleStringSchema();
