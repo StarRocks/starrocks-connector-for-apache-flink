@@ -32,8 +32,12 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
+import java.util.StringJoiner;
 
 import static com.starrocks.connector.flink.it.sink.StarRocksTableUtils.scanTable;
 import static com.starrocks.connector.flink.it.sink.StarRocksTableUtils.verifyResult;
@@ -51,10 +55,32 @@ public class KafkaToStarRocksITTest extends KafkaTableTestBase {
 
     @Test
     public void testUpsertAndDelete() throws Exception {
+        testPrimaryKeyBase(
+                "upsert_and_delete_topic",
+                "data/debezium-upsert-and-delete.txt",
+                Collections.emptyMap(),
+                Arrays.asList(
+                        Arrays.asList(1, 2.0f, "row1"),
+                        Arrays.asList(2, 2.0f, "row2")
+                    )
+            );
+    }
+
+    @Test
+    public void testUpdateWithPkChanged() throws Exception {
+        testPrimaryKeyBase(
+                "update_with_pk_changed_topic",
+                "data/debezium-update-with-pk-changed.txt",
+                Collections.singletonMap("sink.ignore.update-before", "false"),
+                Collections.singletonList(Arrays.asList(2, 2.0f, "row2"))
+        );
+    }
+
+    private void testPrimaryKeyBase(String topic, String dataFile, Map<String, String> customProperties,
+                                    List<List<Object>> expectedData) throws Exception {
         // create kafka topic and write data
-        final String topic = "upsert_and_delete_topic";
         createTestTopic(topic, 1, 1);
-        List<String> lines = readLines("data/debezium-upsert-and-delete.txt");
+        List<String> lines = readLines(dataFile);
         try {
             writeRecordsToKafka(topic, lines);
         } catch (Exception e) {
@@ -62,7 +88,7 @@ public class KafkaToStarRocksITTest extends KafkaTableTestBase {
         }
 
         // create SR table
-        String tableName = "testUpsertAndDelete_" + genRandomUuid();
+        String tableName = "testPrimaryKeyBase_" + genRandomUuid();
         String createStarRocksTable =
                 String.format(
                         "CREATE TABLE `%s`.`%s` (" +
@@ -95,24 +121,31 @@ public class KafkaToStarRocksITTest extends KafkaTableTestBase {
                                 + " 'value.format' = 'debezium-json'"
                                 + ")",
                         topic, bootstraps);
-        String sinkDDL =
-               String.format(
-                        "CREATE TABLE sink("
+
+        Map<String, String> propertiesMap = new HashMap<>();
+        propertiesMap.put("connector", "starrocks");
+        propertiesMap.put("jdbc-url", getSrJdbcUrl());
+        propertiesMap.put("load-url", getSrHttpUrls());
+        propertiesMap.put("database-name", SR_DB_NAME);
+        propertiesMap.put("table-name", tableName);
+        propertiesMap.put("username", "root");
+        propertiesMap.put("password", "");
+        propertiesMap.put("sink.buffer-flush.interval-ms", "1000");
+        propertiesMap.putAll(customProperties);
+        StringJoiner joiner = new StringJoiner(",");
+        for (Map.Entry<String, String> entry : propertiesMap.entrySet()) {
+            joiner.add(String.format("'%s' = '%s'", entry.getKey(), entry.getValue()));
+        }
+
+        String properties = joiner.toString();
+        String sinkDDL = "CREATE TABLE sink("
                                 + "c0 INT,"
                                 + "c1 FLOAT,"
                                 + "c2 STRING,"
                                 + "PRIMARY KEY (`c0`) NOT ENFORCED"
                                 + ") WITH ( "
-                                + "'connector' = 'starrocks',"
-                                + "'jdbc-url'='%s',"
-                                + "'load-url'='%s',"
-                                + "'database-name' = '%s',"
-                                + "'table-name' = '%s',"
-                                + "'username' = '%s',"
-                                + "'password' = '%s',"
-                                + "'sink.buffer-flush.interval-ms' = '1000'"
-                                + ")",
-                       getSrJdbcUrl(), getSrHttpUrls(), SR_DB_NAME, tableName, "root", "");
+                                + properties
+                                + ")";
 
         tEnv.executeSql(sourceDDL);
         tEnv.executeSql(sinkDDL);
@@ -124,11 +157,6 @@ public class KafkaToStarRocksITTest extends KafkaTableTestBase {
             // ignore
         }
         tableResult.getJobClient().get().cancel().get(); // stop the job
-
-        List<List<Object>> expectedData = Arrays.asList(
-                Arrays.asList(1, 2.0f, "row1"),
-                Arrays.asList(2, 2.0f, "row2")
-        );
         List<List<Object>> actualData = scanTable(SR_DB_CONNECTION, SR_DB_NAME, tableName);
         verifyResult(expectedData, actualData);
 
