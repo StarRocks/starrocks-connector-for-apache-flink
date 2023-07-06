@@ -57,7 +57,7 @@ public class KafkaToStarRocksITTest extends KafkaTableTestBase {
     public void testUpsertAndDelete() throws Exception {
         testPrimaryKeyBase(
                 "upsert_and_delete_topic",
-                "data/debezium-upsert-and-delete.txt",
+                "data/sink/debezium-upsert-and-delete.txt",
                 Collections.emptyMap(),
                 Arrays.asList(
                         Arrays.asList(1, 2.0f, "row1"),
@@ -70,7 +70,7 @@ public class KafkaToStarRocksITTest extends KafkaTableTestBase {
     public void testUpdateWithPkChanged() throws Exception {
         testPrimaryKeyBase(
                 "update_with_pk_changed_topic",
-                "data/debezium-update-with-pk-changed.txt",
+                "data/sink/debezium-update-with-pk-changed.txt",
                 Collections.singletonMap("sink.ignore.update-before", "false"),
                 Collections.singletonList(Arrays.asList(2, 2.0f, "row2"))
         );
