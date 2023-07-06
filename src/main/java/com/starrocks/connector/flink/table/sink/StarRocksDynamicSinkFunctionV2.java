@@ -150,8 +150,8 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
             }
         }
         if (value instanceof RowData) {
-            if (RowKind.UPDATE_BEFORE.equals(((RowData)value).getRowKind())) {
-                // do not need update_before, cauz an update action happened on the primary keys will be separated into `delete` and `create`
+            if (RowKind.UPDATE_BEFORE.equals(((RowData)value).getRowKind()) &&
+                    (!sinkOptions.supportUpsertDelete() || sinkOptions.getIgnoreUpdateBefore())) {
                 return;
             }
             if (!sinkOptions.supportUpsertDelete() && RowKind.DELETE.equals(((RowData)value).getRowKind())) {
