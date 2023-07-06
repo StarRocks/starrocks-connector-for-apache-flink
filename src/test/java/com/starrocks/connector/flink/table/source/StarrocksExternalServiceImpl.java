@@ -125,7 +125,7 @@ public class StarrocksExternalServiceImpl implements TStarrocksExternalService.I
             result.setEos(true);
             return result;
         }
-        String fileName = System.getProperty("user.dir") + "/src/test/resources/rowsData";
+        String fileName = System.getProperty("user.dir") + "/src/test/resources/data/source/rowsData";
         String line = null;
         try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
             line = br.readLine();
