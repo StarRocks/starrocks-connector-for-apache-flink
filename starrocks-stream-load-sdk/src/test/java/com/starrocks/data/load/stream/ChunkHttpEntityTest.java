@@ -20,25 +20,22 @@
 
 package com.starrocks.data.load.stream;
 
-import com.starrocks.data.load.stream.properties.StreamLoadProperties;
+import com.starrocks.data.load.stream.v2.ChunkHttpEntity;
+import org.junit.Test;
 
-import java.util.concurrent.Future;
+import java.io.ByteArrayOutputStream;
 
-public interface StreamLoader {
+import static com.starrocks.data.load.stream.ChunkInputStreamTest.genChunk;
+import static org.junit.Assert.assertArrayEquals;
 
-    void start(StreamLoadProperties properties, StreamLoadManager manager);
-    void close();
+public class ChunkHttpEntityTest {
 
-    boolean begin(TableRegion region);
-    Future<StreamLoadResponse> send(TableRegion region);
-
-    Future<StreamLoadResponse> send(TableRegion region, int delayMs);
-
-    boolean prepare(StreamLoadSnapshot.Transaction transaction);
-    boolean commit(StreamLoadSnapshot.Transaction transaction);
-    boolean rollback(StreamLoadSnapshot.Transaction transaction);
-
-    boolean prepare(StreamLoadSnapshot snapshot);
-    boolean commit(StreamLoadSnapshot snapshot);
-    boolean rollback(StreamLoadSnapshot snapshot);
+    @Test
+    public void testWrite() throws Exception {
+        ChunkInputStreamTest.ChunkMeta chunkMeta = genChunk();
+        ChunkHttpEntity entity = new ChunkHttpEntity("test", chunkMeta.chunk);
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        entity.writeTo(outputStream);
+        assertArrayEquals(chunkMeta.expectedData, outputStream.toByteArray());
+    }
 }

@@ -420,6 +420,7 @@ limitations under the License.
                     </licenseFamilies>
                     <excludes>
                         <exclude>src/test/resources/data/**</exclude>
+                        <exclude>**/dependency-reduced-pom.xml</exclude>
                         <exclude>**/target/**</exclude>
                         <exclude>README.md</exclude>
                         <exclude>.github/**</exclude>

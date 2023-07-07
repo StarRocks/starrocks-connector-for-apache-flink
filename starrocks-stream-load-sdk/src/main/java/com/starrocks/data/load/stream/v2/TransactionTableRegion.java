@@ -18,7 +18,7 @@
 
 package com.starrocks.data.load.stream.v2;
 
-import com.starrocks.data.load.stream.StreamLoadDataFormat;
+import com.starrocks.data.load.stream.Chunk;
 import com.starrocks.data.load.stream.StreamLoadManager;
 import com.starrocks.data.load.stream.StreamLoadResponse;
 import com.starrocks.data.load.stream.StreamLoadSnapshot;
@@ -27,11 +27,11 @@ import com.starrocks.data.load.stream.TableRegion;
 import com.starrocks.data.load.stream.exception.StreamLoadFailException;
 import com.starrocks.data.load.stream.http.StreamLoadEntityMeta;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
+import org.apache.http.HttpEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.LinkedList;
-import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -49,48 +49,43 @@ public class TransactionTableRegion implements TableRegion {
 
     private final StreamLoadManager manager;
     private final StreamLoader streamLoader;
-
     private final String uniqueKey;
     private final String database;
     private final String table;
     private final StreamLoadTableProperties properties;
-    private final StreamLoadDataFormat dataFormat;
-
     private final AtomicLong age = new AtomicLong(0L);
-
     private final AtomicLong cacheBytes = new AtomicLong();
-    private final AtomicLong flushBytes = new AtomicLong();
-    private final AtomicLong flushRows = new AtomicLong();
-
     private final AtomicReference<State> state;
     private final AtomicBoolean ctl = new AtomicBoolean(false);
-
-    private volatile Queue<byte[]> outBuffer = new LinkedList<>();
-    private volatile Queue<byte[]> inBuffer;
-    private volatile StreamLoadEntityMeta entityMeta;
-
+    private volatile Chunk activeChunk;
+    private final ConcurrentLinkedQueue<Chunk> inactiveChunks = new ConcurrentLinkedQueue<>();
     private volatile String label;
     private volatile Future<?> responseFuture;
-    private volatile long lastWriteTimeMillis = Long.MAX_VALUE;
-    private volatile boolean flushing;
-
     private volatile long lastCommitTimeMills;
+    private final int maxRetries;
+    private final int retryIntervalInMs;
+    private volatile int numRetries;
+    private volatile long lastFailTimeMs;
 
     public TransactionTableRegion(String uniqueKey,
                             String database,
                             String table,
                             StreamLoadManager manager,
                             StreamLoadTableProperties properties,
-                            StreamLoader streamLoader) {
+                            StreamLoader streamLoader,
+                            int maxRetries,
+                            int retryIntervalInMs) {
         this.uniqueKey = uniqueKey;
         this.database = database;
         this.table = table;
         this.manager = manager;
         this.properties = properties;
-        this.dataFormat = properties.getDataFormat();
         this.streamLoader = streamLoader;
         this.state = new AtomicReference<>(State.ACTIVE);
         this.lastCommitTimeMills = System.currentTimeMillis();
+        this.activeChunk = new Chunk(properties.getDataFormat());
+        this.maxRetries = maxRetries;
+        this.retryIntervalInMs = retryIntervalInMs;
     }
 
     @Override
@@ -129,21 +124,6 @@ public class TransactionTableRegion implements TableRegion {
     }
 
     @Override
-    public long getFlushBytes() {
-        return flushBytes.get();
-    }
-
-    @Override
-    public StreamLoadEntityMeta getEntityMeta() {
-        return entityMeta;
-    }
-
-    @Override
-    public long getLastWriteTimeMillis() {
-        return lastWriteTimeMillis;
-    }
-
-    @Override
     public void resetAge() {
         age.set(0);
     }
@@ -179,37 +159,22 @@ public class TransactionTableRegion implements TableRegion {
         return c;
     }
 
-    protected int write0(byte[] row) {
-        if (outBuffer == null) {
-            outBuffer = new LinkedList<>();
+    private void switchChunk() {
+        if (activeChunk == null) {
+            return;
         }
-        outBuffer.offer(row);
-        cacheBytes.addAndGet(row.length);
-        lastWriteTimeMillis = System.currentTimeMillis();
-        return row.length;
+        inactiveChunks.add(activeChunk);
+        activeChunk = new Chunk(properties.getDataFormat());
     }
 
-    @Override
-    public byte[] read() {
-        if (flushRows.get() == entityMeta.getRows()) {
-            flushing = false;
-            return null;
+    protected int write0(byte[] row) {
+        if (activeChunk.estimateChunkSize(row) > properties.getChunkLimit()) {
+            switchChunk();
         }
 
-        byte[] row = inBuffer.poll();
-
-        if (row == null) {
-            flushing = false;
-            return null;
-        }
-
-        if (!flushing) {
-            flushing = true;
-        }
-        cacheBytes.addAndGet(-row.length);
-        flushBytes.addAndGet(row.length);
-        flushRows.incrementAndGet();
-        return row;
+        activeChunk.addRow(row);
+        cacheBytes.addAndGet(row.length);
+        return row.length;
     }
 
     @Override
@@ -223,14 +188,15 @@ public class TransactionTableRegion implements TableRegion {
             for (;;) {
                 if (ctl.compareAndSet(false, true)) {
                     LOG.info("Flush uniqueKey : {}, label : {}, bytes : {}", uniqueKey, label, cacheBytes.get());
-                    inBuffer = outBuffer;
-                    outBuffer = null;
+                    if (activeChunk.numRows() > 0) {
+                        switchChunk();
+                    }
                     ctl.set(false);
                     break;
                 }
             }
-            if (inBuffer != null && !inBuffer.isEmpty()) {
-                streamLoad();
+            if (!inactiveChunks.isEmpty()) {
+                streamLoad(0);
                 return true;
             } else {
                 state.compareAndSet(State.FLUSHING, State.ACTIVE);
@@ -260,7 +226,7 @@ public class TransactionTableRegion implements TableRegion {
                 }
             } catch (Exception e) {
                 LOG.error("TransactionTableRegion commit failed, db: {}, table: {}, label: {}", database, table, label, e);
-                callback(e);
+                fail(e);
                 return false;
             }
 
@@ -281,25 +247,32 @@ public class TransactionTableRegion implements TableRegion {
     }
 
     @Override
-    public void callback(StreamLoadResponse response) {
-        manager.callback(response);
-    }
-
-    @Override
-    public void callback(Throwable e) {
-        manager.callback(e);
+    public void fail(Throwable e) {
+        if (numRetries >= maxRetries) {
+            manager.callback(e);
+            return;
+        }
+        responseFuture = null;
+        numRetries += 1;
+        lastFailTimeMs = System.currentTimeMillis();
+        LOG.warn("Failed to flush data for db: {}, table: {}, and will retry for {} times after {} ms",
+                database, table, numRetries, retryIntervalInMs, e);
+        streamLoad(retryIntervalInMs);
     }
 
     @Override
     public void complete(StreamLoadResponse response) {
-        response.setFlushBytes(flushBytes.get());
-        response.setFlushRows(flushRows.get());
-        callback(response);
+        Chunk chunk = inactiveChunks.remove();
+        cacheBytes.addAndGet(-chunk.rowBytes());
+        response.setFlushBytes(chunk.rowBytes());
+        response.setFlushRows(chunk.numRows());
+        manager.callback(response);
+        numRetries = 0;
 
         LOG.info("Stream load flushed, db: {}, table: {}, label : {}", database, table, label);
-        if (!inBuffer.isEmpty()) {
+        if (!inactiveChunks.isEmpty()) {
             LOG.info("Stream load continue, db: {}, table: {}, label : {}", database, table, label);
-            streamLoad();
+            streamLoad(0);
             return;
         }
         if (state.compareAndSet(State.FLUSHING, State.ACTIVE)) {
@@ -308,59 +281,54 @@ public class TransactionTableRegion implements TableRegion {
     }
 
     @Override
-    public void setResult(Future<?> result) {
-        responseFuture = result;
-    }
-
-    @Override
     public Future<?> getResult() {
         return responseFuture;
     }
 
-    protected void flip() {
-        flushBytes.set(0L);
-        flushRows.set(0L);
-        responseFuture = null;
-
-        StreamLoadEntityMeta chunkMeta = genEntityMeta();
-        this.entityMeta = chunkMeta;
-        LOG.info("Generate entity meta, db: {}, table: {}, total rows : {}, entity rows : {}, entity bytes : {}",
-                database, table, inBuffer.size(), chunkMeta.getRows(), chunkMeta.getBytes());
-    }
-
-    protected void streamLoad() {
+    protected void streamLoad(int delayMs) {
         try {
-            flip();
-            setResult(streamLoader.send(this));
+            Chunk chunk = inactiveChunks.peek();
+            LOG.info("Stream load chunk, db: {}, table: {}, numRows: {}, rowBytes: {}, chunkBytes: {}",
+                    database, table, chunk.numRows(), chunk.rowBytes(), chunk.chunkBytes());
+            responseFuture = streamLoader.send(this, delayMs);
         } catch (Exception e) {
-            callback(e);
+            fail(e);
         }
     }
 
-    protected StreamLoadEntityMeta genEntityMeta() {
-        long chunkBytes = 0;
-        long chunkRows = 0;
+    @Override
+    public HttpEntity getHttpEntity() {
+        return new ChunkHttpEntity(uniqueKey, inactiveChunks.peek());
+    }
 
-        int delimiter = dataFormat.delimiter() == null ? 0 : dataFormat.delimiter().length;
-        if (dataFormat.first() != null) {
-            chunkBytes += dataFormat.first().length;
-        }
-        if (dataFormat.end() != null) {
-            chunkBytes += dataFormat.end().length;
-        }
+    @Override
+    public long getLastWriteTimeMillis() {
+        throw new UnsupportedOperationException();
+    }
 
-        boolean first = true;
-        for (byte[] bytes : inBuffer) {
-            int d = first ? 0 : delimiter;
-            first = false;
-            if (chunkBytes + d + bytes.length > properties.getChunkLimit()) {
-                break;
-            }
-            chunkBytes += bytes.length + d;
-            chunkRows++;
-        }
+    @Override
+    public void setResult(Future<?> result) {
+        throw new UnsupportedOperationException();
+    }
 
-        return new StreamLoadEntityMeta(chunkBytes, chunkRows);
+    @Override
+    public void callback(StreamLoadResponse response) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public long getFlushBytes() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public byte[] read() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public StreamLoadEntityMeta getEntityMeta() {
+        throw new UnsupportedOperationException();
     }
 
     @Override
