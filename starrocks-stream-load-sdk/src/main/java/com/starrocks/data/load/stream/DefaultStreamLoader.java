@@ -24,7 +24,6 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.starrocks.data.load.stream.exception.StreamLoadFailException;
-import com.starrocks.data.load.stream.http.StreamLoadEntity;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
 import org.apache.http.Header;
@@ -51,10 +50,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -70,7 +68,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
     private HttpClientBuilder clientBuilder;
     private Header[] defaultHeaders;
 
-    private ExecutorService executorService;
+    private ScheduledExecutorService executorService;
 
     private boolean enableTransaction = false;
 
@@ -106,8 +104,8 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
                             return true;
                         }
                     });
-            ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(
-                    properties.getIoThreadCount(), properties.getIoThreadCount(), 10, TimeUnit.SECONDS, new LinkedBlockingQueue<>(),
+            this.executorService = new ScheduledThreadPoolExecutor(
+                    properties.getIoThreadCount(),
                     r -> {
                         Thread thread = new Thread(null, r, "I/O client dispatch - " + UUID.randomUUID());
                         thread.setDaemon(true);
@@ -117,8 +115,6 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
                         });
                         return thread;
                     });
-            threadPoolExecutor.allowCoreThreadTimeOut(true);
-            this.executorService = threadPoolExecutor;
 
             String propertiesStr = "";
             String headerStr = "";
@@ -157,7 +153,22 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
             StreamLoadTableProperties tableProperties = properties.getTableProperties(region.getUniqueKey());
             return executorService.submit(() -> send(tableProperties, region));
         } else {
-            region.callback(new StreamLoadFailException("Transaction start failed, db : " + region.getDatabase()));
+            region.fail(new StreamLoadFailException("Transaction start failed, db : " + region.getDatabase()));
+        }
+
+        return null;
+    }
+
+    @Override
+    public Future<StreamLoadResponse> send(TableRegion region, int delayMs) {
+        if (!start.get()) {
+            log.warn("Stream load not start");
+        }
+        if (begin(region)) {
+            StreamLoadTableProperties tableProperties = properties.getTableProperties(region.getUniqueKey());
+            return executorService.schedule(() -> send(tableProperties, region), delayMs, TimeUnit.MILLISECONDS);
+        } else {
+            region.fail(new StreamLoadFailException("Transaction start failed, db : " + region.getDatabase()));
         }
 
         return null;
@@ -266,14 +277,13 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
 
     protected StreamLoadResponse send(StreamLoadTableProperties tableProperties, TableRegion region) {
         try {
-            StreamLoadDataFormat dataFormat = tableProperties.getDataFormat();
             String host = getAvailableHost();
             String sendUrl = getSendUrl(host, region.getDatabase(), region.getTable());
             String label = region.getLabel();
 
             HttpPut httpPut = new HttpPut(sendUrl);
             httpPut.setConfig(RequestConfig.custom().setExpectContinueEnabled(true).setRedirectsEnabled(true).build());
-            httpPut.setEntity(new StreamLoadEntity(region, dataFormat, region.getEntityMeta()));
+            httpPut.setEntity(region.getHttpEntity());
 
             httpPut.setHeaders(defaultHeaders);
 
@@ -337,7 +347,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
             }
         } catch (Exception e) {
             log.error("Exception happens when sending data, thread: {}", Thread.currentThread().getName(), e);
-            region.callback(e);
+            region.fail(e);
         }
         return null;
     }
