@@ -87,7 +87,8 @@ public class StreamLoadProperties implements Serializable {
     private final float regionBufferRatio;
     private final float youngThreshold;
     private final float oldThreshold;
-
+    private final int maxRetries;
+    private final int retryIntervalInMs;
     private final Map<String, String> headers;
 
     private StreamLoadProperties(Builder builder) {
@@ -118,6 +119,9 @@ public class StreamLoadProperties implements Serializable {
         this.regionBufferRatio = builder.regionBufferRatio;
         this.youngThreshold = builder.youngThreshold;
         this.oldThreshold = builder.oldThreshold;
+
+        this.maxRetries = builder.maxRetries;
+        this.retryIntervalInMs = builder.retryIntervalInMs;
 
         this.headers = Collections.unmodifiableMap(builder.headers);
     }
@@ -218,6 +222,14 @@ public class StreamLoadProperties implements Serializable {
         return oldThreshold;
     }
 
+    public int getMaxRetries() {
+        return maxRetries;
+    }
+
+    public int getRetryIntervalInMs() {
+        return retryIntervalInMs;
+    }
+
     public Map<String, String> getHeaders() {
         return headers;
     }
@@ -253,7 +265,8 @@ public class StreamLoadProperties implements Serializable {
         private float regionBufferRatio = 0.6F;
         private float youngThreshold = 0.1F;
         private float oldThreshold = 0.9F;
-
+        private int maxRetries = 0;
+        private int retryIntervalInMs = 10000;
         private Map<String, String> headers = new HashMap<>();
 
         public Builder jdbcUrl(String jdbcUrl) {
@@ -403,6 +416,16 @@ public class StreamLoadProperties implements Serializable {
 
         public Builder addHeader(String name, String value) {
             headers.put(name, value);
+            return this;
+        }
+
+        public Builder maxRetries(int maxRetries) {
+            this.maxRetries = maxRetries;
+            return this;
+        }
+
+        public Builder retryIntervalInMs(int retryIntervalInMs) {
+            this.retryIntervalInMs = retryIntervalInMs;
             return this;
         }
 
