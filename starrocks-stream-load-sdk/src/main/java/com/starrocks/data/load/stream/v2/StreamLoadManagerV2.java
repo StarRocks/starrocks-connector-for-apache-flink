@@ -78,6 +78,8 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
     private final StreamLoadProperties properties;
     private final boolean enableAutoCommit;
     private final StreamLoader streamLoader;
+    private final int maxRetries;
+    private final int retryIntervalInMs;
     // threshold to trigger flush
     private final long maxCacheBytes;
     // threshold to block write
@@ -116,10 +118,19 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
     private transient StreamLoadListener streamLoadListener;
     public StreamLoadManagerV2(StreamLoadProperties properties, boolean enableAutoCommit) {
         this.properties = properties;
+        if (!enableAutoCommit && !properties.isEnableTransaction()) {
+            throw new IllegalArgumentException("You must use transaction stream load if not enable auto-commit");
+        }
         this.enableAutoCommit = enableAutoCommit;
-        this.streamLoader = properties.isEnableTransaction() ? new TransactionStreamLoader() : new DefaultStreamLoader();
-        if (!(enableAutoCommit || properties.isEnableTransaction())) {
-            throw new IllegalArgumentException("You must enable auto commit, or use transaction stream load");
+        if (!enableAutoCommit) {
+            streamLoader = new TransactionStreamLoader();
+            maxRetries = 0;
+            retryIntervalInMs = 0;
+        } else {
+            // TODO transaction stream load can't support retry currently
+            streamLoader = properties.getMaxRetries() > 0 ? new DefaultStreamLoader() : new TransactionStreamLoader();
+            maxRetries = properties.getMaxRetries();
+            retryIntervalInMs = properties.getRetryIntervalInMs();
         }
         this.maxCacheBytes = properties.getMaxCacheBytes();
         this.maxWriteBlockCacheBytes = 2 * maxCacheBytes;
@@ -406,7 +417,8 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
                 region = regions.get(uniqueKey);
                 if (region == null) {
                     StreamLoadTableProperties tableProperties = properties.getTableProperties(uniqueKey);
-                    region = new TransactionTableRegion(uniqueKey, database, table, this, tableProperties, streamLoader);
+                    region = new TransactionTableRegion(uniqueKey, database, table, this,
+                            tableProperties, streamLoader, maxRetries, retryIntervalInMs);
                     regions.put(uniqueKey, region);
                     flushQ.offer(region);
                 }

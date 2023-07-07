@@ -263,7 +263,7 @@ public class StreamTableRegion implements TableRegion, Serializable {
     }
 
     @Override
-    public void callback(Throwable e) {
+    public void fail(Throwable e) {
         manager.callback(e);
     }
 
@@ -311,7 +311,7 @@ public class StreamTableRegion implements TableRegion, Serializable {
             setResult(streamLoader.send(this));
             return true;
         } catch (Exception e) {
-            callback(e);
+            fail(e);
         }
 
         return false;
