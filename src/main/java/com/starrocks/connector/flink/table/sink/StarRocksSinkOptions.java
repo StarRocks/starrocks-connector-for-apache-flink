@@ -105,6 +105,10 @@ public class StarRocksSinkOptions implements Serializable {
 
     public static final ConfigOption<Integer> SINK_MAX_RETRIES = ConfigOptions.key("sink.max-retries")
             .intType().defaultValue(3).withDescription("Max flushing retry times of the row batch.");
+
+    public static final ConfigOption<Integer> SINK_RETRY_INTERVAL = ConfigOptions.key("sink.retry.interval-ms")
+            .intType().defaultValue(10000).withDescription("Interval in milliseconds between tries.");
+
     public static final ConfigOption<Long> SINK_BATCH_OFFER_TIMEOUT = ConfigOptions.key("sink.buffer-flush.enqueue-timeout-ms")
             .longType().defaultValue(600000L).withDescription("Offer to flushQueue timeout in millisecond.");
     public static final ConfigOption<Integer> SINK_METRIC_HISTOGRAM_WINDOW_SIZE = ConfigOptions.key("sink.metric.histogram-window-size")
@@ -199,6 +203,10 @@ public class StarRocksSinkOptions implements Serializable {
 
     public int getSinkMaxRetries() {
         return tableOptions.get(SINK_MAX_RETRIES);
+    }
+
+    public int getRetryIntervalMs() {
+        return tableOptions.get(SINK_RETRY_INTERVAL);
     }
 
     public long getSinkMaxFlushInterval() {
@@ -482,6 +490,9 @@ public class StarRocksSinkOptions implements Serializable {
                 .password(getPassword())
                 .version(sinkTable.getVersion())
                 .expectDelayTime(getSinkMaxFlushInterval())
+                // TODO not support retry currently
+                .maxRetries(0)
+                .retryIntervalInMs(getRetryIntervalMs())
                 .addHeaders(getSinkStreamLoadProperties());
 
         for (StreamLoadTableProperties tableProperties : tablePropertiesList) {

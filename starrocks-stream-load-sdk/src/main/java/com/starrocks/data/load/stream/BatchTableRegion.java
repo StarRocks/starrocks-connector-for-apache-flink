@@ -248,7 +248,7 @@ public class BatchTableRegion implements TableRegion {
     }
 
     @Override
-    public void callback(Throwable e) {
+    public void fail(Throwable e) {
         manager.callback(e);
     }
 
@@ -304,7 +304,7 @@ public class BatchTableRegion implements TableRegion {
             flip();
             setResult(streamLoader.send(this));
         } catch (Exception e) {
-            callback(e);
+            fail(e);
         }
     }
 

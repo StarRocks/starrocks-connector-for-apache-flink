@@ -20,8 +20,10 @@
 
 package com.starrocks.data.load.stream;
 
+import com.starrocks.data.load.stream.http.StreamLoadEntity;
 import com.starrocks.data.load.stream.http.StreamLoadEntityMeta;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
+import org.apache.http.HttpEntity;
 
 import java.util.concurrent.Future;
 
@@ -53,7 +55,7 @@ public interface TableRegion {
     boolean cancel();
 
     void callback(StreamLoadResponse response);
-    void callback(Throwable e);
+    void fail(Throwable e);
     void complete(StreamLoadResponse response);
 
     void setResult(Future<?> result);
@@ -61,4 +63,8 @@ public interface TableRegion {
 
     boolean isReadable();
     boolean isFlushing();
+
+    default HttpEntity getHttpEntity() {
+        return new StreamLoadEntity(this, getProperties().getDataFormat(), getEntityMeta());
+    }
 }
