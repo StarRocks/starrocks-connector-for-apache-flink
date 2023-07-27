@@ -34,6 +34,7 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import static com.starrocks.connector.flink.it.sink.StarRocksTableUtils.scanTable;
@@ -128,7 +129,7 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
                         "\"replication_num\" = \"1\"" +
                         ")",
                         DB_NAME, tableName);
-        executeSRDDLSQL(createStarRocksTable);
+        executeSrSQL(createStarRocksTable);
 
         StarRocksSinkOptions sinkOptions = StarRocksSinkOptions.builder()
                 .withProperty("jdbc-url", getJdbcUrl())
@@ -249,7 +250,7 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
                                 "\"replication_num\" = \"1\"" +
                                 ")",
                         DB_NAME, tableName);
-        executeSRDDLSQL(createStarRocksTable);
+        executeSrSQL(createStarRocksTable);
 
         StarRocksSinkOptions sinkOptions = StarRocksSinkOptions.builder()
                 .withProperty("jdbc-url", getJdbcUrl())
@@ -300,7 +301,7 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
                                 "\"replication_num\" = \"1\"" +
                                 ")",
                         DB_NAME, tableName);
-        executeSRDDLSQL(createStarRocksTable);
+        executeSrSQL(createStarRocksTable);
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);
@@ -313,7 +314,7 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
                         Row.ofKind(RowKind.UPDATE_AFTER, 1, 3.0f, "row3"),
                         Row.ofKind(RowKind.UPDATE_AFTER, 3, 3.0f, "row3"),
                         Row.ofKind(RowKind.DELETE, 2, 2.0f, "row2"));
-        Table table = tEnv.fromChangelogStream(dataStream, Schema.newBuilder().build(), ChangelogMode.all());
+        Table table = tEnv.fromChangelogStream(dataStream, Schema.newBuilder().primaryKey("f0").build(), ChangelogMode.all());
         tEnv.createTemporaryView("src", table);
 
         StarRocksSinkOptions sinkOptions = StarRocksSinkOptions.builder()
@@ -346,6 +347,68 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
             Arrays.asList(1, 3.0f, "row3"),
             Arrays.asList(3, 3.0f, "row3")
         );
+        List<List<Object>> actualData = scanTable(DB_CONNECTION, DB_NAME, tableName);
+        verifyResult(expectedData, actualData);
+    }
+
+    @Test
+    public void testPKPartialUpdateDelete() throws Exception {
+        String tableName = "testPKPartialUpdateDelete_" + genRandomUuid();
+        String createStarRocksTable =
+                String.format(
+                        "CREATE TABLE `%s`.`%s` (" +
+                                "c0 INT," +
+                                "c1 FLOAT," +
+                                "c2 STRING" +
+                                ") ENGINE = OLAP " +
+                                "PRIMARY KEY(c0) " +
+                                "DISTRIBUTED BY HASH (c0) BUCKETS 8 " +
+                                "PROPERTIES (" +
+                                "\"replication_num\" = \"1\"" +
+                                ")",
+                        DB_NAME, tableName);
+        executeSrSQL(createStarRocksTable);
+        executeSrSQL(String.format("INSERT INTO `%s`.`%s` VALUES (1, 1.0, '1')", DB_NAME, tableName));
+        verifyResult(Collections.singletonList(Arrays.asList(1, 1.0f, "1")), scanTable(DB_CONNECTION, DB_NAME, tableName));
+
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        StreamTableEnvironment tEnv;
+        tEnv = StreamTableEnvironment.create(env);
+        DataStream<Row> dataStream = env.fromElements(
+                Row.ofKind(RowKind.DELETE, 1, "1"),
+                Row.ofKind(RowKind.INSERT, 2, "2"));
+        Table table = tEnv.fromChangelogStream(dataStream, Schema.newBuilder().primaryKey("f0").build(), ChangelogMode.all());
+        tEnv.createTemporaryView("src", table);
+
+        StarRocksSinkOptions sinkOptions = StarRocksSinkOptions.builder()
+                .withProperty("jdbc-url", getJdbcUrl())
+                .withProperty("load-url", getHttpUrls())
+                .withProperty("database-name", DB_NAME)
+                .withProperty("table-name", tableName)
+                .withProperty("username", "root")
+                .withProperty("password", "")
+                .build();
+
+        String createSQL = "CREATE TABLE sink(" +
+                "c0 INT," +
+                "c2 STRING," +
+                "PRIMARY KEY (`c0`) NOT ENFORCED" +
+                ") WITH ( " +
+                "'connector' = 'starrocks'," +
+                "'jdbc-url'='" + sinkOptions.getJdbcUrl() + "'," +
+                "'load-url'='" + String.join(";", sinkOptions.getLoadUrlList()) + "'," +
+                "'database-name' = '" + DB_NAME + "'," +
+                "'table-name' = '" + sinkOptions.getTableName() + "'," +
+                "'username' = '" + sinkOptions.getUsername() + "'," +
+                "'password' = '" + sinkOptions.getPassword() + "'," +
+                "'sink.properties.partial_update' = 'true'" +
+                ")";
+        tEnv.executeSql(createSQL);
+        tEnv.executeSql("INSERT INTO sink SELECT * FROM src").await();
+
+        List<List<Object>> expectedData = Collections.singletonList(
+                Arrays.asList(2, null, "2"));
         List<List<Object>> actualData = scanTable(DB_CONNECTION, DB_NAME, tableName);
         verifyResult(expectedData, actualData);
     }
