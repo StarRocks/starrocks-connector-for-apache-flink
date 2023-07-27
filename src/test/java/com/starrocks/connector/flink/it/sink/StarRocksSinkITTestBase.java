@@ -66,7 +66,7 @@ public abstract class StarRocksSinkITTestBase {
 
         try {
             String createDb = "CREATE DATABASE " + DB_NAME;
-            executeSRDDLSQL(createDb);
+            executeSrSQL(createDb);
             LOG.info("Successful to create database {}", DB_NAME);
         } catch (Exception e) {
             LOG.error("Failed to create database {}", DB_NAME, e);
@@ -79,7 +79,7 @@ public abstract class StarRocksSinkITTestBase {
         if (DB_CONNECTION != null) {
             try {
                 String dropDb = String.format("DROP DATABASE IF EXISTS %s FORCE", DB_NAME);
-                executeSRDDLSQL(dropDb);
+                executeSrSQL(dropDb);
                 LOG.info("Successful to drop database {}", DB_NAME);
             } catch (Exception e) {
                 LOG.error("Failed to drop database {}", DB_NAME, e);
@@ -92,7 +92,7 @@ public abstract class StarRocksSinkITTestBase {
         return UUID.randomUUID().toString().replace("-", "_");
     }
 
-    protected static void executeSRDDLSQL(String sql) throws Exception {
+    protected static void executeSrSQL(String sql) throws Exception {
         try (PreparedStatement statement = DB_CONNECTION.prepareStatement(sql)) {
             statement.execute();
         }
