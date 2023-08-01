@@ -36,6 +36,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.StringJoiner;
+import java.util.function.Function;
 
 import static com.starrocks.connector.flink.it.sink.StarRocksTableUtils.scanTable;
 import static com.starrocks.connector.flink.it.sink.StarRocksTableUtils.verifyResult;
@@ -51,13 +54,11 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
         RowTypeInfo rowTypeInfo = new RowTypeInfo(
                 new TypeInformation[]{Types.INT, Types.FLOAT, Types.STRING},
                 new String[]{"c0", "c1", "c2"});
-        String tableName = "testDupKeyWriteFullColumnsInOrder_" + genRandomUuid();
-
         List<List<Object>> expectedData = Arrays.asList(
                 Arrays.asList(1, 10.1f, "abc"),
                 Arrays.asList(2, 20.2f, "def")
         );
-        testDupKeyWriteBase(tableName, ddl, rowTypeInfo, testData, expectedData);
+        testDupKeyWriteBase(ddl, rowTypeInfo, testData, expectedData);
     }
 
     @Test
@@ -69,13 +70,11 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
         RowTypeInfo rowTypeInfo = new RowTypeInfo(
                 new TypeInformation[]{Types.STRING, Types.FLOAT, Types.INT},
                 new String[]{"c2", "c1", "c0"});
-        String tableName = "testDupKeyWriteFullColumnsOutOfOrder_" + genRandomUuid();
-
         List<List<Object>> expectedData = Arrays.asList(
                 Arrays.asList(1, 10.1f, "abc"),
                 Arrays.asList(2, 20.2f, "def")
         );
-        testDupKeyWriteBase(tableName, ddl, rowTypeInfo, testData, expectedData);
+        testDupKeyWriteBase(ddl, rowTypeInfo, testData, expectedData);
     }
 
     @Test
@@ -87,13 +86,11 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
         RowTypeInfo rowTypeInfo = new RowTypeInfo(
                 new TypeInformation[]{Types.INT, Types.STRING},
                 new String[]{"c0", "c2"});
-        String tableName = "testDupKeyWritePartialColumnsInOrder_" + genRandomUuid();
-
         List<List<Object>> expectedData = Arrays.asList(
                 Arrays.asList(1, null, "abc"),
                 Arrays.asList(2, null, "def")
         );
-        testDupKeyWriteBase(tableName, ddl, rowTypeInfo, testData, expectedData);
+        testDupKeyWriteBase(ddl, rowTypeInfo, testData, expectedData);
     }
 
     @Test
@@ -105,32 +102,16 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
         RowTypeInfo rowTypeInfo = new RowTypeInfo(
                 new TypeInformation[]{Types.STRING, Types.INT},
                 new String[]{"c2", "c0"});
-        String tableName = "testDupKeyWritePartialColumnsOutOfOrder_" + genRandomUuid();
-
         List<List<Object>> expectedData = Arrays.asList(
                 Arrays.asList(1, null, "abc"),
                 Arrays.asList(2, null, "def")
         );
-        testDupKeyWriteBase(tableName, ddl, rowTypeInfo, testData, expectedData);
+        testDupKeyWriteBase(ddl, rowTypeInfo, testData, expectedData);
     }
 
-    private void testDupKeyWriteBase(String tableName, String flinkDDL,  RowTypeInfo rowTypeInfo,
+    private void testDupKeyWriteBase(String flinkDDL,  RowTypeInfo rowTypeInfo,
                                      List<Row> testData, List<List<Object>> expectedData) throws Exception {
-        String createStarRocksTable =
-                String.format(
-                        "CREATE TABLE `%s`.`%s` (" +
-                        "c0 INT," +
-                        "c1 FLOAT," +
-                        "c2 STRING" +
-                        ") ENGINE = OLAP " +
-                        "DUPLICATE KEY(c0) " +
-                        "DISTRIBUTED BY HASH (c0) BUCKETS 8 " +
-                        "PROPERTIES (" +
-                        "\"replication_num\" = \"1\"" +
-                        ")",
-                        DB_NAME, tableName);
-        executeSrSQL(createStarRocksTable);
-
+        String tableName = createDupTable("testDupKeyWriteBase");
         StarRocksSinkOptions sinkOptions = StarRocksSinkOptions.builder()
                 .withProperty("jdbc-url", getJdbcUrl())
                 .withProperty("load-url", getHttpUrls())
@@ -163,6 +144,25 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
         verifyResult(expectedData, actualData);
     }
 
+    private String createDupTable(String tablePrefix) throws Exception {
+        String tableName = tablePrefix + "_" + genRandomUuid();
+        String createStarRocksTable =
+                String.format(
+                        "CREATE TABLE `%s`.`%s` (" +
+                                "c0 INT," +
+                                "c1 FLOAT," +
+                                "c2 STRING" +
+                                ") ENGINE = OLAP " +
+                                "DUPLICATE KEY(c0) " +
+                                "DISTRIBUTED BY HASH (c0) BUCKETS 8 " +
+                                "PROPERTIES (" +
+                                "\"replication_num\" = \"1\"" +
+                                ")",
+                        DB_NAME, tableName);
+        executeSrSQL(createStarRocksTable);
+        return tableName;
+    }
+
     @Test
     public void testPkWriteFullColumnsInOrder() throws Exception {
         String ddl = "c0 INT, c1 FLOAT, c2 STRING";
@@ -172,13 +172,11 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
         RowTypeInfo rowTypeInfo = new RowTypeInfo(
                 new TypeInformation[]{Types.INT, Types.FLOAT, Types.STRING},
                 new String[]{"c0", "c1", "c2"});
-        String tableName = "testPkWriteFullColumnsInOrder_" + genRandomUuid();
-
         List<List<Object>> expectedData = Arrays.asList(
                 Arrays.asList(1, 10.1f, "abc"),
                 Arrays.asList(2, 20.2f, "def")
         );
-        testPkWriteForBase(tableName, ddl, rowTypeInfo, testData, expectedData);
+        testPkWriteForBase(ddl, rowTypeInfo, testData, expectedData);
     }
 
     @Test
@@ -190,13 +188,11 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
         RowTypeInfo rowTypeInfo = new RowTypeInfo(
                 new TypeInformation[]{Types.STRING, Types.FLOAT, Types.INT},
                 new String[]{"c2", "c1", "c0"});
-        String tableName = "testPkWriteFullColumnsOutOfOrder_" + genRandomUuid();
-
         List<List<Object>> expectedData = Arrays.asList(
                 Arrays.asList(1, 10.1f, "abc"),
                 Arrays.asList(2, 20.2f, "def")
         );
-        testPkWriteForBase(tableName, ddl, rowTypeInfo, testData, expectedData);
+        testPkWriteForBase(ddl, rowTypeInfo, testData, expectedData);
     }
 
     @Test
@@ -208,13 +204,11 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
         RowTypeInfo rowTypeInfo = new RowTypeInfo(
                 new TypeInformation[]{Types.INT, Types.STRING},
                 new String[]{"c0", "c2"});
-        String tableName = "testPkWritePartialColumnsInOrder_" + genRandomUuid();
-
         List<List<Object>> expectedData = Arrays.asList(
                 Arrays.asList(1, null, "abc"),
                 Arrays.asList(2, null, "def")
         );
-        testPkWriteForBase(tableName, ddl, rowTypeInfo, testData, expectedData);
+        testPkWriteForBase(ddl, rowTypeInfo, testData, expectedData);
     }
 
     @Test
@@ -226,32 +220,16 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
         RowTypeInfo rowTypeInfo = new RowTypeInfo(
                 new TypeInformation[]{Types.STRING, Types.INT},
                 new String[]{"c2", "c0"});
-        String tableName = "testPkWritePartialColumnsOutOfOrder_" + genRandomUuid();
-
         List<List<Object>> expectedData = Arrays.asList(
                 Arrays.asList(1, null, "abc"),
                 Arrays.asList(2, null, "def")
         );
-        testPkWriteForBase(tableName, ddl, rowTypeInfo, testData, expectedData);
+        testPkWriteForBase(ddl, rowTypeInfo, testData, expectedData);
     }
 
-    private void testPkWriteForBase(String tableName, String flinkDDL,  RowTypeInfo rowTypeInfo,
+    private void testPkWriteForBase(String flinkDDL,  RowTypeInfo rowTypeInfo,
                                     List<Row> testData, List<List<Object>> expectedData) throws Exception {
-        String createStarRocksTable =
-                String.format(
-                        "CREATE TABLE `%s`.`%s` (" +
-                                "c0 INT," +
-                                "c1 FLOAT," +
-                                "c2 STRING" +
-                                ") ENGINE = OLAP " +
-                                "PRIMARY KEY(c0) " +
-                                "DISTRIBUTED BY HASH (c0) BUCKETS 8 " +
-                                "PROPERTIES (" +
-                                "\"replication_num\" = \"1\"" +
-                                ")",
-                        DB_NAME, tableName);
-        executeSrSQL(createStarRocksTable);
-
+        String tableName = createPkTable("testPkWriteForBase");
         StarRocksSinkOptions sinkOptions = StarRocksSinkOptions.builder()
                 .withProperty("jdbc-url", getJdbcUrl())
                 .withProperty("load-url", getHttpUrls())
@@ -287,22 +265,7 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
 
     @Test
     public void testPKUpsertAndDelete() throws Exception {
-        String tableName = "testPKUpsertAndDelete_" + genRandomUuid();
-        String createStarRocksTable =
-                String.format(
-                        "CREATE TABLE `%s`.`%s` (" +
-                                "c0 INT," +
-                                "c1 FLOAT," +
-                                "c2 STRING" +
-                                ") ENGINE = OLAP " +
-                                "PRIMARY KEY(c0) " +
-                                "DISTRIBUTED BY HASH (c0) BUCKETS 8 " +
-                                "PROPERTIES (" +
-                                "\"replication_num\" = \"1\"" +
-                                ")",
-                        DB_NAME, tableName);
-        executeSrSQL(createStarRocksTable);
-
+        String tableName = createPkTable("testPKUpsertAndDelete");
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);
         StreamTableEnvironment tEnv;
@@ -353,21 +316,7 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
 
     @Test
     public void testPKPartialUpdateDelete() throws Exception {
-        String tableName = "testPKPartialUpdateDelete_" + genRandomUuid();
-        String createStarRocksTable =
-                String.format(
-                        "CREATE TABLE `%s`.`%s` (" +
-                                "c0 INT," +
-                                "c1 FLOAT," +
-                                "c2 STRING" +
-                                ") ENGINE = OLAP " +
-                                "PRIMARY KEY(c0) " +
-                                "DISTRIBUTED BY HASH (c0) BUCKETS 8 " +
-                                "PROPERTIES (" +
-                                "\"replication_num\" = \"1\"" +
-                                ")",
-                        DB_NAME, tableName);
-        executeSrSQL(createStarRocksTable);
+        String tableName = createPkTable("testPKPartialUpdateDelete");
         executeSrSQL(String.format("INSERT INTO `%s`.`%s` VALUES (1, 1.0, '1')", DB_NAME, tableName));
         verifyResult(Collections.singletonList(Arrays.asList(1, 1.0f, "1")), scanTable(DB_CONNECTION, DB_NAME, tableName));
 
@@ -411,5 +360,70 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
                 Arrays.asList(2, null, "2"));
         List<List<Object>> actualData = scanTable(DB_CONNECTION, DB_NAME, tableName);
         verifyResult(expectedData, actualData);
+    }
+
+    @Test
+    public void testAtLeastOnceWithTransaction() throws Exception {
+        testConfigurationBase(Collections.emptyMap(), env -> null);
+    }
+
+    @Test
+    public void testAtLeastOnceWithoutTransaction() throws Exception {
+        testConfigurationBase(
+                Collections.singletonMap("sink.at-least-once.use-transaction-stream-load", "false"), env -> null);
+    }
+
+    private void testConfigurationBase(Map<String, String> options, Function<StreamExecutionEnvironment, Void> setFlinkEnv) throws Exception {
+        String tableName = createPkTable("testAtLeastOnceBase");
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        setFlinkEnv.apply(env);
+
+        StreamTableEnvironment tEnv;
+        tEnv = StreamTableEnvironment.create(env);
+
+        StringJoiner joiner = new StringJoiner(",\n");
+        for (Map.Entry<String, String> entry : options.entrySet()) {
+            joiner.add(String.format("'%s' = '%s'", entry.getKey(), entry.getValue()));
+        }
+        String optionStr = joiner.toString();
+        String createSQL = "CREATE TABLE sink(" +
+                "c0 INT," +
+                "c1 FLOAT," +
+                "c2 STRING," +
+                "PRIMARY KEY (`c0`) NOT ENFORCED" +
+                ") WITH ( " +
+                "'connector' = 'starrocks'," +
+                "'jdbc-url'='" + getJdbcUrl() + "'," +
+                "'load-url'='" + String.join(";", getHttpUrls()) + "'," +
+                "'database-name' = '" + DB_NAME + "'," +
+                "'table-name' = '" + tableName + "'," +
+                "'username' = 'root'," +
+                "'password' = ''" +
+                (optionStr.isEmpty() ? "" : "," + optionStr) +
+                ")";
+        tEnv.executeSql(createSQL);
+        tEnv.executeSql("INSERT INTO sink VALUES (1, 1.0, '1')").await();
+        List<List<Object>> actualData = scanTable(DB_CONNECTION, DB_NAME, tableName);
+        verifyResult(Collections.singletonList(Arrays.asList(1, 1.0, '1')), actualData);
+    }
+
+    private String createPkTable(String tablePrefix) throws Exception {
+        String tableName = tablePrefix + "_" + genRandomUuid();
+        String createStarRocksTable =
+                String.format(
+                        "CREATE TABLE `%s`.`%s` (" +
+                                "c0 INT," +
+                                "c1 FLOAT," +
+                                "c2 STRING" +
+                                ") ENGINE = OLAP " +
+                                "PRIMARY KEY(c0) " +
+                                "DISTRIBUTED BY HASH (c0) BUCKETS 8 " +
+                                "PROPERTIES (" +
+                                "\"replication_num\" = \"1\"" +
+                                ")",
+                        DB_NAME, tableName);
+        executeSrSQL(createStarRocksTable);
+        return tableName;
     }
 }

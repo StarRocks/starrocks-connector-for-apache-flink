@@ -128,7 +128,8 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
             retryIntervalInMs = 0;
         } else {
             // TODO transaction stream load can't support retry currently
-            streamLoader = properties.getMaxRetries() > 0 ? new DefaultStreamLoader() : new TransactionStreamLoader();
+            streamLoader = (properties.getMaxRetries() > 0 || !properties.isEnableTransaction())
+                    ? new DefaultStreamLoader() : new TransactionStreamLoader();
             maxRetries = properties.getMaxRetries();
             retryIntervalInMs = properties.getRetryIntervalInMs();
         }
