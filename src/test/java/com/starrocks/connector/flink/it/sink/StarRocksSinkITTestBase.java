@@ -20,6 +20,8 @@ package com.starrocks.connector.flink.it.sink;
 
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Rule;
+import org.junit.rules.TemporaryFolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,6 +37,10 @@ public abstract class StarRocksSinkITTestBase {
     private static final Logger LOG = LoggerFactory.getLogger(StarRocksSinkITTestBase.class);
 
     private static final boolean DEBUG_MODE = false;
+
+    @Rule
+    public TemporaryFolder temporaryFolder = new TemporaryFolder();
+
     protected static String DB_NAME;
     protected static String HTTP_URLS;
     protected static String JDBC_URLS;
@@ -48,7 +54,6 @@ public abstract class StarRocksSinkITTestBase {
     }
 
     protected static Connection DB_CONNECTION;
-
     @BeforeClass
     public static void setUp() throws Exception {
         HTTP_URLS = DEBUG_MODE ? "127.0.0.1:11901" : System.getProperty("http_urls");
