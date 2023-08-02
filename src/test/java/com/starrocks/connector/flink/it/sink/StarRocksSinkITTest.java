@@ -373,6 +373,12 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
                 Collections.singletonMap("sink.at-least-once.use-transaction-stream-load", "false"), env -> null);
     }
 
+    @Test
+    public void testJsonFormat() throws Exception {
+        testConfigurationBase(
+                Collections.singletonMap("sink.properties.format", "json"), env -> null);
+    }
+
     private void testConfigurationBase(Map<String, String> options, Function<StreamExecutionEnvironment, Void> setFlinkEnv) throws Exception {
         String tableName = createPkTable("testAtLeastOnceBase");
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
