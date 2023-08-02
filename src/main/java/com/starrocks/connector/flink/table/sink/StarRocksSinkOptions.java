@@ -476,6 +476,17 @@ public class StarRocksSinkOptions implements Serializable {
             }
         }
 
+        Map<String, String> streamLoadProperties = new HashMap<>(getSinkStreamLoadProperties());
+        // By default, using json format should enable strip_outer_array and ignore_json_size,
+        // which will simplify the configurations
+        if (dataFormat instanceof StreamLoadDataFormat.JSONFormat) {
+            if (!streamLoadProperties.containsKey("strip_outer_array")) {
+                streamLoadProperties.put("strip_outer_array", "true");
+            }
+            if (!streamLoadProperties.containsKey("ignore_json_size")) {
+                streamLoadProperties.put("ignore_json_size", "true");
+            }
+        }
         StreamLoadProperties.Builder builder = StreamLoadProperties.builder()
                 .loadUrls(getLoadUrlList().toArray(new String[0]))
                 .jdbcUrl(getJdbcUrl())
@@ -493,7 +504,7 @@ public class StarRocksSinkOptions implements Serializable {
                 // TODO not support retry currently
                 .maxRetries(0)
                 .retryIntervalInMs(getRetryIntervalMs())
-                .addHeaders(getSinkStreamLoadProperties());
+                .addHeaders(streamLoadProperties);
 
         for (StreamLoadTableProperties tableProperties : tablePropertiesList) {
             builder.addTableProperties(tableProperties);
