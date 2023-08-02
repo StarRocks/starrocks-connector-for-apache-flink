@@ -394,6 +394,12 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
         );
     }
 
+    @Test
+    public void testJsonFormat() throws Exception {
+        testConfigurationBase(
+                Collections.singletonMap("sink.properties.format", "json"), env -> null);
+    }
+
     private void testConfigurationBase(Map<String, String> options, Function<StreamExecutionEnvironment, Void> setFlinkEnv) throws Exception {
         String tableName = createPkTable("testAtLeastOnceBase");
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
