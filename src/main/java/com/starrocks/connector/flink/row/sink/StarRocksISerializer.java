@@ -14,10 +14,25 @@
 
 package com.starrocks.connector.flink.row.sink;
 
+import com.starrocks.connector.flink.tools.JsonWrapper;
+
 import java.io.Serializable;
 
 public interface StarRocksISerializer extends Serializable {
 
+    default void open(SerializerContext context) {}
+
     String serialize(Object[] values);
-    
+
+    class SerializerContext {
+        private final JsonWrapper jsonWrapper;
+
+        public SerializerContext(JsonWrapper jsonWrapper) {
+            this.jsonWrapper = jsonWrapper;
+        }
+
+        public JsonWrapper getFastJsonWrapper() {
+            return jsonWrapper;
+        }
+    }
 }

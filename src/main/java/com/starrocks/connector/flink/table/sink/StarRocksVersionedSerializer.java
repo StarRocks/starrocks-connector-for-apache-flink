@@ -20,7 +20,7 @@
 
 package com.starrocks.connector.flink.table.sink;
 
-import com.alibaba.fastjson.JSON;
+import com.starrocks.connector.flink.tools.JsonWrapper;
 import org.apache.flink.core.io.SimpleVersionedSerializer;
 
 import java.io.IOException;
@@ -40,6 +40,12 @@ public class StarRocksVersionedSerializer implements SimpleVersionedSerializer<S
         }
     }
 
+    private final JsonWrapper jsonWrapper;
+
+    public StarRocksVersionedSerializer(JsonWrapper jsonWrapper) {
+        this.jsonWrapper = jsonWrapper;
+    }
+
     @Override
     public int getVersion() {
         return SerializerVersion.V1.getVersion();
@@ -47,11 +53,11 @@ public class StarRocksVersionedSerializer implements SimpleVersionedSerializer<S
 
     @Override
     public byte[] serialize(StarrocksSnapshotState state) throws IOException {
-        return JSON.toJSONBytes(state);
+        return jsonWrapper.toJSONBytes(state);
     }
 
     @Override
     public StarrocksSnapshotState deserialize(int version, byte[] serialized) throws IOException {
-        return JSON.parseObject(serialized, StarrocksSnapshotState.class);
+        return jsonWrapper.parseObject(serialized, StarrocksSnapshotState.class);
     }
 }

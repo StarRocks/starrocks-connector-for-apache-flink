@@ -24,6 +24,7 @@ import com.starrocks.connector.flink.row.sink.StarRocksIRowTransformer;
 import com.starrocks.connector.flink.row.sink.StarRocksISerializer;
 import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
 import com.starrocks.connector.flink.tools.EnvUtils;
+import com.starrocks.connector.flink.tools.JsonWrapper;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.alter.Alter;
@@ -64,6 +65,8 @@ public class StarRocksDynamicSinkFunction<T> extends StarRocksDynamicSinkFunctio
     // state only works with `StarRocksSinkSemantic.EXACTLY_ONCE`
     private transient ListState<Map<String, StarRocksSinkBufferEntity>> checkpointedState;
 
+    private transient JsonWrapper jsonWrapper;
+
     public StarRocksDynamicSinkFunction(StarRocksSinkOptions sinkOptions, TableSchema schema, StarRocksIRowTransformer<T> rowTransformer) {
         StarRocksJdbcConnectionOptions jdbcOptions = new StarRocksJdbcConnectionOptions(sinkOptions.getJdbcUrl(), sinkOptions.getUsername(), sinkOptions.getPassword());
         StarRocksJdbcConnectionProvider jdbcConnProvider = new StarRocksJdbcConnectionProvider(jdbcOptions);
@@ -85,11 +88,14 @@ public class StarRocksDynamicSinkFunction<T> extends StarRocksDynamicSinkFunctio
     @Override
     public void open(Configuration parameters) throws Exception {
         super.open(parameters);
-        sinkManager.setRuntimeContext(getRuntimeContext());
+        this.jsonWrapper = new JsonWrapper();
+        this.serializer.open(new StarRocksISerializer.SerializerContext(jsonWrapper));
+        sinkManager.open(getRuntimeContext(), jsonWrapper);
         totalInvokeRows = getRuntimeContext().getMetricGroup().counter(COUNTER_INVOKE_ROWS);
         totalInvokeRowsTime = getRuntimeContext().getMetricGroup().counter(COUNTER_INVOKE_ROWS_COST_TIME);
         if (null != rowTransformer) {
             rowTransformer.setRuntimeContext(getRuntimeContext());
+            rowTransformer.setFastJsonWrapper(jsonWrapper);
         }
         sinkManager.startScheduler();
         sinkManager.startAsyncFlushing();
