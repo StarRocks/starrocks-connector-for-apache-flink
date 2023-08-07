@@ -323,6 +323,7 @@ limitations under the License.
                         <exclude>src/test/resources/data/**</exclude>
                         <exclude>**/dependency-reduced-pom.xml</exclude>
                         <exclude>**/target/**</exclude>
+                        <exclude>docs/**</exclude>
                         <exclude>README.md</exclude>
                         <exclude>.github/**</exclude>
                     </excludes>
