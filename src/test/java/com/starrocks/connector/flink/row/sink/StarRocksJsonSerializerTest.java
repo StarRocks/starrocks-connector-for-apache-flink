@@ -14,11 +14,10 @@
 
 package com.starrocks.connector.flink.row.sink;
 
+import com.alibaba.fastjson.JSON;
+import com.starrocks.connector.flink.StarRocksSinkBaseTest;
+import com.starrocks.connector.flink.tools.JsonWrapper;
 import org.junit.Test;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -27,10 +26,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import com.alibaba.fastjson.JSON;
-import com.starrocks.connector.flink.StarRocksSinkBaseTest;
-import com.starrocks.connector.flink.row.sink.StarRocksISerializer;
-import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 
 public class StarRocksJsonSerializerTest extends StarRocksSinkBaseTest {
@@ -39,6 +37,7 @@ public class StarRocksJsonSerializerTest extends StarRocksSinkBaseTest {
     public void testCumstomizedSeparatorSerialize() throws IOException {
         OPTIONS.getSinkStreamLoadProperties().put("format", "json");
         StarRocksISerializer serializer = StarRocksSerializerFactory.createSerializer(OPTIONS, TABLE_SCHEMA.getFieldNames());
+        serializer.open(new StarRocksISerializer.SerializerContext(new JsonWrapper()));
         List<Object[]> originRows = Arrays.asList(
             new Object[]{1,"222",333.1,true,"1dsasd","ppp","2020-01-01"},
             new Object[]{2,"333",444.2,false,"1dsasd","ppp","2020-01-01"}
