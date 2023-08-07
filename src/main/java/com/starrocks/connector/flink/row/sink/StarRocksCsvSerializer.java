@@ -14,7 +14,7 @@
 
 package com.starrocks.connector.flink.row.sink;
 
-import com.alibaba.fastjson.JSON;
+import com.starrocks.connector.flink.tools.JsonWrapper;
 
 import java.util.List;
 import java.util.Map;
@@ -25,8 +25,15 @@ public class StarRocksCsvSerializer implements StarRocksISerializer {
 
     private final String columnSeparator;
 
+    private transient JsonWrapper jsonWrapper;
+
     public StarRocksCsvSerializer(String sp) {
         this.columnSeparator = StarRocksDelimiterParser.parse(sp, "\t");
+    }
+
+    @Override
+    public void open(SerializerContext context) {
+        this.jsonWrapper = context.getFastJsonWrapper();
     }
 
     @Override
@@ -34,7 +41,7 @@ public class StarRocksCsvSerializer implements StarRocksISerializer {
         StringBuilder sb = new StringBuilder();
         int idx = 0;
         for (Object val : values) {
-            sb.append(null == val ? "\\N" : ((val instanceof Map || val instanceof List) ? JSON.toJSONString(val) : val));
+            sb.append(null == val ? "\\N" : ((val instanceof Map || val instanceof List) ? jsonWrapper.toJSONString(val) : val));
             if (idx++ < values.length - 1) {
                 sb.append(columnSeparator);
             }

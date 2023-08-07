@@ -15,7 +15,7 @@
 package com.starrocks.connector.flink.row.sink;
 
 import com.starrocks.connector.flink.table.StarRocksDataType;
-
+import com.starrocks.connector.flink.tools.JsonWrapper;
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.table.api.TableSchema;
 
@@ -29,6 +29,8 @@ public interface StarRocksIRowTransformer<T> extends Serializable {
     void setTableSchema(TableSchema tableSchema);
 
     void setRuntimeContext(RuntimeContext ctx);
+
+    default void setFastJsonWrapper(JsonWrapper jsonWrapper) {}
 
     Object[] transform(T record, boolean supportUpsertDelete);
     
