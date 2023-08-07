@@ -14,10 +14,10 @@
 
 package com.starrocks.connector.flink.manager;
 
-import com.alibaba.fastjson.JSON;
 import com.starrocks.connector.flink.row.sink.StarRocksDelimiterParser;
 import com.starrocks.connector.flink.row.sink.StarRocksSinkOP;
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
+import com.starrocks.connector.flink.tools.JsonWrapper;
 import com.starrocks.data.load.stream.exception.StreamLoadFailException;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.http.HttpEntity;
@@ -69,6 +69,8 @@ public class StarRocksStreamLoadVisitor implements Serializable {
     private static final String RESULT_LABEL_ABORTED = "ABORTED";
     private static final String RESULT_LABEL_UNKNOWN = "UNKNOWN";
 
+    private transient JsonWrapper jsonWrapper;
+
     public StarRocksStreamLoadVisitor(StarRocksSinkOptions sinkOptions, String[] fieldNames, boolean __opAutoProjectionInJson) {
         this.fieldNames = fieldNames;
         this.sinkOptions = sinkOptions;
@@ -79,6 +81,10 @@ public class StarRocksStreamLoadVisitor implements Serializable {
         } else {
             this.checkLabelTimeoutSecond = 600;
         }
+    }
+
+    public void open(JsonWrapper jsonWrapper) {
+        this.jsonWrapper = jsonWrapper;
     }
 
     public Map<String, Object> doStreamLoad(StarRocksSinkBufferEntity bufferEntity) throws IOException {
@@ -100,7 +106,7 @@ public class StarRocksStreamLoadVisitor implements Serializable {
             throw new IOException("Unable to flush data to StarRocks: unknown result status, usually caused by: 1.authorization or permission related problems. 2.Wrong column_separator or row_delimiter. 3.Column count exceeded the limitation.");
         }
         if (LOG.isDebugEnabled()) {
-            LOG.debug(String.format("Stream Load response: \n%s\n", JSON.toJSONString(loadResult)));
+            LOG.debug(String.format("Stream Load response: \n%s\n", jsonWrapper.toJSONString(loadResult)));
         }
         if (RESULT_FAILED.equals(loadResult.get(keyStatus))) {
             Map<String, String> logMap = new HashMap<>();
@@ -108,9 +114,9 @@ public class StarRocksStreamLoadVisitor implements Serializable {
                 logMap.put("streamLoadErrorLog", getErrorLog((String) loadResult.get("ErrorURL")));
             }
             throw new StarRocksStreamLoadFailedException(String.format("Failed to flush data to StarRocks, Error " +
-                "response: \n%s\n%s\n", JSON.toJSONString(loadResult), JSON.toJSONString(logMap)), loadResult);
+                "response: \n%s\n%s\n", jsonWrapper.toJSONString(loadResult), jsonWrapper.toJSONString(logMap)), loadResult);
         } else if (RESULT_LABEL_EXISTED.equals(loadResult.get(keyStatus))) {
-            LOG.error(String.format("Stream Load response: \n%s\n", JSON.toJSONString(loadResult)));
+            LOG.error(String.format("Stream Load response: \n%s\n", jsonWrapper.toJSONString(loadResult)));
             // has to block-checking the state to get the final result
             checkLabelState(host, bufferEntity.getLabel());
         }
@@ -144,7 +150,7 @@ public class StarRocksStreamLoadVisitor implements Serializable {
                         throw new StarRocksStreamLoadFailedException(String.format("Failed to flush data to StarRocks, Error " +
                                 "could not get the final state of label[%s].\n", label), null);
                     }
-                    Map<String, Object> result = (Map<String, Object>)JSON.parse(EntityUtils.toString(respEntity));
+                    Map<String, Object> result = (Map<String, Object>)jsonWrapper.parse(EntityUtils.toString(respEntity));
                     String labelState = (String)result.get("state");
                     if (null == labelState) {
                         throw new StarRocksStreamLoadFailedException(String.format("Failed to flush data to StarRocks, Error " +
@@ -289,7 +295,7 @@ public class StarRocksStreamLoadVisitor implements Serializable {
                 HttpEntity respEntity = getHttpEntity(resp);
                 if (respEntity == null)
                     return null;
-                return (Map<String, Object>)JSON.parse(EntityUtils.toString(respEntity));
+                return (Map<String, Object>)jsonWrapper.parse(EntityUtils.toString(respEntity));
             }
         }
     }

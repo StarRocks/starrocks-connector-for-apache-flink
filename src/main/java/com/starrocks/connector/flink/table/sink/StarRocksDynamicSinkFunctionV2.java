@@ -29,6 +29,7 @@ import com.starrocks.connector.flink.row.sink.StarRocksISerializer;
 import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
 import com.starrocks.connector.flink.table.data.StarRocksRowData;
 import com.starrocks.connector.flink.tools.EnvUtils;
+import com.starrocks.connector.flink.tools.JsonWrapper;
 import com.starrocks.data.load.stream.StreamLoadSnapshot;
 import com.starrocks.data.load.stream.v2.StreamLoadManagerV2;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
@@ -82,6 +83,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
     private transient ListState<Map<String, StarRocksSinkBufferEntity>> legacyState;
     @Deprecated
     private transient List<StarRocksSinkBufferEntity> legacyData;
+    private transient JsonWrapper jsonWrapper;
 
     private transient long totalReceivedRows;
 
@@ -197,14 +199,24 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
     @Override
     public void open(Configuration parameters) throws Exception {
         totalReceivedRows = 0;
+        this.serializer.open(new StarRocksISerializer.SerializerContext(getOrCreateJsonWrapper()));
         sinkManager.init();
         this.streamLoadListener = new StarRocksStreamLoadListener(getRuntimeContext(), sinkOptions);
         sinkManager.setStreamLoadListener(streamLoadListener);
         if (rowTransformer != null) {
             rowTransformer.setRuntimeContext(getRuntimeContext());
+            rowTransformer.setFastJsonWrapper(getOrCreateJsonWrapper());
         }
         notifyCheckpointComplete(Long.MAX_VALUE);
         log.info("Open sink function v2. {}", EnvUtils.getGitInformation());
+    }
+
+    private JsonWrapper getOrCreateJsonWrapper() {
+        if (jsonWrapper == null) {
+            this.jsonWrapper = new JsonWrapper();
+        }
+
+        return jsonWrapper;
     }
 
     @Override
@@ -263,7 +275,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
                 );
 
         ListState<byte[]> listState = functionInitializationContext.getOperatorStateStore().getListState(descriptor);
-        snapshotStates = new SimpleVersionedListState<>(listState, new StarRocksVersionedSerializer());
+        snapshotStates = new SimpleVersionedListState<>(listState, new StarRocksVersionedSerializer(getOrCreateJsonWrapper()));
 
         // old version
         ListStateDescriptor<Map<String, StarRocksSinkBufferEntity>> legacyDescriptor =

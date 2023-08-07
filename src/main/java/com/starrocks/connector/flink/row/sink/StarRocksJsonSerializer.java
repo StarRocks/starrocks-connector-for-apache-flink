@@ -14,7 +14,7 @@
 
 package com.starrocks.connector.flink.row.sink;
 
-import com.alibaba.fastjson.JSON;
+import com.starrocks.connector.flink.tools.JsonWrapper;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -25,8 +25,15 @@ public class StarRocksJsonSerializer implements StarRocksISerializer {
     
     private final String[] fieldNames;
 
+    private transient JsonWrapper jsonWrapper;
+
     public StarRocksJsonSerializer(String[] fieldNames) {
         this.fieldNames = fieldNames;
+    }
+
+    @Override
+    public void open(SerializerContext context) {
+        this.jsonWrapper = context.getFastJsonWrapper();
     }
 
     @Override
@@ -38,7 +45,7 @@ public class StarRocksJsonSerializer implements StarRocksISerializer {
             idx++;
         }
 
-        return JSON.toJSONString(rowMap);
+        return jsonWrapper.toJSONString(rowMap);
     }
     
 }

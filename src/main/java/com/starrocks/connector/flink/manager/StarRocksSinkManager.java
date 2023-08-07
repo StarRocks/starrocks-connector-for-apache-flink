@@ -18,6 +18,7 @@ import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionOptions;
 import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 import com.starrocks.connector.flink.table.sink.StarRocksSinkSemantic;
+import com.starrocks.connector.flink.tools.JsonWrapper;
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Histogram;
@@ -141,7 +142,7 @@ public class StarRocksSinkManager implements Serializable {
         );
     }
 
-    public void setRuntimeContext(RuntimeContext runtimeCtx) {
+    public void open(RuntimeContext runtimeCtx, JsonWrapper jsonWrapper) {
         startTimeNano = System.nanoTime();
         totalFlushBytes = runtimeCtx.getMetricGroup().counter(COUNTER_TOTAL_FLUSH_BYTES);
         totalFlushRows = runtimeCtx.getMetricGroup().counter(COUNTER_TOTAL_FLUSH_ROWS);
@@ -162,6 +163,7 @@ public class StarRocksSinkManager implements Serializable {
         readDataTimeMs = runtimeCtx.getMetricGroup().histogram(HISTOGRAM_READ_DATA_TIME_MS, new DescriptiveStatisticsHistogram(sinkOptions.getSinkHistogramWindowSize()));
         writeDataTimeMs = runtimeCtx.getMetricGroup().histogram(HISTOGRAM_WRITE_DATA_TIME_MS, new DescriptiveStatisticsHistogram(sinkOptions.getSinkHistogramWindowSize()));
         loadTimeMs = runtimeCtx.getMetricGroup().histogram(HISTOGRAM_LOAD_TIME_MS, new DescriptiveStatisticsHistogram(sinkOptions.getSinkHistogramWindowSize()));
+        starrocksStreamLoadVisitor.open(jsonWrapper);
     }
 
     public void startAsyncFlushing() {
