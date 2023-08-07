@@ -14,28 +14,21 @@
 
 package com.starrocks.connector.flink.row.sink;
 
-import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.serializer.JSONSerializer;
-import com.alibaba.fastjson.serializer.ObjectSerializer;
-import com.alibaba.fastjson.serializer.SerializeConfig;
-import com.alibaba.fastjson.serializer.SerializeWriter;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.connector.flink.table.StarRocksDataType;
+import com.starrocks.connector.flink.tools.JsonWrapper;
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.data.ArrayData;
-import org.apache.flink.table.data.DecimalData;
 import org.apache.flink.table.data.GenericArrayData;
 import org.apache.flink.table.data.GenericMapData;
 import org.apache.flink.table.data.MapData;
 import org.apache.flink.table.data.RowData;
-import org.apache.flink.table.data.TimestampData;
 import org.apache.flink.table.data.binary.BinaryArrayData;
 import org.apache.flink.table.data.binary.BinaryMapData;
-import org.apache.flink.table.data.binary.BinaryStringData;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.ArrayType;
 import org.apache.flink.table.types.logical.DecimalType;
@@ -46,9 +39,6 @@ import org.apache.flink.table.types.logical.MapType;
 import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.table.types.logical.TimestampType;
 
-import java.io.IOException;
-import java.io.Serializable;
-import java.lang.reflect.Type;
 import java.sql.Date;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
@@ -68,7 +58,9 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
     private DataType[] columnDataTypes;
     private Map<String, StarRocksDataType> columns;
     private final SimpleDateFormat dateFormatter = new SimpleDateFormat("yyyy-MM-dd");
-    
+
+    private transient JsonWrapper jsonWrapper;
+
     public StarRocksTableRowTransformer(TypeInformation<RowData> rowDataTypeInfo) {
         this.rowDataTypeInfo = rowDataTypeInfo;
     }
@@ -88,9 +80,11 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
     public void setRuntimeContext(RuntimeContext runtimeCtx) {
         final TypeSerializer<RowData> typeSerializer = rowDataTypeInfo.createSerializer(runtimeCtx.getExecutionConfig());
         valueTransform = runtimeCtx.getExecutionConfig().isObjectReuseEnabled() ? typeSerializer::copy : Function.identity();
-        SerializeConfig.getGlobalInstance().put(BinaryStringData.class, new BinaryStringDataSerializer());
-        SerializeConfig.getGlobalInstance().put(DecimalData.class, new DecimalDataSerializer());
-        SerializeConfig.getGlobalInstance().put(TimestampData.class, new TimestampDataSerializer());
+    }
+
+    @Override
+    public void setFastJsonWrapper(JsonWrapper jsonWrapper) {
+        this.jsonWrapper = jsonWrapper;
     }
 
     @Override
@@ -145,7 +139,7 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
                     // string is "{"a": 1, "b": 2}", and if input it to JSON.toJSONString directly, the
                     // result will be "{\"a\": 1, \"b\": 2}" which will not be recognized as a json in
                     // StarRocks
-                    return JSON.parse(sValue);
+                    return jsonWrapper.parse(sValue);
                 }
                 return sValue;
             case DATE:
@@ -182,7 +176,7 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
                 StarRocksDataType rStarRocksDataType =
                         columns.getOrDefault(columnNames[pos], StarRocksDataType.UNKNOWN);
                 if (rStarRocksDataType == StarRocksDataType.STRING) {
-                    return JSON.toJSONString(m);
+                    return jsonWrapper.toJSONString(m);
                 }
                 return m;
             default:
@@ -203,7 +197,7 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
                 return data.parallelStream().map(row -> {
                     Map<String, Object> m = Maps.newHashMap();
                     rType.getFields().parallelStream().forEach(f -> m.put(f.getName(), typeConvertion(f.getType(), (RowData)row, rType.getFieldIndex(f.getName()))));
-                    return JSON.toJSONString(m);
+                    return jsonWrapper.toJSONString(m);
                 }).collect(Collectors.toList());
             }
             if (LogicalTypeRoot.MAP.equals(lt.getTypeRoot())) {
@@ -255,44 +249,4 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
         throw new UnsupportedOperationException(String.format("Unsupported map data: %s", mapData.getClass()));
     }
     
-}
-
-final class BinaryStringDataSerializer implements ObjectSerializer, Serializable {
-    private static final long serialVersionUID = 1L;
-    @Override
-    public void write(JSONSerializer serializer, Object object, Object fieldName, Type fieldType, int features) throws IOException {
-        SerializeWriter out = serializer.getWriter();
-        if (null == object) {
-            serializer.getWriter().writeNull();
-            return;
-        }
-        BinaryStringData strData = (BinaryStringData)object;
-        out.writeString(strData.toString());
-    }
-}
-
-final class DecimalDataSerializer implements ObjectSerializer, Serializable {
-    private static final long serialVersionUID = 1L;
-    @Override
-    public void write(JSONSerializer serializer, Object object, Object fieldName, Type fieldType, int features) throws IOException {
-        SerializeWriter out = serializer.getWriter();
-        if (null == object) {
-            serializer.getWriter().writeNull();
-            return;
-        }
-        out.writeString(((DecimalData)object).toBigDecimal().toPlainString());
-    }
-}
-
-final class TimestampDataSerializer implements ObjectSerializer, Serializable {
-    private static final long serialVersionUID = 1L;
-    @Override
-    public void write(JSONSerializer serializer, Object object, Object fieldName, Type fieldType, int features) throws IOException {
-        SerializeWriter out = serializer.getWriter();
-        if (null == object) {
-            serializer.getWriter().writeNull();
-            return;
-        }
-        out.writeString(((TimestampData)object).toLocalDateTime().toString());
-    }
 }
