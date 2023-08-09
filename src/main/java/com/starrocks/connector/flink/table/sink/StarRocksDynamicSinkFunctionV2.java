@@ -199,7 +199,9 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
     @Override
     public void open(Configuration parameters) throws Exception {
         totalReceivedRows = 0;
-        this.serializer.open(new StarRocksISerializer.SerializerContext(getOrCreateJsonWrapper()));
+        if (serializer != null) {
+            this.serializer.open(new StarRocksISerializer.SerializerContext(getOrCreateJsonWrapper()));
+        }
         sinkManager.init();
         this.streamLoadListener = new StarRocksStreamLoadListener(getRuntimeContext(), sinkOptions);
         sinkManager.setStreamLoadListener(streamLoadListener);
