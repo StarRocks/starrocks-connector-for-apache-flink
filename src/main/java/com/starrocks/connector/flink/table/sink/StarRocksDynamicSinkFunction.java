@@ -89,7 +89,9 @@ public class StarRocksDynamicSinkFunction<T> extends StarRocksDynamicSinkFunctio
     public void open(Configuration parameters) throws Exception {
         super.open(parameters);
         this.jsonWrapper = new JsonWrapper();
-        this.serializer.open(new StarRocksISerializer.SerializerContext(jsonWrapper));
+        if (serializer != null) {
+            this.serializer.open(new StarRocksISerializer.SerializerContext(jsonWrapper));
+        }
         sinkManager.open(getRuntimeContext(), jsonWrapper);
         totalInvokeRows = getRuntimeContext().getMetricGroup().counter(COUNTER_INVOKE_ROWS);
         totalInvokeRowsTime = getRuntimeContext().getMetricGroup().counter(COUNTER_INVOKE_ROWS_COST_TIME);
