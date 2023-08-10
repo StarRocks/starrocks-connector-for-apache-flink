@@ -147,8 +147,203 @@ When you load data from Apache Flink® into StarRocks, take note of the followin
 
 ## Examples
 
-TODO
+The following examples show how to use the Flink connector to load data into a StarRocks table with Flink SQL or Flink DataStream.
 
+### Preparations
+
+#### Create a StarRocks table
+
+Create a database `test` and create a Primary Key table `score_board`.
+
+```sql
+CREATE DATABASE `test`;
+
+CREATE TABLE `test`.`score_board`
+(
+    `id` int(11) NOT NULL COMMENT "",
+    `name` varchar(65533) NULL DEFAULT "" COMMENT "",
+    `score` int(11) NOT NULL DEFAULT "0" COMMENT ""
+)
+ENGINE=OLAP
+PRIMARY KEY(`id`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id`);
+```
+
+#### Set up Flink environment
+
+* Download Flink binary [Flink 1.15.2](https://archive.apache.org/dist/flink/flink-1.15.2/flink-1.15.2-bin-scala_2.12.tgz), and unzip it to directory `flink-1.15.2`
+* Download [connector 1.2.7](https://repo1.maven.org/maven2/com/starrocks/flink-connector-starrocks/1.2.7_flink-1.15/flink-connector-starrocks-1.2.7_flink-1.15.jar), and put it into the directory `flink-1.15.2/lib`
+* Run the following commands to start a Flink cluster
+    ```shell
+    cd flink-1.15.2
+    ./bin/start-cluster.sh
+    ```
+
+### Run with Flink SQL
+
+* Run the following command to start a Flink SQL client.
+    ```shell
+    ./bin/sql-client.sh
+    ```
+* Create a Flink table `score_board`, and insert values into the table via Flink SQL Client.
+
+    ```sql
+    CREATE TABLE `score_board` (
+        `id` INT,
+        `name` STRING,
+        `score` INT,
+        PRIMARY KEY (id) NOT ENFORCED
+    ) WITH (
+        'connector' = 'starrocks',
+        'jdbc-url' = 'jdbc:mysql://127.0.0.1:11903',
+        'load-url' = '127.0.0.1:11901',
+        'database-name' = 'test',
+        'table-name' = 'score_board',
+        'username' = 'root',
+        'password' = ''
+    );
+
+    INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'flink', 100);
+    ```
+
+### Run with Flink DataStream
+
+There are several ways to implement a Flink DataStream job according to the type of the input records, such as a csv Java `String`, a json Java `String` or a custom Java object.    
+
+* The input records are csv-format `String`. See [LoadCsvRecords](https://github.com/StarRocks/starrocks-connector-for-apache-flink/tree/main/examples/src/main/java/com/starrocks/connector/flink/examples/datastream/LoadCsvRecords.java) for a complete example.
+    ```java
+    // Generate csv-format records. Each record has three fields separated by "\t". These
+    // fields correspond to the columns `id`, `name`, and `score` in StarRocks table.
+    String[] records = new String[]{
+            "1\tstarrocks-csv\t100",
+            "2\tflink-csv\t100"
+    };
+    DataStream<String> source = env.fromElements(records);
+
+    // Configure the connector with the required properties, and you also need to add properties
+    // "sink.properties.format" and "sink.properties.column_separator" to tell the connector the
+    // input records are csv-format, and the separator is "\t". You can also use other separators
+    // in the records, but remember to modify the "sink.properties.column_separator" correspondingly
+    StarRocksSinkOptions options = StarRocksSinkOptions.builder()
+            .withProperty("jdbc-url", jdbcUrl)
+            .withProperty("load-url", loadUrl)
+            .withProperty("database-name", "test")
+            .withProperty("table-name", "score_board")
+            .withProperty("username", "root")
+            .withProperty("password", "")
+            .withProperty("sink.properties.format", "csv")
+            .withProperty("sink.properties.column_separator", "\t")
+            .build();
+    // Create the sink with the options
+    SinkFunction<String> starRockSink = StarRocksSink.sink(options);
+    source.addSink(starRockSink);
+    ```
+
+* The input records are json-format `String`. See [LoadJsonRecords](https://github.com/StarRocks/starrocks-connector-for-apache-flink/tree/main/examples/src/main/java/com/starrocks/connector/flink/examples/datastream/LoadJsonRecords.java) for a complete example.
+    ```java
+    // Generate json-format records. Each record has three fields correspond to
+    // the columns `id`, `name`, and `score` in StarRocks table.
+    String[] records = new String[]{
+            "{\"id\":1, \"name\":\"starrocks-json\", \"score\":100}",
+            "{\"id\":2, \"name\":\"flink-json\", \"score\":100}",
+    };
+    DataStream<String> source = env.fromElements(records);
+
+    // Configure the connector with the required properties, and you also need to add properties
+    // "sink.properties.format" and "sink.properties.strip_outer_array" to tell the connector the
+    // input records are json-format.
+    StarRocksSinkOptions options = StarRocksSinkOptions.builder()
+            .withProperty("jdbc-url", jdbcUrl)
+            .withProperty("load-url", loadUrl)
+            .withProperty("database-name", "test")
+            .withProperty("table-name", "score_board")
+            .withProperty("username", "root")
+            .withProperty("password", "")
+            .withProperty("sink.properties.format", "json")
+            .withProperty("sink.properties.strip_outer_array", "true")
+            .build();
+    // Create the sink with the options
+    SinkFunction<String> starRockSink = StarRocksSink.sink(options);
+    source.addSink(starRockSink);
+    ```
+
+* The input records are custom Java objects. See [LoadCustomJavaRecords](https://github.com/StarRocks/starrocks-connector-for-apache-flink/tree/main/examples/src/main/java/com/starrocks/connector/flink/examples/datastream/LoadCustomJavaRecords.java) for a complete example.
+
+  * In this example, the input record is a simple POJO `RowData`.
+
+      ```java
+      public static class RowData {
+              public int id;
+              public String name;
+              public int score;
+    
+              public RowData() {}
+    
+              public RowData(int id, String name, int score) {
+                  this.id = id;
+                  this.name = name;
+                  this.score = score;
+              }
+          }
+      ```
+
+  * The main program is
+    ```java
+    // Generate records which use RowData as the container.
+    RowData[] records = new RowData[]{
+            new RowData(1, "starrocks-rowdata", 100),
+            new RowData(2, "flink-rowdata", 100),
+        };
+    DataStream<RowData> source = env.fromElements(records);
+
+    // Configure the connector with the required properties
+    StarRocksSinkOptions options = StarRocksSinkOptions.builder()
+            .withProperty("jdbc-url", jdbcUrl)
+            .withProperty("load-url", loadUrl)
+            .withProperty("database-name", "test")
+            .withProperty("table-name", "score_board")
+            .withProperty("username", "root")
+            .withProperty("password", "")
+            .build();
+
+    // connector will use a Java object array (Object[]) to represent a row of
+    // StarRocks table, and each element is the value for a column. Need to
+    // define the schema of the Object[] which matches that of StarRocks table
+    TableSchema schema = TableSchema.builder()
+            .field("id", DataTypes.INT().notNull())
+            .field("name", DataTypes.STRING())
+            .field("score", DataTypes.INT())
+            // Must specify the primary key for StarRocks primary key table,
+            // and DataTypes.INT().notNull() for `id` must specify notNull()
+            .primaryKey("id")
+            .build();
+    // Transforms the RowData to the Object[] according to the schema
+    RowDataTransformer transformer = new RowDataTransformer();
+    // Create the sink with schema, options, and transformer
+    SinkFunction<RowData> starRockSink = StarRocksSink.sink(schema, options, transformer);
+    source.addSink(starRockSink);
+    ```
+
+  * The `RowDataTransformer` in the main program is defined as
+    ```java
+    private static class RowDataTransformer implements StarRocksSinkRowBuilder<RowData> {
+    
+        /**
+         * Set each element of the object array according to the input RowData.
+         * The schema of the array matches that of StarRocks table.
+         */
+        @Override
+        public void accept(Object[] internalRow, RowData rowData) {
+            internalRow[0] = rowData.id;
+            internalRow[1] = rowData.name;
+            internalRow[2] = rowData.score;
+            // Only need for StarRocks primary key table. Set the last
+            // element to tell whether the record is a UPSERT or DELETE.
+            internalRow[internalRow.length - 1] = StarRocksSinkOP.UPSERT.ordinal();
+        }
+    }  
+    ```
 
 ## Best Practices
 TODO
