@@ -5,9 +5,9 @@ The connector has a higher performance than [flink-connector-jdbc](https://night
 
 ## Version requirements
 
-| Fpark connector | Flink                    | StarRocks     | Java | Scala     |
-|-----------------|--------------------------|---------------| ---- |-----------|
-| 1.2.7           | 1.11,1.12,1.13,1.14,1.15 | 2.1 and later | 8    | 2.11,2.12 |
+| Connector | Flink                    | StarRocks     | Java | Scala     |
+|-----------|--------------------------|---------------| ---- |-----------|
+| 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 and later | 8    | 2.11,2.12 |
 
 ## Obtain Flink connector
 
