@@ -267,7 +267,6 @@ public class StarRocksSinkManager implements Serializable {
         if (!closed) {
             closed = true;
             LOG.info("StarRocks Sink is about to close, loadMetrics: {}.", metricsToString());
-            this.bufferMap.clear();
             if (scheduledFuture != null) {
                 scheduledFuture.cancel(false);
                 scheduler.shutdown();
