@@ -187,8 +187,9 @@ DISTRIBUTED BY HASH(`id`);
     ./bin/sql-client.sh
     ```
 * Create a Flink table `score_board`, and insert values into the table via Flink SQL Client.
+Note you must define the primary key in the Flink DDL if load to a StarRocks primary key table. It's optional for other types of StarRocks table. 
 
-    ```sql
+    ```SQL
     CREATE TABLE `score_board` (
         `id` INT,
         `name` STRING,
@@ -346,4 +347,283 @@ There are several ways to implement a Flink DataStream job according to the type
     ```
 
 ## Best Practices
-TODO
+
+### Load data to primary key table
+
+This section will show how to load data to StarRocks primary key table to achieve partial update, and conditional update.
+You can see [Change data through loading](https://docs.starrocks.io/en-us/latest/loading/Load_to_Primary_Key_tables) for the introduction of those features.
+These examples use Flink SQL.
+
+#### Preparations
+
+Create a database `test` and create a Primary Key table `score_board` in StarRocks.
+
+```SQL
+CREATE DATABASE `test`;
+
+CREATE TABLE `test`.`score_board`
+(
+    `id` int(11) NOT NULL COMMENT "",
+    `name` varchar(65533) NULL DEFAULT "" COMMENT "",
+    `score` int(11) NOT NULL DEFAULT "0" COMMENT ""
+)
+ENGINE=OLAP
+PRIMARY KEY(`id`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id`);
+```
+
+#### Partial update
+
+This example will show how to load data only to columns `id` and `name`.
+
+1. Insert initial data to StarRocks table in MySQL client
+```SQL
+mysql> INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'flink', 100);
+
+mysql> select * from score_board;
++------+-----------+-------+
+| id   | name      | score |
++------+-----------+-------+
+|    1 | starrocks |   100 |
+|    2 | flink     |   100 |
++------+-----------+-------+
+2 rows in set (0.02 sec)
+```
+
+2. Create a Flink table `score_board` in Flink SQL client
+  * Define the DDL which only includes columns `id` and `name`
+  * Set the option `sink.properties.partial_update` to `true` which tells the connector to do partial update 
+  * If the connector version <= 1.2.7, also need to set the option `sink.properties.columns` to `id,name,__op`
+  which tells the connector the columns to update. Note you need append `__op` at the end, and this field is
+  used to specify UPSERT/DELETE operation, but its value is set by the connector automatically.
+
+  ```SQL
+  CREATE TABLE `score_board` (
+      `id` INT,
+      `name` STRING,
+      PRIMARY KEY (id) NOT ENFORCED
+  ) WITH (
+      'connector' = 'starrocks',
+      'jdbc-url' = 'jdbc:mysql://127.0.0.1:11903',
+      'load-url' = '127.0.0.1:11901',
+      'database-name' = 'test',
+      'table-name' = 'score_board',
+      'username' = 'root',
+      'password' = '',
+      'sink.properties.partial_update' = 'true',
+      -- only need for connector version <= 1.2.7
+      'sink.properties.columns' = 'id,name,__op'
+  ); 
+  ```
+3. Insert data to the table in Flink SQL client, and only update the column `name`
+  ```SQL
+  INSERT INTO `score_board` VALUES (1, 'starrocks-update'), (2, 'flink-update');
+  ```
+4. Query the StarRocks table in mysql client
+  You can see that only values for `name` changes, and the values for `score` does not change.
+  
+  ```SQL
+  mysql> select * from score_board;
+  +------+------------------+-------+
+  | id   | name             | score |
+  +------+------------------+-------+
+  |    1 | starrocks-update |   100 |
+  |    2 | flink-update     |   100 |
+  +------+------------------+-------+
+  2 rows in set (0.02 sec)
+  ```
+
+#### Conditional update
+
+This example will show how to do conditional update according to the value of column `score`. The update for an `id`
+takes effect only when the new value for `score` is has a greater or equal to the old value.
+
+1. Insert initial data to StarRocks table in MySQL client
+  ```SQL
+  mysql> INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'flink', 100);
+  
+  mysql> select * from score_board;
+  +------+-----------+-------+
+  | id   | name      | score |
+  +------+-----------+-------+
+  |    1 | starrocks |   100 |
+  |    2 | flink     |   100 |
+  +------+-----------+-------+
+  2 rows in set (0.02 sec)
+  ```
+
+2. Create a Flink table `score_board` in the following ways
+  * Define the DDL including all of columns
+  * Set the option `sink.properties.merge_condition` to `score` which tells the connector to use the column `score`
+  as the condition
+  ```SQL
+  CREATE TABLE `score_board` (
+      `id` INT,
+      `name` STRING,
+      `score` INT,
+      PRIMARY KEY (id) NOT ENFORCED
+  ) WITH (
+      'connector' = 'starrocks',
+      'jdbc-url' = 'jdbc:mysql://127.0.0.1:11903',
+      'load-url' = '127.0.0.1:11901',
+      'database-name' = 'test',
+      'table-name' = 'score_board',
+      'username' = 'root',
+      'password' = '',
+      'sink.properties.merge_condition' = 'score'
+  );
+  ```
+
+3. Insert data to the table in Flink SQL client, and update id 1 with a smaller score, and id 2 with a larger score 
+  ```SQL
+  INSERT INTO `score_board` VALUES (1, 'starrocks', 99), (2, 'flink', 101);
+  ```
+
+4. Query the StarRocks table in mysql client
+  You can see that only the score for id 2 changes, and the score for id 1 does not change.
+  ```SQL
+  mysql> select * from score_board;
+  +------+-----------+-------+
+  | id   | name      | score |
+  +------+-----------+-------+
+  |    1 | starrocks |    99 |
+  |    2 | flink     |   101 |
+  +------+-----------+-------+
+  2 rows in set (0.02 sec)
+  ```
+
+### Load data into columns of BITMAP type
+
+[`BITMAP`](https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-types/BITMAP) is often used to accelerate count distinct, such as counting UV, see [Use Bitmap for exact Count Distinct](https://docs.starrocks.io/en-us/latest/using_starrocks/Using_bitmap).
+Here we take the counting of UV as an example to show how to load data into columns of the `BITMAP` type.
+
+1. Create a StarRocks Aggregate table
+
+   In the database `test`, create an Aggregate table `page_uv` where the column `visit_users` is defined as the `BITMAP` type and configured with the aggregate function `BITMAP_UNION`.
+
+    ```SQL
+    CREATE TABLE `test`.`page_uv` (
+      `page_id` INT NOT NULL COMMENT 'page ID',
+      `visit_date` datetime NOT NULL COMMENT 'access time',
+      `visit_users` BITMAP BITMAP_UNION NOT NULL COMMENT 'user ID'
+    ) ENGINE=OLAP
+    AGGREGATE KEY(`page_id`, `visit_date`)
+    DISTRIBUTED BY HASH(`page_id`);
+    ```
+
+2. Create a Flink table in Flink SQL client
+    
+    `visit_user_id` is `BIGINT` in Flink, and we want to load it to the column `visit_users` of StarRocks table. Note that for the Flink DDL
+    * define the `visit_user_id` instead of `visit_users` because Flink does not support `BITMAP`
+    * set the option `sink.properties.columns` to `page_id,visit_date,user_id,visit_users=to_bitmap(visit_user_id)` which tells the connector the column mapping
+    between Flink table and StarRocks table. It uses the [`to_bitmap`](https://docs.starrocks.io/en-us/latest/sql-reference/sql-functions/bitmap-functions/to_bitmap)
+   function to convert the data of `BIGINT` type into `BITMAP` type.
+
+    ```SQL
+    CREATE TABLE `page_uv` (
+        `page_id` INT,
+        `visit_date` TIMESTAMP,
+        `visit_user_id` BIGINT
+    ) WITH (
+        'connector' = 'starrocks',
+        'jdbc-url' = 'jdbc:mysql://127.0.0.1:11903',
+        'load-url' = '127.0.0.1:11901',
+        'database-name' = 'test',
+        'table-name' = 'page_uv',
+        'username' = 'root',
+        'password' = '',
+        'sink.properties.columns' = 'page_id,visit_date,visit_user_id,visit_users=to_bitmap(visit_user_id)'
+    );
+    ```
+
+3. Load data into Flink table in Flink SQL client
+
+    ```SQL
+    INSERT INTO `page_uv` VALUES
+       (1, CAST('2020-06-23 01:30:30' AS TIMESTAMP), 13),
+       (1, CAST('2020-06-23 01:30:30' AS TIMESTAMP), 23),
+       (1, CAST('2020-06-23 01:30:30' AS TIMESTAMP), 33),
+       (1, CAST('2020-06-23 02:30:30' AS TIMESTAMP), 13),
+       (2, CAST('2020-06-23 01:30:30' AS TIMESTAMP), 23);
+    ```
+
+4. Calculate page UVs from the StarRocks table in MySQL client.
+
+    ```SQL
+    MySQL [test]> SELECT `page_id`, COUNT(DISTINCT `visit_users`) FROM `page_uv` GROUP BY `page_id`;
+    +---------+-----------------------------+
+    | page_id | count(DISTINCT visit_users) |
+    +---------+-----------------------------+
+    |       2 |                           1 |
+    |       1 |                           3 |
+    +---------+-----------------------------+
+    2 rows in set (0.05 sec)
+    ```
+
+### Load data into columns of HLL type
+
+[`HLL`](https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-types/HLL) can be used for approximate count distinct, see [Use HLL for approximate count distinct](https://docs.starrocks.io/en-us/latest/using_starrocks/Using_HLL).
+
+Here we take the counting of UV as an example to show how to load data into columns of the `HLL` type.
+
+1. Create a StarRocks Aggregate table
+
+   In the database `test`, create an Aggregate table `hll_uv` where the column `visit_users` is defined as the `HLL` type and configured with the aggregate function `HLL_UNION`.
+
+    ```SQL
+    CREATE TABLE `hll_uv` (
+      `page_id` INT NOT NULL COMMENT 'page ID',
+      `visit_date` datetime NOT NULL COMMENT 'access time',
+      `visit_users` HLL HLL_UNION NOT NULL COMMENT 'user ID'
+    ) ENGINE=OLAP
+    AGGREGATE KEY(`page_id`, `visit_date`)
+    DISTRIBUTED BY HASH(`page_id`);
+    ```
+
+2. Create a Flink table in Flink SQL client
+
+   `visit_user_id` is `BIGINT` in Flink, and we want to load it to the column `visit_users` of StarRocks table. Note that for the Flink DDL
+    * define the `visit_user_id` instead of `visit_users` because Flink does not support `BITMAP`
+    * set the option `sink.properties.columns` to `page_id,visit_date,user_id,visit_users=hll_hash(visit_user_id)` which tells the connector the column mapping
+      between Flink table and StarRocks table. It uses the [`hll_hash`](https://docs.starrocks.io/en-us/latest/sql-reference/sql-functions/aggregate-functions/hll_hash)
+      function to convert the data of `BIGINT` type into `HLL` type.
+
+    ```SQL
+    CREATE TABLE `hll_uv` (
+        `page_id` INT,
+        `visit_date` TIMESTAMP,
+        `visit_user_id` BIGINT
+    ) WITH (
+        'connector' = 'starrocks',
+        'jdbc-url' = 'jdbc:mysql://127.0.0.1:11903',
+        'load-url' = '127.0.0.1:11901',
+        'database-name' = 'test',
+        'table-name' = 'hll_uv',
+        'username' = 'root',
+        'password' = '',
+        'sink.properties.columns' = 'page_id,visit_date,visit_user_id,visit_users=hll_hash(visit_user_id)'
+    );
+    ```
+
+3. Load data into Flink table in Flink SQL client
+
+    ```SQL
+    INSERT INTO `hll_uv` VALUES
+       (3, CAST('2023-07-24 12:00:00' AS TIMESTAMP), 78),
+       (4, CAST('2023-07-24 13:20:10' AS TIMESTAMP), 2),
+       (3, CAST('2023-07-24 12:30:00' AS TIMESTAMP), 674);
+    ```
+
+4. Calculate page UVs from the StarRocks table in MySQL client.
+
+    ```SQL
+    mysql> SELECT `page_id`, COUNT(DISTINCT `visit_users`) FROM `hll_uv` GROUP BY `page_id`;
+    **+---------+-----------------------------+
+    | page_id | count(DISTINCT visit_users) |
+    +---------+-----------------------------+
+    |       3 |                           2 |
+    |       4 |                           1 |
+    +---------+-----------------------------+
+    2 rows in set (0.04 sec)
+    ```
