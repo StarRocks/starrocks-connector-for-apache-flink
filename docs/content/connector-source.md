@@ -2,8 +2,6 @@
 
 StarRocks provides a self-developed connector named StarRocks Connector for Apache Flink® (Flink connector for short) to help you read data in bulk from a StarRocks cluster by using Flink.
 
-The Flink connector supports two reading methods: Flink SQL and Flink DataStream. Flink SQL is recommended.
-
 ## Background information
 
 Unlike the JDBC connector provided by Flink, the Flink connector of StarRocks supports reading data from multiple BEs of your StarRocks cluster in parallel, greatly accelerating read tasks. The following comparison shows the difference in implementation between the two connectors.
