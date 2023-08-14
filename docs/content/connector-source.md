@@ -85,8 +85,6 @@ Follow these steps to deploy the Flink connector:
 
 ### Common parameters
 
-The following parameters apply to both the Flink SQL and Flink DataStream reading methods.
-
 | Parameter                   | Required | Data type | Description                                                  |
 | --------------------------- | -------- | --------- | ------------------------------------------------------------ |
 | connector                   | Yes      | STRING    | The type of connector that you want to use to read data. Set the value to `starrocks`.                                |
@@ -102,9 +100,7 @@ The following parameters apply to both the Flink SQL and Flink DataStream readin
 | scan.params.mem-limit-byte  | No       | STRING    | The maximum amount of memory allowed per query on each BE. Unit: bytes. Default value: `1073741824`, equal to 1 GB. |
 | scan.max-retries            | No       | STRING    | The maximum number of times that the read task can be retried upon failures. Default value: `1`. If the number of times that the read task is retried exceeds this limit, the read task returns errors. |
 
-### Parameters for Flink DataStream
-
-The following parameters apply only to the Flink DataStream reading method.
+The following parameters apply only to reading data by using DataStream API.
 
 | Parameter    | Required | Data type | Description                                                  |
 | ------------ | -------- | --------- | ------------------------------------------------------------ |
