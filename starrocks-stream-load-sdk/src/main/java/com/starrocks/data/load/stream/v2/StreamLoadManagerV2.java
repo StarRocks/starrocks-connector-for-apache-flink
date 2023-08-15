@@ -105,7 +105,7 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
     private final AtomicReference<State> state = new AtomicReference<>(State.INACTIVE);
     private volatile Throwable e;
 
-    private final Queue<TableRegion> flushQ = new LinkedList<>();
+    private final Queue<TransactionTableRegion> flushQ = new LinkedList<>();
 
     /**
      * Whether write() has triggered a flush after currentCacheBytes > maxCacheBytes.
@@ -167,8 +167,8 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
                     }
 
                     if (savepoint) {
-                        for (TableRegion region : flushQ) {
-                            boolean flush = region.flush();
+                        for (TransactionTableRegion region : flushQ) {
+                            boolean flush = region.flush(FlushReason.COMMIT);
                             LOG.debug("Trigger flush table region {} because of savepoint, region cache bytes: {}, flush: {}",
                                     region.getUniqueKey(), region.getCacheBytes(), flush);
                         }
@@ -176,11 +176,11 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
                         // should ensure all data is committed for auto-commit mode
                         if (enableAutoCommit) {
                             int committedRegions = 0;
-                            for (TableRegion region : flushQ) {
+                            for (TransactionTableRegion region : flushQ) {
                                 // savepoint makes sure no more data is written, so these conditions
                                 // can guarantee commit after all data has been written to StarRocks
                                 if (region.getCacheBytes() == 0 && !region.isFlushing()) {
-                                    boolean success = ((TransactionTableRegion) region).commit();
+                                    boolean success = region.commit();
                                     if (success) {
                                         committedRegions += 1;
                                         region.resetAge();
@@ -196,10 +196,10 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
                         }
                         LockSupport.unpark(current);
                     } else {
-                        for (TableRegion region : flushQ) {
+                        for (TransactionTableRegion region : flushQ) {
                             region.getAndIncrementAge();
                             if (flushAndCommitStrategy.shouldCommit(region)) {
-                                boolean success = ((TransactionTableRegion) region).commit();
+                                boolean success = region.commit();
                                 if (success) {
                                     region.resetAge();
                                 }
@@ -207,8 +207,9 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
                             }
                         }
 
-                        for (TableRegion region : flushAndCommitStrategy.selectFlushRegions(flushQ, currentCacheBytes.get())) {
-                            boolean flush = region.flush();
+                        for (FlushAndCommitStrategy.SelectFlushResult result : flushAndCommitStrategy.selectFlushRegions(flushQ, currentCacheBytes.get())) {
+                            TransactionTableRegion region = result.getRegion();
+                            boolean flush = region.flush(result.getReason());
                             LOG.debug("Trigger flush table region {} because of selection, region cache bytes: {}," +
                                     " flush: {}", region.getUniqueKey(), region.getCacheBytes(), flush);
                         }
@@ -425,7 +426,7 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
                     region = new TransactionTableRegion(uniqueKey, database, table, this,
                             tableProperties, streamLoader, maxRetries, retryIntervalInMs);
                     regions.put(uniqueKey, region);
-                    flushQ.offer(region);
+                    flushQ.offer((TransactionTableRegion) region);
                 }
             }
         }
