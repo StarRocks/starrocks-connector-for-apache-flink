@@ -43,7 +43,8 @@ public class FlushAndCommitStrategy implements StreamLoadStrategy {
     private final boolean enableAutoCommit;
 
     private final AtomicLong numAgeTriggerFlush = new AtomicLong(0);
-    private final AtomicLong numForceTriggerFlush = new AtomicLong(0);
+    private final AtomicLong numCacheTriggerFlush = new AtomicLong(0);
+    private final AtomicLong numTableTriggerFlush = new AtomicLong(0);
 
     public FlushAndCommitStrategy(StreamLoadProperties properties, boolean enableAutoCommit) {
         this.expectDelayTime = properties.getExpectDelayTime();
@@ -60,24 +61,34 @@ public class FlushAndCommitStrategy implements StreamLoadStrategy {
        throw new UnsupportedOperationException();
     }
 
-    public List<TableRegion> selectFlushRegions(Queue<TableRegion> regions, long currentCacheBytes) {
-        List<TableRegion> flushRegions = new ArrayList<>();
-        for (TableRegion region : regions) {
+    public List<SelectFlushResult> selectFlushRegions(Queue<TransactionTableRegion> regions, long currentCacheBytes) {
+        List<SelectFlushResult> flushRegions = new ArrayList<>();
+        for (TransactionTableRegion region : regions) {
             if (shouldCommit(region)) {
                 numAgeTriggerFlush.getAndIncrement();
-                flushRegions.add(region);
+                flushRegions.add(new SelectFlushResult(FlushReason.COMMIT, region));
                 LOG.debug("Choose region {} to flush because the region should commit, age: {}, " +
                             "threshold: {}, scanFreq: {}, expectDelayTime: {}", region.getUniqueKey(),
                                 region.getAge(), ageThreshold, scanFrequency, expectDelayTime);
+            } else {
+                FlushReason reason = region.shouldFlush();
+                if (reason != FlushReason.NONE) {
+                    numTableTriggerFlush.getAndIncrement();
+                    flushRegions.add(new SelectFlushResult(reason, region));
+                    LOG.debug("Choose region {} to flush because the region itself decide to flush, age: {}, " +
+                                    "threshold: {}, scanFreq: {}, expectDelayTime: {}, reason: {}", region.getUniqueKey(),
+                            region.getAge(), ageThreshold, scanFrequency, expectDelayTime, reason);
+                }
             }
         }
 
         // simply choose the region with maximum bytes
         if (flushRegions.isEmpty() && currentCacheBytes >= maxCacheBytes) {
-            regions.stream().max(Comparator.comparingLong(TableRegion::getCacheBytes)).ifPresent(flushRegions::add);
-            if (!flushRegions.isEmpty()) {
-                numForceTriggerFlush.getAndIncrement();
-                TableRegion region = flushRegions.get(0);
+            TransactionTableRegion region = regions.stream()
+                    .max(Comparator.comparingLong(TableRegion::getCacheBytes)).orElse(null);
+            if (region != null) {
+                numCacheTriggerFlush.getAndIncrement();
+                flushRegions.add(new SelectFlushResult(FlushReason.CACHE_FULL, region));
                 LOG.debug("Choose region {} to flush because it's force flush, age: {}, " +
                             "threshold: {}, scanFreq: {}, expectDelayTime: {}", region.getUniqueKey(),
                                 region.getAge(), ageThreshold, scanFrequency, expectDelayTime);
@@ -100,7 +111,27 @@ public class FlushAndCommitStrategy implements StreamLoadStrategy {
                 ", maxCacheBytes=" + maxCacheBytes +
                 ", enableAutoCommit=" + enableAutoCommit +
                 ", numAgeTriggerFlush=" + numAgeTriggerFlush +
-                ", numForceTriggerFlush=" + numForceTriggerFlush +
+                ", numCacheTriggerFlush=" + numCacheTriggerFlush +
+                ", numTableTriggerFlush=" + numTableTriggerFlush +
                 '}';
+    }
+
+    public static class SelectFlushResult {
+
+        private final FlushReason reason;
+        private TransactionTableRegion region;
+
+        public SelectFlushResult(FlushReason reason, TransactionTableRegion region) {
+            this.reason = reason;
+            this.region = region;
+        }
+
+        public FlushReason getReason() {
+            return reason;
+        }
+
+        public TransactionTableRegion getRegion() {
+            return region;
+        }
     }
 }
