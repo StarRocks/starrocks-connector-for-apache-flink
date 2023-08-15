@@ -20,9 +20,9 @@ package com.starrocks.data.load.stream.v2;
 
 import com.starrocks.data.load.stream.Chunk;
 import com.starrocks.data.load.stream.StreamLoadManager;
+import com.starrocks.data.load.stream.StreamLoader;
 import com.starrocks.data.load.stream.StreamLoadResponse;
 import com.starrocks.data.load.stream.StreamLoadSnapshot;
-import com.starrocks.data.load.stream.StreamLoader;
 import com.starrocks.data.load.stream.TableRegion;
 import com.starrocks.data.load.stream.exception.StreamLoadFailException;
 import com.starrocks.data.load.stream.http.StreamLoadEntityMeta;
@@ -55,6 +55,7 @@ public class TransactionTableRegion implements TableRegion {
     private final StreamLoadTableProperties properties;
     private final AtomicLong age = new AtomicLong(0L);
     private final AtomicLong cacheBytes = new AtomicLong();
+    private final AtomicLong cacheRows = new AtomicLong();
     private final AtomicReference<State> state;
     private final AtomicBoolean ctl = new AtomicBoolean(false);
     private volatile Chunk activeChunk;
@@ -160,7 +161,7 @@ public class TransactionTableRegion implements TableRegion {
     }
 
     private void switchChunk() {
-        if (activeChunk == null) {
+        if (activeChunk == null || activeChunk.numRows() == 0) {
             return;
         }
         inactiveChunks.add(activeChunk);
@@ -168,12 +169,14 @@ public class TransactionTableRegion implements TableRegion {
     }
 
     protected int write0(byte[] row) {
-        if (activeChunk.estimateChunkSize(row) > properties.getChunkLimit()) {
+        if (activeChunk.estimateChunkSize(row) > properties.getChunkLimit()
+                || activeChunk.numRows() >= properties.getMaxBufferRows()) {
             switchChunk();
         }
 
         activeChunk.addRow(row);
         cacheBytes.addAndGet(row.length);
+        cacheRows.incrementAndGet();
         return row.length;
     }
 
@@ -182,13 +185,21 @@ public class TransactionTableRegion implements TableRegion {
         return state.get() == State.FLUSHING;
     }
 
-    @Override
-    public boolean flush() {
+    public FlushReason shouldFlush() {
+        if (state.get() != State.ACTIVE) {
+            return FlushReason.NONE;
+        }
+        return cacheRows.get() >= properties.getMaxBufferRows() ? FlushReason.BUFFER_ROWS_REACH_LIMIT : FlushReason.NONE;
+    }
+
+    public boolean flush(FlushReason reason) {
         if (state.compareAndSet(State.ACTIVE, State.FLUSHING)) {
             for (;;) {
                 if (ctl.compareAndSet(false, true)) {
-                    LOG.info("Flush uniqueKey : {}, label : {}, bytes : {}", uniqueKey, label, cacheBytes.get());
-                    if (activeChunk.numRows() > 0) {
+                    LOG.info("Flush uniqueKey : {}, label : {}, bytes : {}, rows: {}, reason: {}",
+                            uniqueKey, label, cacheBytes.get(), cacheRows.get(), reason);
+                    if (reason != FlushReason.BUFFER_ROWS_REACH_LIMIT ||
+                            activeChunk.numRows() >= properties.getMaxBufferRows()) {
                         switchChunk();
                     }
                     ctl.set(false);
@@ -264,6 +275,7 @@ public class TransactionTableRegion implements TableRegion {
     public void complete(StreamLoadResponse response) {
         Chunk chunk = inactiveChunks.remove();
         cacheBytes.addAndGet(-chunk.rowBytes());
+        cacheRows.addAndGet(-chunk.numRows());
         response.setFlushBytes(chunk.rowBytes());
         response.setFlushRows(chunk.numRows());
         manager.callback(response);
@@ -350,4 +362,7 @@ public class TransactionTableRegion implements TableRegion {
     public boolean isReadable() {
         throw new UnsupportedOperationException();
     }
+
+    @Override
+    public boolean flush() { throw new UnsupportedOperationException(); }
 }

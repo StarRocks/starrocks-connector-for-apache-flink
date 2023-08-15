@@ -37,6 +37,7 @@ public class StreamLoadTableProperties implements Serializable {
 
     private final boolean enableUpsertDelete;
     private final long chunkLimit;
+    private final int maxBufferRows;
 
     private StreamLoadTableProperties(Builder builder) {
         this.database = builder.database;
@@ -56,6 +57,7 @@ public class StreamLoadTableProperties implements Serializable {
         } else {
             chunkLimit = Math.min(10737418240L, builder.chunkLimit);
         }
+        this.maxBufferRows = builder.maxBufferRows;
         this.properties = builder.properties;
     }
 
@@ -83,6 +85,10 @@ public class StreamLoadTableProperties implements Serializable {
         return chunkLimit;
     }
 
+    public int getMaxBufferRows() {
+        return maxBufferRows;
+    }
+
     public Map<String, String> getProperties() {
         return properties;
     }
@@ -100,6 +106,7 @@ public class StreamLoadTableProperties implements Serializable {
         private boolean enableUpsertDelete;
         private StreamLoadDataFormat dataFormat;
         private long chunkLimit;
+        private int maxBufferRows = Integer.MAX_VALUE;
 
         private final Map<String, String> properties = new HashMap<>();
 
@@ -139,6 +146,11 @@ public class StreamLoadTableProperties implements Serializable {
 
         public Builder chunkLimit(long chunkLimit) {
             this.chunkLimit = chunkLimit;
+            return this;
+        }
+
+        public Builder maxBufferRows(int maxBufferRows) {
+            this.maxBufferRows = maxBufferRows;
             return this;
         }
 
