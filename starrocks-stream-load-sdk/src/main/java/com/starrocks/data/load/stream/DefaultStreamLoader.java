@@ -140,7 +140,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
 
     @Override
     public boolean begin(TableRegion region) {
-        region.setLabel(genLabel(region));
+        region.setLabel(region.getLabelGenerator().next());
         return true;
     }
 
@@ -501,12 +501,5 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
             throw new IllegalArgumentException("None of the hosts in `load_url` could be connected.");
         }
         return host + "/api/" + database + "/" + table + "/_stream_load";
-    }
-
-    protected String genLabel(TableRegion region) {
-        if (properties.getLabelPrefix() != null) {
-            return properties.getLabelPrefix() + UUID.randomUUID();
-        }
-        return UUID.randomUUID().toString();
     }
 }

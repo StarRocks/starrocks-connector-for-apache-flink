@@ -96,7 +96,7 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
     public boolean begin(TableRegion region) {
         if (region.getLabel() == null) {
             for (int i = 0; i < 5; i++) {
-                region.setLabel(genLabel(region));
+                region.setLabel(region.getLabelGenerator().next());
                 if (doBegin(region)) {
                     return true;
                 } else {
