@@ -35,10 +35,10 @@ import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.Map;
 import java.util.Queue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -84,7 +84,7 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
     private final long maxCacheBytes;
     // threshold to block write
     private final long maxWriteBlockCacheBytes;
-    private final Map<String, TableRegion> regions = new HashMap<>();
+    private final Map<String, TableRegion> regions = new ConcurrentHashMap<>();
     private final AtomicLong currentCacheBytes = new AtomicLong(0L);
     private final AtomicLong totalFlushRows = new AtomicLong(0L);
 
@@ -105,7 +105,7 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
     private final AtomicReference<State> state = new AtomicReference<>(State.INACTIVE);
     private volatile Throwable e;
 
-    private final Queue<TransactionTableRegion> flushQ = new LinkedList<>();
+    private final Queue<TransactionTableRegion> flushQ = new ConcurrentLinkedQueue<>();
 
     /**
      * Whether write() has triggered a flush after currentCacheBytes > maxCacheBytes.
@@ -419,16 +419,11 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
 
         TableRegion region = regions.get(uniqueKey);
         if (region == null) {
-            synchronized (regions) {
-                region = regions.get(uniqueKey);
-                if (region == null) {
-                    StreamLoadTableProperties tableProperties = properties.getTableProperties(uniqueKey);
-                    region = new TransactionTableRegion(uniqueKey, database, table, this,
-                            tableProperties, streamLoader, maxRetries, retryIntervalInMs);
-                    regions.put(uniqueKey, region);
-                    flushQ.offer((TransactionTableRegion) region);
-                }
-            }
+            StreamLoadTableProperties tableProperties = properties.getTableProperties(uniqueKey);
+            region = new TransactionTableRegion(uniqueKey, database, table, this,
+                    tableProperties, streamLoader, maxRetries, retryIntervalInMs);
+            regions.put(uniqueKey, region);
+            flushQ.offer((TransactionTableRegion) region);
         }
         return region;
     }
