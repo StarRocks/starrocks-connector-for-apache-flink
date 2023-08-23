@@ -419,11 +419,18 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
 
         TableRegion region = regions.get(uniqueKey);
         if (region == null) {
-            StreamLoadTableProperties tableProperties = properties.getTableProperties(uniqueKey);
-            region = new TransactionTableRegion(uniqueKey, database, table, this,
-                    tableProperties, streamLoader, maxRetries, retryIntervalInMs);
-            regions.put(uniqueKey, region);
-            flushQ.offer((TransactionTableRegion) region);
+            // currently write() will not be called concurrently, so regions will also not be
+            // created concurrently, but for future extension, protect it with synchronized
+            synchronized (regions) {
+                region = regions.get(uniqueKey);
+                if (region == null) {
+                    StreamLoadTableProperties tableProperties = properties.getTableProperties(uniqueKey);
+                    region = new TransactionTableRegion(uniqueKey, database, table, this,
+                            tableProperties, streamLoader, maxRetries, retryIntervalInMs);
+                    regions.put(uniqueKey, region);
+                    flushQ.offer((TransactionTableRegion) region);
+                }
+            }
         }
         return region;
     }
