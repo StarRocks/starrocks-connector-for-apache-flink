@@ -131,15 +131,16 @@ When you load data from Apache Flink® into StarRocks, take note of the followin
 
 - Loading data into StarRocks tables needs INSERT privilege. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/account-management/GRANT) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
 
-- If you specify the exactly-once semantics, the two-phase commit (2PC) protocol must be supported to ensure efficient data loading. StarRocks does not support this protocol. Therefore we need to rely on Apache Flink® to achieve exactly-once. The overall process is as follows:
-    1. Save data and its label at each checkpoint that is completed at a specific checkpoint interval.
-    2. After data and labels are saved, block the flushing of data cached in the state at the first invoke after each checkpoint is completed.
 
-  If StarRocks unexpectedly exits, the operators for Apache Flink® sink streaming are blocked for a long time and Apache Flink® issues a monitoring alert or shuts down.
+- Since v2.4, StarRocks provides a Stream Load transaction interface. Since Flink connector version 1.2.4, the Sink is redesigned to implement exactly-once semantics based on transactional interfaces. Compared to the previous implementation based on non-transactional interfaces, the new implementation reduces memory usage and checkpoint overhead, thereby enhancing real-time performance and stability of loading. Starting from Flink connector version 1.2.4, the Sink implements transactional interfaces by default. To enable non-transactional interfaces, the `sink.version` needs to be configured as `V1`.
 
-- By default, data is loaded in the CSV format. You can set the `sink.properties.row_delimiter` parameter to `\\x02` to specify a row separator and set the `sink.properties.column_separator` parameter to `\\x01` to specify a column separator.
+    > **NOTICE**
+    >
+    > If the version of StarRocks is earlier than 2.4 or the version of Flink connector is earlier than 1.2.4, the sink automatically implements the non-transactional interface.
+    
+- For the exactly-once semantics achieved by implementing non-transactional interface of Stream Load, it relies on Flink's checkpoint mechanism to save a small batch of data and its label at each checkpoint. In the first invocation after the completion of a checkpoint, it blocks to flush all data cached in the state, thus achieving precisely-once processing. However, if StarRocks unexpectedly exits, the operators for Apache Flink® sink streaming are blocked for a long time and Apache Flink® issues a monitoring alert or shuts down. 
 
-- If data loading pauses, you can increase the memory of the Flink task.
+- If data loading pauses, you can try to increase the memory of the Flink task.
 
 - If the preceding code runs as expected and StarRocks can receive data, but the data loading fails, check whether your machine can access the HTTP port of the backends (BEs) in your StarRocks cluster. If you can successfully ping the HTTP port returned by the execution of the SHOW BACKENDS command in your StarRocks cluster, your machine can access the HTTP port of the BEs in your StarRocks cluster. For example, a machine has a public IP address and a private IP address, the HTTP ports of frontends (FEs) and BEs can be accessed through the public IP address of the FEs and BEs, the IP address that is bounded with your StarRocks cluster is the private IP address, and the value of `loadurl` for the Flink task is the HTTP port of the public IP address of the FEs. The FEs forwards the data loading task to the private IP address of the BEs. In this example, if the machine cannot ping the private IP address of the BEs, the data loading fails.
 
@@ -197,8 +198,8 @@ Note you must define the primary key in the Flink DDL if load to a StarRocks pri
         PRIMARY KEY (id) NOT ENFORCED
     ) WITH (
         'connector' = 'starrocks',
-        'jdbc-url' = 'jdbc:mysql://127.0.0.1:11903',
-        'load-url' = '127.0.0.1:11901',
+        'jdbc-url' = 'jdbc:mysql://127.0.0.1:9030',
+        'load-url' = '127.0.0.1:8030',
         'database-name' = 'test',
         'table-name' = 'score_board',
         'username' = 'root',
@@ -405,8 +406,8 @@ mysql> select * from score_board;
       PRIMARY KEY (id) NOT ENFORCED
   ) WITH (
       'connector' = 'starrocks',
-      'jdbc-url' = 'jdbc:mysql://127.0.0.1:11903',
-      'load-url' = '127.0.0.1:11901',
+      'jdbc-url' = 'jdbc:mysql://127.0.0.1:9030',
+      'load-url' = '127.0.0.1:8030',
       'database-name' = 'test',
       'table-name' = 'score_board',
       'username' = 'root',
@@ -465,8 +466,8 @@ takes effect only when the new value for `score` is has a greater or equal to th
       PRIMARY KEY (id) NOT ENFORCED
   ) WITH (
       'connector' = 'starrocks',
-      'jdbc-url' = 'jdbc:mysql://127.0.0.1:11903',
-      'load-url' = '127.0.0.1:11901',
+      'jdbc-url' = 'jdbc:mysql://127.0.0.1:9030',
+      'load-url' = '127.0.0.1:8030',
       'database-name' = 'test',
       'table-name' = 'score_board',
       'username' = 'root',
@@ -596,8 +597,8 @@ Here we take the counting of UV as an example to show how to load data into colu
         `visit_user_id` BIGINT
     ) WITH (
         'connector' = 'starrocks',
-        'jdbc-url' = 'jdbc:mysql://127.0.0.1:11903',
-        'load-url' = '127.0.0.1:11901',
+        'jdbc-url' = 'jdbc:mysql://127.0.0.1:9030',
+        'load-url' = '127.0.0.1:8030',
         'database-name' = 'test',
         'table-name' = 'hll_uv',
         'username' = 'root',
