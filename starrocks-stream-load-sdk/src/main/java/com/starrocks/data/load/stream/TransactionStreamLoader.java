@@ -203,8 +203,8 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
                     // currently this could happen after timeout which is specified in http header,
                     // but as a protection we check the state again
                     String labelState = getLabelState(host, transaction.getDatabase(), transaction.getTable(), transaction.getLabel(),
-                            Collections.singleton(StreamLoadConstants.LABEL_STATE_PREPARE));
-                    if (!StreamLoadConstants.LABEL_STATE_PREPARED.equals(labelState)) {
+                            Collections.singleton(TransactionStatus.PREPARE.name()));
+                    if (!TransactionStatus.PREPARED.isSame(labelState)) {
                        String errMsg = String.format("Transaction prepare failed because of unexpected state, " +
                                        "label: %s, state: %s", transaction.getLabel(), labelState);
                        log.error(errMsg);
@@ -272,7 +272,7 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
             //    the transaction actually success, and this commit should be successful
             // To reduce the dependency for the returned status type, always check the label state
             String labelState = getLabelState(host, transaction.getDatabase(), transaction.getTable(), transaction.getLabel(), Collections.emptySet());
-            if (StreamLoadConstants.LABEL_STATE_COMMITTED.equals(labelState) || StreamLoadConstants.LABEL_STATE_VISIBLE.equals(labelState)) {
+            if (TransactionStatus.COMMITTED.isSame(labelState) || TransactionStatus.VISIBLE.isSame(labelState)) {
                 return true;
             }
 
@@ -284,7 +284,7 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
                    " label state: %s", transaction.getDatabase(), transaction.getTable(), transaction.getLabel(), status, labelState);
             // transaction not exist often happens after transaction timeouts
             if (StreamLoadConstants.RESULT_STATUS_TRANSACTION_NOT_EXISTED.equals(status) ||
-                StreamLoadConstants.LABEL_STATE_UNKNOWN.equals(labelState)) {
+                TransactionStatus.UNKNOWN.isSame(labelState)) {
                 exceptionMsg += ". commit response status with TXN_NOT_EXISTS or label state with UNKNOWN often happens when transaction" +
                         " timeouts, and please check StarRocks FE leader's log to confirm it. You can find the transaction id for the label" +
                         " in the FE log first, and search with the transaction id and the keyword 'expired'";
@@ -329,8 +329,11 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
             if (StreamLoadConstants.RESULT_STATUS_SUCCESS.equals(status) || StreamLoadConstants.RESULT_STATUS_OK.equals(status)) {
                 return true;
             }
-            log.error("Transaction rollback failed, db: {}, table: {}, label : {}",
-                    transaction.getDatabase(), transaction.getTable(), transaction.getLabel());
+
+            JsonNode msgNode = node.get("Message");
+            String msg = msgNode == null ? "" : msgNode.asText();
+            log.error("Transaction rollback failed, db: {}, table: {}, label : {}, message: {}",
+                    transaction.getDatabase(), transaction.getTable(), transaction.getLabel(), msg);
             return false;
         } catch (IOException e) {
             throw new RuntimeException(e);

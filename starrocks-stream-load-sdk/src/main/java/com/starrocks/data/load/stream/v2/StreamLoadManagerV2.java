@@ -386,6 +386,10 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
         return snapshot;
     }
 
+    public StreamLoader getStreamLoader() {
+        return streamLoader;
+    }
+
     @Override
     public boolean prepare(StreamLoadSnapshot snapshot) {
         return streamLoader.prepare(snapshot);
