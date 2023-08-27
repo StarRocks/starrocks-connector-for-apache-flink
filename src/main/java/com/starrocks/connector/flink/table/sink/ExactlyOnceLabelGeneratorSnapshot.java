@@ -20,6 +20,8 @@
 
 package com.starrocks.connector.flink.table.sink;
 
+import com.google.common.base.Objects;
+
 /** Snapshot for the label generator. */
 public class ExactlyOnceLabelGeneratorSnapshot {
 
@@ -34,18 +36,18 @@ public class ExactlyOnceLabelGeneratorSnapshot {
     /** The number of subtasks (the parallelism of the sink) when this snapshot is created. */
     private final int numberOfSubtasks;
     /** The index of the subtask that creates this snapshot. */
-    private final int subtaskIndex;
+    private final int subTaskIndex;
     /** Next id used to create label. */
     private final long nextId;
 
     public ExactlyOnceLabelGeneratorSnapshot(long checkpointId, String db, String table,
-                                             String labelPrefix, int numberOfSubtasks, int subtaskIndex, long nextId) {
+                                             String labelPrefix, int numberOfSubtasks, int subTaskIndex, long nextId) {
         this.checkpointId = checkpointId;
         this.db = db;
         this.table = table;
         this.labelPrefix = labelPrefix;
         this.numberOfSubtasks = numberOfSubtasks;
-        this.subtaskIndex = subtaskIndex;
+        this.subTaskIndex = subTaskIndex;
         this.nextId = nextId;
     }
 
@@ -69,8 +71,8 @@ public class ExactlyOnceLabelGeneratorSnapshot {
         return numberOfSubtasks;
     }
 
-    public int getSubtaskIndex() {
-        return subtaskIndex;
+    public int getSubTaskIndex() {
+        return subTaskIndex;
     }
 
     public long getNextId() {
@@ -78,7 +80,37 @@ public class ExactlyOnceLabelGeneratorSnapshot {
     }
 
     public ExactlyOnceLabelGenerator.LabelDbTableSubtask createLabelDbTableSubtask() {
-        return new ExactlyOnceLabelGenerator.LabelDbTableSubtask(labelPrefix, db, table, subtaskIndex);
+        return new ExactlyOnceLabelGenerator.LabelDbTableSubtask(labelPrefix, db, table, subTaskIndex);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        ExactlyOnceLabelGeneratorSnapshot snapshot = (ExactlyOnceLabelGeneratorSnapshot) o;
+        return checkpointId == snapshot.checkpointId
+                && numberOfSubtasks == snapshot.numberOfSubtasks
+                && subTaskIndex == snapshot.subTaskIndex
+                && nextId == snapshot.nextId
+                && Objects.equal(db, snapshot.db)
+                && Objects.equal(table, snapshot.table)
+                && Objects.equal(labelPrefix, snapshot.labelPrefix);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(
+                checkpointId,
+                db,
+                table,
+                labelPrefix,
+                numberOfSubtasks,
+                subTaskIndex,
+                nextId);
     }
 
     @Override
@@ -89,7 +121,7 @@ public class ExactlyOnceLabelGeneratorSnapshot {
                 ", table='" + table + '\'' +
                 ", labelPrefix='" + labelPrefix + '\'' +
                 ", numberOfSubtasks=" + numberOfSubtasks +
-                ", subtaskIndex=" + subtaskIndex +
+                ", subtaskIndex=" + subTaskIndex +
                 ", nextId=" + nextId +
                 '}';
     }

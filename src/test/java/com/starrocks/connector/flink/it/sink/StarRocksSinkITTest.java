@@ -47,12 +47,12 @@ import java.util.function.Function;
 
 import static com.starrocks.connector.flink.it.sink.StarRocksTableUtils.scanTable;
 import static com.starrocks.connector.flink.it.sink.StarRocksTableUtils.verifyResult;
-import static org.junit.Assume.assumeFalse;
+import static org.junit.Assume.assumeTrue;
 
 @RunWith(Parameterized.class)
 public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
 
-    @Parameterized.Parameters(name = "isSinkV2={0}")
+    @Parameterized.Parameters(name = "sinkV2={0}")
     public static List<Object> parameters() {
         return Arrays.asList(false, true);
     }
@@ -94,7 +94,7 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
 
     @Test
     public void testDupKeyWritePartialColumnsInOrder() throws Exception {
-        assumeFalse(isSinkV2);
+        assumeTrue(isSinkV2);
         String ddl = "c0 INT, c2 STRING";
         List<Row> testData = new ArrayList<>();
         testData.add(Row.of(1, "abc"));
@@ -111,7 +111,7 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
 
     @Test
     public void testDupKeyWritePartialColumnsOutOfOrder() throws Exception {
-        assumeFalse(isSinkV2);
+        assumeTrue(isSinkV2);
         String ddl = "c2 STRING, c0 INT";
         List<Row> testData = new ArrayList<>();
         testData.add(Row.of("abc", 1));
@@ -147,7 +147,7 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
                 "'connector' = 'starrocks'," +
                 "'jdbc-url'='" + sinkOptions.getJdbcUrl() + "'," +
                 "'load-url'='" + String.join(";", sinkOptions.getLoadUrlList()) + "'," +
-                "'sink.version' = '" + (isSinkV2 ? "V1" : "V2") + "'," +
+                "'sink.version' = '" + (isSinkV2 ? "V2" : "V1") + "'," +
                 "'database-name' = '" + DB_NAME + "'," +
                 "'table-name' = '" + sinkOptions.getTableName() + "'," +
                 "'username' = '" + sinkOptions.getUsername() + "'," +
@@ -215,7 +215,7 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
 
     @Test
     public void testPkWritePartialColumnsInOrder() throws Exception {
-        assumeFalse(isSinkV2);
+        assumeTrue(isSinkV2);
         String ddl = "c0 INT, c2 STRING";
         List<Row> testData = new ArrayList<>();
         testData.add(Row.of(1, "abc"));
@@ -232,7 +232,7 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
 
     @Test
     public void testPkWritePartialColumnsOutOfOrder() throws Exception {
-        assumeFalse(isSinkV2);
+        assumeTrue(isSinkV2);
         String ddl = "c2 STRING, c0 INT";
         List<Row> testData = new ArrayList<>();
         testData.add(Row.of("abc", 1));
@@ -269,7 +269,7 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
                 "'connector' = 'starrocks'," +
                 "'jdbc-url'='" + sinkOptions.getJdbcUrl() + "'," +
                 "'load-url'='" + String.join(";", sinkOptions.getLoadUrlList()) + "'," +
-                "'sink.version' = '" + (isSinkV2 ? "V1" : "V2") + "'," +
+                "'sink.version' = '" + (isSinkV2 ? "V2" : "V1") + "'," +
                 "'database-name' = '" + DB_NAME + "'," +
                 "'table-name' = '" + sinkOptions.getTableName() + "'," +
                 "'username' = '" + sinkOptions.getUsername() + "'," +
@@ -319,7 +319,7 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
                 "'connector' = 'starrocks'," +
                 "'jdbc-url'='" + sinkOptions.getJdbcUrl() + "'," +
                 "'load-url'='" + String.join(";", sinkOptions.getLoadUrlList()) + "'," +
-                "'sink.version' = '" + (isSinkV2 ? "V1" : "V2") + "'," +
+                "'sink.version' = '" + (isSinkV2 ? "V2" : "V1") + "'," +
                 "'database-name' = '" + DB_NAME + "'," +
                 "'table-name' = '" + sinkOptions.getTableName() + "'," +
                 "'username' = '" + sinkOptions.getUsername() + "'," +
@@ -338,7 +338,7 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
 
     @Test
     public void testPKPartialUpdateDelete() throws Exception {
-        assumeFalse(isSinkV2);
+        assumeTrue(isSinkV2);
         String tableName = createPkTable("testPKPartialUpdateDelete");
         executeSrSQL(String.format("INSERT INTO `%s`.`%s` VALUES (1, 1.0, '1'), (2, 2.0, '2')", DB_NAME, tableName));
         verifyResult(Arrays.asList(Arrays.asList(1, 1.0f, "1"), Arrays.asList(2, 2.0f, "2")),
@@ -372,7 +372,7 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
                 "'connector' = 'starrocks'," +
                 "'jdbc-url'='" + sinkOptions.getJdbcUrl() + "'," +
                 "'load-url'='" + String.join(";", sinkOptions.getLoadUrlList()) + "'," +
-                "'sink.version' = '" + (isSinkV2 ? "V1" : "V2") + "'," +
+                "'sink.version' = '" + (isSinkV2 ? "V2" : "V1") + "'," +
                 "'database-name' = '" + DB_NAME + "'," +
                 "'table-name' = '" + sinkOptions.getTableName() + "'," +
                 "'username' = '" + sinkOptions.getUsername() + "'," +
@@ -420,10 +420,36 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
     }
 
     @Test
+    public void testAbortLingeringTransactions() throws Exception {
+        assumeTrue(isSinkV2);
+        Map<String, String> options = new HashMap<>();
+        options.put("sink.at-least-once.use-transaction-stream-load", "false");
+        options.put("sink.semantic", "exactly-once");
+        options.put("sink.label-prefix", "test_label");
+        String checkpointDir = temporaryFolder.newFolder().toURI().toString();
+        testConfigurationBase(options,
+                env -> {
+                    env.enableCheckpointing(1000);
+                    env.getCheckpointConfig().setCheckpointStorage(checkpointDir);
+                    Configuration config = new Configuration();
+                    config.set(ExecutionCheckpointingOptions.ENABLE_CHECKPOINTS_AFTER_TASKS_FINISH, true);
+                    env.configure(config);
+                    return null;
+                }
+        );
+    }
+
+    @Test
     public void testJsonFormat() throws Exception {
-        assumeFalse(isSinkV2);
-        testConfigurationBase(
-                Collections.singletonMap("sink.properties.format", "json"), env -> null);
+        if (isSinkV2) {
+            testConfigurationBase(
+                    Collections.singletonMap("sink.properties.format", "json"), env -> null);
+        } else {
+            Map<String, String> map = new HashMap<>();
+            map.put("sink.properties.format", "json");
+            map.put("sink.properties.strip_outer_array", "true");
+            testConfigurationBase(map, env -> null);
+        }
     }
 
     private void testConfigurationBase(Map<String, String> options, Function<StreamExecutionEnvironment, Void> setFlinkEnv) throws Exception {
@@ -449,7 +475,7 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
                 "'connector' = 'starrocks'," +
                 "'jdbc-url'='" + getJdbcUrl() + "'," +
                 "'load-url'='" + String.join(";", getHttpUrls()) + "'," +
-                "'sink.version' = '" + (isSinkV2 ? "V1" : "V2") + "'," +
+                "'sink.version' = '" + (isSinkV2 ? "V2" : "V1") + "'," +
                 "'database-name' = '" + DB_NAME + "'," +
                 "'table-name' = '" + tableName + "'," +
                 "'username' = 'root'," +

@@ -28,8 +28,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -68,7 +68,7 @@ public class LingeringTransactionAborter {
     }
 
     public void execute() throws Exception {
-        Map<ExactlyOnceLabelGenerator.LabelDbTableSubtask, ExactlyOnceLabelGeneratorSnapshot> map = new HashMap<>();
+        Map<ExactlyOnceLabelGenerator.LabelDbTableSubtask, ExactlyOnceLabelGeneratorSnapshot> map = new LinkedHashMap<>();
         Set<String> oldLabelPrefixes = new HashSet<>();
         for (ExactlyOnceLabelGeneratorSnapshot snapshot : snapshots) {
             // sanity check that the checkpoint id of the snapshot should be the same with the restoredCheckpointId
@@ -109,7 +109,7 @@ public class LingeringTransactionAborter {
             long endId = checkNumTxns < 0 ? Long.MAX_VALUE : snapshot.getNextId() + checkNumTxns;
             for (long id = snapshot.getNextId(); id < endId; id++) {
                 String label = ExactlyOnceLabelGenerator.genLabel(
-                        snapshot.getLabelPrefix(), snapshot.getTable(), snapshot.getSubtaskIndex(), id);
+                        snapshot.getLabelPrefix(), snapshot.getTable(), snapshot.getSubTaskIndex(), id);
                 try {
                     boolean result = tryAbortTransaction(snapshot.getDb(), snapshot.getTable(), label);
                     // if checkNumTxns < 0, end up after finding the first transaction that does not need abort
@@ -132,9 +132,9 @@ public class LingeringTransactionAborter {
             //TODO considering rescale
             // if checkNumTxns is negative, execute until find the first txn that does not need abort
             // The start checkpoint
-            long endId = checkNumTxns < 0 ? Long.MAX_VALUE : restoredCheckpointId + checkNumTxns;
+            long endId = checkNumTxns < 0 ? Long.MAX_VALUE : restoredCheckpointId + 1 + checkNumTxns;
             for (long id = restoredCheckpointId + 1; id < endId; id++) {
-                String label = ExactlyOnceLabelGenerator.genLabel(dbTable.f0, dbTable.f1, subtaskIndex, id);
+                String label = ExactlyOnceLabelGenerator.genLabel(currentLabelPrefix, dbTable.f1, subtaskIndex, id);
                 try {
                     boolean result = tryAbortTransaction(dbTable.f0, dbTable.f1, label);
                     // if checkNumTxns < 0, end up after finding the first transaction that does not need abort
@@ -215,7 +215,7 @@ public class LingeringTransactionAborter {
                         "db: {}, table: {}, label: {}", db, table, label, ie);
             }
 
-            if (newStatus == null || newStatus == TransactionStatus.PREPARE || newStatus == TransactionStatus.PREPARED) {
+            if (newStatus != TransactionStatus.UNKNOWN && newStatus != TransactionStatus.ABORTED) {
                 String errMsg = String.format("Fail to abort lingering transaction, db: %s, table: %s, " +
                         "label: %s, status: %s", db, table, label, newStatus);
                 LOG.error(errMsg, e);

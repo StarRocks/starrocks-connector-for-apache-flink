@@ -89,6 +89,34 @@ public class ExactlyOnceLabelGenerator implements LabelGenerator {
                 checkpointId, db, table, labelPrefix, numberOfSubtasks, subTaskIndex, nextId.get());
     }
 
+    public String getLabelPrefix() {
+        return labelPrefix;
+    }
+
+    public String getDb() {
+        return db;
+    }
+
+    public String getTable() {
+        return table;
+    }
+
+    public int getNumberOfSubtasks() {
+        return numberOfSubtasks;
+    }
+
+    public int getSubTaskIndex() {
+        return subTaskIndex;
+    }
+
+    public long getNextId() {
+        return nextId.get();
+    }
+
+    public ExactlyOnceLabelGenerator.LabelDbTableSubtask createLabelDbTableSubtask() {
+        return new ExactlyOnceLabelGenerator.LabelDbTableSubtask(labelPrefix, db, table, subTaskIndex);
+    }
+
     public static String genLabel(String labelPrefix, String table, int subTaskIndex, long id) {
         return String.format("%s-%s-%s-%s", labelPrefix, table, subTaskIndex, id);
     }

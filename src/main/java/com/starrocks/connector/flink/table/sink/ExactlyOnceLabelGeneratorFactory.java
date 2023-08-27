@@ -20,8 +20,8 @@
 
 package com.starrocks.connector.flink.table.sink;
 
-import com.starrocks.data.load.stream.LabelGenerator;
 import com.starrocks.data.load.stream.LabelGeneratorFactory;
+import org.apache.arrow.util.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,7 +56,7 @@ public class ExactlyOnceLabelGeneratorFactory implements LabelGeneratorFactory {
     }
 
     @Override
-    public synchronized LabelGenerator create(String db, String table) {
+    public synchronized ExactlyOnceLabelGenerator create(String db, String table) {
             Map<String, ExactlyOnceLabelGenerator> tableMap = labelGenerators.computeIfAbsent(db, key -> new HashMap<>());
             ExactlyOnceLabelGenerator generator = tableMap.get(table);
             if (generator == null) {
@@ -83,7 +83,7 @@ public class ExactlyOnceLabelGeneratorFactory implements LabelGeneratorFactory {
     public synchronized void restore(List<ExactlyOnceLabelGeneratorSnapshot> snapshots) {
         Map<ExactlyOnceLabelGenerator.LabelDbTableSubtask, ExactlyOnceLabelGeneratorSnapshot> map = new HashMap<>();
         for (ExactlyOnceLabelGeneratorSnapshot snapshot : snapshots) {
-            if (snapshot.getSubtaskIndex() != subtaskIndex && !snapshot.getLabelPrefix().equals(labelPrefix)) {
+            if (snapshot.getSubTaskIndex() != subtaskIndex || !snapshot.getLabelPrefix().equals(labelPrefix)) {
                 LOG.info("Skip snapshot: {}", snapshot);
                 continue;
             }
@@ -93,6 +93,9 @@ public class ExactlyOnceLabelGeneratorFactory implements LabelGeneratorFactory {
             // Sanity check that there should not have duplicated snapshot for a LabelDbTableSubtask
             if (oldSnapshot != null) {
                 LOG.warn("Find duplicate snapshot, old snapshot: {}, new snapshot: {}", oldSnapshot, snapshot);
+                if (snapshot.getNextId() < oldSnapshot.getNextId()) {
+                    continue;
+                }
             }
             map.put(meta, snapshot);
         }
@@ -104,5 +107,12 @@ public class ExactlyOnceLabelGeneratorFactory implements LabelGeneratorFactory {
                     .put(snapshot.getTable(), generator);
             LOG.info("Restore snapshot: {}, generator: {}", snapshot, generator);
         }
+    }
+
+    @VisibleForTesting
+    public long numGenerators() {
+        return labelGenerators.values().stream()
+                .mapToInt(m -> m.values().size())
+                .sum();
     }
 }
