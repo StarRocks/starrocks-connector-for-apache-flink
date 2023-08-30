@@ -458,6 +458,8 @@ takes effect only when the new value for `score` is has a greater or equal to th
   * Define the DDL including all of columns
   * Set the option `sink.properties.merge_condition` to `score` which tells the connector to use the column `score`
   as the condition
+  * Set the option `sink.version` to `V1` which tells the connector to use stream load
+
   ```SQL
   CREATE TABLE `score_board` (
       `id` INT,
@@ -472,26 +474,27 @@ takes effect only when the new value for `score` is has a greater or equal to th
       'table-name' = 'score_board',
       'username' = 'root',
       'password' = '',
-      'sink.properties.merge_condition' = 'score'
+      'sink.properties.merge_condition' = 'score',
+      'sink.version' = 'V1'
   );
   ```
 
 3. Insert data to the table in Flink SQL client, and update id 1 with a smaller score, and id 2 with a larger score 
   ```SQL
-  INSERT INTO `score_board` VALUES (1, 'starrocks', 99), (2, 'flink', 101);
+  INSERT INTO `score_board` VALUES (1, 'starrocks-update', 99), (2, 'flink-update', 101);
   ```
 
 4. Query the StarRocks table in mysql client
-  You can see that only the score for id 2 changes, and the score for id 1 does not change.
+  You can see that only the row for id 2 changes, and the row for id 1 does not change.
   ```SQL
   mysql> select * from score_board;
-  +------+-----------+-------+
-  | id   | name      | score |
-  +------+-----------+-------+
-  |    1 | starrocks |    99 |
-  |    2 | flink     |   101 |
-  +------+-----------+-------+
-  2 rows in set (0.02 sec)
+    +------+--------------+-------+
+    | id   | name         | score |
+    +------+--------------+-------+
+    |    1 | starrocks    |   100 |
+    |    2 | flink-update |   101 |
+    +------+--------------+-------+
+    2 rows in set (0.03 sec)
   ```
 
 ### Load data into columns of BITMAP type
