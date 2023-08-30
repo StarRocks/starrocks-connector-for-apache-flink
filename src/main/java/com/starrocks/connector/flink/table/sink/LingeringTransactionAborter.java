@@ -112,11 +112,16 @@ public class LingeringTransactionAborter {
                         snapshot.getLabelPrefix(), snapshot.getTable(), snapshot.getSubTaskIndex(), id);
                 try {
                     boolean result = tryAbortTransaction(snapshot.getDb(), snapshot.getTable(), label);
+                    if (result) {
+                        LOG.info("Successful to abort transaction, label: {}, snapshot: {}", label, snapshot);
+                    } else {
+                        LOG.info("Transaction does not need abort, label: {}, snapshot: {}, ", label, snapshot);
+                    }
+
                     // if checkNumTxns < 0, end up after finding the first transaction that does not need abort
-                    if (!result && checkNumTxns < 0) {
+                    if (checkNumTxns < 0 && !result) {
                         break;
                     }
-                    LOG.info("Successful to abort transaction with label {}, the snapshot is {}", label, snapshot);
                 } catch (Exception e) {
                     String errMsg = String.format("Failed to abort transactions with label %s, the snapshot is %s",
                             label, snapshot);
@@ -137,11 +142,16 @@ public class LingeringTransactionAborter {
                 String label = ExactlyOnceLabelGenerator.genLabel(currentLabelPrefix, dbTable.f1, subtaskIndex, id);
                 try {
                     boolean result = tryAbortTransaction(dbTable.f0, dbTable.f1, label);
+                    if (result) {
+                        LOG.info("Successful to abort transaction, label: {}, db: {}, table: {}", label, dbTable.f0, dbTable.f1);
+                    } else {
+                        LOG.info("Transaction does not need abort, label: {}, db: {}, table: {}", label, dbTable.f0, dbTable.f1);
+                    }
+
                     // if checkNumTxns < 0, end up after finding the first transaction that does not need abort
-                    if (!result && checkNumTxns < 0) {
+                    if (checkNumTxns < 0 && !result) {
                         break;
                     }
-                    LOG.info("Successful to abort transaction with label {}, db: {}, table: {}", label, dbTable.f0, dbTable.f1);
                 } catch (Exception e) {
                     String errMsg = String.format("Failed to abort transactions with label %s, db: %s, table: %s",
                             label, dbTable.f0, dbTable.f1);

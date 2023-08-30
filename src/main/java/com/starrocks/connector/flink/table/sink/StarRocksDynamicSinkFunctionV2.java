@@ -252,6 +252,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
                     getRuntimeContext().getIndexOfThisSubtask(),
                     restoredCheckpointId);
             labelGeneratorFactory.restore(restoredGeneratorSnapshots);
+            sinkManager.setLabelGeneratorFactory(labelGeneratorFactory);
         }
 
         notifyCheckpointComplete(Long.MAX_VALUE);
