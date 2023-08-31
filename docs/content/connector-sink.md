@@ -1,7 +1,9 @@
 # Continuously load data from Apache Flink®
 
 StarRocks provides a self-developed connector named Flink connector for Apache Flink® (Flink connector for short) to help you load data into a StarRocks table by using Flink. The basic principle is that Flink connector accumulates data in memory and then load it all at a time into StarRocks through [STREAM LOAD](https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD).
+
 The Flink connector supports DataStream API, Table API & SQL, and Python API.
+
 The Flink connector boasts a higher and more stable performance than [flink-connector-jdbc](https://nightlies.apache.org/flink/flink-docs-master/docs/connectors/table/jdbc/) provided by Apache Flink®.
 
 ## Version requirements
@@ -28,7 +30,7 @@ The naming format of the Flink connector JAR file is as follows:
 >
 > In general, the latest version of the Flink connector only maintains compatibility with the three most recent versions of Flink.
 
-### Download the compiled Jar file
+### Download the compiled JAR file
 
 Directly download the corresponding version of the Flink connector Jar file from the [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks).
 
