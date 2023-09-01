@@ -22,7 +22,6 @@ package com.starrocks.data.load.stream;
 
 import com.starrocks.data.load.stream.http.StreamLoadEntityMeta;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,7 +45,7 @@ public class StreamTableRegion implements TableRegion, Serializable {
     private static final byte[] END_STREAM = new byte[0];
 
     private final StreamLoader streamLoader;
-
+    private final LabelGenerator labelGenerator;
     private final String uniqueKey;
     private final String database;
     private final String table;
@@ -74,7 +73,8 @@ public class StreamTableRegion implements TableRegion, Serializable {
                              String table,
                              StreamLoadManager manager,
                              StreamLoadTableProperties properties,
-                             StreamLoader streamLoader) {
+                             StreamLoader streamLoader,
+                             LabelGenerator labelGenerator) {
         this.uniqueKey = uniqueKey;
         this.database = database;
         this.table = table;
@@ -83,6 +83,7 @@ public class StreamTableRegion implements TableRegion, Serializable {
         this.dataFormat = properties.getDataFormat();
         this.chunkLimit = properties.getChunkLimit();
         this.streamLoader = streamLoader;
+        this.labelGenerator = labelGenerator;
         this.state = new AtomicReference<>(State.ACTIVE);
     }
 
@@ -104,6 +105,11 @@ public class StreamTableRegion implements TableRegion, Serializable {
     @Override
     public String getTable() {
         return table;
+    }
+
+    @Override
+    public LabelGenerator getLabelGenerator() {
+        return labelGenerator;
     }
 
     @Override

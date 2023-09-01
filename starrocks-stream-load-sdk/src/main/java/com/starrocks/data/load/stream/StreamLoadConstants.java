@@ -42,13 +42,6 @@ public interface StreamLoadConstants {
 
     String EXISTING_JOB_STATUS_FINISHED = "FINISHED";
 
-    String LABEL_STATE_VISIBLE = "VISIBLE";
-    String LABEL_STATE_COMMITTED = "COMMITTED";
-    String LABEL_STATE_PREPARED = "PREPARED";
-    String LABEL_STATE_PREPARE = "PREPARE";
-    String LABEL_STATE_ABORTED = "ABORTED";
-    String LABEL_STATE_UNKNOWN = "UNKNOWN";
-
     public static String getBeginUrl(String host) {
         if (host == null) {
             throw new IllegalArgumentException("None of the hosts in `load_url` could be connected.");
