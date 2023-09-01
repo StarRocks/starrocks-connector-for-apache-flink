@@ -20,6 +20,8 @@ package com.starrocks.data.load.stream.v2;
 
 import com.starrocks.data.load.stream.DefaultStreamLoader;
 import com.starrocks.data.load.stream.EnvUtils;
+import com.starrocks.data.load.stream.LabelGenerator;
+import com.starrocks.data.load.stream.LabelGeneratorFactory;
 import com.starrocks.data.load.stream.LoadMetrics;
 import com.starrocks.data.load.stream.StreamLoadManager;
 import com.starrocks.data.load.stream.StreamLoadResponse;
@@ -116,6 +118,8 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
     private transient AtomicBoolean writeTriggerFlush;
     private transient LoadMetrics loadMetrics;
     private transient StreamLoadListener streamLoadListener;
+    private transient LabelGeneratorFactory labelGeneratorFactory;
+
     public StreamLoadManagerV2(StreamLoadProperties properties, boolean enableAutoCommit) {
         this.properties = properties;
         if (!enableAutoCommit && !properties.isEnableTransaction()) {
@@ -141,6 +145,10 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
 
     @Override
     public void init() {
+        if (labelGeneratorFactory == null) {
+            this.labelGeneratorFactory =
+                    new LabelGeneratorFactory.DefaultLabelGeneratorFactory(properties.getLabelPrefix());
+        }
         this.writeTriggerFlush = new AtomicBoolean(false);
         this.loadMetrics = new LoadMetrics();
         if (state.compareAndSet(State.INACTIVE, State.ACTIVE)) {
@@ -231,6 +239,10 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
 
     public void setStreamLoadListener(StreamLoadListener streamLoadListener) {
         this.streamLoadListener = streamLoadListener;
+    }
+
+    public void setLabelGeneratorFactory(LabelGeneratorFactory labelGeneratorFactory) {
+        this.labelGeneratorFactory = labelGeneratorFactory;
     }
 
     @Override
@@ -374,6 +386,10 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
         return snapshot;
     }
 
+    public StreamLoader getStreamLoader() {
+        return streamLoader;
+    }
+
     @Override
     public boolean prepare(StreamLoadSnapshot snapshot) {
         return streamLoader.prepare(snapshot);
@@ -425,8 +441,9 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
                 region = regions.get(uniqueKey);
                 if (region == null) {
                     StreamLoadTableProperties tableProperties = properties.getTableProperties(uniqueKey);
+                    LabelGenerator labelGenerator = labelGeneratorFactory.create(database, table);
                     region = new TransactionTableRegion(uniqueKey, database, table, this,
-                            tableProperties, streamLoader, maxRetries, retryIntervalInMs);
+                            tableProperties, streamLoader, labelGenerator, maxRetries, retryIntervalInMs);
                     regions.put(uniqueKey, region);
                     flushQ.offer((TransactionTableRegion) region);
                 }

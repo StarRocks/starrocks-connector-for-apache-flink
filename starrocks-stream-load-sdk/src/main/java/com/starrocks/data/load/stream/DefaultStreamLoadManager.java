@@ -86,7 +86,7 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
     private final Queue<TableRegion> waitQ = new ConcurrentLinkedQueue<>();
     private final Queue<TableRegion> prepareQ = new LinkedList<>();
     private final Queue<TableRegion> commitQ = new LinkedList<>();
-
+    private transient LabelGeneratorFactory labelGeneratorFactory;
     /**
      * Whether write() has triggered a flush after currentCacheBytes > maxCacheBytes.
      * This flag is set true after the flush is triggered in writer(), and set false
@@ -111,6 +111,7 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
 
     @Override
     public void init() {
+        this.labelGeneratorFactory = new LabelGeneratorFactory.DefaultLabelGeneratorFactory(properties.getLabelPrefix());
         this.writeTriggerFlush = new AtomicBoolean(false);
         this.loadMetrics = new LoadMetrics();
         if (state.compareAndSet(State.INACTIVE, State.ACTIVE)) {
@@ -414,7 +415,9 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                 region = regions.get(uniqueKey);
                 if (region == null) {
                     StreamLoadTableProperties tableProperties = properties.getTableProperties(uniqueKey);
-                    region = new BatchTableRegion(uniqueKey, database, table, this, tableProperties, streamLoader);
+                    LabelGenerator labelGenerator = labelGeneratorFactory.create(database, table);
+                    region = new BatchTableRegion(uniqueKey, database, table, this, tableProperties,
+                            streamLoader, labelGenerator);
                     regions.put(uniqueKey, region);
                     waitQ.offer(region);
                 }

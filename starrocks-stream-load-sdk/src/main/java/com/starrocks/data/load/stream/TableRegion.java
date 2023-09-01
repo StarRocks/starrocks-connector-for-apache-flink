@@ -33,7 +33,7 @@ public interface TableRegion {
     String getUniqueKey();
     String getDatabase();
     String getTable();
-
+    LabelGenerator getLabelGenerator();
     void setLabel(String label);
     String getLabel();
 

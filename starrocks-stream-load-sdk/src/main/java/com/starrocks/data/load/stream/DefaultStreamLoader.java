@@ -46,6 +46,7 @@ import org.slf4j.LoggerFactory;
 import java.io.Serializable;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -140,7 +141,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
 
     @Override
     public boolean begin(TableRegion region) {
-        region.setLabel(genLabel(region));
+        region.setLabel(region.getLabelGenerator().next());
         return true;
     }
 
@@ -418,6 +419,13 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
         }
     }
 
+    @Override
+    public TransactionStatus getLoadStatus(String db, String table, String label) throws Exception {
+        String host = getAvailableHost();
+        String state = getLabelState(host, db, table, label, Collections.emptySet());
+        return TransactionStatus.valueOf(state.toUpperCase());
+    }
+
     protected String getLabelState(String host, String database, String table, String label, Set<String> retryStates) throws Exception {
         int totalSleepSecond = 0;
         String lastState = null;
@@ -501,12 +509,5 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
             throw new IllegalArgumentException("None of the hosts in `load_url` could be connected.");
         }
         return host + "/api/" + database + "/" + table + "/_stream_load";
-    }
-
-    protected String genLabel(TableRegion region) {
-        if (properties.getLabelPrefix() != null) {
-            return properties.getLabelPrefix() + UUID.randomUUID();
-        }
-        return UUID.randomUUID().toString();
     }
 }

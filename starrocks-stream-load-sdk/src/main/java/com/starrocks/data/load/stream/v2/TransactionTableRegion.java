@@ -19,6 +19,7 @@
 package com.starrocks.data.load.stream.v2;
 
 import com.starrocks.data.load.stream.Chunk;
+import com.starrocks.data.load.stream.LabelGenerator;
 import com.starrocks.data.load.stream.StreamLoadManager;
 import com.starrocks.data.load.stream.StreamLoader;
 import com.starrocks.data.load.stream.StreamLoadResponse;
@@ -49,6 +50,7 @@ public class TransactionTableRegion implements TableRegion {
 
     private final StreamLoadManager manager;
     private final StreamLoader streamLoader;
+    private final LabelGenerator labelGenerator;
     private final String uniqueKey;
     private final String database;
     private final String table;
@@ -74,6 +76,7 @@ public class TransactionTableRegion implements TableRegion {
                             StreamLoadManager manager,
                             StreamLoadTableProperties properties,
                             StreamLoader streamLoader,
+                            LabelGenerator labelGenerator,
                             int maxRetries,
                             int retryIntervalInMs) {
         this.uniqueKey = uniqueKey;
@@ -82,6 +85,7 @@ public class TransactionTableRegion implements TableRegion {
         this.manager = manager;
         this.properties = properties;
         this.streamLoader = streamLoader;
+        this.labelGenerator = labelGenerator;
         this.state = new AtomicReference<>(State.ACTIVE);
         this.lastCommitTimeMills = System.currentTimeMillis();
         this.activeChunk = new Chunk(properties.getDataFormat());
@@ -107,6 +111,11 @@ public class TransactionTableRegion implements TableRegion {
     @Override
     public String getTable() {
         return table;
+    }
+
+    @Override
+    public LabelGenerator getLabelGenerator() {
+        return labelGenerator;
     }
 
     @Override

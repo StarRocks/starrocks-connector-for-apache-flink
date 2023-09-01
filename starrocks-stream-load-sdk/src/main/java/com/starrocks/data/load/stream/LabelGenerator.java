@@ -20,27 +20,24 @@
 
 package com.starrocks.data.load.stream;
 
-import com.starrocks.data.load.stream.properties.StreamLoadProperties;
+import java.util.UUID;
 
-import java.util.concurrent.Future;
+/** Generate labels. */
+public interface LabelGenerator {
 
-public interface StreamLoader {
+    String next();
 
-    void start(StreamLoadProperties properties, StreamLoadManager manager);
-    void close();
+    class DefaultLabelGenerator implements LabelGenerator {
 
-    boolean begin(TableRegion region);
-    Future<StreamLoadResponse> send(TableRegion region);
+        private final String labelPrefix;
 
-    Future<StreamLoadResponse> send(TableRegion region, int delayMs);
+        public DefaultLabelGenerator(String labelPrefix) {
+            this.labelPrefix = labelPrefix;
+        }
 
-    TransactionStatus getLoadStatus(String db, String table, String label) throws Exception;
-
-    boolean prepare(StreamLoadSnapshot.Transaction transaction);
-    boolean commit(StreamLoadSnapshot.Transaction transaction);
-    boolean rollback(StreamLoadSnapshot.Transaction transaction);
-
-    boolean prepare(StreamLoadSnapshot snapshot);
-    boolean commit(StreamLoadSnapshot snapshot);
-    boolean rollback(StreamLoadSnapshot snapshot);
+        @Override
+        public String next() {
+            return labelPrefix + "-" + UUID.randomUUID();
+        }
+    }
 }
