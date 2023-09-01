@@ -19,6 +19,7 @@ import com.starrocks.connector.flink.row.sink.StarRocksDelimiterParser;
 import com.starrocks.data.load.stream.StreamLoadDataFormat;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
@@ -33,6 +34,7 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -123,6 +125,15 @@ public class StarRocksSinkOptions implements Serializable {
                     "insert the update_after row in StarRocks, and this options should be set false for this case. Note that how " +
                     "to set this options depends on the user case.");
 
+    public static final ConfigOption<Boolean> SINK_ABORT_LINGERING_TXNS = ConfigOptions.key("sink.abort.lingering-txns")
+            .booleanType().defaultValue(true).withDescription("Whether to abort lingering transactions when the job restore. " +
+                    "This option is only available when you are using exactly-once.");
+
+    public static final ConfigOption<Integer> SINK_ABORT_CHECK_NUM_TXNS = ConfigOptions.key("sink.abort.check-num-txns")
+            .intType().defaultValue(-1).withDescription("The number of lingering transactions to check. -1 indicates that " +
+                    "check until finding the first unused transaction. This option is only available when " +
+                    "sink.abort.lingering-txns is enabled.");
+
     public static final ConfigOption<Integer> SINK_PARALLELISM = FactoryUtil.SINK_PARALLELISM;
 
     // Sink semantic
@@ -151,6 +162,19 @@ public class StarRocksSinkOptions implements Serializable {
     public StarRocksSinkOptions addTableProperties(StreamLoadTableProperties tableProperties) {
         tablePropertiesList.add(tableProperties);
         return this;
+    }
+
+    public List<Tuple2<String, String>> getDbTables() {
+        Set<Tuple2<String, String>> dbTables = new HashSet<>();
+        if (getDatabaseName() != null && getTableName() != null) {
+            dbTables.add(Tuple2.of(getDatabaseName(), getTableName()));
+        }
+
+        for (StreamLoadTableProperties properties : tablePropertiesList) {
+            dbTables.add(Tuple2.of(properties.getDatabase(), getTableName()));
+        }
+
+        return new ArrayList<>(dbTables);
     }
 
     private void validate() {
@@ -308,6 +332,14 @@ public class StarRocksSinkOptions implements Serializable {
 
     public boolean isSupportTransactionStreamLoad() {
         return supportTransactionStreamLoad;
+    }
+
+    public boolean isAbortLingeringTxns() {
+        return tableOptions.get(SINK_ABORT_LINGERING_TXNS);
+    }
+
+    public int getAbortCheckNumTxns() {
+        return tableOptions.get(SINK_ABORT_CHECK_NUM_TXNS);
     }
 
     private void validateStreamLoadUrl() {

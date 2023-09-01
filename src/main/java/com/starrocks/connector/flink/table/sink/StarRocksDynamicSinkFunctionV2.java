@@ -61,6 +61,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import javax.annotation.Nullable;
 
 public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunctionBase<T> {
 
@@ -75,9 +76,18 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
     private final StarRocksIRowTransformer<T> rowTransformer;
 
     private transient volatile ListState<StarrocksSnapshotState> snapshotStates;
-    private final Map<Long, List<StreamLoadSnapshot>> snapshotMap = new ConcurrentHashMap<>();
+
+    private transient long restoredCheckpointId;
+
+    private transient List<ExactlyOnceLabelGeneratorSnapshot> restoredGeneratorSnapshots;
+
+    private transient Map<Long, List<StreamLoadSnapshot>> snapshotMap;
 
     private transient StarRocksStreamLoadListener streamLoadListener;
+
+    // Only valid when using exactly-once and label prefix is set
+    @Nullable
+    private transient ExactlyOnceLabelGeneratorFactory labelGeneratorFactory;
 
     @Deprecated
     private transient ListState<Map<String, StarRocksSinkBufferEntity>> legacyState;
@@ -202,15 +212,48 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
         if (serializer != null) {
             this.serializer.open(new StarRocksISerializer.SerializerContext(getOrCreateJsonWrapper()));
         }
-        sinkManager.init();
         this.streamLoadListener = new StarRocksStreamLoadListener(getRuntimeContext(), sinkOptions);
         sinkManager.setStreamLoadListener(streamLoadListener);
+        if (labelGeneratorFactory != null) {
+            sinkManager.setLabelGeneratorFactory(labelGeneratorFactory);
+        }
+        sinkManager.init();
         if (rowTransformer != null) {
             rowTransformer.setRuntimeContext(getRuntimeContext());
             rowTransformer.setFastJsonWrapper(getOrCreateJsonWrapper());
         }
-        notifyCheckpointComplete(Long.MAX_VALUE);
+
+        if (sinkOptions.getSemantic() == StarRocksSinkSemantic.EXACTLY_ONCE) {
+            openForExactlyOnce();
+        }
+
         log.info("Open sink function v2. {}", EnvUtils.getGitInformation());
+    }
+
+    private void openForExactlyOnce() throws Exception {
+        if (sinkOptions.isAbortLingeringTxns()) {
+            LingeringTransactionAborter aborter = new LingeringTransactionAborter(
+                    sinkOptions.getLabelPrefix(),
+                    restoredCheckpointId,
+                    getRuntimeContext().getIndexOfThisSubtask(),
+                    sinkOptions.getAbortCheckNumTxns(),
+                    sinkOptions.getDbTables(),
+                    restoredGeneratorSnapshots,
+                    sinkManager.getStreamLoader());
+            aborter.execute();
+        }
+
+        if (sinkOptions.getLabelPrefix() != null) {
+            this.labelGeneratorFactory = new ExactlyOnceLabelGeneratorFactory(
+                    sinkOptions.getLabelPrefix(),
+                    getRuntimeContext().getNumberOfParallelSubtasks(),
+                    getRuntimeContext().getIndexOfThisSubtask(),
+                    restoredCheckpointId);
+            labelGeneratorFactory.restore(restoredGeneratorSnapshots);
+            sinkManager.setLabelGeneratorFactory(labelGeneratorFactory);
+        }
+
+        notifyCheckpointComplete(Long.MAX_VALUE);
     }
 
     private JsonWrapper getOrCreateJsonWrapper() {
@@ -227,6 +270,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
 
     @Override
     public void close() {
+        log.info("Close sink function");
         try {
             sinkManager.flush();
         } catch (Exception e) {
@@ -252,7 +296,9 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
             snapshotMap.put(functionSnapshotContext.getCheckpointId(), Collections.singletonList(snapshot));
 
             snapshotStates.clear();
-            snapshotStates.add(StarrocksSnapshotState.of(snapshotMap));
+            List<ExactlyOnceLabelGeneratorSnapshot> labelSnapshots = labelGeneratorFactory == null ? null
+                    : labelGeneratorFactory.snapshot(functionSnapshotContext.getCheckpointId());
+            snapshotStates.add(StarrocksSnapshotState.of(snapshotMap, labelSnapshots));
         } else {
             sinkManager.abort(snapshot);
             throw new RuntimeException("Snapshot state failed by prepare");
@@ -265,6 +311,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
 
     @Override
     public void initializeState(FunctionInitializationContext functionInitializationContext) throws Exception {
+        log.info("Initialize state");
         if (sinkOptions.getSemantic() != StarRocksSinkSemantic.EXACTLY_ONCE) {
             return;
         }
@@ -285,7 +332,9 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
                         TypeInformation.of(new TypeHint<Map<String, StarRocksSinkBufferEntity>>(){})
                 );
         legacyState = functionInitializationContext.getOperatorStateStore().getListState(legacyDescriptor);
-
+        this.restoredCheckpointId = 0;
+        this.restoredGeneratorSnapshots = new ArrayList<>();
+        this.snapshotMap = new ConcurrentHashMap<>();
         if (functionInitializationContext.isRestored()) {
             for (StarrocksSnapshotState state : snapshotStates.get()) {
                 for (Map.Entry<Long, List<StreamLoadSnapshot>> entry : state.getData().entrySet()) {
@@ -296,6 +345,13 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
                         v.addAll(entry.getValue());
                         return v;
                     });
+                }
+
+                if (state.getLabelSnapshots() != null) {
+                    List<ExactlyOnceLabelGeneratorSnapshot> labelSnapshots = state.getLabelSnapshots();
+                    restoredGeneratorSnapshots.addAll(labelSnapshots);
+                    long checkpointId = labelSnapshots.isEmpty() ? -1 : labelSnapshots.get(0).getCheckpointId();
+                    restoredCheckpointId = Math.max(restoredCheckpointId, checkpointId);
                 }
             }
 
@@ -309,9 +365,11 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
 
     @Override
     public void notifyCheckpointComplete(long checkpointId) throws Exception {
+        if (sinkOptions.getSemantic() != StarRocksSinkSemantic.EXACTLY_ONCE) {
+            return;
+        }
 
         boolean succeed = true;
-
         List<Long> commitCheckpointIds = snapshotMap.keySet().stream()
                 .filter(cpId -> cpId <= checkpointId)
                 .sorted(Long::compare)

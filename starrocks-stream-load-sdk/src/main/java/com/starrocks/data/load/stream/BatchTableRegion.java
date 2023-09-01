@@ -22,7 +22,6 @@ package com.starrocks.data.load.stream;
 
 import com.starrocks.data.load.stream.http.StreamLoadEntityMeta;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,7 +43,7 @@ public class BatchTableRegion implements TableRegion {
 
     private final StreamLoadManager manager;
     private final StreamLoader streamLoader;
-
+    private final LabelGenerator labelGenerator;
     private final String uniqueKey;
     private final String database;
     private final String table;
@@ -74,7 +73,8 @@ public class BatchTableRegion implements TableRegion {
                             String table,
                             StreamLoadManager manager,
                             StreamLoadTableProperties properties,
-                            StreamLoader streamLoader) {
+                            StreamLoader streamLoader,
+                            LabelGenerator labelGenerator) {
         this.uniqueKey = uniqueKey;
         this.database = database;
         this.table = table;
@@ -82,6 +82,7 @@ public class BatchTableRegion implements TableRegion {
         this.properties = properties;
         this.dataFormat = properties.getDataFormat();
         this.streamLoader = streamLoader;
+        this.labelGenerator = labelGenerator;
         this.state = new AtomicReference<>(State.ACTIVE);
     }
 
@@ -103,6 +104,11 @@ public class BatchTableRegion implements TableRegion {
     @Override
     public String getTable() {
         return table;
+    }
+
+    @Override
+    public LabelGenerator getLabelGenerator() {
+        return labelGenerator;
     }
 
     @Override

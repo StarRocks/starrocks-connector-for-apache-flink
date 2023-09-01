@@ -20,27 +20,23 @@
 
 package com.starrocks.data.load.stream;
 
-import com.starrocks.data.load.stream.properties.StreamLoadProperties;
+/** Factory for {@link LabelGenerator}. */
+public interface LabelGeneratorFactory {
 
-import java.util.concurrent.Future;
+    // Create a label generator for the specified db and table.
+    LabelGenerator create(String db, String table);
 
-public interface StreamLoader {
+    class DefaultLabelGeneratorFactory implements LabelGeneratorFactory {
 
-    void start(StreamLoadProperties properties, StreamLoadManager manager);
-    void close();
+        private final String labelPrefix;
 
-    boolean begin(TableRegion region);
-    Future<StreamLoadResponse> send(TableRegion region);
+        public DefaultLabelGeneratorFactory(String labelPrefix) {
+            this.labelPrefix = labelPrefix == null ? "flink_" : labelPrefix;
+        }
 
-    Future<StreamLoadResponse> send(TableRegion region, int delayMs);
-
-    TransactionStatus getLoadStatus(String db, String table, String label) throws Exception;
-
-    boolean prepare(StreamLoadSnapshot.Transaction transaction);
-    boolean commit(StreamLoadSnapshot.Transaction transaction);
-    boolean rollback(StreamLoadSnapshot.Transaction transaction);
-
-    boolean prepare(StreamLoadSnapshot snapshot);
-    boolean commit(StreamLoadSnapshot snapshot);
-    boolean rollback(StreamLoadSnapshot snapshot);
+        @Override
+        public LabelGenerator create(String db, String table) {
+            return new LabelGenerator.DefaultLabelGenerator(labelPrefix);
+        }
+    }
 }
