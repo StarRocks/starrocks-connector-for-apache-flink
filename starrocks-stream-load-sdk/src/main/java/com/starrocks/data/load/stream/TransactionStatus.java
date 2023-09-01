@@ -20,27 +20,15 @@
 
 package com.starrocks.data.load.stream;
 
-import com.starrocks.data.load.stream.properties.StreamLoadProperties;
+public enum TransactionStatus {
+    UNKNOWN,
+    PREPARE,
+    COMMITTED,
+    VISIBLE,
+    ABORTED,
+    PREPARED;
 
-import java.util.concurrent.Future;
-
-public interface StreamLoader {
-
-    void start(StreamLoadProperties properties, StreamLoadManager manager);
-    void close();
-
-    boolean begin(TableRegion region);
-    Future<StreamLoadResponse> send(TableRegion region);
-
-    Future<StreamLoadResponse> send(TableRegion region, int delayMs);
-
-    TransactionStatus getLoadStatus(String db, String table, String label) throws Exception;
-
-    boolean prepare(StreamLoadSnapshot.Transaction transaction);
-    boolean commit(StreamLoadSnapshot.Transaction transaction);
-    boolean rollback(StreamLoadSnapshot.Transaction transaction);
-
-    boolean prepare(StreamLoadSnapshot snapshot);
-    boolean commit(StreamLoadSnapshot snapshot);
-    boolean rollback(StreamLoadSnapshot snapshot);
+    public boolean isSame(String status) {
+        return name().equalsIgnoreCase(status);
+    }
 }

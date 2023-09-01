@@ -26,15 +26,20 @@ import com.starrocks.data.load.stream.StreamLoadSnapshot;
 import java.io.Serializable;
 import java.util.List;
 import java.util.Map;
+import javax.annotation.Nullable;
 
 public class StarrocksSnapshotState implements Serializable {
     private String version;
     private Map<Long, List<StreamLoadSnapshot>> data;
+    @Nullable
+    private List<ExactlyOnceLabelGeneratorSnapshot> labelSnapshots;
 
-    public static StarrocksSnapshotState of(Map<Long, List<StreamLoadSnapshot>> data) {
+    public static StarrocksSnapshotState of(
+            Map<Long, List<StreamLoadSnapshot>> data, List<ExactlyOnceLabelGeneratorSnapshot> labelSnapshots) {
         StarrocksSnapshotState starrocksSnapshotState = new StarrocksSnapshotState();
         starrocksSnapshotState.version = EnvUtils.getSRFCVersion();
         starrocksSnapshotState.data = data;
+        starrocksSnapshotState.labelSnapshots = labelSnapshots;
         return starrocksSnapshotState;
     }
 
@@ -52,5 +57,14 @@ public class StarrocksSnapshotState implements Serializable {
 
     public void setData(Map<Long, List<StreamLoadSnapshot>> data) {
         this.data = data;
+    }
+
+    @Nullable
+    public List<ExactlyOnceLabelGeneratorSnapshot> getLabelSnapshots() {
+        return labelSnapshots;
+    }
+
+    public void setLabelSnapshots(@Nullable List<ExactlyOnceLabelGeneratorSnapshot> labelSnapshots) {
+        this.labelSnapshots = labelSnapshots;
     }
 }
