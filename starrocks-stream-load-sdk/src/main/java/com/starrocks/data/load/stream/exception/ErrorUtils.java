@@ -50,7 +50,7 @@ public class ErrorUtils {
         }
 
         if (!RESULT_STATUS_FAILED.equalsIgnoreCase(responseBody.getStatus())
-            || !RESULT_STATUS_INTERNAL_ERROR.equalsIgnoreCase(responseBody.getStatus())) {
+            && !RESULT_STATUS_INTERNAL_ERROR.equalsIgnoreCase(responseBody.getStatus())) {
             return false;
         }
 
