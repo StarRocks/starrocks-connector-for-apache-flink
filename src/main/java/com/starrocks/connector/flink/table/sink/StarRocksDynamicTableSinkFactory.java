@@ -76,7 +76,9 @@ public class StarRocksDynamicTableSinkFactory implements DynamicTableSinkFactory
         optionalOptions.add(StarRocksSinkOptions.SINK_CHUNK_LIMIT);
         optionalOptions.add(StarRocksSinkOptions.SINK_SCAN_FREQUENCY);
         optionalOptions.add(StarRocksSinkOptions.SINK_IGNORE_UPDATE_BEFORE);
+        optionalOptions.add(StarRocksSinkOptions.SINK_ENABLE_EXACTLY_ONCE_LABEL_GEN);
         optionalOptions.add(StarRocksSinkOptions.SINK_ABORT_LINGERING_TXNS);
+        optionalOptions.add(StarRocksSinkOptions.SINK_ABORT_CHECK_NUM_TXNS);
         return optionalOptions;
     }
 }
