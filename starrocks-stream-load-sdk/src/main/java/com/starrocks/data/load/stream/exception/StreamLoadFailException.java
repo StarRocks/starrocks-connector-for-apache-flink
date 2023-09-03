@@ -20,13 +20,26 @@
 
 package com.starrocks.data.load.stream.exception;
 
+import com.starrocks.data.load.stream.StreamLoadResponse;
+
 public class StreamLoadFailException extends RuntimeException {
+
+    private StreamLoadResponse.StreamLoadResponseBody responseBody;
 
     public StreamLoadFailException(String message) {
         super(message);
     }
 
+    public StreamLoadFailException(String message, StreamLoadResponse.StreamLoadResponseBody responseBody) {
+        super(message);
+        this.responseBody = responseBody;
+    }
+
     public StreamLoadFailException(String message, Throwable cause) {
         super(message, cause);
+    }
+
+    public StreamLoadResponse.StreamLoadResponseBody getResponseBody() {
+        return responseBody;
     }
 }

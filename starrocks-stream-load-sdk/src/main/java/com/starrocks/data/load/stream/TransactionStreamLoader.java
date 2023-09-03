@@ -95,15 +95,13 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
     @Override
     public boolean begin(TableRegion region) {
         if (region.getLabel() == null) {
-            for (int i = 0; i < 5; i++) {
-                region.setLabel(region.getLabelGenerator().next());
-                if (doBegin(region)) {
-                    return true;
-                } else {
-                    region.setLabel(null);
-                }
+            region.setLabel(region.getLabelGenerator().next());
+            if (doBegin(region)) {
+                return true;
+            } else {
+                region.setLabel(null);
+                return false;
             }
-            return false;
         }
         return true;
     }
@@ -146,15 +144,15 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
                 throw new StreamLoadFailException(errMsg);
             }
 
-            switch (status) {
-                case StreamLoadConstants.RESULT_STATUS_OK:
-                    return true;
-                case StreamLoadConstants.RESULT_STATUS_LABEL_EXISTED:
-                    return false;
-                default:
-                    log.error("Transaction start failed, db : {}, label : {}", region.getDatabase(), label);
-                    return false;
+            if (StreamLoadConstants.RESULT_STATUS_OK.equals(status)) {
+                return true;
             }
+
+            String errMsg = String.format("Transaction start failed, db: %s, table: %s, label: %s, responseBody: %s",
+                    region.getDatabase(), region.getTable(), label, responseBody);
+            throw new StreamLoadFailException(errMsg);
+        } catch (StreamLoadFailException se) {
+            throw se;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -216,12 +214,16 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
             }
 
             String errorLog = getErrorLog(streamLoadBody.getErrorURL());
-            log.error("Transaction prepare failed, db: {}, table: {}, label: {}, \nresponseBody: {}\nerrorLog: {}",
-                    transaction.getDatabase(), transaction.getTable(), transaction.getLabel(), responseBody, errorLog);
+            String errorMsg = String.format("Transaction prepare failed, db: %s, table: %s, label: %s, " +
+                            "\nresponseBody: %s\nerrorLog: %s", transaction.getDatabase(), transaction.getTable(),
+                            transaction.getLabel(), responseBody, errorLog);
+            log.error(errorMsg);
+            throw new StreamLoadFailException(errorMsg);
+        } catch (StreamLoadFailException se) {
+            throw se;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-        return false;
     }
 
     @Override
