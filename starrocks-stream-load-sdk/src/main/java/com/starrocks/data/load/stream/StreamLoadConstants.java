@@ -34,6 +34,7 @@ public interface StreamLoadConstants {
 
     String RESULT_STATUS_OK = "OK";
     String RESULT_STATUS_SUCCESS = "Success";
+    String RESULT_STATUS_INTERNAL_ERROR = "INTERNAL_ERROR";
     String RESULT_STATUS_FAILED = "Fail";
     String RESULT_STATUS_LABEL_EXISTED = "Label Already Exists";
     String RESULT_STATUS_TRANSACTION_NOT_EXISTED = "TXN_NOT_EXISTS";

@@ -21,9 +21,9 @@ package com.starrocks.data.load.stream.v2;
 import com.starrocks.data.load.stream.Chunk;
 import com.starrocks.data.load.stream.LabelGenerator;
 import com.starrocks.data.load.stream.StreamLoadManager;
-import com.starrocks.data.load.stream.StreamLoader;
 import com.starrocks.data.load.stream.StreamLoadResponse;
 import com.starrocks.data.load.stream.StreamLoadSnapshot;
+import com.starrocks.data.load.stream.StreamLoader;
 import com.starrocks.data.load.stream.TableRegion;
 import com.starrocks.data.load.stream.exception.StreamLoadFailException;
 import com.starrocks.data.load.stream.http.StreamLoadEntityMeta;
@@ -37,6 +37,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+
+import static com.starrocks.data.load.stream.exception.ErrorUtils.isRetryable;
 
 public class TransactionTableRegion implements TableRegion {
 
@@ -268,7 +270,7 @@ public class TransactionTableRegion implements TableRegion {
 
     @Override
     public void fail(Throwable e) {
-        if (numRetries >= maxRetries) {
+        if (numRetries >= maxRetries || !isRetryable(e)) {
             manager.callback(e);
             return;
         }
