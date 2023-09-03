@@ -125,9 +125,14 @@ public class StarRocksSinkOptions implements Serializable {
                     "insert the update_after row in StarRocks, and this options should be set false for this case. Note that how " +
                     "to set this options depends on the user case.");
 
+    public static final ConfigOption<Boolean> SINK_ENABLE_EXACTLY_ONCE_LABEL_GEN = ConfigOptions.key("sink.enable.exactly-once.label-gen")
+            .booleanType().defaultValue(false).withDescription("Only available when using exactly-once and sink.label-prefix is set. " +
+                    "When this option is true, the connector will generate label in the format '{labelPrefix}-{tableName}-{subtaskIndex}-{id}'. " +
+                    "This format could be used to track lingering transactions.");
+
     public static final ConfigOption<Boolean> SINK_ABORT_LINGERING_TXNS = ConfigOptions.key("sink.abort.lingering-txns")
             .booleanType().defaultValue(true).withDescription("Whether to abort lingering transactions when the job restore. " +
-                    "This option is only available when you are using exactly-once.");
+                    "This option is only available when using exactly-once.");
 
     public static final ConfigOption<Integer> SINK_ABORT_CHECK_NUM_TXNS = ConfigOptions.key("sink.abort.check-num-txns")
             .intType().defaultValue(-1).withDescription("The number of lingering transactions to check. -1 indicates that " +
@@ -332,6 +337,10 @@ public class StarRocksSinkOptions implements Serializable {
 
     public boolean isSupportTransactionStreamLoad() {
         return supportTransactionStreamLoad;
+    }
+
+    public boolean isEnableExactlyOnceLabelGen() {
+        return tableOptions.get(SINK_ENABLE_EXACTLY_ONCE_LABEL_GEN);
     }
 
     public boolean isAbortLingeringTxns() {
