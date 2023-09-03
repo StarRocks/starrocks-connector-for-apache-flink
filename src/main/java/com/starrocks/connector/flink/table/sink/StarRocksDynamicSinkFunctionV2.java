@@ -30,6 +30,7 @@ import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
 import com.starrocks.connector.flink.table.data.StarRocksRowData;
 import com.starrocks.connector.flink.tools.EnvUtils;
 import com.starrocks.connector.flink.tools.JsonWrapper;
+import com.starrocks.data.load.stream.LabelGeneratorFactory;
 import com.starrocks.data.load.stream.StreamLoadSnapshot;
 import com.starrocks.data.load.stream.v2.StreamLoadManagerV2;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
@@ -88,7 +89,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
 
     // Only valid when using exactly-once and label prefix is set
     @Nullable
-    private transient ExactlyOnceLabelGeneratorFactory labelGeneratorFactory;
+    private transient ExactlyOnceLabelGeneratorFactory exactlyOnceLabelFactory;
 
     @Deprecated
     private transient ListState<Map<String, StarRocksSinkBufferEntity>> legacyState;
@@ -215,9 +216,25 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
         }
         this.streamLoadListener = new StarRocksStreamLoadListener(getRuntimeContext(), sinkOptions);
         sinkManager.setStreamLoadListener(streamLoadListener);
-        if (labelGeneratorFactory != null) {
-            sinkManager.setLabelGeneratorFactory(labelGeneratorFactory);
+
+        LabelGeneratorFactory labelGeneratorFactory;
+        String labelPrefix = sinkOptions.getLabelPrefix();
+        if (labelPrefix == null ||
+                sinkOptions.getSemantic() == StarRocksSinkSemantic.AT_LEAST_ONCE ||
+                !sinkOptions.isEnableExactlyOnceLabelGen()) {
+            labelGeneratorFactory = new LabelGeneratorFactory.DefaultLabelGeneratorFactory(
+                    labelPrefix == null ? "flink" : labelPrefix);
+        } else {
+            this.exactlyOnceLabelFactory = new ExactlyOnceLabelGeneratorFactory(
+                    labelPrefix,
+                    getRuntimeContext().getNumberOfParallelSubtasks(),
+                    getRuntimeContext().getIndexOfThisSubtask(),
+                    restoredCheckpointId);
+            exactlyOnceLabelFactory.restore(restoredGeneratorSnapshots);
+            labelGeneratorFactory = exactlyOnceLabelFactory;
         }
+        sinkManager.setLabelGeneratorFactory(labelGeneratorFactory);
+
         sinkManager.init();
         if (rowTransformer != null) {
             rowTransformer.setRuntimeContext(getRuntimeContext());
@@ -242,16 +259,6 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
                     restoredGeneratorSnapshots,
                     sinkManager.getStreamLoader());
             aborter.execute();
-        }
-
-        if (sinkOptions.getLabelPrefix() != null) {
-            this.labelGeneratorFactory = new ExactlyOnceLabelGeneratorFactory(
-                    sinkOptions.getLabelPrefix(),
-                    getRuntimeContext().getNumberOfParallelSubtasks(),
-                    getRuntimeContext().getIndexOfThisSubtask(),
-                    restoredCheckpointId);
-            labelGeneratorFactory.restore(restoredGeneratorSnapshots);
-            sinkManager.setLabelGeneratorFactory(labelGeneratorFactory);
         }
 
         notifyCheckpointComplete(Long.MAX_VALUE);
@@ -298,8 +305,8 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
             snapshotMap.put(functionSnapshotContext.getCheckpointId(), Collections.singletonList(snapshot));
 
             snapshotStates.clear();
-            List<ExactlyOnceLabelGeneratorSnapshot> labelSnapshots = labelGeneratorFactory == null ? null
-                    : labelGeneratorFactory.snapshot(functionSnapshotContext.getCheckpointId());
+            List<ExactlyOnceLabelGeneratorSnapshot> labelSnapshots = exactlyOnceLabelFactory == null ? null
+                    : exactlyOnceLabelFactory.snapshot(functionSnapshotContext.getCheckpointId());
             snapshotStates.add(StarrocksSnapshotState.of(snapshotMap, labelSnapshots));
         } else {
             sinkManager.abort(snapshot);

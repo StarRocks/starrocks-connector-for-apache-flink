@@ -31,7 +31,7 @@ public interface LabelGeneratorFactory {
         private final String labelPrefix;
 
         public DefaultLabelGeneratorFactory(String labelPrefix) {
-            this.labelPrefix = labelPrefix == null ? "flink_" : labelPrefix;
+            this.labelPrefix = labelPrefix == null ? "" : labelPrefix;
         }
 
         @Override

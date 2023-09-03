@@ -420,12 +420,51 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
     }
 
     @Test
+    public void testEnableExactlyOnceLabelGen() throws Exception {
+        assumeTrue(isSinkV2);
+        Map<String, String> options = new HashMap<>();
+        options.put("sink.semantic", "exactly-once");
+        options.put("sink.label-prefix", "test_label");
+        options.put("sink.enable.exactly-once.label-gen", "true");
+        String checkpointDir = temporaryFolder.newFolder().toURI().toString();
+        testConfigurationBase(options,
+                env -> {
+                    env.enableCheckpointing(1000);
+                    env.getCheckpointConfig().setCheckpointStorage(checkpointDir);
+                    Configuration config = new Configuration();
+                    config.set(ExecutionCheckpointingOptions.ENABLE_CHECKPOINTS_AFTER_TASKS_FINISH, true);
+                    env.configure(config);
+                    return null;
+                }
+        );
+    }
+
+    @Test
     public void testAbortLingeringTransactions() throws Exception {
         assumeTrue(isSinkV2);
         Map<String, String> options = new HashMap<>();
-        options.put("sink.at-least-once.use-transaction-stream-load", "false");
         options.put("sink.semantic", "exactly-once");
         options.put("sink.label-prefix", "test_label");
+        String checkpointDir = temporaryFolder.newFolder().toURI().toString();
+        testConfigurationBase(options,
+                env -> {
+                    env.enableCheckpointing(1000);
+                    env.getCheckpointConfig().setCheckpointStorage(checkpointDir);
+                    Configuration config = new Configuration();
+                    config.set(ExecutionCheckpointingOptions.ENABLE_CHECKPOINTS_AFTER_TASKS_FINISH, true);
+                    env.configure(config);
+                    return null;
+                }
+        );
+    }
+
+    @Test
+    public void testAbortLingeringTransactionsWithCheckNum() throws Exception {
+        assumeTrue(isSinkV2);
+        Map<String, String> options = new HashMap<>();
+        options.put("sink.semantic", "exactly-once");
+        options.put("sink.label-prefix", "test_label");
+        options.put("sink.abort.check-num-txns", "10");
         String checkpointDir = temporaryFolder.newFolder().toURI().toString();
         testConfigurationBase(options,
                 env -> {
