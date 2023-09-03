@@ -57,6 +57,8 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static com.starrocks.data.load.stream.StreamLoadConstants.RESULT_STATUS_FAILED;
+
 public class DefaultStreamLoader implements StreamLoader, Serializable {
 
     private static final Logger log = LoggerFactory.getLogger(DefaultStreamLoader.class);
@@ -336,7 +338,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
                     String errorMsg = String.format("Stream load failed because of error, db: %s, table: %s, label: %s, " +
                                     "\nresponseBody: %s\nerrorLog: %s", region.getDatabase(), region.getTable(), label,
                                     responseBody, errorLog);
-                    throw new StreamLoadFailException(errorMsg);
+                    throw new StreamLoadFailException(errorMsg, streamLoadBody);
                 }
                 return streamLoadResponse;
             } catch (StreamLoadFailException e) {
@@ -393,6 +395,15 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
                     requestType, db, table, label, response.getStatusLine());
             log.error("{}", errorMsg);
             throw new StreamLoadFailException(errorMsg);
+        } else if (401 == code) {
+            String errorMsg = String.format("Request %s failed because of access denied. You need to grant at least SELECT and INSERT " +
+                    "privilege on %s.%s. label: %s, response status line: %s", requestType, db, table, label, response.getStatusLine());
+            log.error("{}", errorMsg);
+            // Fake response body to judge the retryable error. See ErrorUtils#isRetryable
+            StreamLoadResponse.StreamLoadResponseBody responseBody = new StreamLoadResponse.StreamLoadResponseBody();
+            responseBody.setStatus(RESULT_STATUS_FAILED);
+            responseBody.setMessage("Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
+            throw new StreamLoadFailException(errorMsg, responseBody);
         } else if (200 != code) {
             String errorMsg = String.format("Request %s failed because http response code is not 200. db: %s, table: %s," +
                     "label: %s, response status line: %s", requestType, db, table, label, response.getStatusLine());
