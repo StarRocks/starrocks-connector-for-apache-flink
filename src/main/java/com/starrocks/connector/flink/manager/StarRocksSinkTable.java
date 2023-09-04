@@ -142,8 +142,11 @@ public class StarRocksSinkTable {
             }
 
             String srType = srColumn.get("DATA_TYPE").toString().toLowerCase();
-            boolean typeMatched = typesMap.containsKey(srType) &&
-                    typesMap.get(srType).contains(column.getType().getLogicalType().getTypeRoot());
+            // Some types of StarRocks, such as json, are not mapped to Flink natively,
+            // and there will be no entry in typesMap, but they can be represented as
+            // STRING in Flink generally, so we think the type is matched even if
+            // typesMap does not contain the srType
+            boolean typeMatched = !typesMap.containsKey(srType) || typesMap.get(srType).contains(column.getType().getLogicalType().getTypeRoot());
             if (!typeMatched) {
                 throw new IllegalArgumentException(
                         String.format("Flink and StarRocks types are not matched for column %s, " +
