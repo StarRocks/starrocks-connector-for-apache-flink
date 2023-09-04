@@ -545,4 +545,57 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
         executeSrSQL(createStarRocksTable);
         return tableName;
     }
+
+    @Test
+    public void testUnalignedTypes() throws Exception {
+        String tableName = "testUnalignedTypes_" + genRandomUuid();
+        String createStarRocksTable =
+                String.format(
+                        "CREATE TABLE `%s`.`%s` (" +
+                                "c0 INT," +
+                                "c1 LARGEINT," +
+                                "c2 JSON" +
+                                ") ENGINE = OLAP " +
+                                "PRIMARY KEY(c0) " +
+                                "DISTRIBUTED BY HASH (c0) BUCKETS 8 " +
+                                "PROPERTIES (" +
+                                "\"replication_num\" = \"1\"" +
+                                ")",
+                        DB_NAME, tableName);
+        executeSrSQL(createStarRocksTable);
+
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
+
+        StarRocksSinkOptions sinkOptions = StarRocksSinkOptions.builder()
+                .withProperty("jdbc-url", getJdbcUrl())
+                .withProperty("load-url", getHttpUrls())
+                .withProperty("database-name", DB_NAME)
+                .withProperty("table-name", tableName)
+                .withProperty("username", "root")
+                .withProperty("password", "")
+                .build();
+
+        String createSQL = "CREATE TABLE sink(" +
+                    "c0 INT," +
+                    "c1 STRING," +
+                    "c2 STRING," +
+                    "PRIMARY KEY (`c0`) NOT ENFORCED" +
+                ") WITH ( " +
+                    "'connector' = 'starrocks'," +
+                    "'jdbc-url'='" + sinkOptions.getJdbcUrl() + "'," +
+                    "'load-url'='" + String.join(";", sinkOptions.getLoadUrlList()) + "'," +
+                    "'sink.version' = '" + (isSinkV2 ? "V2" : "V1") + "'," +
+                    "'database-name' = '" + DB_NAME + "'," +
+                    "'table-name' = '" + sinkOptions.getTableName() + "'," +
+                    "'username' = '" + sinkOptions.getUsername() + "'," +
+                    "'password' = '" + sinkOptions.getPassword() + "'" +
+                ")";
+
+        tEnv.executeSql(createSQL);
+        tEnv.executeSql("INSERT INTO sink VALUES (1, '123', '{\"key\": 1, \"value\": 2}')").await();
+        List<List<Object>> actualData = scanTable(DB_CONNECTION, DB_NAME, tableName);
+        verifyResult(Collections.singletonList(Arrays.asList(1, "123", "{\"key\": 1, \"value\": 2}")), actualData);
+    }
 }
