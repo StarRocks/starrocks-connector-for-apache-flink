@@ -72,6 +72,9 @@ public class TransactionTableRegion implements TableRegion {
     private volatile int numRetries;
     private volatile long lastFailTimeMs;
 
+    // First exception if retry many times
+    private volatile Throwable firstException;
+
     public TransactionTableRegion(String uniqueKey,
                             String database,
                             String table,
@@ -270,10 +273,17 @@ public class TransactionTableRegion implements TableRegion {
 
     @Override
     public void fail(Throwable e) {
+        if (firstException == null) {
+            firstException = e;
+        }
+
         if (numRetries >= maxRetries || !isRetryable(e)) {
-            manager.callback(e);
+            LOG.error("Failed to flush data for db: {}, table: {} after {} times retry, the last exception is",
+                    database, table, numRetries, e);
+            manager.callback(firstException);
             return;
         }
+
         responseFuture = null;
         numRetries += 1;
         lastFailTimeMs = System.currentTimeMillis();
@@ -291,6 +301,7 @@ public class TransactionTableRegion implements TableRegion {
         response.setFlushRows(chunk.numRows());
         manager.callback(response);
         numRetries = 0;
+        firstException = null;
 
         LOG.info("Stream load flushed, db: {}, table: {}, label : {}", database, table, label);
         if (!inactiveChunks.isEmpty()) {

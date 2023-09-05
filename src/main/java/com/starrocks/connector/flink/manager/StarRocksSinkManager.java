@@ -332,6 +332,7 @@ public class StarRocksSinkManager implements Serializable {
         stopScheduler();
         LOG.info(String.format("Async stream load: db[%s] table[%s] rows[%d] bytes[%d] label[%s].", flushData.getDatabase(), flushData.getTable(), flushData.getBatchCount(), flushData.getBatchSize(), flushData.getLabel()));
         long startWithRetries = System.nanoTime();
+        Exception firstException = null;
         for (int i = 0; i <= sinkOptions.getSinkMaxRetries(); i++) {
             try {
                 long start = System.nanoTime();
@@ -358,8 +359,12 @@ public class StarRocksSinkManager implements Serializable {
                     totalFlushFailedTimes.inc();
                 }
                 LOG.warn("Failed to flush batch data to StarRocks, retry times = {}", i, e);
+                if (firstException == null) {
+                    firstException = e;
+                }
+
                 if (i >= sinkOptions.getSinkMaxRetries()) {
-                    throw e;
+                    throw firstException;
                 }
                 if (e instanceof StarRocksStreamLoadFailedException && ((StarRocksStreamLoadFailedException)e).needReCreateLabel()) {
                     String oldLabel = flushData.getLabel();
