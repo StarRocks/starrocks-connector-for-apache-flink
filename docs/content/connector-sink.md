@@ -93,9 +93,9 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 | table-name                        | Yes          | NONE              | The name of the table that you want to use to load data into StarRocks.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | username                          | Yes          | NONE              | The username of the account that you want to use to load data into StarRocks. The account needs [SELECT and INSERT privileges](https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/account-management/GRANT).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | password                          | Yes          | NONE              | The password of the preceding account.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| sink.version                      | No           | AUTO              | the interface used to load data. This parameter is supported from Flink connector version 1.2.4 onwards. <ul><li>`V1`: Use [Stream Load](https://docs.starrocks.io/en-us/latest/loading/StreamLoad) interface to load data. Connectors before 1.2.4 only support this mode. </li> <li>`V2`: Use [Transaction Stream Load](https://docs.starrocks.io/en-us/latest/loading/Stream_Load_transaction_interface) interface to load data. It requires StarRocks to be at least version 2.4. Recommends `V2` because it optimizes the memory usage and provides a more stable exactly-once implementation. </li> <li>`AUTO`: If the version of StarRocks supports transaction Stream Load, will choose `V2` automatically, otherwise choose `V1` </li></ul> |
-| sink.label-prefix                 | No           | NONE              | The label prefix used by Stream Load.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | sink.semantic                     | No           | at-least-once     | The semantic guaranteed by sink. Valid values: **at-least-once** and **exactly-once**.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| sink.version                      | No           | AUTO              | the interface used to load data. This parameter is supported from Flink connector version 1.2.4 onwards. <ul><li>`V1`: Use [Stream Load](https://docs.starrocks.io/en-us/latest/loading/StreamLoad) interface to load data. Connectors before 1.2.4 only support this mode. </li> <li>`V2`: Use [Transaction Stream Load](https://docs.starrocks.io/en-us/latest/loading/Stream_Load_transaction_interface) interface to load data. It requires StarRocks to be at least version 2.4. Recommends `V2` because it optimizes the memory usage and provides a more stable exactly-once implementation. </li> <li>`AUTO`: If the version of StarRocks supports transaction Stream Load, will choose `V2` automatically, otherwise choose `V1` </li></ul> |
+| sink.label-prefix                 | No           | NONE              | The label prefix used by Stream Load. Strongly recommend to configure it if you are using exactly-once with connector 1.2.8 and later. See [exactly-once usage notes](#exactly-once).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | sink.buffer-flush.max-bytes       | No           | 94371840(90M)     | The maximum size of data that can be accumulated in memory before being sent to StarRocks at a time. The maximum value ranges from 64 MB to 10 GB. Setting this parameter to a larger value can improve loading performance but may increase loading latency. This parameter only takes effect when `sink.semantic` is set to `at-least-once`. If `sink.semantic` is set to `exactly-once`, the data in memory is flushed when a Flink checkpoint is triggered. In this circumstance, this parameter does not take effect. |
 | sink.buffer-flush.max-rows        | No           | 500000            | The maximum number of rows that can be accumulated in memory before being sent to StarRocks at a time. This parameter is available only when `sink.version` is `V1` and `sink.semantic` is `at-least-once`. Valid values: 64000 to 5000000.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | sink.buffer-flush.interval-ms     | No           | 300000            | The interval at which data is flushed. This parameter is available only when `sink.semantic` is `at-least-once`. Valid values: 1000 to 3600000. Unit: ms.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
@@ -135,19 +135,52 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 
 ## Usage notes
 
-- Since v2.4, StarRocks provides a Stream Load transaction interface. Since Flink connector version 1.2.4, the Sink is redesigned to implement exactly-once semantics based on transactional interfaces. Compared to the previous implementation based on non-transactional interfaces, the new implementation reduces memory usage and checkpoint overhead, thereby enhancing real-time performance and stability of loading. Starting from Flink connector version 1.2.4, the Sink implements transactional interfaces by default. To enable non-transactional interfaces, the `sink.version` needs to be configured as `V1`.
+### Exactly Once
 
-    > **NOTICE**
-    >
-    > If the version of StarRocks is earlier than 2.4 or the version of Flink connector is earlier than 1.2.4, the sink automatically implements the non-transactional interface.
+- If you want to use exactly-once, recommend to upgrade StarRocks to 2.5 or later, and connector to 1.2.4 or later
+   
+  - Since Flink connector 1.2.4, the exactly-once is redesigned based on [Stream Load transaction interface](https://docs.starrocks.io/en-us/latest/loading/Stream_Load_transaction_interface)
+    provided by StarRocks 2.4 or later. Compared to the previous implementation based on non-transactional interfaces,
+    the new implementation reduces memory usage and checkpoint overhead, thereby enhancing real-time performance and
+    stability of loading.
+  
+  - If the version of StarRocks is earlier than 2.4 or the version of Flink connector is earlier than 1.2.4, the sink
+    will automatically choose the implementation based on non-transactional interface.
+  
+- Connector configurations for exactly-once
+    
+  - **Must** set `sink.semantic` to `exactly-once`.
+    
+  - For connector 1.2.8 and later, **strongly recommend** to set `sink.label-prefix`.
+      
+    - The prefix must be unique across all loads in StarRocks, such as Flink jobs, Routine Load, and Broker Load.
+    
+    - The connector will use the prefix to clean up lingering transactions generated when Flink job fails because of
+      some exceptions. When the Flink job restarts, the connector will find those lingering transactions according to
+      the prefix, and abort them. If not set the prefix, those lingering transactions will be cleaned up by StarRocks
+      only after they times out, and the number of running transactions can reach the limitation of StarRocks 
+      `max_running_txn_num_per_db` if Flink fails frequently before transaction timeout. Those lingering transactions
+      are generally in `PREPARED` status if you inspect them in StarRocks.
+        
+- If your Flink job will recover from checkpoint/savepoint after a long downtime because of stop or continuous failover,
+  please adjust the following StarRocks configurations accordingly, otherwise there can be data loss.
+  
+  - `prepared_transaction_default_timeout_second`: FE configuration, default value is `86400`. The downtime of the Flink
+    job should be less than this value. Otherwise, the transaction could time out before you restart the Flink job, and
+    lead to data loss.
+  
+  - `label_keep_max_second` and `label_keep_max_num`: FE configurations, default values are `259200` and `1000`, see
+    [FE configurations](https://docs.starrocks.io/en-us/latest/loading/Loading_intro#fe-configurations) for details.
+    The downtime of the Flink job should be less than the label keep time. Otherwise, the connector could not get the
+    state of transactions recorded in the savepoint/checkpoint from StarRocks, and verify whether there is data loss. 
 
-- For the exactly-once semantics achieved by implementing non-transactional interface of Stream Load, it relies on Flink's checkpoint mechanism to save a small batch of data and its label at each checkpoint. In the first invocation after the completion of a checkpoint, it blocks to flush all data cached in the state, thus achieving precisely-once processing. However, if StarRocks unexpectedly exits, the operators for Apache Flink® sink streaming are blocked for a long time and Apache Flink® issues a monitoring alert or shuts down.
+  - Those configurations are mutable, and can be modified on FE with `ADMIN SET FRONTEND CONFIG`
 
-- If data loading pauses, you can try to increase the memory of the Flink task.
-
-- If the preceding code runs as expected and StarRocks can receive data, but the data loading fails, check whether your machine can access the HTTP port of the backends (BEs) in your StarRocks cluster. If you can successfully ping the HTTP port returned by the execution of the SHOW BACKENDS command in your StarRocks cluster, your machine can access the HTTP port of the BEs in your StarRocks cluster. For example, a machine has a public IP address and a private IP address, the HTTP ports of frontends (FEs) and BEs can be accessed through the public IP address of the FEs and BEs, the IP address that is bounded with your StarRocks cluster is the private IP address, and the value of `loadurl` for the Flink task is the HTTP port of the public IP address of the FEs. The FEs forwards the data loading task to the private IP address of the BEs. In this example, if the machine cannot ping the private IP address of the BEs, the data loading fails.
-
-- If you set `sink.semantic` to `exactly-once`, `sink.buffer-flush.max-bytes`, `sink.buffer-flush.max-bytes`, and `sink.buffer-flush.interval-ms` are invalid.
+  ```SQL
+    ADMIN SET FRONTEND CONFIG ("prepared_transaction_default_timeout_second" = "3600");
+    ADMIN SET FRONTEND CONFIG ("label_keep_max_second" = "259200");
+    ADMIN SET FRONTEND CONFIG ("label_keep_max_num" = "1000");
+  ```
 
 ## Examples
 
