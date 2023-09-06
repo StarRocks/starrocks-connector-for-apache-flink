@@ -125,19 +125,19 @@ public class StarRocksSinkOptions implements Serializable {
                     "insert the update_after row in StarRocks, and this options should be set false for this case. Note that how " +
                     "to set this options depends on the user case.");
 
-    public static final ConfigOption<Boolean> SINK_ENABLE_EXACTLY_ONCE_LABEL_GEN = ConfigOptions.key("sink.enable.exactly-once.label-gen")
-            .booleanType().defaultValue(false).withDescription("Only available when using exactly-once and sink.label-prefix is set. " +
-                    "When this option is true, the connector will generate label in the format '{labelPrefix}-{tableName}-{subtaskIndex}-{id}'. " +
+    public static final ConfigOption<Boolean> SINK_ENABLE_EXACTLY_ONCE_LABEL_GEN = ConfigOptions.key("sink.exactly-once.enable-label-gen")
+            .booleanType().defaultValue(true).withDescription("Only available when using exactly-once and sink.label-prefix is set. " +
+                    "When it's true, the connector will generate label in the format '{labelPrefix}-{tableName}-{subtaskIndex}-{id}'. " +
                     "This format could be used to track lingering transactions.");
 
-    public static final ConfigOption<Boolean> SINK_ABORT_LINGERING_TXNS = ConfigOptions.key("sink.abort.lingering-txns")
-            .booleanType().defaultValue(true).withDescription("Whether to abort lingering transactions when the job restore. " +
-                    "This option is only available when using exactly-once.");
+    public static final ConfigOption<Boolean> SINK_ABORT_LINGERING_TXNS = ConfigOptions.key("sink.exactly-once.enable-abort-lingering-txn")
+            .booleanType().defaultValue(true).withDescription("Only available when using exactly-once and sink.label-prefix is set. " +
+                    "Whether to abort lingering transactions when the job restore.");
 
-    public static final ConfigOption<Integer> SINK_ABORT_CHECK_NUM_TXNS = ConfigOptions.key("sink.abort.check-num-txns")
-            .intType().defaultValue(-1).withDescription("The number of lingering transactions to check. -1 indicates that " +
-                    "check until finding the first unused transaction. This option is only available when " +
-                    "sink.abort.lingering-txns is enabled.");
+    public static final ConfigOption<Integer> SINK_ABORT_CHECK_NUM_TXNS = ConfigOptions.key("sink.exactly-once.check-num-lingering-txn")
+            .intType().defaultValue(-1).withDescription("Only available when sink.exactly-once.abort-lingering-txn is enabled. " +
+                    "The number of transactions to check if they are lingering. -1 indicates that check until finding the first " +
+                    "transaction that is not lingering.");
 
     public static final ConfigOption<Integer> SINK_PARALLELISM = FactoryUtil.SINK_PARALLELISM;
 
