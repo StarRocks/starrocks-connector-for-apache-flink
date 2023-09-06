@@ -12,6 +12,7 @@ The Flink connector supports DataStream API, Table API & SQL, and Python API. It
 
 | Connector | Flink                    | StarRocks     | Java | Scala     |
 |-----------|--------------------------|---------------| ---- |-----------|
+| 1.2.8     | 1.13,1.14,1.15,1.16,1.17 | 2.1 and later| 8    | 2.11,2.12 |
 | 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 and later| 8    | 2.11,2.12 |
 
 ## Obtain Flink connector
