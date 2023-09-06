@@ -195,6 +195,18 @@ For at-least-once, the flush will be triggered when any of the following conditi
 
 For exactly-once, the flush only happens when a checkpoint is triggered.
 
+## Monitoring
+
+The connector exposes the following metrics.
+
+| Name                     | Type    | Description                                                     |
+|--------------------------|---------|-----------------------------------------------------------------|
+| totalFlushBytes          | counter | successfully flushed bytes.                                     |
+| totalFlushRows           | counter | successfully flushed rows.                                      |
+| totalFlushSucceededTimes | counter | number of times that the data-batch been successfully flushed.  |
+| totalFlushFailedTimes    | counter | number of times that the flushing been failed.                  |
+| totalFilteredRows        | counter | number of rows filtered. totalFlushRows includes those rows.    |
+
 ## Examples
 
 The following examples show how to use the Flink connector to load data into a StarRocks table with Flink SQL or Flink DataStream.
