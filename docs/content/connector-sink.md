@@ -141,7 +141,7 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 - If you want to use exactly-once, recommend to upgrade StarRocks to 2.5 or later, and connector to 1.2.4 or later
    
   - Since Flink connector 1.2.4, the exactly-once is redesigned based on [Stream Load transaction interface](https://docs.starrocks.io/en-us/latest/loading/Stream_Load_transaction_interface)
-    provided by StarRocks 2.4 or later. Compared to the previous implementation based on non-transactional interfaces,
+    provided by StarRocks since 2.4. Compared to the previous implementation based on non-transactional interfaces,
     the new implementation reduces memory usage and checkpoint overhead, thereby enhancing real-time performance and
     stability of loading.
   
@@ -168,26 +168,27 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
     
     - If not set the label prefix, lingering transactions will be cleaned up by StarRocks only after they time out,
       but the number of running transactions can reach the limitation of StarRocks `max_running_txn_num_per_db` if
-      Flink jobs fail frequently before transactions time out. The timeout is controlled by FE configuration
+      Flink jobs fail frequently before transactions time out. The timeout is controlled by StarRocks FE configuration
       `prepared_transaction_default_timeout_second` whose default value is `86400` (1 day). You can decrease it
       to make transactions expired faster if you don't want to set the label prefix.
         
 - If your Flink job will recover from checkpoint/savepoint after a long downtime because of stop or continuous failover,
   please adjust the following StarRocks configurations accordingly, otherwise there can be data loss.
   
-  - `prepared_transaction_default_timeout_second`: FE configuration, default value is `86400`. The downtime of the Flink
-    job should be less than this value. Otherwise, the transaction could time out before you restart the Flink job, and
-    lead to data loss.
+  - `prepared_transaction_default_timeout_second`: StarRocks FE configuration, default value is `86400`. The downtime
+    of the Flink job should be less than this value. Otherwise, the transaction could time out before you restart the
+    Flink job, and lead to data loss. Note that you'd better to set `sink.label-prefix` to clean up lingering transactions
+    if you want a larger value for this configuration.
   
-  - `label_keep_max_second` and `label_keep_max_num`: FE configurations, default values are `259200` and `1000` respectively,
-    see [FE configurations](https://docs.starrocks.io/en-us/latest/loading/Loading_intro#fe-configurations) for details.
-    The downtime of the Flink job should be less than the label keep time. Otherwise, the connector could not get the
-    state of transactions recorded in the savepoint/checkpoint from StarRocks, and verify whether there is data loss. 
+  - `label_keep_max_second` and `label_keep_max_num`: StarRocks FE configurations, default values are `259200` and `1000`
+    respectively, see [FE configurations](https://docs.starrocks.io/en-us/latest/loading/Loading_intro#fe-configurations)
+    for details. The downtime of the Flink job should be less than the label keep time. Otherwise, the connector could not
+    get the state of transactions recorded in the savepoint/checkpoint from StarRocks, and verify whether there is data loss. 
 
-  - Those configurations are mutable, and can be modified on FE with `ADMIN SET FRONTEND CONFIG`
+  - Those configurations are mutable, and can be modified on StarRocks FE with `ADMIN SET FRONTEND CONFIG`
 
   ```SQL
-    ADMIN SET FRONTEND CONFIG ("prepared_transaction_default_timeout_second" = "86400");
+    ADMIN SET FRONTEND CONFIG ("prepared_transaction_default_timeout_second" = "3600");
     ADMIN SET FRONTEND CONFIG ("label_keep_max_second" = "259200");
     ADMIN SET FRONTEND CONFIG ("label_keep_max_num" = "1000");
   ```
