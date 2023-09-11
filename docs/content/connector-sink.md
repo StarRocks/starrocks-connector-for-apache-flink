@@ -138,8 +138,7 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 
 ### Exactly Once
 
-- If you want to use exactly-once, recommend to upgrade StarRocks to 2.5 or later, and connector to 1.2.4 or later
-   
+- If you want sink to guarantee exactly-once semantics, we recommend you to upgrade StarRocks to 2.5 or later, and Flink connector to 1.2.4 or later
   - Since Flink connector 1.2.4, the exactly-once is redesigned based on [Stream Load transaction interface](https://docs.starrocks.io/en-us/latest/loading/Stream_Load_transaction_interface)
     provided by StarRocks since 2.4. Compared to the previous implementation based on non-transactional interfaces,
     the new implementation reduces memory usage and checkpoint overhead, thereby enhancing real-time performance and
@@ -148,44 +147,41 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
   - If the version of StarRocks is earlier than 2.4 or the version of Flink connector is earlier than 1.2.4, the sink
     will automatically choose the implementation based on non-transactional interface.
   
-- Connector configurations for exactly-once
+- Configurations to guarantee exactly-once
     
-  - Must set `sink.semantic` to `exactly-once`.
+  - The value of `sink.semantic` needs to be `exactly-once`.
     
-  - For connector 1.2.8 and later, recommend to set `sink.label-prefix`.
-      
-    - The prefix must be unique across all loads in StarRocks, such as Flink jobs, Routine Load, and Broker Load.
+  - If the version of Flink connector is 1.2.8 and later, it is recommended to specify the value of `sink.label-prefix`. Note that the label prefix must be unique among all types of loading in StarRocks, such as Flink jobs, Routine Load, and Broker Load.
     
-    - The connector will use the label prefix to clean up lingering transactions that maybe generate in some Flink
-      failure scenarios, such as the Flink job fails when a checkpoint is still in progress. Those lingering transactions
-      are generally in `PREPARED` status if you inspect them in StarRocks. When the Flink job restores from checkpoint,
-      the connector will find those lingering transactions according to the label prefix and some information in
-      checkpoint, and abort them. The connector can't abort them when the Flink job exits because of the two-phase-commit
-      mechanism to implement the exactly-once. When job exits, the connector haven't received the notification from
-      Flink checkpoint coordinator whether the transaction should be included in a successful checkpoint, and it may
-      lead to data loss if aborting it anyway. You can have an overview about how to achieve end-to-end exactly-once
+    - If the label prefix is specified, the Flink connector will use the label prefix to clean up lingering transactions that may be generated in some Flink
+      failure scenarios, such as the Flink job fails when a checkpoint is still in progress. These lingering transactions
+      are generally in `PREPARED` status if you use `SHOW PROC '/transactions/<db_id>/running';` to view them in StarRocks. When the Flink job restores from checkpoint,
+      the Flink connector will find these lingering transactions according to the label prefix and some information in
+      checkpoint, and abort them. The Flink connector can not abort them when the Flink job exits because of the two-phase-commit
+      mechanism to implement the exactly-once. When the Flink job exits, the Flink connector has not received the notification from
+      Flink checkpoint coordinator whether the transactions should be included in a successful checkpoint, and it may
+      lead to data loss if these transactions are aborted anyway. You can have an overview about how to achieve end-to-end exactly-once
       in Flink in this [blogpost](https://flink.apache.org/2018/02/28/an-overview-of-end-to-end-exactly-once-processing-in-apache-flink-with-apache-kafka-too/).
     
-    - If not set the label prefix, lingering transactions will be cleaned up by StarRocks only after they time out,
-      but the number of running transactions can reach the limitation of StarRocks `max_running_txn_num_per_db` if
-      Flink jobs fail frequently before transactions time out. The timeout is controlled by StarRocks FE configuration
-      `prepared_transaction_default_timeout_second` whose default value is `86400` (1 day). You can decrease it
-      to make transactions expired faster if you don't want to set the label prefix.
+    - If the label prefix is not specified, lingering transactions will be cleaned up by StarRocks only after they time out. However the number of running transactions can reach the limitation of StarRocks `max_running_txn_num_per_db` if
+      Flink jobs fail frequently before transactions time out. The timeout length is controlled by StarRocks FE configuration
+      `prepared_transaction_default_timeout_second` whose default value is `86400` (1 day). You can set a smaller value to it
+      to make transactions expired faster when the label prefix is not specified
         
-- If your Flink job will recover from checkpoint/savepoint after a long downtime because of stop or continuous failover,
-  please adjust the following StarRocks configurations accordingly, otherwise there can be data loss.
+- If you are certain that the Flink job will eventually recover from checkpoint or savepoint after a long downtime because of stop or continuous failover,
+  please adjust the following StarRocks configurations accordingly, to avoid data loss.
   
-  - `prepared_transaction_default_timeout_second`: StarRocks FE configuration, default value is `86400`. The downtime
-    of the Flink job should be less than this value. Otherwise, the transaction could time out before you restart the
-    Flink job, and lead to data loss. Note that you'd better to set `sink.label-prefix` to clean up lingering transactions
-    if you want a larger value for this configuration.
+  - `prepared_transaction_default_timeout_second`: StarRocks FE configuration, default value is `86400`. The value of this configuration needs to be larger than the downtime
+    of the Flink job. Otherwise, the lingering transactions that are included in a successful checkpoint may be aborted because of timeout before you restart the
+    Flink job, which leads to data loss.
+    
+    Note that when you set a larger value to this configuration, it is better to specify the value of `sink.label-prefix` so that the lingering transactions can be cleaned according to the label prefix and some information in
+      checkpoint, instead of due to timeout (which may cause data loss).
   
   - `label_keep_max_second` and `label_keep_max_num`: StarRocks FE configurations, default values are `259200` and `1000`
-    respectively, see [FE configurations](https://docs.starrocks.io/en-us/latest/loading/Loading_intro#fe-configurations)
-    for details. The downtime of the Flink job should be less than the label keep time. Otherwise, the connector could not
-    get the state of transactions recorded in the savepoint/checkpoint from StarRocks, and verify whether there is data loss. 
+    respectively. For details, see [FE configurations](https://docs.starrocks.io/en-us/latest/loading/Loading_intro#fe-configurations). The value of `label_keep_max_second` needs to be larger than the downtime of the Flink job. Otherwise, the Flink connector can not check the state of transactions in StarRocks by using the transaction labels saved in the Flink's savepoint or checkpoint and figure out whether these transactions are committed or not, which may eventually lead to data loss.
 
-  - Those configurations are mutable, and can be modified on StarRocks FE with `ADMIN SET FRONTEND CONFIG`
+  These configurations are mutable and can be modified by using `ADMIN SET FRONTEND CONFIG`:
 
   ```SQL
     ADMIN SET FRONTEND CONFIG ("prepared_transaction_default_timeout_second" = "3600");
@@ -195,28 +191,28 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
   
 ### Flush Policy
 
-The connector will buffer the data in memory, and flush them in batch to StarRocks via stream load. How the flush
+The Flink connector will buffer the data in memory, and flush them in batch to StarRocks via Stream Load. How the flush
 is triggered is different between at-least-once and exactly-once.
 
-For at-least-once, the flush will be triggered when any of the following conditions are met
-* the bytes of buffered rows reaches the limit `sink.buffer-flush.max-bytes`
-* the number of buffered rows reaches the limit `sink.buffer-flush.max-rows`. (Only valid for sink version V1)
-* the elapsed time since the last flush reaches the limit `sink.buffer-flush.interval-ms`
-* a checkpoint is triggered
+For at-least-once, the flush will be triggered when any of the following conditions are met:
+- the bytes of buffered rows reaches the limit `sink.buffer-flush.max-bytes`
+- the number of buffered rows reaches the limit `sink.buffer-flush.max-rows`. (Only valid for sink version V1)
+- the elapsed time since the last flush reaches the limit `sink.buffer-flush.interval-ms`
+- a checkpoint is triggered
 
 For exactly-once, the flush only happens when a checkpoint is triggered.
 
-## Monitoring
+### Monitoring load metrics
 
-The connector exposes the following metrics.
+The Flink connector provides the following metrics to monitor loading.
 
 | Name                     | Type    | Description                                                     |
 |--------------------------|---------|-----------------------------------------------------------------|
 | totalFlushBytes          | counter | successfully flushed bytes.                                     |
-| totalFlushRows           | counter | successfully flushed rows.                                      |
+| totalFlushRows           | counter | number of rows successfully flushed.                                      |
 | totalFlushSucceededTimes | counter | number of times that the data-batch been successfully flushed.  |
 | totalFlushFailedTimes    | counter | number of times that the flushing been failed.                  |
-| totalFilteredRows        | counter | number of rows filtered. totalFlushRows includes those rows.    |
+| totalFilteredRows        | counter | number of rows filtered which is also included in totalFlushRows.    |
 
 ## Examples
 
@@ -398,7 +394,7 @@ There are several ways to implement a Flink DataStream job according to the type
             .build();
 
     /**
-     * The connector will use a Java object array (Object[]) to represent a row to be loaded into the StarRocks table,
+     * The Flink connector will use a Java object array (Object[]) to represent a row to be loaded into the StarRocks table,
      * and each element is the value for a column.
      * You need to define the schema of the Object[] which matches that of the StarRocks table.
      */
@@ -553,7 +549,7 @@ takes effect only when the new value for `score` is has a greater or equal to th
     - Define the DDL including all of columns.
     - Set the option `sink.properties.merge_condition` to `score` to tell the Flink connector to use the column `score`
     as the condition.
-    - Set the option `sink.version` to `V1` to tell the connector to use Stream Load interface.
+    - Set the option `sink.version` to `V1` to tell the Flink connector to use Stream Load interface.
 
     ```SQL
     CREATE TABLE `score_board` (
