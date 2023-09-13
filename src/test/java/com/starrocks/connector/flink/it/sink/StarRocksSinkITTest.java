@@ -400,6 +400,14 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
     }
 
     @Test
+    public void testCsvFormatWithColumnSeparatorAndRowDelimiter() throws Exception {
+        Map<String, String> map = new HashMap<>();
+        map.put("sink.properties.column_separator", "\\x01");
+        map.put("sink.properties.row_delimiter", "\\0x2");
+        testConfigurationBase(map, env -> null);
+    }
+
+    @Test
     public void testJsonFormat() throws Exception {
         if (isSinkV2) {
             testConfigurationBase(
@@ -413,7 +421,7 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
     }
 
     private void testConfigurationBase(Map<String, String> options, Function<StreamExecutionEnvironment, Void> setFlinkEnv) throws Exception {
-        String tableName = createPkTable("testAtLeastOnceBase");
+        String tableName = createPkTable("testConfigurationBase");
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);
         setFlinkEnv.apply(env);
