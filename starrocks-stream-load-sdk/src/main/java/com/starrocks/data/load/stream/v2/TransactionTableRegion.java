@@ -125,6 +125,10 @@ public class TransactionTableRegion implements TableRegion {
 
     @Override
     public void setLabel(String label) {
+        // Reuse the same label to avoid duplicate load if retry happens
+        if (numRetries > 0 && label != null) {
+            return;
+        }
         this.label = label;
     }
 
