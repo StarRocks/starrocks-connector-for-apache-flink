@@ -425,7 +425,7 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
         Map<String, String> options = new HashMap<>();
         options.put("sink.semantic", "exactly-once");
         options.put("sink.label-prefix", "test_label");
-        options.put("sink.enable.exactly-once.label-gen", "true");
+        options.put("sink.exactly-once.enable-label-gen", "true");
         String checkpointDir = temporaryFolder.newFolder().toURI().toString();
         testConfigurationBase(options,
                 env -> {
@@ -464,7 +464,7 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
         Map<String, String> options = new HashMap<>();
         options.put("sink.semantic", "exactly-once");
         options.put("sink.label-prefix", "test_label");
-        options.put("sink.abort.check-num-txns", "10");
+        options.put("sink.exactly-once.check-num-lingering-txn", "10");
         String checkpointDir = temporaryFolder.newFolder().toURI().toString();
         testConfigurationBase(options,
                 env -> {
@@ -476,6 +476,14 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
                     return null;
                 }
         );
+    }
+
+    @Test
+    public void testCsvFormatWithColumnSeparatorAndRowDelimiter() throws Exception {
+        Map<String, String> map = new HashMap<>();
+        map.put("sink.properties.column_separator", "\\x01");
+        map.put("sink.properties.row_delimiter", "\\0x2");
+        testConfigurationBase(map, env -> null);
     }
 
     @Test
@@ -492,7 +500,7 @@ public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
     }
 
     private void testConfigurationBase(Map<String, String> options, Function<StreamExecutionEnvironment, Void> setFlinkEnv) throws Exception {
-        String tableName = createPkTable("testAtLeastOnceBase");
+        String tableName = createPkTable("testConfigurationBase");
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);
         setFlinkEnv.apply(env);
