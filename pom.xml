@@ -46,7 +46,7 @@ limitations under the License.
     <version>${srfc.version}_flink-${flink.minor.version}-SNAPSHOT</version>
 
     <properties>
-        <srfc.version>1.2.8</srfc.version>
+        <srfc.version>1.2.9</srfc.version>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
