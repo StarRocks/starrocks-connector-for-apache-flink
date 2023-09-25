@@ -14,11 +14,23 @@
 
 package com.starrocks.connector.flink.table.source;
 
-import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
-import com.starrocks.connector.flink.table.source.struct.QueryBeXTablets;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionOptions;
+import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
+import com.starrocks.connector.flink.converter.JdbcRowConverter;
+import com.starrocks.connector.flink.dialect.MySqlDialect;
+import com.starrocks.connector.flink.statement.FieldNamedPreparedStatement;
 import com.starrocks.connector.flink.table.source.struct.QueryInfo;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 import com.starrocks.connector.flink.tools.EnvUtils;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.functions.FunctionContext;
@@ -27,109 +39,124 @@ import org.apache.flink.types.Row;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
-
 public class StarRocksDynamicLookupFunction extends TableFunction<RowData> {
-    
+
     private static final Logger LOG = LoggerFactory.getLogger(StarRocksDynamicLookupFunction.class);
-    
-    private final ColumnRichInfo[] filterRichInfos;
+
     private final StarRocksSourceOptions sourceOptions;
     private QueryInfo queryInfo;
     private final SelectColumn[] selectColumns;
-    private final List<ColumnRichInfo> columnRichInfos;
-    
     private final long cacheMaxSize;
     private final long cacheExpireMs;
     private final int maxRetryTimes;
 
     // cache for lookup data
-    private Map<Row, List<RowData>> cacheMap;
+    private final Cache<RowData, List<RowData>> cacheMap;
 
-    private transient long nextLoadTime;
+    private final String[] keyNames;
 
-    public StarRocksDynamicLookupFunction(StarRocksSourceOptions sourceOptions, 
-                                          ColumnRichInfo[] filterRichInfos,
-                                          List<ColumnRichInfo> columnRichInfos,
-                                          SelectColumn[] selectColumns
-                                          ) {
+    private final String query;
+
+    private final transient StarRocksJdbcConnectionProvider connectionProvider;
+
+    private transient FieldNamedPreparedStatement statement;
+
+    private final JdbcRowConverter lookupKeyRowConverter;
+
+    private final JdbcRowConverter jdbcRowConverter;
+
+    public StarRocksDynamicLookupFunction(StarRocksSourceOptions sourceOptions,
+        SelectColumn[] selectColumns
+    ) {
         this.sourceOptions = sourceOptions;
-        this.filterRichInfos = filterRichInfos;
-        this.columnRichInfos = columnRichInfos;
         this.selectColumns = selectColumns;
 
         this.cacheMaxSize = sourceOptions.getLookupCacheMaxRows();
         this.cacheExpireMs = sourceOptions.getLookupCacheTTL();
         this.maxRetryTimes = sourceOptions.getLookupMaxRetries();
-        
-        this.cacheMap = new HashMap<>();
-        this.nextLoadTime = -1L;
+
+        this.cacheMap = CacheBuilder.newBuilder()
+            .maximumSize(cacheMaxSize)
+            .expireAfterWrite(Duration.ofMillis(cacheExpireMs))
+            .build();
+        this.keyNames = null;
+        MySqlDialect mySqlDialect = new MySqlDialect();
+        this.query = mySqlDialect.getSelectFromStatement(sourceOptions.getTableName(), null,
+            null);
+        connectionProvider = new StarRocksJdbcConnectionProvider(
+            new StarRocksJdbcConnectionOptions(
+                sourceOptions.getJdbcUrl(), sourceOptions.getUsername(),
+                sourceOptions.getPassword()));
+        this.jdbcRowConverter = mySqlDialect.getRowConverter(null);
+        this.lookupKeyRowConverter = mySqlDialect.getRowConverter(null);
     }
-    
+
     @Override
     public void open(FunctionContext context) throws Exception {
         super.open(context);
+        establishConnectionAndStatement();
         LOG.info("Open lookup function. {}", EnvUtils.getGitInformation());
     }
 
     public void eval(Object... keys) {
-        reloadData();
-        Row keyRow = Row.of(keys);
-        List<RowData> curList = cacheMap.get(keyRow);
-        if (curList != null) {
-            curList.parallelStream().forEach(this::collect);
-        }
-    }
+        GenericRowData keyRow = GenericRowData.of(keys);
+        if (cacheMap != null) {
 
-    private void reloadData() {
-        if (nextLoadTime > System.currentTimeMillis()) {
-            return;
-        }
-        if (nextLoadTime > 0) {
-            LOG.info("Lookup join cache has expired after {} (ms), reloading", this.cacheExpireMs);
-        } else {
-            LOG.info("Populating lookup join cache");
-        }
-        cacheMap.clear();
-        
-        StringBuilder sqlSb = new StringBuilder("select * from ");
-        sqlSb.append("`").append(sourceOptions.getDatabaseName()).append("`");
-        sqlSb.append(".");
-        sqlSb.append("`" + sourceOptions.getTableName() + "`");
-        LOG.info("LookUpFunction SQL [{}]", sqlSb.toString());
-        this.queryInfo = StarRocksSourceCommonFunc.getQueryInfo(this.sourceOptions, sqlSb.toString());
-        List<List<QueryBeXTablets>> lists = StarRocksSourceCommonFunc.splitQueryBeXTablets(1, queryInfo);
-        cacheMap = lists.get(0).parallelStream().flatMap(beXTablets -> {
-            StarRocksSourceBeReader beReader = new StarRocksSourceBeReader(
-                    beXTablets.getBeNode(),
-                    columnRichInfos,
-                    selectColumns,
-                    sourceOptions);
-            beReader.openScanner(beXTablets.getTabletIds(), queryInfo.getQueryPlan().getOpaqued_query_plan(), sourceOptions);
-            beReader.startToRead();
-            List<RowData> tmpDataList = new ArrayList<>();
-            while (beReader.hasNext()) {
-                RowData row = beReader.getNext();
-                tmpDataList.add(row);
+            List<RowData> curList = cacheMap.getIfPresent(keyRow);
+            if (curList != null) {
+                curList.parallelStream().forEach(this::collect);
+                return;
             }
-            return tmpDataList.stream();
-        }).collect(Collectors.groupingBy(row -> {
-            GenericRowData gRowData = (GenericRowData)row;
-            Object[] keyObj = new Object[filterRichInfos.length];
-            for (int i = 0; i < filterRichInfos.length; i ++) {
-                keyObj[i] = gRowData.getField(filterRichInfos[i].getColumnIndexInSchema());
+        }
+        for (int retry = 1; retry <= maxRetryTimes; retry++) {
+            // query
+            try {
+                statement.clearParameters();
+                statement = lookupKeyRowConverter.toExternal(keyRow, statement);
+                try (ResultSet resultSet = statement.executeQuery()) {
+                    ArrayList<RowData> rows = new ArrayList<>();
+                    while (resultSet.next()) {
+                        RowData rowData = jdbcRowConverter.toInternal(resultSet);
+                        rows.add(rowData);
+                    }
+                    rows.trimToSize();
+                    rows.parallelStream().forEach(this::collect);
+                    break;
+                }
+            } catch (SQLException e) {
+                LOG.error("query StarRocks error", e);
+                if (retry >= maxRetryTimes) {
+                    throw new RuntimeException("Exception of StarRocks lookup failed.", e);
+                }
+                try {
+                    if (!connectionProvider.getConnection().isValid(10)) {
+                        statement.close();
+                        connectionProvider.close();
+                        establishConnectionAndStatement();
+                    }
+                } catch (SQLException | ClassNotFoundException exception) {
+                    LOG.error("Jdbc Connection is not valid, and reestablish connection failed",
+                        exception);
+                    throw new RuntimeException("Reestablish JDBC connection failed", exception);
+                }
+                try {
+                    Thread.sleep(1000L * retry);
+                } catch (InterruptedException ie) {
+                    throw new RuntimeException(ie);
+                }
             }
-            return Row.of(keyObj);
-        }));
-        nextLoadTime = System.currentTimeMillis() + this.cacheExpireMs;
+
+        }
     }
 
     @Override
     public void close() throws Exception {
+        connectionProvider.close();
         super.close();
+    }
+
+    private void establishConnectionAndStatement() throws SQLException, ClassNotFoundException {
+        Connection dbConn = connectionProvider.getConnection();
+        statement = FieldNamedPreparedStatement.prepareStatement(dbConn, query, keyNames);
     }
 }

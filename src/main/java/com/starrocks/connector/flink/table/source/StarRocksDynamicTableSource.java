@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.flink.table.source;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
 import com.starrocks.connector.flink.table.source.struct.PushDownHolder;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
@@ -30,6 +31,7 @@ import org.apache.flink.table.connector.source.abilities.SupportsFilterPushDown;
 import org.apache.flink.table.connector.source.abilities.SupportsLimitPushDown;
 import org.apache.flink.table.connector.source.abilities.SupportsProjectionPushDown;
 import org.apache.flink.table.expressions.ResolvedExpression;
+import org.apache.flink.table.types.DataType;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -80,11 +82,21 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
             filerRichInfo[i] = columnRichInfo;
         }
 
+        String[] keyNames = new String[context.getKeys().length];
+        for (int i = 0; i < keyNames.length; i++) {
+            int[] innerKeyArr = context.getKeys()[i];
+            Preconditions.checkArgument(innerKeyArr.length == 1,
+                "StarRocks only support non-nested lookup keys"
+                );
+            keyNames[i] = flinkSchema.getFieldName(i).get();
+
+        }
+
         Map<String, ColumnRichInfo> columnMap = StarRocksSourceCommonFunc.genColumnMap(flinkSchema);
         List<ColumnRichInfo> ColumnRichInfos = StarRocksSourceCommonFunc.genColumnRichInfo(columnMap);
         SelectColumn[] selectColumns = StarRocksSourceCommonFunc.genSelectedColumns(columnMap, this.options, ColumnRichInfos);
 
-        StarRocksDynamicLookupFunction tableFunction = new StarRocksDynamicLookupFunction(this.options, filerRichInfo, ColumnRichInfos, selectColumns);
+        StarRocksDynamicLookupFunction tableFunction = new StarRocksDynamicLookupFunction(this.options, selectColumns);
         return TableFunctionProvider.of(tableFunction);
     }
 
