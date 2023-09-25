@@ -63,7 +63,30 @@ public class StarRocksJdbcConnectionProvider implements StarRocksJdbcConnectionI
     @Override
     public Connection reestablishConnection() throws SQLException, ClassNotFoundException {
         close();
-        connection = getConnection();
+        return getOrEstablishConnection();
+    }
+
+    public boolean isConnectionValid() throws SQLException {
+        return connection != null && connection.isValid(60);
+    }
+
+    @Override
+    public Connection getOrEstablishConnection() throws SQLException, ClassNotFoundException {
+        if (isConnectionValid() && !connection.isClosed() ) {
+            return connection;
+        }
+        try {
+            Class.forName(jdbcOptions.getCjDriverName());
+        } catch (ClassNotFoundException ex) {
+            LOG.warn("can not found class {}, try class {}", jdbcOptions.getCjDriverName(), jdbcOptions.getDriverName());
+            Class.forName(jdbcOptions.getDriverName());
+        }
+        if (jdbcOptions.getUsername().isPresent()) {
+            connection = DriverManager.getConnection(jdbcOptions.getDbURL(), jdbcOptions.getUsername().get(),
+                    jdbcOptions.getPassword().orElse(null));
+        } else {
+            connection = DriverManager.getConnection(jdbcOptions.getDbURL());
+        }
         return connection;
     }
 
