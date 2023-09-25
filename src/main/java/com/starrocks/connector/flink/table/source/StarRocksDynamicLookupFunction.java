@@ -14,122 +14,173 @@
 
 package com.starrocks.connector.flink.table.source;
 
-import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
-import com.starrocks.connector.flink.table.source.struct.QueryBeXTablets;
-import com.starrocks.connector.flink.table.source.struct.QueryInfo;
-import com.starrocks.connector.flink.table.source.struct.SelectColumn;
+import static java.lang.String.format;
+import static org.apache.flink.util.Preconditions.checkArgument;
+
+import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionOptions;
+import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
+import com.starrocks.connector.flink.converter.JdbcRowConverter;
+import com.starrocks.connector.flink.dialect.MySqlDialect;
+import com.starrocks.connector.flink.statement.FieldNamedPreparedStatement;
 import com.starrocks.connector.flink.tools.EnvUtils;
-import org.apache.flink.table.data.GenericRowData;
+import java.io.IOException;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
+
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.functions.FunctionContext;
-import org.apache.flink.table.functions.TableFunction;
-import org.apache.flink.types.Row;
+import org.apache.flink.table.functions.LookupFunction;
+import org.apache.flink.table.types.DataType;
+import org.apache.flink.table.types.logical.LogicalType;
+import org.apache.flink.table.types.logical.RowType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
+public class StarRocksDynamicLookupFunction extends LookupFunction {
 
-public class StarRocksDynamicLookupFunction extends TableFunction<RowData> {
-    
     private static final Logger LOG = LoggerFactory.getLogger(StarRocksDynamicLookupFunction.class);
-    
-    private final ColumnRichInfo[] filterRichInfos;
+
     private final StarRocksSourceOptions sourceOptions;
-    private QueryInfo queryInfo;
-    private final SelectColumn[] selectColumns;
-    private final List<ColumnRichInfo> columnRichInfos;
-    
-    private final long cacheMaxSize;
-    private final long cacheExpireMs;
     private final int maxRetryTimes;
 
     // cache for lookup data
-    private Map<Row, List<RowData>> cacheMap;
+    private final String[] keyNames;
 
-    private transient long nextLoadTime;
+    private final String query;
 
-    public StarRocksDynamicLookupFunction(StarRocksSourceOptions sourceOptions, 
-                                          ColumnRichInfo[] filterRichInfos,
-                                          List<ColumnRichInfo> columnRichInfos,
-                                          SelectColumn[] selectColumns
-                                          ) {
+    private final transient StarRocksJdbcConnectionProvider connectionProvider;
+
+    private transient FieldNamedPreparedStatement statement;
+
+    private final JdbcRowConverter lookupKeyRowConverter;
+
+    private final JdbcRowConverter jdbcRowConverter;
+
+    public StarRocksDynamicLookupFunction(StarRocksSourceOptions sourceOptions,
+        String[] fieldNames,
+        DataType[] fieldTypes,
+        String[] keyNames,
+        RowType rowType
+    ) {
         this.sourceOptions = sourceOptions;
-        this.filterRichInfos = filterRichInfos;
-        this.columnRichInfos = columnRichInfos;
-        this.selectColumns = selectColumns;
 
-        this.cacheMaxSize = sourceOptions.getLookupCacheMaxRows();
-        this.cacheExpireMs = sourceOptions.getLookupCacheTTL();
         this.maxRetryTimes = sourceOptions.getLookupMaxRetries();
-        
-        this.cacheMap = new HashMap<>();
-        this.nextLoadTime = -1L;
+
+        this.keyNames = keyNames;
+        MySqlDialect mySqlDialect = new MySqlDialect();
+        this.query = lookupSql(sourceOptions.getTableName(), fieldNames, keyNames);
+        connectionProvider = new StarRocksJdbcConnectionProvider(
+            new StarRocksJdbcConnectionOptions(
+                sourceOptions.getJdbcUrl(), sourceOptions.getUsername(),
+                sourceOptions.getPassword()));
+        this.jdbcRowConverter = mySqlDialect.getRowConverter(rowType);
+        List<String> nameList = Arrays.asList(fieldNames);
+        DataType[] keyTypes =
+            Arrays.stream(keyNames)
+                .map(
+                    s -> {
+                        checkArgument(
+                            nameList.contains(s),
+                            "keyName %s can't find in fieldNames %s.",
+                            s,
+                            nameList);
+                        return fieldTypes[nameList.indexOf(s)];
+                    })
+                .toArray(DataType[]::new);
+
+        this.lookupKeyRowConverter = mySqlDialect.getRowConverter(RowType.of(
+            Arrays.stream(keyTypes)
+                .map(DataType::getLogicalType)
+                .toArray(LogicalType[]::new)));
+
     }
-    
+
+    private String lookupSql(String tableName, String[] selectFields, String[] conditionFields){
+        String selectExpressions =
+                Arrays.stream(selectFields)
+                        .map(this::quoteIdentifier)
+                        .collect(Collectors.joining(", "));
+        String fieldExpressions =
+                Arrays.stream(conditionFields)
+                        .map(f -> format("%s = :%s", quoteIdentifier(f), f))
+                        .collect(Collectors.joining(" AND "));
+        return "SELECT "
+                + selectExpressions
+                + " FROM "
+                + quoteIdentifier(tableName)
+                + (conditionFields.length > 0 ? " WHERE " + fieldExpressions : "");
+    }
+
+    public String quoteIdentifier(String identifier) {
+        return "`" + identifier + "`";
+    }
+
     @Override
     public void open(FunctionContext context) throws Exception {
         super.open(context);
+        establishConnectionAndStatement();
         LOG.info("Open lookup function. {}", EnvUtils.getGitInformation());
     }
 
-    public void eval(Object... keys) {
-        reloadData();
-        Row keyRow = Row.of(keys);
-        List<RowData> curList = cacheMap.get(keyRow);
-        if (curList != null) {
-            curList.parallelStream().forEach(this::collect);
+    @Override
+    public Collection<RowData> lookup(RowData keyRow) throws IOException {
+        for (int retry = 0; retry <= maxRetryTimes; retry++) {
+            try {
+                statement = lookupKeyRowConverter.toExternal(keyRow, statement);
+                try (ResultSet resultSet = statement.executeQuery()) {
+                    ArrayList<RowData> rows = new ArrayList<>();
+                    while (resultSet.next()) {
+                        RowData row = jdbcRowConverter.toInternal(resultSet);
+                        rows.add(row);
+                    }
+                    rows.trimToSize();
+                    return rows;
+                }
+            } catch (SQLException e) {
+                LOG.error(String.format("JDBC executeBatch error, retry times = %d", retry), e);
+                if (retry >= maxRetryTimes) {
+                    throw new RuntimeException("Execution of JDBC statement failed.", e);
+                }
+
+                try {
+                    if (!connectionProvider.isConnectionValid()) {
+                        statement.close();
+                        connectionProvider.close();
+                        establishConnectionAndStatement();
+                    }
+                } catch (SQLException | ClassNotFoundException exception) {
+                    LOG.error(
+                        "JDBC connection is not valid, and reestablish connection failed",
+                        exception);
+                    throw new RuntimeException("Reestablish JDBC connection failed", exception);
+                }
+
+                try {
+                    Thread.sleep(1000L * retry);
+                } catch (InterruptedException e1) {
+                    throw new RuntimeException(e1);
+                }
+            }
         }
+        return Collections.emptyList();
     }
 
-    private void reloadData() {
-        if (nextLoadTime > System.currentTimeMillis()) {
-            return;
-        }
-        if (nextLoadTime > 0) {
-            LOG.info("Lookup join cache has expired after {} (ms), reloading", this.cacheExpireMs);
-        } else {
-            LOG.info("Populating lookup join cache");
-        }
-        cacheMap.clear();
-        
-        StringBuilder sqlSb = new StringBuilder("select * from ");
-        sqlSb.append("`").append(sourceOptions.getDatabaseName()).append("`");
-        sqlSb.append(".");
-        sqlSb.append("`" + sourceOptions.getTableName() + "`");
-        LOG.info("LookUpFunction SQL [{}]", sqlSb.toString());
-        this.queryInfo = StarRocksSourceCommonFunc.getQueryInfo(this.sourceOptions, sqlSb.toString());
-        List<List<QueryBeXTablets>> lists = StarRocksSourceCommonFunc.splitQueryBeXTablets(1, queryInfo);
-        cacheMap = lists.get(0).parallelStream().flatMap(beXTablets -> {
-            StarRocksSourceBeReader beReader = new StarRocksSourceBeReader(
-                    beXTablets.getBeNode(),
-                    columnRichInfos,
-                    selectColumns,
-                    sourceOptions);
-            beReader.openScanner(beXTablets.getTabletIds(), queryInfo.getQueryPlan().getOpaqued_query_plan(), sourceOptions);
-            beReader.startToRead();
-            List<RowData> tmpDataList = new ArrayList<>();
-            while (beReader.hasNext()) {
-                RowData row = beReader.getNext();
-                tmpDataList.add(row);
-            }
-            return tmpDataList.stream();
-        }).collect(Collectors.groupingBy(row -> {
-            GenericRowData gRowData = (GenericRowData)row;
-            Object[] keyObj = new Object[filterRichInfos.length];
-            for (int i = 0; i < filterRichInfos.length; i ++) {
-                keyObj[i] = gRowData.getField(filterRichInfos[i].getColumnIndexInSchema());
-            }
-            return Row.of(keyObj);
-        }));
-        nextLoadTime = System.currentTimeMillis() + this.cacheExpireMs;
-    }
 
     @Override
     public void close() throws Exception {
+        connectionProvider.close();
         super.close();
+    }
+
+    private void establishConnectionAndStatement() throws SQLException, ClassNotFoundException {
+        Connection dbConn = connectionProvider.getConnection();
+        statement = FieldNamedPreparedStatement.prepareStatement(dbConn, query, keyNames);
     }
 }
