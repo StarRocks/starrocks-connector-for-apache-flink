@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.flink.table.source;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
 import com.starrocks.connector.flink.table.source.struct.PushDownHolder;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
@@ -30,9 +29,15 @@ import org.apache.flink.table.connector.source.TableFunctionProvider;
 import org.apache.flink.table.connector.source.abilities.SupportsFilterPushDown;
 import org.apache.flink.table.connector.source.abilities.SupportsLimitPushDown;
 import org.apache.flink.table.connector.source.abilities.SupportsProjectionPushDown;
+import org.apache.flink.table.connector.source.lookup.LookupFunctionProvider;
+import org.apache.flink.table.connector.source.lookup.PartialCachingLookupProvider;
+import org.apache.flink.table.connector.source.lookup.cache.LookupCache;
 import org.apache.flink.table.expressions.ResolvedExpression;
 import org.apache.flink.table.types.DataType;
+import org.apache.flink.table.types.logical.RowType;
+import org.apache.flink.util.Preconditions;
 
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedList;
@@ -40,16 +45,29 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-public class StarRocksDynamicTableSource implements ScanTableSource, LookupTableSource, SupportsLimitPushDown, SupportsFilterPushDown, SupportsProjectionPushDown {
+public class StarRocksDynamicTableSource implements ScanTableSource, LookupTableSource,
+    SupportsLimitPushDown, SupportsFilterPushDown, SupportsProjectionPushDown {
 
     private final TableSchema flinkSchema;
     private final StarRocksSourceOptions options;
     private final PushDownHolder pushDownHolder;
 
-    public StarRocksDynamicTableSource(StarRocksSourceOptions options, TableSchema schema, PushDownHolder pushDownHolder) {
+    @Nullable
+    private final LookupCache cache;
+
+    private DataType physicalRowDataType;
+
+    public StarRocksDynamicTableSource(StarRocksSourceOptions options,
+        TableSchema schema,
+        PushDownHolder pushDownHolder,
+        @Nullable LookupCache cache,
+        DataType physicalRowDataType
+    ) {
         this.options = options;
         this.flinkSchema = schema;
         this.pushDownHolder = pushDownHolder;
+        this.cache = cache;
+        this.physicalRowDataType = physicalRowDataType;
     }
 
     @Override
@@ -60,49 +78,45 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
     @Override
     public ScanRuntimeProvider getScanRuntimeProvider(ScanContext scanContext) {
         StarRocksDynamicSourceFunction sourceFunction = new StarRocksDynamicSourceFunction(
-            options, flinkSchema, 
-            this.pushDownHolder.getFilter(), 
-            this.pushDownHolder.getLimit(), 
-            this.pushDownHolder.getSelectColumns(), 
-            this.pushDownHolder.getColumns(), 
+            options, flinkSchema,
+            this.pushDownHolder.getFilter(),
+            this.pushDownHolder.getLimit(),
+            this.pushDownHolder.getSelectColumns(),
+            this.pushDownHolder.getColumns(),
             this.pushDownHolder.getQueryType());
         return SourceFunctionProvider.of(sourceFunction, true);
     }
 
     @Override
     public LookupRuntimeProvider getLookupRuntimeProvider(LookupContext context) {
-        int[] projectedFields = Arrays.stream(context.getKeys()).mapToInt(value -> value[0]).toArray();
-        ColumnRichInfo[] filerRichInfo = new ColumnRichInfo[projectedFields.length];
-        for (int i = 0; i < projectedFields.length; i ++) {
-            ColumnRichInfo columnRichInfo = new ColumnRichInfo(
-                this.flinkSchema.getFieldName(projectedFields[i]).get(), 
-                projectedFields[i],
-                this.flinkSchema.getFieldDataType(projectedFields[i]).get()
-            );
-            filerRichInfo[i] = columnRichInfo;
-        }
-
+        // JDBC only support non-nested look up keys
         String[] keyNames = new String[context.getKeys().length];
         for (int i = 0; i < keyNames.length; i++) {
             int[] innerKeyArr = context.getKeys()[i];
-            Preconditions.checkArgument(innerKeyArr.length == 1,
-                "StarRocks only support non-nested lookup keys"
-                );
-            keyNames[i] = flinkSchema.getFieldName(i).get();
-
+            Preconditions.checkArgument(
+                innerKeyArr.length == 1, "JDBC only support non-nested look up keys");
+            keyNames[i] = DataType.getFieldNames(physicalRowDataType).get(innerKeyArr[0]);
         }
+        final RowType rowType = (RowType) physicalRowDataType.getLogicalType();
 
-        Map<String, ColumnRichInfo> columnMap = StarRocksSourceCommonFunc.genColumnMap(flinkSchema);
-        List<ColumnRichInfo> ColumnRichInfos = StarRocksSourceCommonFunc.genColumnRichInfo(columnMap);
-        SelectColumn[] selectColumns = StarRocksSourceCommonFunc.genSelectedColumns(columnMap, this.options, ColumnRichInfos);
-
-        StarRocksDynamicLookupFunction tableFunction = new StarRocksDynamicLookupFunction(this.options, selectColumns);
-        return TableFunctionProvider.of(tableFunction);
+        StarRocksDynamicLookupFunction lookupFunction =
+            new StarRocksDynamicLookupFunction(
+                options,
+                DataType.getFieldNames(physicalRowDataType).toArray(new String[0]),
+                DataType.getFieldDataTypes(physicalRowDataType).toArray(new DataType[0]),
+                keyNames,
+                rowType);
+        if (cache != null) {
+            return PartialCachingLookupProvider.of(lookupFunction, cache);
+        } else {
+            return LookupFunctionProvider.of(lookupFunction);
+        }
     }
 
     @Override
     public DynamicTableSource copy() {
-        return new StarRocksDynamicTableSource(this.options, this.flinkSchema, this.pushDownHolder);
+        return new StarRocksDynamicTableSource(this.options, this.flinkSchema, this.pushDownHolder,
+            cache, physicalRowDataType);
     }
 
     @Override
@@ -118,15 +132,16 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
     @Override
     public void applyProjection(int[][] projectedFields) {
         // if columns = "*", this func will not be called, so 'selectColumns' will be null
-        int[] curProjectedFields = Arrays.stream(projectedFields).mapToInt(value -> value[0]).toArray();
-        if (curProjectedFields.length == 0 ) {
+        int[] curProjectedFields = Arrays.stream(projectedFields).mapToInt(value -> value[0])
+            .toArray();
+        if (curProjectedFields.length == 0) {
             this.pushDownHolder.setQueryType(StarRocksSourceQueryType.QueryCount);
             return;
         }
         this.pushDownHolder.setQueryType(StarRocksSourceQueryType.QuerySomeColumns);
 
         ArrayList<String> columnList = new ArrayList<>();
-        ArrayList<SelectColumn> selectColumns = new ArrayList<SelectColumn>(); 
+        ArrayList<SelectColumn> selectColumns = new ArrayList<SelectColumn>();
         for (int index : curProjectedFields) {
             String columnName = flinkSchema.getFieldName(index).get();
             columnList.add(columnName);
@@ -134,7 +149,8 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
         }
         String columns = String.join(", ", columnList);
         this.pushDownHolder.setColumns(columns);
-        this.pushDownHolder.setSelectColumns(selectColumns.toArray(new SelectColumn[selectColumns.size()]));
+        this.pushDownHolder.setSelectColumns(
+            selectColumns.toArray(new SelectColumn[selectColumns.size()]));
     }
 
     @Override
@@ -145,7 +161,8 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
 
         StarRocksExpressionExtractor extractor = new StarRocksExpressionExtractor();
         for (ResolvedExpression expression : filtersExpressions) {
-            if (expression.getOutputDataType().equals(DataTypes.BOOLEAN()) && expression.getChildren().size() == 0) {
+            if (expression.getOutputDataType().equals(DataTypes.BOOLEAN())
+                && expression.getChildren().size() == 0) {
                 filters.add(expression.accept(extractor) + " = true");
                 ac.add(expression);
                 continue;

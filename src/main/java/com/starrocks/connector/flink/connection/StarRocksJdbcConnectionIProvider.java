@@ -16,6 +16,7 @@ package com.starrocks.connector.flink.connection;
 
 import org.apache.flink.annotation.Internal;
 import java.sql.Connection;
+import java.sql.SQLException;
 
 /**
  * connection provider.
@@ -26,6 +27,8 @@ public interface StarRocksJdbcConnectionIProvider {
     Connection getConnection() throws Exception;
 
     Connection reestablishConnection() throws Exception;
+
+    boolean isConnectionValid() throws SQLException;
 
     void close();
     

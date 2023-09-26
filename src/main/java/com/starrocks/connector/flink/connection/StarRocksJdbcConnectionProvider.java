@@ -67,6 +67,11 @@ public class StarRocksJdbcConnectionProvider implements StarRocksJdbcConnectionI
         return connection;
     }
 
+    public boolean isConnectionValid() throws SQLException {
+        return connection != null
+            && connection.isValid(60);
+    }
+
     @Override
     public void close() {
         if (connection == null) {

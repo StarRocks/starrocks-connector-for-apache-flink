@@ -18,28 +18,62 @@ import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.connector.source.DynamicTableSource;
+import org.apache.flink.table.connector.source.lookup.LookupOptions;
+import org.apache.flink.table.connector.source.lookup.cache.DefaultLookupCache;
+import org.apache.flink.table.connector.source.lookup.cache.LookupCache;
 import org.apache.flink.table.factories.DynamicTableSourceFactory;
 import org.apache.flink.table.factories.FactoryUtil;
 import org.apache.flink.table.utils.TableSchemaUtils;
 
+import java.time.Duration;
 import java.util.HashSet;
 import java.util.Set;
 
 import com.starrocks.connector.flink.table.source.struct.PushDownHolder;
+import javax.annotation.Nullable;
+
+import static com.starrocks.connector.flink.table.source.StarRocksSourceOptions.LOOKUP_CACHE_MAX_ROWS;
+import static com.starrocks.connector.flink.table.source.StarRocksSourceOptions.LOOKUP_CACHE_MISSING_KEY;
+import static com.starrocks.connector.flink.table.source.StarRocksSourceOptions.LOOKUP_CACHE_TTL_MS;
 
 
 public final class StarRocksDynamicTableSourceFactory implements DynamicTableSourceFactory {
 
     @Override
     public DynamicTableSource createDynamicTableSource(Context context) {
-        final FactoryUtil.TableFactoryHelper helper = FactoryUtil.createTableFactoryHelper(this, context);
+        final FactoryUtil.TableFactoryHelper helper = FactoryUtil.createTableFactoryHelper(this,
+            context);
         helper.validateExcept(StarRocksSourceOptions.SOURCE_PROPERTIES_PREFIX);
         ReadableConfig options = helper.getOptions();
         // validate some special properties
-        StarRocksSourceOptions sourceOptions = new StarRocksSourceOptions(options, context.getCatalogTable().getOptions());
-        TableSchema flinkSchema = TableSchemaUtils.getPhysicalSchema(context.getCatalogTable().getSchema());
+        StarRocksSourceOptions sourceOptions = new StarRocksSourceOptions(options,
+            context.getCatalogTable().getOptions());
+        TableSchema flinkSchema = TableSchemaUtils.getPhysicalSchema(
+            context.getCatalogTable().getSchema());
         PushDownHolder pushDownHolder = new PushDownHolder();
-        return new StarRocksDynamicTableSource(sourceOptions, flinkSchema, pushDownHolder);
+        return new StarRocksDynamicTableSource(sourceOptions, flinkSchema, pushDownHolder,
+            getLookupCache(options), context.getPhysicalRowDataType());
+    }
+
+    @Nullable
+    private LookupCache getLookupCache(ReadableConfig tableOptions) {
+        LookupCache cache = null;
+        // Legacy cache options
+        if (tableOptions.get(LOOKUP_CACHE_MAX_ROWS) > 0
+            && tableOptions.get(LOOKUP_CACHE_TTL_MS).compareTo(0L) > 0) {
+            cache =
+                DefaultLookupCache.newBuilder()
+                    .maximumSize(tableOptions.get(LOOKUP_CACHE_MAX_ROWS))
+                    .expireAfterWrite(Duration.ofMillis(tableOptions.get(LOOKUP_CACHE_TTL_MS)))
+                    .cacheMissingKey(tableOptions.get(LOOKUP_CACHE_MISSING_KEY))
+                    .build();
+        }
+        if (tableOptions
+            .get(LookupOptions.CACHE_TYPE)
+            .equals(LookupOptions.LookupCacheType.PARTIAL)) {
+            cache = DefaultLookupCache.fromConfig(tableOptions);
+        }
+        return cache;
     }
 
 
@@ -72,8 +106,8 @@ public final class StarRocksDynamicTableSourceFactory implements DynamicTableSou
         options.add(StarRocksSourceOptions.SCAN_MEM_LIMIT);
         options.add(StarRocksSourceOptions.SCAN_MAX_RETRIES);
         options.add(StarRocksSourceOptions.SCAN_BE_HOST_MAPPING_LIST);
-        options.add(StarRocksSourceOptions.LOOKUP_CACHE_TTL_MS);
-        options.add(StarRocksSourceOptions.LOOKUP_CACHE_MAX_ROWS);
+        options.add(LOOKUP_CACHE_TTL_MS);
+        options.add(LOOKUP_CACHE_MAX_ROWS);
         options.add(StarRocksSourceOptions.LOOKUP_MAX_RETRIES);
         return options;
     }

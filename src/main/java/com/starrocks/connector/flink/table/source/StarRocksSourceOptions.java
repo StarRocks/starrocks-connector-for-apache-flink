@@ -105,7 +105,7 @@ public class StarRocksSourceOptions implements Serializable {
     public static final ConfigOption<Integer> LOOKUP_MAX_RETRIES = ConfigOptions.key("lookup.max-retries")
             .intType().defaultValue(1).withDescription("the max retry times if lookup database failed.");
 
-    public static final ConfigOption<Boolean> PARTIAL_CACHE_CACHE_MISSING_KEY = ConfigOptions.key("lookup.partial-cache.cache-missing-key")
+    public static final ConfigOption<Boolean> LOOKUP_CACHE_MISSING_KEY = ConfigOptions.key("lookup.partial-cache.cache-missing-key")
         .booleanType().defaultValue(true).withDescription("Whether to store an empty value into the cache if the lookup key doesn't match any rows in the table");
 
     public static final ConfigOption<LookupCacheType> CACHE_TYPE = ConfigOptions.key("lookup.type")
