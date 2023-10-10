@@ -270,7 +270,7 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
             // there are many corner cases that can lead to non-ok status. some of them are
             // 1. TXN_NOT_EXISTS: transaction timeout and the label is cleanup up
             // 2. Failed: the error message can be "has no backend", The case is that FE leader restarts, and after
-            //    that commit the transaction repeatedly because flink job continues failover for some reason , but
+            //    that commit the transaction repeatedly because flink/spark job continues failover for some reason , but
             //    the transaction actually success, and this commit should be successful
             // To reduce the dependency for the returned status type, always check the label state
             String labelState = getLabelState(host, transaction.getDatabase(), transaction.getTable(), transaction.getLabel(), Collections.emptySet());
