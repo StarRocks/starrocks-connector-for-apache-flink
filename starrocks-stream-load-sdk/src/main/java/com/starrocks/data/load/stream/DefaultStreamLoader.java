@@ -391,7 +391,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
         if (307 == code) {
             String errorMsg = String.format("Request %s failed because http response code is 307 which means 'Temporary Redirect'. " +
                     "This can happen when FE responds the request slowly , you should find the reason first. The reason may be " +
-                    "StarRocks FE/Flink GC, network delay, or others. db: %s, table: %s, label: %s, response status line: %s",
+                    "StarRocks FE/Flink/Spark GC, network delay, or others. db: %s, table: %s, label: %s, response status line: %s",
                     requestType, db, table, label, response.getStatusLine());
             log.error("{}", errorMsg);
             throw new StreamLoadFailException(errorMsg);
