@@ -29,8 +29,14 @@ public class StarRocksDynamicTableSinkFactory implements DynamicTableSinkFactory
 
     @Override
     public DynamicTableSink createDynamicTableSink(Context context) {
+       return createDynamicTableSink(context, true);
+    }
+
+    public DynamicTableSink createDynamicTableSink(Context context, boolean needValidate) {
         final FactoryUtil.TableFactoryHelper helper = FactoryUtil.createTableFactoryHelper(this, context);
-        helper.validateExcept(StarRocksSinkOptions.SINK_PROPERTIES_PREFIX);
+        if (needValidate) {
+            helper.validateExcept(StarRocksSinkOptions.SINK_PROPERTIES_PREFIX);
+        }
         ReadableConfig options = helper.getOptions();
         // validate some special properties
         StarRocksSinkOptions sinkOptions = new StarRocksSinkOptions(options, context.getCatalogTable().getOptions());

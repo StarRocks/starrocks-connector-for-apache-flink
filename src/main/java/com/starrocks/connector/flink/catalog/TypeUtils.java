@@ -60,45 +60,54 @@ public class TypeUtils {
     public static final String DATETIME = "DATETIME";
     public static final String JSON = "JSON";
 
-    public static DataType toFlinkType(String starRocksType, @Nullable Integer precision, @Nullable Integer scale) {
+    public static final int MAX_VARCHAR_SIZE = 1048576;
+    public static final int STRING_SIZE = 65533;
+
+    public static DataType toFlinkType(
+            String starRocksType,
+            @Nullable Integer precision,
+            @Nullable Integer scale,
+            boolean isNull) {
         switch (starRocksType.toUpperCase()) {
             case BOOLEAN:
-                return DataTypes.BOOLEAN();
+                return wrapNull(DataTypes.BOOLEAN(), isNull);
             case TINYINT:
                 // mysql does not have boolean type, and starrocks `information_schema`.`COLUMNS` will return
                 // a "tinyint" data type for both StarRocks BOOLEAN and TINYINT type, We distinguish them by
                 // column size, and the size of BOOLEAN is null
-                return precision == null ? DataTypes.BOOLEAN() : DataTypes.TINYINT();
+                return precision == null
+                        ? wrapNull(DataTypes.BOOLEAN(), isNull)
+                        : wrapNull(DataTypes.TINYINT(), isNull);
             case SMALLINT:
-                return DataTypes.SMALLINT();
+                return wrapNull(DataTypes.SMALLINT(), isNull);
             case INT:
-                return DataTypes.INT();
+                return wrapNull(DataTypes.INT(), isNull);
             case BIGINT:
-                return DataTypes.BIGINT();
+                return wrapNull(DataTypes.BIGINT(), isNull);
             case LARGEINT:
-                return DataTypes.STRING();
+                return wrapNull(DataTypes.STRING(), isNull);
             case FLOAT:
-                return DataTypes.FLOAT();
+                return wrapNull(DataTypes.FLOAT(), isNull);
             case DOUBLE:
-                return DataTypes.DOUBLE();
+                return wrapNull(DataTypes.DOUBLE(), isNull);
             case DECIMAL:
                 Preconditions.checkNotNull(precision, "Precision for StarRocks DECIMAL can't be null.");
                 Preconditions.checkNotNull(scale, "Scale for StarRocks DECIMAL can't be null.");
-                return DataTypes.DECIMAL(precision, scale);
+                return wrapNull(DataTypes.DECIMAL(precision, scale), isNull);
             case CHAR:
                 Preconditions.checkNotNull(precision, "Precision for StarRocks CHAR can't be null.");
-                return DataTypes.CHAR(precision);
+                return wrapNull(DataTypes.CHAR(precision), isNull);
             case VARCHAR:
                 Preconditions.checkNotNull(precision, "Precision for StarRocks VARCHAR can't be null.");
-                return DataTypes.VARCHAR(precision);
+                return wrapNull(DataTypes.VARCHAR(precision), isNull);
             case STRING:
-                return DataTypes.STRING();
+                return wrapNull(DataTypes.STRING(), isNull);
             case DATE:
-                return DataTypes.DATE();
+                return wrapNull(DataTypes.DATE(), isNull);
             case DATETIME:
-                return DataTypes.TIMESTAMP();
+                return wrapNull(DataTypes.TIMESTAMP(0), isNull);
             case JSON:
-                return DataTypes.STRING();
+                return wrapNull(DataTypes.STRING(), isNull);
             default:
                 throw new UnsupportedOperationException(
                         String.format(
@@ -106,6 +115,10 @@ public class TypeUtils {
                                         "You can try to create table directly if you want to map this StarRocks type.",
                                 starRocksType));
         }
+    }
+
+    private static DataType wrapNull(DataType dataType, boolean isNull) {
+        return isNull ? dataType.nullable() : dataType.notNull();
     }
 
     public static void toStarRocksType(StarRocksColumn.Builder builder, LogicalType flinkType) {
@@ -130,7 +143,7 @@ public class TypeUtils {
         @Override
         public StarRocksColumn.Builder visit(VarCharType varCharType) {
             builder.setType(VARCHAR);
-            builder.setSize(varCharType.getLength());
+            builder.setSize(Math.min(varCharType.getLength(), MAX_VARCHAR_SIZE));
             return builder;
         }
 

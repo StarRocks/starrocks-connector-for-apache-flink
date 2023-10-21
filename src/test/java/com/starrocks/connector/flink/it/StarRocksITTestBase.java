@@ -1,4 +1,6 @@
 /*
+ * Copyright 2021-present StarRocks, Inc. All rights reserved.
+ *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,13 +20,10 @@
 
 package com.starrocks.connector.flink.it;
 
-import com.esotericsoftware.minlog.Log;
-import com.starrocks.connector.flink.container.StarRocksCluster;
-import org.apache.flink.types.Row;
-import org.apache.flink.util.TestLogger;
 import org.junit.AfterClass;
-import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Rule;
+import org.junit.rules.TemporaryFolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,37 +31,62 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.function.Function;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.Assume.assumeTrue;
 
-/** Abstract IT case class for StarRocks. */
-public abstract class StarRocksITTestBase extends TestLogger {
+public abstract class StarRocksITTestBase {
 
     private static final Logger LOG = LoggerFactory.getLogger(StarRocksITTestBase.class);
 
-    public static StarRocksCluster STARROCKS_CLUSTER =
-            new StarRocksCluster(1, 0, 3);
+    private static final boolean DEBUG_MODE = false;
+
+    @Rule
+    public TemporaryFolder temporaryFolder = new TemporaryFolder();
+
+    protected static String DB_NAME;
+    protected static String HTTP_URLS;
+    protected static String JDBC_URLS;
+
+    protected static String getHttpUrls() {
+        return HTTP_URLS;
+    }
+
+    protected static String getJdbcUrl() {
+        return JDBC_URLS;
+    }
 
     protected static Connection DB_CONNECTION;
 
+    protected static Set<String> DATABASE_SET_TO_CLEAN;
+
     @BeforeClass
     public static void setUp() throws Exception {
-        try {
-            STARROCKS_CLUSTER.start();
-            LOG.info("StarRocks cluster is started.");
-        } catch (Exception e) {
-            LOG.error("Failed to star StarRocks cluster.", e);
-            throw e;
-        }
-        Log.info("StarRocks cluster try to connect.");
+        HTTP_URLS = DEBUG_MODE ? "127.0.0.1:11901" : System.getProperty("http_urls");
+        JDBC_URLS = DEBUG_MODE ? "jdbc:mysql://127.0.0.1:11903" : System.getProperty("jdbc_urls");
+        assumeTrue(HTTP_URLS != null && JDBC_URLS != null);
+
+        DB_NAME = "sr_test_" + genRandomUuid();
         try {
             DB_CONNECTION = DriverManager.getConnection(getJdbcUrl(), "root", "");
             LOG.info("Success to create db connection via jdbc {}", getJdbcUrl());
         } catch (Exception e) {
             LOG.error("Failed to create db connection via jdbc {}", getJdbcUrl(), e);
+            throw e;
+        }
+
+        DATABASE_SET_TO_CLEAN = new HashSet<>();
+        try {
+            DATABASE_SET_TO_CLEAN.add(DB_NAME);
+            createDatabase(DB_NAME);
+            LOG.info("Successful to create database {}", DB_NAME);
+        } catch (Exception e) {
+            LOG.error("Failed to create database {}", DB_NAME, e);
             throw e;
         }
     }
@@ -70,92 +94,47 @@ public abstract class StarRocksITTestBase extends TestLogger {
     @AfterClass
     public static void tearDown() throws Exception {
         if (DB_CONNECTION != null) {
+            for (String database : DATABASE_SET_TO_CLEAN) {
+                try {
+                    String dropDb = String.format("DROP DATABASE IF EXISTS %s FORCE", database);
+                    executeSrSQL(dropDb);
+                    LOG.info("Successful to drop database {}", DB_NAME);
+                } catch (Exception e) {
+                    LOG.error("Failed to drop database {}", DB_NAME, e);
+                }
+            }
             DB_CONNECTION.close();
-            LOG.info("Close db connection");
-        }
-
-        if (STARROCKS_CLUSTER != null) {
-            STARROCKS_CLUSTER.stop();
-            STARROCKS_CLUSTER.close();
-            Log.info("Stop and close StarRocks cluster.");
         }
     }
 
-    protected static String getJdbcUrl() {
-        return "jdbc:mysql://" + STARROCKS_CLUSTER.getQueryUrls();
+    protected static String genRandomUuid() {
+        return UUID.randomUUID().toString().replace("-", "_");
     }
 
-    /**
-     * Query the data in the table, and compare the result with the expected data.
-     *
-     * <p> For example, we can call this method as follows:
-     *      verifyResult(
-     *                 new Row[] {
-     *                     Row.of("1", 1.4, Timestamp.valueOf("2022-09-06 20:00:00.000")),
-     *                     Row.of("2", 2.4, Timestamp.valueOf("2022-09-06 20:00:00.000")),
-     *                 },
-     *                 "select * from db.table"
-     *             );
-     */
-    public static void verifyResult(Row[] expectedData, String sql) throws Exception {
-        ArrayList<Row> resultData = getSQLResult(sql);
-        LOG.info("resultData: {}",resultData);
-        LOG.info("expectedData: {}",Arrays.asList(expectedData));
-        assertEquals(expectedData.length, resultData.size());
-        for (int i = 0; i < expectedData.length; i++) {
-            assertEquals(expectedData[i].toString(), resultData.get(i).toString());
+    protected static void createDatabase(String database) throws Exception {
+        try (Statement statement = DB_CONNECTION.createStatement()) {
+            DATABASE_SET_TO_CLEAN.add(database);
+            statement.executeUpdate(String.format("CREATE DATABASE %s;", database));
         }
     }
 
-    public static ArrayList<Row> getSQLResult(String sql) throws Exception {
-        if (!DB_CONNECTION.isValid(3000)) {
-            reestablishConnection();
-        }
-        ArrayList<Row> resultData = new ArrayList<>();
-        try (PreparedStatement statement = DB_CONNECTION.prepareStatement(sql);
-             ResultSet resultSet = statement.executeQuery()) {
-            int columnCount = resultSet.getMetaData().getColumnCount();
-            while (resultSet.next()) {
-                Row row = new Row(columnCount);
-                for (int i = 0; i < columnCount; i++) {
-                    row.setField(i, resultSet.getObject(i + 1));
+    protected static List<String> listDatabase() throws Exception {
+        List<String> databaseList = new ArrayList<>();
+        try (Statement statement = DB_CONNECTION.createStatement()) {
+            try (ResultSet resultSet = statement.executeQuery(
+                    "SELECT `SCHEMA_NAME` FROM `INFORMATION_SCHEMA`.`SCHEMATA`;")) {
+                while (resultSet.next()) {
+                    String columnValue = resultSet.getString(1);
+                    databaseList.add(columnValue);
                 }
-                resultData.add(row);
             }
         }
-        return resultData;
+        return databaseList;
     }
 
-    private static void reestablishConnection() throws Exception{
-        try {
-            DB_CONNECTION = DriverManager.getConnection(getJdbcUrl(), "root", "");
-            LOG.info("Success to create db connection via jdbc {}", getJdbcUrl());
-        } catch (Exception e) {
-            LOG.error("Failed to create db connection via jdbc {}", getJdbcUrl(), e);
-            throw e;
-        }
-    }
-
-    public static void verifyResult(Function<Row[], Boolean> verifyFunction, String sql) throws Exception {
-        ArrayList<Row> resultData = new ArrayList<>();
-        if (!DB_CONNECTION.isValid(3000)) {
-            reestablishConnection();
-        }
-        try (PreparedStatement statement = DB_CONNECTION.prepareStatement(sql);
-             ResultSet resultSet = statement.executeQuery()) {
-            int columnCount = resultSet.getMetaData().getColumnCount();
-            while (resultSet.next()) {
-                Row row = new Row(columnCount);
-                for (int i = 0; i < columnCount; i++) {
-                    row.setField(i, resultSet.getObject(i + 1));
-                }
-                resultData.add(row);
-            }
-        }
-        if (!verifyFunction.apply(resultData.toArray(new Row[0])))
-        {
-            LOG.info("verifyResult is : {}", resultData.toString());
-            Assert.fail();
+    protected static void executeSrSQL(String sql) throws Exception {
+        try (PreparedStatement statement = DB_CONNECTION.prepareStatement(sql)) {
+            statement.execute();
         }
     }
 }

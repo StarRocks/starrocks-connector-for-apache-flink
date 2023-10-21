@@ -32,13 +32,11 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * Note this factory is only used for catalog currently, and maybe unify it with
+ * Note this factory is only used for catalog currently, and can unify it with
  * {@link StarRocksDynamicTableSourceFactory} and {@link StarRocksDynamicTableSinkFactory}
  * in the future.
  */
 public class StarRocksDynamicTableFactory implements DynamicTableSinkFactory, DynamicTableSourceFactory {
-
-    public static final String IDENTIFIER = "starrocks";
 
     private final StarRocksDynamicTableSourceFactory sourceFactory;
     private final StarRocksDynamicTableSinkFactory sinkFactory;
@@ -50,17 +48,17 @@ public class StarRocksDynamicTableFactory implements DynamicTableSinkFactory, Dy
 
     @Override
     public String factoryIdentifier() {
-        return IDENTIFIER;
+        return CatalogOptions.IDENTIFIER;
     }
 
     @Override
     public DynamicTableSource createDynamicTableSource(Context context) {
-        return sourceFactory.createDynamicTableSource(context);
+        return sourceFactory.createDynamicTableSource(context, false);
     }
 
     @Override
     public DynamicTableSink createDynamicTableSink(Context context) {
-        return sinkFactory.createDynamicTableSink(context);
+        return sinkFactory.createDynamicTableSink(context, false);
     }
 
     @Override

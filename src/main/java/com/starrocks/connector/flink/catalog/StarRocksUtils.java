@@ -148,7 +148,12 @@ public class StarRocksUtils {
         }
         starRocksTableBuilder.setComment(flinkTable.getComment());
         starRocksTableBuilder.setTableProperties(
-                ConfigUtils.getPrefixConfigs(CatalogOptions.TABLE_PROPERTIES_PREFIX, tableBaseConfig.toMap()));
+                    ConfigUtils.getPrefixConfigs(
+                        CatalogOptions.TABLE_PROPERTIES_PREFIX,
+                        tableBaseConfig.toMap(),
+                        true
+                    )
+                );
         return starRocksTableBuilder.build();
     }
 

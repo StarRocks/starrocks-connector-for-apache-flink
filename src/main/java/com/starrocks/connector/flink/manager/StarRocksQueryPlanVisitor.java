@@ -19,7 +19,7 @@ import com.starrocks.connector.flink.table.source.StarRocksSourceOptions;
 import com.starrocks.connector.flink.table.source.struct.QueryBeXTablets;
 import com.starrocks.connector.flink.table.source.struct.QueryInfo;
 import com.starrocks.connector.flink.table.source.struct.QueryPlan;
-
+import com.starrocks.connector.flink.tools.JsonWrapper;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -137,8 +137,7 @@ public class StarRocksQueryPlanVisitor implements Serializable {
             LOG.warn("Request failed with empty response.");
             throw new RuntimeException("Request failed with empty response." + requsetCode);
         }
-        JSONObject jsonObject = JSONObject.parseObject(respString);
-        return JSONObject.toJavaObject(jsonObject, QueryPlan.class);
+        return new JsonWrapper().parseObject(respString, QueryPlan.class);
     }
 
     private static String getBasicAuthHeader(String username, String password) {

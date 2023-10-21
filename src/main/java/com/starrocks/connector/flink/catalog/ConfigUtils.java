@@ -25,12 +25,17 @@ import java.util.Map;
 
 public class ConfigUtils {
 
-    public static Map<String, String> getPrefixConfigs(String prefix, Map<String, String> conf) {
+    public static Map<String, String> getPrefixConfigs(
+            String prefix, Map<String, String> conf, boolean removePrefix) {
         Map<String, String> result = new HashMap<>();
         for (Map.Entry<String, String> entry : conf.entrySet()) {
             String key = entry.getKey();
             if (key.startsWith(prefix)) {
-                result.put(key.substring(prefix.length()), entry.getValue());
+                if (removePrefix) {
+                    result.put(key.substring(prefix.length()), entry.getValue());
+                } else {
+                    result.put(key, entry.getValue());
+                }
             }
         }
         return result;

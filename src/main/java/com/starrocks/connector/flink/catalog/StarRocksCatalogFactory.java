@@ -51,14 +51,18 @@ public class StarRocksCatalogFactory implements CatalogFactory {
                 CatalogOptions.TABLE_PROPERTIES_PREFIX);
 
         Configuration sourceBaseConfig =
-                Configuration.fromMap(getPrefixConfigs("scan.", context.getOptions()));
+                Configuration.fromMap(
+                        getPrefixConfigs("scan.", context.getOptions(), false));
         Configuration sinkBaseConfig =
-                Configuration.fromMap(getPrefixConfigs("sink.", context.getOptions()));
+                Configuration.fromMap(
+                        getPrefixConfigs("sink.", context.getOptions(), false));
         Configuration tableBaseConfig =
-                Configuration.fromMap(getPrefixConfigs("table.", context.getOptions()));
+                Configuration.fromMap(
+                        getPrefixConfigs("table.", context.getOptions(), false));
         return new StarRocksCatalog(
                 context.getName(),
                 helper.getOptions().get(CatalogOptions.FE_JDBC_URL),
+                helper.getOptions().get(CatalogOptions.FE_HTTP_URL),
                 helper.getOptions().get(CatalogOptions.USERNAME),
                 helper.getOptions().get(CatalogOptions.PASSWORD),
                 helper.getOptions().get(CatalogOptions.DEFAULT_DATABASE),

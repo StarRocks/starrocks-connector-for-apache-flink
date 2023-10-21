@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.flink.table.source;
 
+import com.starrocks.connector.flink.table.source.struct.PushDownHolder;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.table.api.TableSchema;
@@ -25,15 +26,19 @@ import org.apache.flink.table.utils.TableSchemaUtils;
 import java.util.HashSet;
 import java.util.Set;
 
-import com.starrocks.connector.flink.table.source.struct.PushDownHolder;
-
 
 public final class StarRocksDynamicTableSourceFactory implements DynamicTableSourceFactory {
 
     @Override
     public DynamicTableSource createDynamicTableSource(Context context) {
+        return createDynamicTableSource(context, true);
+    }
+
+    public DynamicTableSource createDynamicTableSource(Context context, boolean needValidate) {
         final FactoryUtil.TableFactoryHelper helper = FactoryUtil.createTableFactoryHelper(this, context);
-        helper.validateExcept(StarRocksSourceOptions.SOURCE_PROPERTIES_PREFIX);
+        if (needValidate) {
+            helper.validateExcept(StarRocksSourceOptions.SOURCE_PROPERTIES_PREFIX);
+        }
         ReadableConfig options = helper.getOptions();
         // validate some special properties
         StarRocksSourceOptions sourceOptions = new StarRocksSourceOptions(options, context.getCatalogTable().getOptions());
@@ -41,7 +46,6 @@ public final class StarRocksDynamicTableSourceFactory implements DynamicTableSou
         PushDownHolder pushDownHolder = new PushDownHolder();
         return new StarRocksDynamicTableSource(sourceOptions, flinkSchema, pushDownHolder);
     }
-
 
     @Override
     public String factoryIdentifier() {

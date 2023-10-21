@@ -60,7 +60,7 @@ public class CatalogOptions {
 
     // ------ options for create table ------
 
-    public static final String TABLE_PROPERTIES_PREFIX = "table.properties";
+    public static final String TABLE_PROPERTIES_PREFIX = "table.properties.";
 
     public static final ConfigOption<Integer> TABLE_NUM_BUCKETS =
             ConfigOptions.key("table.num-buckets")

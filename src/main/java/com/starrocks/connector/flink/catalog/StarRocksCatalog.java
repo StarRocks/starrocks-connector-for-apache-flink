@@ -22,7 +22,9 @@ package com.starrocks.connector.flink.catalog;
 
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 import com.starrocks.connector.flink.table.source.StarRocksSourceOptions;
+import org.apache.arrow.util.VisibleForTesting;
 import org.apache.commons.compress.utils.Lists;
+import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.table.api.Schema;
 import org.apache.flink.table.api.ValidationException;
@@ -66,9 +68,11 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static com.starrocks.connector.flink.catalog.JdbcUtils.verifyJdbcDriver;
 import static org.apache.flink.table.factories.FactoryUtil.CONNECTOR;
@@ -78,17 +82,19 @@ public class StarRocksCatalog extends AbstractCatalog {
 
     private static final Logger LOG = LoggerFactory.getLogger(StarRocksCatalog.class);
 
-    private final ClassLoader userClassLoader;
+    private final String jdbcUrl;
+    private final String httpUrl;
     private final String username;
     private final String password;
-    private final String jdbcUrl;
     private final Configuration sourceBaseConfig;
     private final Configuration sinkBaseConfig;
     private final Configuration tableBaseConfig;
+    private final ClassLoader userClassLoader;
 
     public StarRocksCatalog(
             String name,
             String jdbcUrl,
+            String httpUrl,
             String username,
             String password,
             String defaultDatabase,
@@ -97,13 +103,14 @@ public class StarRocksCatalog extends AbstractCatalog {
             Configuration tableBaseConfig,
             ClassLoader userClassLoader) {
         super(name, defaultDatabase);
-        this.userClassLoader = userClassLoader;
+        this.jdbcUrl = jdbcUrl;
+        this.httpUrl = httpUrl;
         this.username = username;
         this.password = password;
-        this.jdbcUrl = jdbcUrl;
         this.sourceBaseConfig = sourceBaseConfig;
         this.sinkBaseConfig = sinkBaseConfig;
         this.tableBaseConfig = tableBaseConfig;
+        this.userClassLoader = userClassLoader;
     }
 
     @Override
@@ -240,14 +247,24 @@ public class StarRocksCatalog extends AbstractCatalog {
 
             StarRocksSchema starRocksSchema = starRocksTable.getSchema();
             Schema.Builder flinkSchemaBuilder = Schema.newBuilder();
-            for (StarRocksColumn column : starRocksSchema.getColumns()) {
-                flinkSchemaBuilder.column(column.getName(),
-                        TypeUtils.toFlinkType(column.getType(), column.getSize(), column.getScale()));
-            }
+            Set<String> primaryKeys = new HashSet<>();
             if (starRocksTable.getTableType() == StarRocksTable.TableType.PRIMARY &&
                     starRocksTable.getTableKeys() != null) {
                 flinkSchemaBuilder.primaryKey(starRocksTable.getTableKeys());
+                primaryKeys.addAll(starRocksTable.getTableKeys());
             }
+            for (StarRocksColumn column : starRocksSchema.getColumns()) {
+                flinkSchemaBuilder.column(
+                        column.getName(),
+                        TypeUtils.toFlinkType(
+                            column.getType(),
+                            column.getSize(),
+                            column.getScale(),
+                            !primaryKeys.contains(column.getName())
+                        )
+                    );
+            }
+
             Schema flinkSchema = flinkSchemaBuilder.build();
 
             Map<String, String> properties = new HashMap<>();
@@ -287,7 +304,7 @@ public class StarRocksCatalog extends AbstractCatalog {
             LOG.error("The failed create table DDL:\n{}", createTableSql);
             throw new CatalogException(
                     String.format("Failed to create table %s in catalog %s",
-                            tablePath.getFullName(), getName()));
+                            tablePath.getFullName(), getName()), e);
         }
     }
 
@@ -326,12 +343,10 @@ public class StarRocksCatalog extends AbstractCatalog {
 
     private Map<String, String> getSourceConfig(String database, String table) {
         Map<String, String> sourceConfig = new HashMap<>(sourceBaseConfig.toMap());
-        sourceConfig.put(StarRocksSourceOptions.JDBC_URL.key(), sourceBaseConfig.get(StarRocksSourceOptions.JDBC_URL));
-        if (!sourceBaseConfig.contains(StarRocksSourceOptions.SCAN_URL)) {
-            sourceConfig.put(StarRocksSourceOptions.SCAN_URL.key(), sourceBaseConfig.toMap().get(StarRocksSourceOptions.SCAN_URL.key()));
-        }
-        sourceConfig.put(StarRocksSourceOptions.USERNAME.key(), sourceBaseConfig.get(StarRocksSourceOptions.USERNAME));
-        sourceConfig.put(StarRocksSourceOptions.PASSWORD.key(), sourceBaseConfig.get(StarRocksSourceOptions.PASSWORD));
+        setIfNotExist(sourceConfig, StarRocksSourceOptions.JDBC_URL, jdbcUrl);
+        setIfNotExist(sourceConfig, StarRocksSourceOptions.SCAN_URL, httpUrl);
+        setIfNotExist(sourceConfig, StarRocksSourceOptions.USERNAME, username);
+        setIfNotExist(sourceConfig, StarRocksSourceOptions.PASSWORD, password);
         sourceConfig.put(StarRocksSourceOptions.DATABASE_NAME.key(), database);
         sourceConfig.put(StarRocksSourceOptions.TABLE_NAME.key(), table);
         return sourceConfig;
@@ -339,12 +354,10 @@ public class StarRocksCatalog extends AbstractCatalog {
 
     private Map<String, String> getSinkConfig(String database, String table) {
         Map<String, String> sinkConfig = new HashMap<>(sinkBaseConfig.toMap());
-        sinkConfig.put(StarRocksSinkOptions.JDBC_URL.key(), sinkBaseConfig.get(StarRocksSinkOptions.JDBC_URL));
-        if (!sourceBaseConfig.contains(StarRocksSinkOptions.LOAD_URL)) {
-            sinkConfig.put(StarRocksSinkOptions.LOAD_URL.key(), sinkBaseConfig.toMap().get(StarRocksSinkOptions.LOAD_URL.key()));
-        }
-        sinkConfig.put(StarRocksSinkOptions.USERNAME.key(), sinkBaseConfig.get(StarRocksSinkOptions.USERNAME));
-        sinkConfig.put(StarRocksSinkOptions.PASSWORD.key(), sinkBaseConfig.get(StarRocksSinkOptions.PASSWORD));
+        setIfNotExist(sinkConfig, StarRocksSinkOptions.JDBC_URL, jdbcUrl);
+        setIfNotExist(sinkConfig, StarRocksSinkOptions.LOAD_URL, httpUrl);
+        setIfNotExist(sinkConfig, StarRocksSinkOptions.USERNAME, username);
+        setIfNotExist(sinkConfig, StarRocksSinkOptions.PASSWORD, password);
         sinkConfig.put(StarRocksSinkOptions.DATABASE_NAME.key(), database);
         sinkConfig.put(StarRocksSinkOptions.TABLE_NAME.key(), table);
         if (sinkConfig.containsKey(StarRocksSinkOptions.SINK_LABEL_PREFIX.key())) {
@@ -353,6 +366,12 @@ public class StarRocksCatalog extends AbstractCatalog {
             sinkConfig.put(StarRocksSinkOptions.SINK_LABEL_PREFIX.key(), labelPrefix);
         }
         return sinkConfig;
+    }
+
+    private void setIfNotExist(Map<String, String> config, ConfigOption<?> option, String value) {
+        if (!config.containsKey(option.key())) {
+            config.put(option.key(), value);
+        }
     }
 
     private int executeUpdateStatement(String sql) throws SQLException {
@@ -401,7 +420,7 @@ public class StarRocksCatalog extends AbstractCatalog {
     @Override
     public List<CatalogPartitionSpec> listPartitions(ObjectPath tablePath)
             throws TableNotExistException, TableNotPartitionedException, CatalogException {
-        throw new UnsupportedOperationException();
+        return Collections.emptyList();
     }
 
     @Override
@@ -409,26 +428,26 @@ public class StarRocksCatalog extends AbstractCatalog {
             ObjectPath tablePath, CatalogPartitionSpec partitionSpec)
             throws TableNotExistException, TableNotPartitionedException,
             PartitionSpecInvalidException, CatalogException {
-        throw new UnsupportedOperationException();
+        return Collections.emptyList();
     }
 
     @Override
     public List<CatalogPartitionSpec> listPartitionsByFilter(
             ObjectPath tablePath, List<Expression> filters)
             throws TableNotExistException, TableNotPartitionedException, CatalogException {
-        throw new UnsupportedOperationException();
+        return Collections.emptyList();
     }
 
     @Override
     public CatalogPartition getPartition(ObjectPath tablePath, CatalogPartitionSpec partitionSpec)
             throws PartitionNotExistException, CatalogException {
-        throw new UnsupportedOperationException();
+        throw new PartitionNotExistException(getName(), tablePath, partitionSpec);
     }
 
     @Override
     public boolean partitionExists(ObjectPath tablePath, CatalogPartitionSpec partitionSpec)
             throws CatalogException {
-        throw new UnsupportedOperationException();
+        return false;
     }
 
     @Override
@@ -464,19 +483,19 @@ public class StarRocksCatalog extends AbstractCatalog {
 
     @Override
     public List<String> listFunctions(String dbName) throws DatabaseNotExistException, CatalogException {
-        throw new UnsupportedOperationException();
+        return Collections.emptyList();
     }
 
     @Override
     public CatalogFunction getFunction(ObjectPath functionPath)
             throws FunctionNotExistException, CatalogException {
-        throw new UnsupportedOperationException();
+        throw new FunctionNotExistException(getName(), functionPath);
     }
 
 
     @Override
     public boolean functionExists(ObjectPath functionPath) throws CatalogException {
-        throw new UnsupportedOperationException();
+        return false;
     }
 
     @Override
@@ -503,27 +522,27 @@ public class StarRocksCatalog extends AbstractCatalog {
     @Override
     public CatalogTableStatistics getTableStatistics(ObjectPath tablePath)
             throws TableNotExistException, CatalogException {
-        throw new UnsupportedOperationException();
+        return CatalogTableStatistics.UNKNOWN;
     }
 
     @Override
     public CatalogColumnStatistics getTableColumnStatistics(ObjectPath tablePath)
             throws TableNotExistException, CatalogException {
-        throw new UnsupportedOperationException();
+        return CatalogColumnStatistics.UNKNOWN;
     }
 
     @Override
     public CatalogTableStatistics getPartitionStatistics(
             ObjectPath tablePath, CatalogPartitionSpec partitionSpec)
             throws PartitionNotExistException, CatalogException {
-        throw new UnsupportedOperationException();
+        return CatalogTableStatistics.UNKNOWN;
     }
 
     @Override
     public CatalogColumnStatistics getPartitionColumnStatistics(
             ObjectPath tablePath, CatalogPartitionSpec partitionSpec)
             throws PartitionNotExistException, CatalogException {
-        throw new UnsupportedOperationException();
+        return CatalogColumnStatistics.UNKNOWN;
     }
 
     @Override
@@ -560,5 +579,40 @@ public class StarRocksCatalog extends AbstractCatalog {
             boolean ignoreIfNotExists)
             throws PartitionNotExistException, CatalogException {
         throw new UnsupportedOperationException();
+    }
+
+    @VisibleForTesting
+    String getJdbcUrl() {
+        return jdbcUrl;
+    }
+
+    @VisibleForTesting
+    String getHttpUrl() {
+        return httpUrl;
+    }
+
+    @VisibleForTesting
+    String getUsername() {
+        return username;
+    }
+
+    @VisibleForTesting
+    String getPassword() {
+        return password;
+    }
+
+    @VisibleForTesting
+    Configuration getSourceBaseConfig() {
+        return sourceBaseConfig;
+    }
+
+    @VisibleForTesting
+    Configuration getSinkBaseConfig() {
+        return sinkBaseConfig;
+    }
+
+    @VisibleForTesting
+    Configuration getTableBaseConfig() {
+        return tableBaseConfig;
     }
 }

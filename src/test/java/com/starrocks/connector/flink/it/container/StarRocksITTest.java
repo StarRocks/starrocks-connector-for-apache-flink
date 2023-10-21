@@ -1,4 +1,6 @@
 /*
+ * Copyright 2021-present StarRocks, Inc. All rights reserved.
+ *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -16,7 +18,7 @@
  * limitations under the License.
  */
 
-package com.starrocks.connector.flink.it;
+package com.starrocks.connector.flink.it.container;
 
 import com.starrocks.connector.flink.StarRocksSink;
 import com.starrocks.connector.flink.StarRocksSource;
