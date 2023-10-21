@@ -1,0 +1,564 @@
+/*
+ * Copyright 2021-present StarRocks, Inc. All rights reserved.
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.starrocks.connector.flink.catalog;
+
+import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
+import com.starrocks.connector.flink.table.source.StarRocksSourceOptions;
+import org.apache.commons.compress.utils.Lists;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.table.api.Schema;
+import org.apache.flink.table.api.ValidationException;
+import org.apache.flink.table.catalog.AbstractCatalog;
+import org.apache.flink.table.catalog.CatalogBaseTable;
+import org.apache.flink.table.catalog.CatalogDatabase;
+import org.apache.flink.table.catalog.CatalogDatabaseImpl;
+import org.apache.flink.table.catalog.CatalogFunction;
+import org.apache.flink.table.catalog.CatalogPartition;
+import org.apache.flink.table.catalog.CatalogPartitionSpec;
+import org.apache.flink.table.catalog.CatalogTable;
+import org.apache.flink.table.catalog.ObjectPath;
+import org.apache.flink.table.catalog.exceptions.CatalogException;
+import org.apache.flink.table.catalog.exceptions.DatabaseAlreadyExistException;
+import org.apache.flink.table.catalog.exceptions.DatabaseNotEmptyException;
+import org.apache.flink.table.catalog.exceptions.DatabaseNotExistException;
+import org.apache.flink.table.catalog.exceptions.FunctionAlreadyExistException;
+import org.apache.flink.table.catalog.exceptions.FunctionNotExistException;
+import org.apache.flink.table.catalog.exceptions.PartitionAlreadyExistsException;
+import org.apache.flink.table.catalog.exceptions.PartitionNotExistException;
+import org.apache.flink.table.catalog.exceptions.PartitionSpecInvalidException;
+import org.apache.flink.table.catalog.exceptions.TableAlreadyExistException;
+import org.apache.flink.table.catalog.exceptions.TableNotExistException;
+import org.apache.flink.table.catalog.exceptions.TableNotPartitionedException;
+import org.apache.flink.table.catalog.exceptions.TablePartitionedException;
+import org.apache.flink.table.catalog.stats.CatalogColumnStatistics;
+import org.apache.flink.table.catalog.stats.CatalogTableStatistics;
+import org.apache.flink.table.expressions.Expression;
+import org.apache.flink.table.factories.Factory;
+import org.apache.flink.util.Preconditions;
+import org.apache.flink.util.StringUtils;
+import org.apache.flink.util.TemporaryClassLoaderContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+import static com.starrocks.connector.flink.catalog.JdbcUtils.verifyJdbcDriver;
+import static org.apache.flink.table.factories.FactoryUtil.CONNECTOR;
+
+/** Flink catalog for StarRocks. */
+public class StarRocksCatalog extends AbstractCatalog {
+
+    private static final Logger LOG = LoggerFactory.getLogger(StarRocksCatalog.class);
+
+    private final ClassLoader userClassLoader;
+    private final String username;
+    private final String password;
+    private final String jdbcUrl;
+    private final Configuration sourceBaseConfig;
+    private final Configuration sinkBaseConfig;
+    private final Configuration tableBaseConfig;
+
+    public StarRocksCatalog(
+            String name,
+            String jdbcUrl,
+            String username,
+            String password,
+            String defaultDatabase,
+            Configuration sourceBaseConfig,
+            Configuration sinkBaseConfig,
+            Configuration tableBaseConfig,
+            ClassLoader userClassLoader) {
+        super(name, defaultDatabase);
+        this.userClassLoader = userClassLoader;
+        this.username = username;
+        this.password = password;
+        this.jdbcUrl = jdbcUrl;
+        this.sourceBaseConfig = sourceBaseConfig;
+        this.sinkBaseConfig = sinkBaseConfig;
+        this.tableBaseConfig = tableBaseConfig;
+    }
+
+    @Override
+    public Optional<Factory> getFactory() {
+        return Optional.of(new StarRocksDynamicTableFactory());
+    }
+
+    @Override
+    public void open() throws CatalogException {
+        // Refer to flink-connector-jdbc's AbstractJdbcCatalog
+        // load the Driver use userClassLoader explicitly, see FLINK-15635 for more detail
+        try (TemporaryClassLoaderContext ignored = TemporaryClassLoaderContext.of(userClassLoader)) {
+            verifyJdbcDriver();
+            // test connection, fail early if we cannot connect to database
+            try (Connection conn = getConnection()) {
+            } catch (SQLException e) {
+                throw new ValidationException(
+                        String.format("Failed to connect StarRocks via JDBC: %s.", jdbcUrl), e);
+            }
+        }
+        LOG.info("Open StarRocks catalog {}", getName());
+    }
+
+    @Override
+    public void close() throws CatalogException {
+        LOG.info("Close StarRocks catalog {}", getName());
+    }
+
+    // ------ databases ------
+
+    @Override
+    public List<String> listDatabases() throws CatalogException {
+        return executeSingleColumnStatement(
+                "SELECT `SCHEMA_NAME` FROM `INFORMATION_SCHEMA`.`SCHEMATA`;");
+    }
+
+    @Override
+    public CatalogDatabase getDatabase(String databaseName)
+            throws DatabaseNotExistException, CatalogException {
+        Preconditions.checkArgument(
+                !StringUtils.isNullOrWhitespaceOnly(databaseName),
+                "database name cannot be null or empty.");
+        if (databaseExists(databaseName)) {
+            return new CatalogDatabaseImpl(Collections.emptyMap(), null);
+        } else {
+            throw new DatabaseNotExistException(getName(), databaseName);
+        }
+    }
+
+    @Override
+    public boolean databaseExists(String databaseName) throws CatalogException {
+        Preconditions.checkArgument(
+                !StringUtils.isNullOrWhitespaceOnly(databaseName),
+                "database name cannot be null or empty.");
+        List<String> dbList = executeSingleColumnStatement(
+                "SELECT `SCHEMA_NAME` FROM `INFORMATION_SCHEMA`.`SCHEMATA` WHERE SCHEMA_NAME = ?;",
+                databaseName);
+        return !dbList.isEmpty();
+    }
+
+    @Override
+    public void createDatabase(String databaseName, CatalogDatabase database, boolean ignoreIfExists)
+            throws DatabaseAlreadyExistException, CatalogException {
+        Preconditions.checkArgument(
+                !StringUtils.isNullOrWhitespaceOnly(databaseName),
+                "database name cannot be null or empty.");
+        if (databaseExists(databaseName)) {
+            if (ignoreIfExists) {
+                return;
+            }
+            throw new DatabaseAlreadyExistException(getName(), databaseName);
+        }
+
+        try {
+            String sql = String.format("CREATE DATABASE %s%s;",
+                    ignoreIfExists ? "IF NOT EXISTS " : "", databaseName);
+            executeUpdateStatement(sql);
+        } catch (SQLException e) {
+            throw new CatalogException(
+                    String.format("Failed to create database %s, ignoreIfExists: %s",
+                            databaseName, ignoreIfExists),
+                    e);
+        }
+    }
+
+    @Override
+    public void dropDatabase(String name, boolean ignoreIfNotExists, boolean cascade)
+            throws DatabaseNotExistException, DatabaseNotEmptyException, CatalogException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void alterDatabase(String name, CatalogDatabase newDatabase, boolean ignoreIfNotExists)
+            throws DatabaseNotExistException, CatalogException {
+        throw new UnsupportedOperationException();
+    }
+
+    // ------ tables ------
+
+    @Override
+    public List<String> listTables(String databaseName) throws DatabaseNotExistException, CatalogException {
+        Preconditions.checkArgument(
+                !StringUtils.isNullOrWhitespaceOnly(databaseName),
+                "database name cannot be null or empty.");
+        if (!databaseExists(databaseName)) {
+            throw new DatabaseNotExistException(getName(), databaseName);
+        }
+
+        return executeSingleColumnStatement(
+                "SELECT TABLE_NAME FROM information_schema.`TABLES` WHERE TABLE_SCHEMA = ?",
+                databaseName);
+    }
+
+    @Override
+    public boolean tableExists(ObjectPath tablePath) throws CatalogException {
+        List<String> tableList = executeSingleColumnStatement(
+                "SELECT TABLE_NAME FROM information_schema.`TABLES` " +
+                        "WHERE TABLE_SCHEMA=? and TABLE_NAME=?",
+                tablePath.getDatabaseName(),
+                tablePath.getObjectName()
+            );
+        return !tableList.isEmpty();
+    }
+
+    @Override
+    public CatalogBaseTable getTable(ObjectPath tablePath) throws TableNotExistException, CatalogException {
+        if (!tableExists(tablePath)) {
+            throw new TableNotExistException(getName(), tablePath);
+        }
+
+        try (Connection connection = getConnection()) {
+            StarRocksTable starRocksTable = StarRocksUtils.getStarRocksTable(
+                    connection, tablePath.getDatabaseName(), tablePath.getObjectName());
+
+            StarRocksSchema starRocksSchema = starRocksTable.getSchema();
+            Schema.Builder flinkSchemaBuilder = Schema.newBuilder();
+            for (StarRocksColumn column : starRocksSchema.getColumns()) {
+                flinkSchemaBuilder.column(column.getName(),
+                        TypeUtils.toFlinkType(column.getType(), column.getSize(), column.getScale()));
+            }
+            if (starRocksTable.getTableType() == StarRocksTable.TableType.PRIMARY &&
+                    starRocksTable.getTableKeys() != null) {
+                flinkSchemaBuilder.primaryKey(starRocksTable.getTableKeys());
+            }
+            Schema flinkSchema = flinkSchemaBuilder.build();
+
+            Map<String, String> properties = new HashMap<>();
+            properties.put(CONNECTOR.key(), CatalogOptions.IDENTIFIER);
+            properties.putAll(getSourceConfig(tablePath.getDatabaseName(), tablePath.getObjectName()));
+            properties.putAll(getSinkConfig(tablePath.getDatabaseName(), tablePath.getObjectName()));
+
+            return CatalogTable.of(flinkSchema, starRocksTable.getComment(), Lists.newArrayList(), properties);
+        } catch (Exception e) {
+            throw new CatalogException(
+                    String.format("Failed to get table %s in catalog %s", tablePath.getFullName(), getName()), e);
+        }
+    }
+
+    @Override
+    public void createTable(ObjectPath tablePath, CatalogBaseTable table, boolean ignoreIfExists)
+            throws TableAlreadyExistException, DatabaseNotExistException, CatalogException {
+        if (!databaseExists(tablePath.getDatabaseName())) {
+            throw new DatabaseNotExistException(getName(), tablePath.getDatabaseName());
+        }
+
+        if (tableExists(tablePath)) {
+           if (ignoreIfExists) {
+               return;
+           }
+           throw new TableAlreadyExistException(getName(), tablePath);
+        }
+
+        StarRocksTable starRocksTable = StarRocksUtils.toStarRocksTable(getName(), tablePath, tableBaseConfig, table);
+        String createTableSql = StarRocksUtils.buildCreateTableSql(starRocksTable, ignoreIfExists);
+        try {
+            executeUpdateStatement(createTableSql);
+            LOG.info("Success to create table {} in catalog {}", tablePath.getFullName(), getName());
+            LOG.info("The create table DDL:\n{}", createTableSql);
+        } catch (Exception e) {
+            LOG.error("Failed to create table {} in catalog {}", tablePath.getFullName(), getName(), e);
+            LOG.error("The failed create table DDL:\n{}", createTableSql);
+            throw new CatalogException(
+                    String.format("Failed to create table %s in catalog %s",
+                            tablePath.getFullName(), getName()));
+        }
+    }
+
+    @Override
+    public void dropTable(ObjectPath tablePath, boolean ignoreIfNotExists)
+            throws TableNotExistException, CatalogException {
+        if (!tableExists(tablePath)) {
+            if (ignoreIfNotExists) {
+                return;
+            }
+            throw new TableNotExistException(getName(), tablePath);
+        }
+
+        try {
+            String dropSql = String.format(
+                    "DROP TABLE `%s`.`%s`;", tablePath.getDatabaseName(), tablePath.getObjectName());
+            executeUpdateStatement(dropSql);
+        } catch (Exception e) {
+            throw new CatalogException(String.format("Failed to drop table %s in catalog %s",
+                    tablePath.getFullName(), getName()), e);
+        }
+    }
+
+    @Override
+    public void alterTable(ObjectPath tablePath, CatalogBaseTable newTable, boolean ignoreIfNotExists)
+            throws TableNotExistException, CatalogException {
+        // TODO Flink supports to add/drop column since 1.17. Implement it in the future if needed.
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void renameTable(ObjectPath tablePath, String newTableName, boolean ignoreIfNotExists)
+            throws TableNotExistException, TableAlreadyExistException, CatalogException {
+        throw new UnsupportedOperationException();
+    }
+
+    private Map<String, String> getSourceConfig(String database, String table) {
+        Map<String, String> sourceConfig = new HashMap<>(sourceBaseConfig.toMap());
+        sourceConfig.put(StarRocksSourceOptions.JDBC_URL.key(), sourceBaseConfig.get(StarRocksSourceOptions.JDBC_URL));
+        if (!sourceBaseConfig.contains(StarRocksSourceOptions.SCAN_URL)) {
+            sourceConfig.put(StarRocksSourceOptions.SCAN_URL.key(), sourceBaseConfig.toMap().get(StarRocksSourceOptions.SCAN_URL.key()));
+        }
+        sourceConfig.put(StarRocksSourceOptions.USERNAME.key(), sourceBaseConfig.get(StarRocksSourceOptions.USERNAME));
+        sourceConfig.put(StarRocksSourceOptions.PASSWORD.key(), sourceBaseConfig.get(StarRocksSourceOptions.PASSWORD));
+        sourceConfig.put(StarRocksSourceOptions.DATABASE_NAME.key(), database);
+        sourceConfig.put(StarRocksSourceOptions.TABLE_NAME.key(), table);
+        return sourceConfig;
+    }
+
+    private Map<String, String> getSinkConfig(String database, String table) {
+        Map<String, String> sinkConfig = new HashMap<>(sinkBaseConfig.toMap());
+        sinkConfig.put(StarRocksSinkOptions.JDBC_URL.key(), sinkBaseConfig.get(StarRocksSinkOptions.JDBC_URL));
+        if (!sourceBaseConfig.contains(StarRocksSinkOptions.LOAD_URL)) {
+            sinkConfig.put(StarRocksSinkOptions.LOAD_URL.key(), sinkBaseConfig.toMap().get(StarRocksSinkOptions.LOAD_URL.key()));
+        }
+        sinkConfig.put(StarRocksSinkOptions.USERNAME.key(), sinkBaseConfig.get(StarRocksSinkOptions.USERNAME));
+        sinkConfig.put(StarRocksSinkOptions.PASSWORD.key(), sinkBaseConfig.get(StarRocksSinkOptions.PASSWORD));
+        sinkConfig.put(StarRocksSinkOptions.DATABASE_NAME.key(), database);
+        sinkConfig.put(StarRocksSinkOptions.TABLE_NAME.key(), table);
+        if (sinkConfig.containsKey(StarRocksSinkOptions.SINK_LABEL_PREFIX.key())) {
+            String rawLabelPrefix = sinkConfig.get(StarRocksSinkOptions.SINK_LABEL_PREFIX.key());
+            String labelPrefix = String.join("_", rawLabelPrefix, database, table);
+            sinkConfig.put(StarRocksSinkOptions.SINK_LABEL_PREFIX.key(), labelPrefix);
+        }
+        return sinkConfig;
+    }
+
+    private int executeUpdateStatement(String sql) throws SQLException {
+        try (Connection connection = getConnection();
+                Statement statement = connection.createStatement()) {
+            return statement.executeUpdate(sql);
+        }
+    }
+
+    private List<String> executeSingleColumnStatement(String sql, Object... params) {
+        try (Connection conn = getConnection();
+                PreparedStatement statement = conn.prepareStatement(sql)) {
+            List<String> columnValues = Lists.newArrayList();
+            if (params != null) {
+                for (int i = 0; i < params.length; i++) {
+                    statement.setObject(i + 1, params[i]);
+                }
+            }
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    String columnValue = rs.getString(1);
+                    columnValues.add(columnValue);
+                }
+            }
+            return columnValues;
+        } catch (Exception e) {
+            throw new CatalogException(
+                    String.format("Failed to execute sql: %s", sql), e);
+        }
+    }
+
+    private Connection getConnection() throws SQLException {
+        // TODO reuse the connection
+        return DriverManager.getConnection(jdbcUrl, username, password);
+    }
+
+    // ------ views ------
+
+    @Override
+    public List<String> listViews(String databaseName) throws DatabaseNotExistException, CatalogException {
+        throw new UnsupportedOperationException();
+    }
+
+    // ------ partitions ------
+
+    @Override
+    public List<CatalogPartitionSpec> listPartitions(ObjectPath tablePath)
+            throws TableNotExistException, TableNotPartitionedException, CatalogException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public List<CatalogPartitionSpec> listPartitions(
+            ObjectPath tablePath, CatalogPartitionSpec partitionSpec)
+            throws TableNotExistException, TableNotPartitionedException,
+            PartitionSpecInvalidException, CatalogException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public List<CatalogPartitionSpec> listPartitionsByFilter(
+            ObjectPath tablePath, List<Expression> filters)
+            throws TableNotExistException, TableNotPartitionedException, CatalogException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public CatalogPartition getPartition(ObjectPath tablePath, CatalogPartitionSpec partitionSpec)
+            throws PartitionNotExistException, CatalogException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean partitionExists(ObjectPath tablePath, CatalogPartitionSpec partitionSpec)
+            throws CatalogException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void createPartition(
+            ObjectPath tablePath,
+            CatalogPartitionSpec partitionSpec,
+            CatalogPartition partition,
+            boolean ignoreIfExists)
+            throws TableNotExistException, TableNotPartitionedException,
+            PartitionSpecInvalidException, PartitionAlreadyExistsException,
+            CatalogException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void dropPartition(
+            ObjectPath tablePath, CatalogPartitionSpec partitionSpec, boolean ignoreIfNotExists)
+            throws PartitionNotExistException, CatalogException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void alterPartition(
+            ObjectPath tablePath,
+            CatalogPartitionSpec partitionSpec,
+            CatalogPartition newPartition,
+            boolean ignoreIfNotExists)
+            throws PartitionNotExistException, CatalogException {
+        throw new UnsupportedOperationException();
+    }
+
+    // ------ functions ------
+
+    @Override
+    public List<String> listFunctions(String dbName) throws DatabaseNotExistException, CatalogException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public CatalogFunction getFunction(ObjectPath functionPath)
+            throws FunctionNotExistException, CatalogException {
+        throw new UnsupportedOperationException();
+    }
+
+
+    @Override
+    public boolean functionExists(ObjectPath functionPath) throws CatalogException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void createFunction(ObjectPath functionPath, CatalogFunction function, boolean ignoreIfExists)
+            throws FunctionAlreadyExistException, DatabaseNotExistException, CatalogException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void alterFunction(
+            ObjectPath functionPath, CatalogFunction newFunction, boolean ignoreIfNotExists)
+            throws FunctionNotExistException, CatalogException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void dropFunction(ObjectPath functionPath, boolean ignoreIfNotExists)
+            throws FunctionNotExistException, CatalogException {
+        throw new UnsupportedOperationException();
+    }
+
+    // ------ statistics ------
+
+    @Override
+    public CatalogTableStatistics getTableStatistics(ObjectPath tablePath)
+            throws TableNotExistException, CatalogException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public CatalogColumnStatistics getTableColumnStatistics(ObjectPath tablePath)
+            throws TableNotExistException, CatalogException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public CatalogTableStatistics getPartitionStatistics(
+            ObjectPath tablePath, CatalogPartitionSpec partitionSpec)
+            throws PartitionNotExistException, CatalogException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public CatalogColumnStatistics getPartitionColumnStatistics(
+            ObjectPath tablePath, CatalogPartitionSpec partitionSpec)
+            throws PartitionNotExistException, CatalogException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void alterTableStatistics(
+            ObjectPath tablePath, CatalogTableStatistics tableStatistics, boolean ignoreIfNotExists)
+            throws TableNotExistException, CatalogException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void alterTableColumnStatistics(
+            ObjectPath tablePath,
+            CatalogColumnStatistics columnStatistics,
+            boolean ignoreIfNotExists)
+            throws TableNotExistException, CatalogException, TablePartitionedException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void alterPartitionStatistics(
+            ObjectPath tablePath,
+            CatalogPartitionSpec partitionSpec,
+            CatalogTableStatistics partitionStatistics,
+            boolean ignoreIfNotExists)
+            throws PartitionNotExistException, CatalogException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void alterPartitionColumnStatistics(
+            ObjectPath tablePath,
+            CatalogPartitionSpec partitionSpec,
+            CatalogColumnStatistics columnStatistics,
+            boolean ignoreIfNotExists)
+            throws PartitionNotExistException, CatalogException {
+        throw new UnsupportedOperationException();
+    }
+}
