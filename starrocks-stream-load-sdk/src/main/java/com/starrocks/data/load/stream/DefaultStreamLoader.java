@@ -292,7 +292,11 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
 
             for (Map.Entry<String, String> entry : tableProperties.getProperties().entrySet()) {
                 httpPut.removeHeaders(entry.getKey());
-                httpPut.addHeader(entry.getKey(), entry.getValue());
+                if (entry.getKey().equals("table")) {
+                    httpPut.addHeader(entry.getKey(), region.getTable());
+                } else {
+                    httpPut.addHeader(entry.getKey(), entry.getValue());
+                }
             }
 
             httpPut.addHeader("label", label);
