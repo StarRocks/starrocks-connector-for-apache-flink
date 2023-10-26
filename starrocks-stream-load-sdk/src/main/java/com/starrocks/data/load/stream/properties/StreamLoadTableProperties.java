@@ -38,6 +38,7 @@ public class StreamLoadTableProperties implements Serializable {
     private final boolean enableUpsertDelete;
     private final long chunkLimit;
     private final int maxBufferRows;
+    private final String columns;
 
     private StreamLoadTableProperties(Builder builder) {
         this.database = builder.database;
@@ -59,7 +60,10 @@ public class StreamLoadTableProperties implements Serializable {
         }
         this.maxBufferRows = builder.maxBufferRows;
         this.properties = builder.properties;
+        this.columns = builder.columns;
     }
+
+    public String getColumns() {return columns; }
 
     public String getUniqueKey() {
         return uniqueKey;
@@ -112,6 +116,20 @@ public class StreamLoadTableProperties implements Serializable {
 
         private Builder() {
 
+        }
+
+        // This function does not copy the uniqueKey and properties attributes because the uniqueKey 
+        // is generated in the StreamLoadTableProperties constructor, and the properties are automatically 
+        // populated during the build process.
+        public Builder copyFrom(StreamLoadTableProperties streamLoadTableProperties) {
+            database(streamLoadTableProperties.getDatabase());
+            table(streamLoadTableProperties.getTable());
+            columns(streamLoadTableProperties.getColumns());
+            enableUpsertDelete(streamLoadTableProperties.isEnableUpsertDelete());
+            streamLoadDataFormat(streamLoadTableProperties.getDataFormat());
+            chunkLimit(streamLoadTableProperties.getChunkLimit());
+            maxBufferRows(streamLoadTableProperties.getMaxBufferRows());
+            return this;
         }
 
         public Builder uniqueKey(String uniqueKey) {

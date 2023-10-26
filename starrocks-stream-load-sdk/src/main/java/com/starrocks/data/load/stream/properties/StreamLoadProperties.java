@@ -174,6 +174,17 @@ public class StreamLoadProperties implements Serializable {
         return tablePropertiesMap.getOrDefault(uniqueKey, defaultTableProperties);
     }
 
+    public StreamLoadTableProperties getTableProperties(String uniqueKey, String database, String table) {
+        StreamLoadTableProperties tableProperties = getTableProperties(uniqueKey);
+        if (!tableProperties.getDatabase().equals(database) || !tableProperties.getDatabase().equals(table)) {
+            StreamLoadTableProperties.Builder tablePropertiesBuilder = StreamLoadTableProperties.builder();
+            tablePropertiesBuilder = tablePropertiesBuilder.copyFrom(tableProperties).database(database).table(table);
+            return tablePropertiesBuilder.build();
+        } else {
+            return tableProperties;
+        }
+    }
+
     public Map<String, StreamLoadTableProperties> getTablePropertiesMap() {
         return tablePropertiesMap;
     }
