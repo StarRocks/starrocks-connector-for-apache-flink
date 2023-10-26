@@ -153,8 +153,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
             log.warn("Stream load not start");
         }
         if (begin(region)) {
-            StreamLoadTableProperties tableProperties = properties.getTableProperties(region.getUniqueKey());
-            return executorService.submit(() -> send(tableProperties, region));
+            return executorService.submit(() -> sendToSR(region));
         } else {
             region.fail(new StreamLoadFailException("Transaction start failed, db : " + region.getDatabase()));
         }
@@ -168,8 +167,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
             log.warn("Stream load not start");
         }
         if (begin(region)) {
-            StreamLoadTableProperties tableProperties = properties.getTableProperties(region.getUniqueKey());
-            return executorService.schedule(() -> send(tableProperties, region), delayMs, TimeUnit.MILLISECONDS);
+            return executorService.schedule(() -> sendToSR(region), delayMs, TimeUnit.MILLISECONDS);
         } else {
             region.fail(new StreamLoadFailException("Transaction start failed, db : " + region.getDatabase()));
         }
@@ -278,7 +276,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
                 .toArray(Header[]::new);
     }
 
-    protected StreamLoadResponse send(StreamLoadTableProperties tableProperties, TableRegion region) {
+    protected StreamLoadResponse sendToSR(TableRegion region) {
         try {
             String host = getAvailableHost();
             String sendUrl = getSendUrl(host, region.getDatabase(), region.getTable());
@@ -289,7 +287,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
             httpPut.setEntity(region.getHttpEntity());
 
             httpPut.setHeaders(defaultHeaders);
-
+            StreamLoadTableProperties tableProperties = region.getProperties();
             for (Map.Entry<String, String> entry : tableProperties.getProperties().entrySet()) {
                 httpPut.removeHeaders(entry.getKey());
                 httpPut.addHeader(entry.getKey(), entry.getValue());
