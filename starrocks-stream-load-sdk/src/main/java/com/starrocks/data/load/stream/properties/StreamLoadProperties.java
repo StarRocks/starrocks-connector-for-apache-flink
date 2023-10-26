@@ -22,7 +22,6 @@ package com.starrocks.data.load.stream.properties;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.starrocks.data.load.stream.StarRocksVersion;
-import com.starrocks.data.load.stream.StreamLoadUtils;
 
 import java.io.Serializable;
 import java.util.Arrays;
@@ -166,12 +165,15 @@ public class StreamLoadProperties implements Serializable {
         return defaultTableProperties;
     }
 
-    public StreamLoadTableProperties getTableProperties(String database, String table) {
-        return getTableProperties(StreamLoadUtils.getTableUniqueKey(database, table));
-    }
-
-    public StreamLoadTableProperties getTableProperties(String uniqueKey) {
-        return tablePropertiesMap.getOrDefault(uniqueKey, defaultTableProperties);
+    public StreamLoadTableProperties getTableProperties(String uniqueKey, String database, String table) {
+        StreamLoadTableProperties tableProperties = tablePropertiesMap.getOrDefault(uniqueKey, defaultTableProperties);
+        if (!tableProperties.getDatabase().equals(database) || !tableProperties.getDatabase().equals(table)) {
+            StreamLoadTableProperties.Builder tablePropertiesBuilder = StreamLoadTableProperties.builder();
+            tablePropertiesBuilder = tablePropertiesBuilder.copyFrom(tableProperties).database(database).table(table);
+            return tablePropertiesBuilder.build();
+        } else {
+            return tableProperties;
+        }
     }
 
     public Map<String, StreamLoadTableProperties> getTablePropertiesMap() {
