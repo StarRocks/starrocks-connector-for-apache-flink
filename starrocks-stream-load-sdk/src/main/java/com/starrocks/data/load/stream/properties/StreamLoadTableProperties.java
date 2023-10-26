@@ -117,6 +117,8 @@ public class StreamLoadTableProperties implements Serializable {
         // StreamLoadTableProperties.properties hold the specific properties of an individual table.
         // This should be taken into consideration during the refactoring.
         public Builder copyFrom(StreamLoadTableProperties streamLoadTableProperties) {
+            // TODO: datbase, table, columns are private propertis for an individual table.
+            // We may not copy thers private propertis.
             database(streamLoadTableProperties.getDatabase());
             table(streamLoadTableProperties.getTable());
             columns(streamLoadTableProperties.getColumns());
