@@ -34,6 +34,7 @@ public class StreamLoadTableProperties implements Serializable {
     private final String table;
     private final StreamLoadDataFormat dataFormat;
     private final Map<String, String> properties;
+    private final boolean enableUpsertDelete;
     private final long chunkLimit;
     private final int maxBufferRows;
     private final String columns;
@@ -50,6 +51,7 @@ public class StreamLoadTableProperties implements Serializable {
                 ? StreamLoadDataFormat.JSON
                 : builder.dataFormat;
 
+        this.enableUpsertDelete = builder.enableUpsertDelete;
         if (dataFormat instanceof StreamLoadDataFormat.JSONFormat) {
             chunkLimit = Math.min(3221225472L, builder.chunkLimit);
         } else {
@@ -72,6 +74,10 @@ public class StreamLoadTableProperties implements Serializable {
 
     public String getTable() {
         return table;
+    }
+
+    public boolean isEnableUpsertDelete() {
+        return enableUpsertDelete;
     }
 
     public StreamLoadDataFormat getDataFormat() {
@@ -99,6 +105,7 @@ public class StreamLoadTableProperties implements Serializable {
         private String database;
         private String table;
         private String columns;
+        private boolean enableUpsertDelete;
         private StreamLoadDataFormat dataFormat;
         private long chunkLimit;
         private int maxBufferRows = Integer.MAX_VALUE;
@@ -145,6 +152,11 @@ public class StreamLoadTableProperties implements Serializable {
 
         public Builder columns(String columns) {
             this.columns = columns;
+            return this;
+        }
+
+        public Builder enableUpsertDelete(boolean enableUpsertDelete) {
+            this.enableUpsertDelete = enableUpsertDelete;
             return this;
         }
 
