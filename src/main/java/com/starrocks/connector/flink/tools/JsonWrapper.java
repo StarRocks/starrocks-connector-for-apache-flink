@@ -71,6 +71,10 @@ public class JsonWrapper {
     public <T> T parseObject(byte[] bytes, Type clazz) {
         return JSON.parseObject(bytes, 0, bytes.length, IOUtils.UTF8, clazz, parserConfig, null, DEFAULT_PARSER_FEATURE);
     }
+
+    public <T> T parseObject(String text, Type clazz) {
+        return JSON.parseObject(text, clazz, parserConfig, null, DEFAULT_PARSER_FEATURE);
+    }
 }
 
 final class BinaryStringDataSerializer implements ObjectSerializer, Serializable {

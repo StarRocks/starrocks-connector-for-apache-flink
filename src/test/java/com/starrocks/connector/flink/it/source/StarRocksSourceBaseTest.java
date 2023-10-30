@@ -14,7 +14,22 @@
 
 package com.starrocks.connector.flink.it.source;
 
-import static org.junit.Assert.assertEquals;
+import com.alibaba.fastjson.JSONObject;
+import com.starrocks.connector.flink.table.source.StarRocksSourceOptions;
+import com.starrocks.connector.flink.table.source.StarrocksExternalServiceImpl;
+import com.starrocks.connector.flink.table.source.struct.SelectColumn;
+import com.starrocks.shade.org.apache.thrift.protocol.TBinaryProtocol;
+import com.starrocks.shade.org.apache.thrift.server.TServer;
+import com.starrocks.shade.org.apache.thrift.server.TThreadPoolServer;
+import com.starrocks.shade.org.apache.thrift.transport.TServerSocket;
+import com.starrocks.shade.org.apache.thrift.transport.TServerTransport;
+import com.starrocks.shade.org.apache.thrift.transport.TTransportException;
+import com.starrocks.shade.org.apache.thrift.transport.TTransportFactory;
+import com.starrocks.thrift.TStarrocksExternalService;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.TableSchema;
+import org.junit.After;
+import org.junit.Before;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -26,23 +41,7 @@ import java.net.Socket;
 import java.util.HashMap;
 import java.util.Map;
 
-import com.alibaba.fastjson.JSONObject;
-import com.starrocks.connector.flink.table.source.StarRocksSourceOptions;
-import com.starrocks.connector.flink.table.source.StarrocksExternalServiceImpl;
-import com.starrocks.connector.flink.table.source.struct.SelectColumn;
-import com.starrocks.thrift.TStarrocksExternalService;
-
-import org.apache.flink.table.api.DataTypes;
-import org.apache.flink.table.api.TableSchema;
-import com.starrocks.shade.org.apache.thrift.protocol.TBinaryProtocol;
-import com.starrocks.shade.org.apache.thrift.server.TServer;
-import com.starrocks.shade.org.apache.thrift.server.TThreadPoolServer;
-import com.starrocks.shade.org.apache.thrift.transport.TServerSocket;
-import com.starrocks.shade.org.apache.thrift.transport.TServerTransport;
-import com.starrocks.shade.org.apache.thrift.transport.TTransportException;
-import com.starrocks.shade.org.apache.thrift.transport.TTransportFactory;
-import org.junit.After;
-import org.junit.Before;
+import static org.junit.Assert.assertEquals;
 
 
 public abstract class StarRocksSourceBaseTest {
@@ -218,7 +217,7 @@ public abstract class StarRocksSourceBaseTest {
         Map<String, Object> respMap = new HashMap<>();
         respMap.put("opaqued_query_plan", "mockPlan");
         respMap.put("status", "200");
-        Map<Integer, Object> partitionsSet = new HashMap<>();
+        Map<String, Object> partitionsSet = new HashMap<>();
         for (int i = 0; i < tabletCount; i ++) {
             Map<String, Object> pMap = new HashMap<>();
             pMap.put("version", 4);
@@ -228,7 +227,7 @@ public abstract class StarRocksSourceBaseTest {
                 beNode[i%beNode.length], 
                 beNode[i%beNode.length + 1 >= beNode.length ? 0 : i%beNode.length + 1]
             });
-            partitionsSet.put(i, pMap);
+            partitionsSet.put(String.valueOf(i), pMap);
         }
         respMap.put("partitions", partitionsSet);
         JSONObject json = new JSONObject(respMap);
@@ -241,7 +240,7 @@ public abstract class StarRocksSourceBaseTest {
         Map<String, Object> respMap = new HashMap<>();
         respMap.put("opaqued_query_plan", "mockPlan");
         respMap.put("status", "200");
-        Map<Integer, Object> partitionsSet = new HashMap<>();
+        Map<String, Object> partitionsSet = new HashMap<>();
         for (int i = 0; i < tabletCount; i ++) {
             Map<String, Object> pMap = new HashMap<>();
             pMap.put("version", 4);
@@ -251,7 +250,7 @@ public abstract class StarRocksSourceBaseTest {
                 beNode[i%beNode.length], 
                 beNode[i%beNode.length + 1 >= beNode.length ? 0 : i%beNode.length + 1]
             });
-            partitionsSet.put(i, pMap);
+            partitionsSet.put(String.valueOf(i), pMap);
         }
         respMap.put("partitions", partitionsSet);
         JSONObject json = new JSONObject(respMap);

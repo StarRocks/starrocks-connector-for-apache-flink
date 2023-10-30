@@ -18,6 +18,7 @@
 
 package com.starrocks.connector.flink.it.sink;
 
+import com.starrocks.connector.flink.it.StarRocksITTestBase;
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeinfo.Types;
@@ -50,7 +51,7 @@ import static com.starrocks.connector.flink.it.sink.StarRocksTableUtils.verifyRe
 import static org.junit.Assume.assumeTrue;
 
 @RunWith(Parameterized.class)
-public class StarRocksSinkITTest extends StarRocksSinkITTestBase {
+public class StarRocksSinkITTest extends StarRocksITTestBase {
 
     @Parameterized.Parameters(name = "sinkV2={0}")
     public static List<Object> parameters() {
