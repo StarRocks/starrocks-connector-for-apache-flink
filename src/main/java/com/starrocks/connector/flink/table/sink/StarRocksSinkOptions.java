@@ -139,6 +139,13 @@ public class StarRocksSinkOptions implements Serializable {
                     "The number of transactions to check if they are lingering. -1 indicates that check until finding the first " +
                     "transaction that is not lingering.");
 
+    public static final ConfigOption<Boolean> SINK_USE_NEW_SINK_API = ConfigOptions.key("sink.use.new-sink-api")
+            .booleanType().defaultValue(false).withDescription("Whether to use the implementation with the unified sink api " +
+                    "described in Flink FLIP-191. There is no difference for users whether to enable this flag. This is just " +
+                    "for adapting some frameworks which only support new sink api, and Flink will also remove the old sink api " +
+                    "in the coming 2.0. Note that it's not compatible after changing the flag, that's, you can't recover from " +
+                    "the previous job after changing the flag.");
+
     public static final ConfigOption<Integer> SINK_PARALLELISM = FactoryUtil.SINK_PARALLELISM;
 
     // Sink semantic
@@ -349,6 +356,10 @@ public class StarRocksSinkOptions implements Serializable {
 
     public int getAbortCheckNumTxns() {
         return tableOptions.get(SINK_ABORT_CHECK_NUM_TXNS);
+    }
+
+    public boolean isUseUnifiedSinkApi() {
+        return tableOptions.get(SINK_USE_NEW_SINK_API);
     }
 
     private void validateStreamLoadUrl() {

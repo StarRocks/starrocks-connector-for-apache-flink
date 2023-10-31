@@ -15,11 +15,13 @@
 package com.starrocks.connector.flink.table.sink;
 
 import com.starrocks.connector.flink.row.sink.StarRocksTableRowTransformer;
+import com.starrocks.connector.flink.table.sink.v2.StarRocksSink;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.connector.ChangelogMode;
 import org.apache.flink.table.connector.sink.DynamicTableSink;
 import org.apache.flink.table.connector.sink.SinkFunctionProvider;
+import org.apache.flink.table.connector.sink.SinkV2Provider;
 import org.apache.flink.table.data.RowData;
  
 public class StarRocksDynamicTableSink implements DynamicTableSink {
@@ -41,12 +43,23 @@ public class StarRocksDynamicTableSink implements DynamicTableSink {
     @SuppressWarnings("unchecked")
     public SinkRuntimeProvider getSinkRuntimeProvider(Context context) {
         final TypeInformation<RowData> rowDataTypeInfo = context.createTypeInformation(flinkSchema.toRowDataType());
-        StarRocksDynamicSinkFunctionBase<RowData> starrocksSinkFunction = SinkFunctionFactory.createSinkFunction(
-            sinkOptions,
-            flinkSchema,
-            new StarRocksTableRowTransformer(rowDataTypeInfo)
-        );
-        return SinkFunctionProvider.of(starrocksSinkFunction, sinkOptions.getSinkParallelism());
+        if (sinkOptions.isUseUnifiedSinkApi()) {
+            StarRocksSink<RowData> starRocksSink =
+                    SinkFunctionFactory.createSink(
+                        sinkOptions,
+                        flinkSchema,
+                        new StarRocksTableRowTransformer(rowDataTypeInfo)
+                    );
+            return SinkV2Provider.of(starRocksSink, sinkOptions.getSinkParallelism());
+        } else {
+            StarRocksDynamicSinkFunctionBase<RowData> starrocksSinkFunction =
+                    SinkFunctionFactory.createSinkFunction(
+                        sinkOptions,
+                        flinkSchema,
+                        new StarRocksTableRowTransformer(rowDataTypeInfo)
+                    );
+            return SinkFunctionProvider.of(starrocksSinkFunction, sinkOptions.getSinkParallelism());
+        }
     }
  
     @Override

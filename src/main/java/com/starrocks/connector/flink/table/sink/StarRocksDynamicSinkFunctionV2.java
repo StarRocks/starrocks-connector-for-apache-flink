@@ -215,7 +215,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
         if (serializer != null) {
             this.serializer.open(new StarRocksISerializer.SerializerContext(getOrCreateJsonWrapper()));
         }
-        this.streamLoadListener = new StarRocksStreamLoadListener(getRuntimeContext(), sinkOptions);
+        this.streamLoadListener = new StarRocksStreamLoadListener(getRuntimeContext().getMetricGroup(), sinkOptions);
         sinkManager.setStreamLoadListener(streamLoadListener);
 
         LabelGeneratorFactory labelGeneratorFactory;

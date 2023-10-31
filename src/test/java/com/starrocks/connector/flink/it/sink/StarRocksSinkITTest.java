@@ -53,13 +53,20 @@ import static org.junit.Assume.assumeTrue;
 @RunWith(Parameterized.class)
 public class StarRocksSinkITTest extends StarRocksITTestBase {
 
-    @Parameterized.Parameters(name = "sinkV2={0}")
-    public static List<Object> parameters() {
-        return Arrays.asList(false, true);
+    @Parameterized.Parameters(name = "sinkV2={0}, newSinkApi={1}")
+    public static List<Object[]> parameters() {
+        return Arrays.asList(
+                new Object[] {false, false},
+                new Object[] {true, false},
+                new Object[] {true, true}
+            );
     }
 
     @Parameterized.Parameter
     public boolean isSinkV2;
+
+    @Parameterized.Parameter(1)
+    public boolean newSinkApi;
 
     @Test
     public void testDupKeyWriteFullColumnsInOrder() throws Exception {
@@ -149,6 +156,7 @@ public class StarRocksSinkITTest extends StarRocksITTestBase {
                 "'jdbc-url'='" + sinkOptions.getJdbcUrl() + "'," +
                 "'load-url'='" + String.join(";", sinkOptions.getLoadUrlList()) + "'," +
                 "'sink.version' = '" + (isSinkV2 ? "V2" : "V1") + "'," +
+                "'sink.use.new-sink-api' = '" + (newSinkApi ? "true" : "false") + "'," +
                 "'database-name' = '" + DB_NAME + "'," +
                 "'table-name' = '" + sinkOptions.getTableName() + "'," +
                 "'username' = '" + sinkOptions.getUsername() + "'," +
@@ -271,6 +279,7 @@ public class StarRocksSinkITTest extends StarRocksITTestBase {
                 "'jdbc-url'='" + sinkOptions.getJdbcUrl() + "'," +
                 "'load-url'='" + String.join(";", sinkOptions.getLoadUrlList()) + "'," +
                 "'sink.version' = '" + (isSinkV2 ? "V2" : "V1") + "'," +
+                "'sink.use.new-sink-api' = '" + (newSinkApi ? "true" : "false") + "'," +
                 "'database-name' = '" + DB_NAME + "'," +
                 "'table-name' = '" + sinkOptions.getTableName() + "'," +
                 "'username' = '" + sinkOptions.getUsername() + "'," +
@@ -321,6 +330,7 @@ public class StarRocksSinkITTest extends StarRocksITTestBase {
                 "'jdbc-url'='" + sinkOptions.getJdbcUrl() + "'," +
                 "'load-url'='" + String.join(";", sinkOptions.getLoadUrlList()) + "'," +
                 "'sink.version' = '" + (isSinkV2 ? "V2" : "V1") + "'," +
+                "'sink.use.new-sink-api' = '" + (newSinkApi ? "true" : "false") + "'," +
                 "'database-name' = '" + DB_NAME + "'," +
                 "'table-name' = '" + sinkOptions.getTableName() + "'," +
                 "'username' = '" + sinkOptions.getUsername() + "'," +
@@ -374,6 +384,7 @@ public class StarRocksSinkITTest extends StarRocksITTestBase {
                 "'jdbc-url'='" + sinkOptions.getJdbcUrl() + "'," +
                 "'load-url'='" + String.join(";", sinkOptions.getLoadUrlList()) + "'," +
                 "'sink.version' = '" + (isSinkV2 ? "V2" : "V1") + "'," +
+                "'sink.use.new-sink-api' = '" + (newSinkApi ? "true" : "false") + "'," +
                 "'database-name' = '" + DB_NAME + "'," +
                 "'table-name' = '" + sinkOptions.getTableName() + "'," +
                 "'username' = '" + sinkOptions.getUsername() + "'," +
@@ -524,6 +535,7 @@ public class StarRocksSinkITTest extends StarRocksITTestBase {
                 "'jdbc-url'='" + getJdbcUrl() + "'," +
                 "'load-url'='" + String.join(";", getHttpUrls()) + "'," +
                 "'sink.version' = '" + (isSinkV2 ? "V2" : "V1") + "'," +
+                "'sink.use.new-sink-api' = '" + (newSinkApi ? "true" : "false") + "'," +
                 "'database-name' = '" + DB_NAME + "'," +
                 "'table-name' = '" + tableName + "'," +
                 "'username' = 'root'," +
@@ -596,6 +608,7 @@ public class StarRocksSinkITTest extends StarRocksITTestBase {
                     "'jdbc-url'='" + sinkOptions.getJdbcUrl() + "'," +
                     "'load-url'='" + String.join(";", sinkOptions.getLoadUrlList()) + "'," +
                     "'sink.version' = '" + (isSinkV2 ? "V2" : "V1") + "'," +
+                    "'sink.use.new-sink-api' = '" + (newSinkApi ? "true" : "false") + "'," +
                     "'database-name' = '" + DB_NAME + "'," +
                     "'table-name' = '" + sinkOptions.getTableName() + "'," +
                     "'username' = '" + sinkOptions.getUsername() + "'," +
