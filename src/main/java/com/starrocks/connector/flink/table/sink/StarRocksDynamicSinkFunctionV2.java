@@ -33,10 +33,6 @@ import com.starrocks.connector.flink.tools.JsonWrapper;
 import com.starrocks.data.load.stream.LabelGeneratorFactory;
 import com.starrocks.data.load.stream.StreamLoadSnapshot;
 import com.starrocks.data.load.stream.v2.StreamLoadManagerV2;
-import net.sf.jsqlparser.parser.CCJSqlParserUtil;
-import net.sf.jsqlparser.statement.Statement;
-import net.sf.jsqlparser.statement.alter.Alter;
-import net.sf.jsqlparser.statement.truncate.Truncate;
 import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.api.common.typeinfo.TypeHint;
@@ -48,9 +44,7 @@ import org.apache.flink.runtime.state.FunctionSnapshotContext;
 import org.apache.flink.streaming.api.operators.util.SimpleVersionedListState;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.data.RowData;
-import org.apache.flink.table.data.binary.NestedRowData;
 import org.apache.flink.types.RowKind;
-import org.apache.flink.util.InstantiationUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -58,7 +52,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -157,33 +150,6 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
             return;
         }
 
-        if (value instanceof NestedRowData) {
-            NestedRowData ddlData = (NestedRowData) value;
-            if (ddlData.getSegments().length != 1 || ddlData.getSegments()[0].size() < NESTED_ROW_DATA_HEADER_SIZE) {
-                return;
-            }
-
-            int totalSize = ddlData.getSegments()[0].size();
-            byte[] data = new byte[totalSize - NESTED_ROW_DATA_HEADER_SIZE];
-            ddlData.getSegments()[0].get(NESTED_ROW_DATA_HEADER_SIZE, data);
-            Map<String, String> ddlMap = InstantiationUtil.deserializeObject(data, HashMap.class.getClassLoader());
-            if (ddlMap == null
-                    || "true".equals(ddlMap.get("snapshot"))
-                    || Strings.isNullOrEmpty(ddlMap.get("ddl"))
-                    || Strings.isNullOrEmpty(ddlMap.get("databaseName"))) {
-                return;
-            }
-            Statement statement = CCJSqlParserUtil.parse(ddlMap.get("ddl"));
-            if (statement instanceof Truncate) {
-                Truncate truncate = (Truncate) statement;
-                if (!sinkOptions.getTableName().equalsIgnoreCase(truncate.getTable().getName())) {
-                    return;
-                }
-                // TODO: add ddl to queue
-            } else if (statement instanceof Alter) {
-
-            }
-        }
         if (value instanceof RowData) {
             if (RowKind.UPDATE_BEFORE.equals(((RowData)value).getRowKind()) &&
                     (!sinkOptions.supportUpsertDelete() || sinkOptions.getIgnoreUpdateBefore())) {

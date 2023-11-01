@@ -25,10 +25,6 @@ import com.starrocks.connector.flink.row.sink.StarRocksISerializer;
 import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
 import com.starrocks.connector.flink.tools.EnvUtils;
 import com.starrocks.connector.flink.tools.JsonWrapper;
-import net.sf.jsqlparser.parser.CCJSqlParserUtil;
-import net.sf.jsqlparser.statement.Statement;
-import net.sf.jsqlparser.statement.alter.Alter;
-import net.sf.jsqlparser.statement.truncate.Truncate;
 import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.api.common.typeinfo.TypeHint;
@@ -39,13 +35,10 @@ import org.apache.flink.runtime.state.FunctionInitializationContext;
 import org.apache.flink.runtime.state.FunctionSnapshotContext;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.data.RowData;
-import org.apache.flink.table.data.binary.NestedRowData;
 import org.apache.flink.types.RowKind;
-import org.apache.flink.util.InstantiationUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashMap;
 import java.util.Map;
 
 public class StarRocksDynamicSinkFunction<T> extends StarRocksDynamicSinkFunctionBase<T> {
@@ -125,33 +118,6 @@ public class StarRocksDynamicSinkFunction<T> extends StarRocksDynamicSinkFunctio
             totalInvokeRows.inc(1);
             totalInvokeRowsTime.inc(System.nanoTime() - start);
             return;
-        }
-        if (value instanceof NestedRowData) {
-            final int headerSize = 256;
-            NestedRowData ddlData = (NestedRowData) value;
-            if (ddlData.getSegments().length != 1 || ddlData.getSegments()[0].size() < headerSize) {
-                return;
-            }
-            int totalSize = ddlData.getSegments()[0].size();
-            byte[] data = new byte[totalSize - headerSize];
-            ddlData.getSegments()[0].get(headerSize, data);
-            Map<String, String> ddlMap = InstantiationUtil.deserializeObject(data, HashMap.class.getClassLoader());
-            if (null == ddlMap
-                    || "true".equals(ddlMap.get("snapshot"))
-                    || Strings.isNullOrEmpty(ddlMap.get("ddl"))
-                    || Strings.isNullOrEmpty(ddlMap.get("databaseName"))) {
-                return;
-            }
-            Statement stmt = CCJSqlParserUtil.parse(ddlMap.get("ddl"));
-            if (stmt instanceof Truncate) {
-                Truncate truncate = (Truncate) stmt;
-                if (!sinkOptions.getTableName().equalsIgnoreCase(truncate.getTable().getName())) {
-                    return;
-                }
-                // TODO: add ddl to queue
-            } else if (stmt instanceof Alter) {
-                Alter alter = (Alter) stmt;
-            }
         }
         if (value instanceof RowData) {
             if (RowKind.UPDATE_BEFORE.equals(((RowData)value).getRowKind()) &&
