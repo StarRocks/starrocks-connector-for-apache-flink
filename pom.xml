@@ -114,11 +114,6 @@ limitations under the License.
             <version>1.15</version>
         </dependency>
         <dependency>
-            <groupId>commons-logging</groupId>
-            <artifactId>commons-logging</artifactId>
-            <version>1.1.1</version>
-        </dependency>
-        <dependency>
             <groupId>commons-io</groupId>
             <artifactId>commons-io</artifactId>
             <version>2.11.0</version>
@@ -467,7 +462,6 @@ limitations under the License.
                                 <includes>
                                     <include>commons-codec:commons-codec</include>
                                     <include>commons-io:commons-io</include>
-                                    <include>commons-logging:*</include>
                                     <include>com.alibaba:fastjson</include>
                                     <include>mysql:mysql-connector-java</include>
                                     <include>com.starrocks:starrocks-stream-load-sdk</include>
