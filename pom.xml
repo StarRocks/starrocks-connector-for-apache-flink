@@ -109,11 +109,6 @@ limitations under the License.
             </exclusions>
         </dependency>
         <dependency>
-            <groupId>commons-codec</groupId>
-            <artifactId>commons-codec</artifactId>
-            <version>1.15</version>
-        </dependency>
-        <dependency>
             <groupId>com.alibaba</groupId>
             <artifactId>fastjson</artifactId>
             <version>1.2.75</version>
@@ -131,11 +126,6 @@ limitations under the License.
         <dependency>
             <groupId>org.apache.arrow</groupId>
             <artifactId>arrow-vector</artifactId>
-            <version>${arrow.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.arrow</groupId>
-            <artifactId>arrow-memory-netty</artifactId>
             <version>${arrow.version}</version>
         </dependency>
 
@@ -437,10 +427,6 @@ limitations under the License.
                                     <shadedPattern>${shading.prefix}.com.alibaba</shadedPattern>
                                 </relocation>
                                 <relocation>
-                                    <pattern>org.apache.commons</pattern>
-                                    <shadedPattern>${shading.prefix}.org.apache.commons</shadedPattern>
-                                </relocation>
-                                <relocation>
                                     <pattern>org.apache.arrow</pattern>
                                     <shadedPattern>${shading.prefix}.org.apache.arrow</shadedPattern>
                                 </relocation>
@@ -455,18 +441,11 @@ limitations under the License.
                             </relocations>
                             <artifactSet>
                                 <includes>
-                                    <include>commons-codec:commons-codec</include>
                                     <include>com.alibaba:fastjson</include>
                                     <include>mysql:mysql-connector-java</include>
                                     <include>com.starrocks:starrocks-stream-load-sdk</include>
                                     <include>com.starrocks:starrocks-thrift-sdk</include>
-                                    <include>org.apache.arrow:arrow-vector</include>
-                                    <include>org.apache.arrow:arrow-memory-netty</include>
-                                    <include>org.apache.arrow:arrow-memory-core</include>
-                                    <include>org.apache.arrow:arrow-format</include>
-                                    <include>io.netty:netty-buffer</include>
-                                    <include>io.netty:netty-common</include>
-                                    <include>com.google.flatbuffers:flatbuffers-java</include>
+                                    <include>org.apache.arrow:*</include>
                                     <include>com.google.guava:*</include>
                                 </includes>
                             </artifactSet>
