@@ -58,6 +58,8 @@ limitations under the License.
         <arrow.version>5.0.0</arrow.version>
         <kafka.version>2.8.1</kafka.version>
         <scala.binary.version>2.12</scala.binary.version>
+        <guava.version>31.1-jre</guava.version>
+        <shading.prefix>com.starrocks.shade</shading.prefix>
     </properties>
 
     <dependencies>
@@ -97,7 +99,14 @@ limitations under the License.
         <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
-            <version>31.1-jre</version>
+            <version>${guava.version}</version>
+            <exclusions>
+                <exclusion>
+                    <!-- this dependency is actually empty and appears to be some weird legacy artifact -->
+                    <groupId>com.google.guava</groupId>
+                    <artifactId>listenablefuture</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>commons-codec</groupId>
@@ -450,35 +459,31 @@ limitations under the License.
                             <relocations>
                                 <relocation>
                                     <pattern>com.alibaba</pattern>
-                                    <shadedPattern>com.starrocks.shade.com.alibaba</shadedPattern>
+                                    <shadedPattern>${shading.prefix}.com.alibaba</shadedPattern>
                                 </relocation>
                                 <relocation>
                                     <pattern>org.apache.http</pattern>
-                                    <shadedPattern>com.starrocks.shade.org.apache.http</shadedPattern>
+                                    <shadedPattern>${shading.prefix}.org.apache.http</shadedPattern>
                                 </relocation>
                                 <relocation>
                                     <pattern>org.apache.commons</pattern>
-                                    <shadedPattern>com.starrocks.shade.org.apache.commons</shadedPattern>
+                                    <shadedPattern>${shading.prefix}.org.apache.commons</shadedPattern>
                                 </relocation>
                                 <relocation>
                                     <pattern>org.apache.arrow</pattern>
-                                    <shadedPattern>com.starrocks.shade.org.apache.arrow</shadedPattern>
+                                    <shadedPattern>${shading.prefix}.org.apache.arrow</shadedPattern>
                                 </relocation>
                                 <relocation>
                                     <pattern>io.netty</pattern>
-                                    <shadedPattern>com.starrocks.shade.io.netty</shadedPattern>
-                                </relocation>
-                                <relocation>
-                                    <pattern>com.google.flatbuffers</pattern>
-                                    <shadedPattern>com.starrocks.shade.com.google.flatbuffers</shadedPattern>
-                                </relocation>
-                                <relocation>
-                                    <pattern>com.google.common</pattern>
-                                    <shadedPattern>com.starrocks.shade.com.google.common</shadedPattern>
+                                    <shadedPattern>${shading.prefix}.io.netty</shadedPattern>
                                 </relocation>
                                 <relocation>
                                     <pattern>com.fasterxml.jackson</pattern>
-                                    <shadedPattern>com.starrocks.shade.com.fasterxml.jackson</shadedPattern>
+                                    <shadedPattern>${shading.prefix}.com.fasterxml.jackson</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.google</pattern>
+                                    <shadedPattern>${shading.prefix}.com.google</shadedPattern>
                                 </relocation>
                             </relocations>
                             <artifactSet>
@@ -499,7 +504,7 @@ limitations under the License.
                                     <include>io.netty:netty-buffer</include>
                                     <include>io.netty:netty-common</include>
                                     <include>com.google.flatbuffers:flatbuffers-java</include>
-                                    <include>com.google.guava:guava</include>
+                                    <include>com.google.guava:*</include>
                                     <include>com.fasterxml.jackson.core:jackson-annotations</include>
                                     <include>com.fasterxml.jackson.core:jackson-core</include>
                                     <include>com.fasterxml.jackson.core:jackson-databind</include>
