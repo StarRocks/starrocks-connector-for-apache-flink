@@ -464,10 +464,6 @@ limitations under the License.
                                     <shadedPattern>${shading.prefix}.io.netty</shadedPattern>
                                 </relocation>
                                 <relocation>
-                                    <pattern>com.fasterxml.jackson</pattern>
-                                    <shadedPattern>${shading.prefix}.com.fasterxml.jackson</shadedPattern>
-                                </relocation>
-                                <relocation>
                                     <pattern>com.google</pattern>
                                     <shadedPattern>${shading.prefix}.com.google</shadedPattern>
                                 </relocation>
@@ -489,9 +485,6 @@ limitations under the License.
                                     <include>io.netty:netty-common</include>
                                     <include>com.google.flatbuffers:flatbuffers-java</include>
                                     <include>com.google.guava:*</include>
-                                    <include>com.fasterxml.jackson.core:jackson-annotations</include>
-                                    <include>com.fasterxml.jackson.core:jackson-core</include>
-                                    <include>com.fasterxml.jackson.core:jackson-databind</include>
                                 </includes>
                             </artifactSet>
                             <filters>
