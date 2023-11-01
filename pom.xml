@@ -53,8 +53,9 @@ limitations under the License.
         <file_encoding>UTF-8</file_encoding>
         <maven-enforcer-plugin.version>3.0.0-M3</maven-enforcer-plugin.version>
         <maven-surefire-plugin.version>3.0.0-M4</maven-surefire-plugin.version>
-        <flink.minor.version>1.17</flink.minor.version>
-        <flink.version>1.17.0</flink.version>
+        <flink.minor.version>1.18</flink.minor.version>
+        <flink.version>1.18.0</flink.version>
+        <kafka.connector.version>3.0.1-1.18</kafka.connector.version>
         <arrow.version>5.0.0</arrow.version>
         <kafka.version>2.8.1</kafka.version>
         <scala.binary.version>2.12</scala.binary.version>
@@ -128,19 +129,24 @@ limitations under the License.
             <artifactId>arrow-vector</artifactId>
             <version>${arrow.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>arrow-memory-netty</artifactId>
+            <version>${arrow.version}</version>
+        </dependency>
 
         <!--Following dependencies are mainly used for tests of kafka -> starrocks pipelines, and copied from flink-->
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-connector-kafka</artifactId>
-            <version>${flink.version}</version>
+            <version>${kafka.connector.version}</version>
             <scope>test</scope>
         </dependency>
 
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-connector-kafka</artifactId>
-            <version>${flink.version}</version>
+            <version>${kafka.connector.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
@@ -438,6 +444,14 @@ limitations under the License.
                                     <pattern>com.google</pattern>
                                     <shadedPattern>${shading.prefix}.com.google</shadedPattern>
                                 </relocation>
+                                <relocation>
+                                    <!--
+                                    arrow depends on fastxml, and relocate to com.starrocks.streamload.shade so that
+                                    we can reuse the fastxml from streamload sdk
+                                    -->
+                                    <pattern>com.fasterxml.jackson</pattern>
+                                    <shadedPattern>com.starrocks.streamload.shade.com.fasterxml.jackson</shadedPattern>
+                                </relocation>
                             </relocations>
                             <artifactSet>
                                 <includes>
@@ -446,6 +460,8 @@ limitations under the License.
                                     <include>com.starrocks:starrocks-stream-load-sdk</include>
                                     <include>com.starrocks:starrocks-thrift-sdk</include>
                                     <include>org.apache.arrow:*</include>
+                                    <include>io.netty:*</include>
+                                    <include>com.google.flatbuffers:flatbuffers-java</include>
                                     <include>com.google.guava:*</include>
                                 </includes>
                             </artifactSet>
