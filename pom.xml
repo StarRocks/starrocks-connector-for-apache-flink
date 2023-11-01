@@ -114,11 +114,6 @@ limitations under the License.
             <version>1.15</version>
         </dependency>
         <dependency>
-            <groupId>commons-io</groupId>
-            <artifactId>commons-io</artifactId>
-            <version>2.11.0</version>
-        </dependency>
-        <dependency>
             <groupId>com.alibaba</groupId>
             <artifactId>fastjson</artifactId>
             <version>1.2.75</version>
@@ -461,7 +456,6 @@ limitations under the License.
                             <artifactSet>
                                 <includes>
                                     <include>commons-codec:commons-codec</include>
-                                    <include>commons-io:commons-io</include>
                                     <include>com.alibaba:fastjson</include>
                                     <include>mysql:mysql-connector-java</include>
                                     <include>com.starrocks:starrocks-stream-load-sdk</include>
