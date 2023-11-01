@@ -129,16 +129,6 @@ limitations under the License.
             <version>2.11.0</version>
         </dependency>
         <dependency>
-            <groupId>org.apache.httpcomponents</groupId>
-            <artifactId>httpcore</artifactId>
-            <version>4.4.6</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.httpcomponents</groupId>
-            <artifactId>httpclient</artifactId>
-            <version>4.5.13</version>
-        </dependency>
-        <dependency>
             <groupId>com.alibaba</groupId>
             <artifactId>fastjson</artifactId>
             <version>1.2.75</version>
@@ -462,10 +452,6 @@ limitations under the License.
                                     <shadedPattern>${shading.prefix}.com.alibaba</shadedPattern>
                                 </relocation>
                                 <relocation>
-                                    <pattern>org.apache.http</pattern>
-                                    <shadedPattern>${shading.prefix}.org.apache.http</shadedPattern>
-                                </relocation>
-                                <relocation>
                                     <pattern>org.apache.commons</pattern>
                                     <shadedPattern>${shading.prefix}.org.apache.commons</shadedPattern>
                                 </relocation>
@@ -491,8 +477,6 @@ limitations under the License.
                                     <include>commons-codec:commons-codec</include>
                                     <include>commons-io:commons-io</include>
                                     <include>commons-logging:*</include>
-                                    <include>org.apache.httpcomponents:httpclient</include>
-                                    <include>org.apache.httpcomponents:httpcore</include>
                                     <include>com.alibaba:fastjson</include>
                                     <include>mysql:mysql-connector-java</include>
                                     <include>com.starrocks:starrocks-stream-load-sdk</include>
