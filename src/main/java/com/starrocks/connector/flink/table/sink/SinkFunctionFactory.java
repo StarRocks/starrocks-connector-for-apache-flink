@@ -19,6 +19,7 @@
 package com.starrocks.connector.flink.table.sink;
 
 import com.starrocks.connector.flink.row.sink.StarRocksIRowTransformer;
+import com.starrocks.connector.flink.table.sink.v2.StarRocksSink;
 import org.apache.flink.table.api.TableSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -113,5 +114,24 @@ public class SinkFunctionFactory {
             default:
                 throw new UnsupportedOperationException("Unsupported sink type " + sinkVersion.name());
         }
+    }
+
+    public static <T> StarRocksSink<T> createSink(
+            StarRocksSinkOptions sinkOptions, TableSchema schema, StarRocksIRowTransformer<T> rowTransformer) {
+        detectStarRocksFeature(sinkOptions);
+        SinkVersion sinkVersion = getSinkVersion(sinkOptions);
+        if (sinkVersion == SinkVersion.V2) {
+            return new StarRocksSink<>(sinkOptions, schema, rowTransformer);
+        }
+        throw new UnsupportedOperationException("New sink api don't support sink type " + sinkVersion.name());
+    }
+
+    public static <T> StarRocksSink<T> createSink(StarRocksSinkOptions sinkOptions) {
+        detectStarRocksFeature(sinkOptions);
+        SinkVersion sinkVersion = getSinkVersion(sinkOptions);
+        if (sinkVersion == SinkVersion.V2) {
+            return new StarRocksSink<>(sinkOptions);
+        }
+        throw new UnsupportedOperationException("New sink api don't support sink type " + sinkVersion.name());
     }
 }
