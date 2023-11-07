@@ -18,40 +18,25 @@
 # specific language governing permissions and limitations
 # under the License.
 
-set -eo pipefail
+source "$(dirname "$0")"/common.sh
 
-# check maven
-MVN_CMD=mvn
-if [[ ! -z ${CUSTOM_MVN} ]]; then
-    MVN_CMD=${CUSTOM_MVN}
-fi
-if ! ${MVN_CMD} --version; then
-    echo "Error: mvn is not found"
-    exit 1
-fi
-export MVN_CMD
-
-supported_minor_version=("1.15" "1.16" "1.17")
-version_msg=$(IFS=, ; echo "${supported_minor_version[*]}")
 if [ ! $1 ]
 then
     echo "Usage:"
-    echo "   sh build.sh <flink_version>"
-    echo "   supported flink version: ${version_msg}"
+    echo "   sh deploy.sh <flink_version>"
+    echo "   supported flink version: ${VERSION_MESSAGE}"
     exit 1
 fi
 
 flink_minor_version=$1
-if [[ " ${supported_minor_version[*]} " == *" $flink_minor_version "* ]];
-then
-    echo "Compiling connector for flink version $flink_minor_version"
-else
-    echo "Error: only support flink version: ${version_msg}"
-    exit 1
-fi
+check_flink_version_supported $flink_minor_version
+flink_version="$(get_flink_version $flink_minor_version)"
+kafka_connector_version="$(get_kafka_connector_version $flink_minor_version)"
 
-flink_version=${flink_minor_version}.0
-${MVN_CMD} clean deploy -Prelease -DskipTests -Dflink.minor.version=${flink_minor_version} -Dflink.version=${flink_version}
+${MVN_CMD} clean deploy -Prelease -DskipTests \
+  -Dflink.minor.version=${flink_minor_version} \
+  -Dflink.version=${flink_version} \
+  -Dkafka.connector.version=${kafka_connector_version}
 
 echo "*********************************************************************"
 echo "Successfully deploy Flink StarRocks Connector for Flink $flink_minor_version"

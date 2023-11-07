@@ -53,11 +53,14 @@ limitations under the License.
         <file_encoding>UTF-8</file_encoding>
         <maven-enforcer-plugin.version>3.0.0-M3</maven-enforcer-plugin.version>
         <maven-surefire-plugin.version>3.0.0-M4</maven-surefire-plugin.version>
-        <flink.minor.version>1.17</flink.minor.version>
-        <flink.version>1.17.0</flink.version>
+        <flink.minor.version>1.18</flink.minor.version>
+        <flink.version>1.18.0</flink.version>
+        <kafka.connector.version>3.0.1-1.18</kafka.connector.version>
         <arrow.version>5.0.0</arrow.version>
         <kafka.version>2.8.1</kafka.version>
         <scala.binary.version>2.12</scala.binary.version>
+        <guava.version>31.1-jre</guava.version>
+        <shading.prefix>com.starrocks.shade</shading.prefix>
     </properties>
 
     <dependencies>
@@ -97,37 +100,14 @@ limitations under the License.
         <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
-            <version>31.1-jre</version>
-        </dependency>
-        <dependency>
-            <groupId>commons-codec</groupId>
-            <artifactId>commons-codec</artifactId>
-            <version>1.15</version>
-        </dependency>
-        <dependency>
-            <groupId>com.github.jsqlparser</groupId>
-            <artifactId>jsqlparser</artifactId>
-            <version>4.0</version>
-        </dependency>
-        <dependency>
-            <groupId>commons-logging</groupId>
-            <artifactId>commons-logging</artifactId>
-            <version>1.1.1</version>
-        </dependency>
-        <dependency>
-            <groupId>commons-io</groupId>
-            <artifactId>commons-io</artifactId>
-            <version>2.11.0</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.httpcomponents</groupId>
-            <artifactId>httpcore</artifactId>
-            <version>4.4.6</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.httpcomponents</groupId>
-            <artifactId>httpclient</artifactId>
-            <version>4.5.13</version>
+            <version>${guava.version}</version>
+            <exclusions>
+                <exclusion>
+                    <!-- this dependency is actually empty and appears to be some weird legacy artifact -->
+                    <groupId>com.google.guava</groupId>
+                    <artifactId>listenablefuture</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>com.alibaba</groupId>
@@ -159,14 +139,14 @@ limitations under the License.
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-connector-kafka</artifactId>
-            <version>${flink.version}</version>
+            <version>${kafka.connector.version}</version>
             <scope>test</scope>
         </dependency>
 
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-connector-kafka</artifactId>
-            <version>${flink.version}</version>
+            <version>${kafka.connector.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
@@ -450,59 +430,39 @@ limitations under the License.
                             <relocations>
                                 <relocation>
                                     <pattern>com.alibaba</pattern>
-                                    <shadedPattern>com.starrocks.shade.com.alibaba</shadedPattern>
-                                </relocation>
-                                <relocation>
-                                    <pattern>org.apache.http</pattern>
-                                    <shadedPattern>com.starrocks.shade.org.apache.http</shadedPattern>
-                                </relocation>
-                                <relocation>
-                                    <pattern>org.apache.commons</pattern>
-                                    <shadedPattern>com.starrocks.shade.org.apache.commons</shadedPattern>
+                                    <shadedPattern>${shading.prefix}.com.alibaba</shadedPattern>
                                 </relocation>
                                 <relocation>
                                     <pattern>org.apache.arrow</pattern>
-                                    <shadedPattern>com.starrocks.shade.org.apache.arrow</shadedPattern>
+                                    <shadedPattern>${shading.prefix}.org.apache.arrow</shadedPattern>
                                 </relocation>
                                 <relocation>
                                     <pattern>io.netty</pattern>
-                                    <shadedPattern>com.starrocks.shade.io.netty</shadedPattern>
+                                    <shadedPattern>${shading.prefix}.io.netty</shadedPattern>
                                 </relocation>
                                 <relocation>
-                                    <pattern>com.google.flatbuffers</pattern>
-                                    <shadedPattern>com.starrocks.shade.com.google.flatbuffers</shadedPattern>
+                                    <pattern>com.google</pattern>
+                                    <shadedPattern>${shading.prefix}.com.google</shadedPattern>
                                 </relocation>
                                 <relocation>
-                                    <pattern>com.google.common</pattern>
-                                    <shadedPattern>com.starrocks.shade.com.google.common</shadedPattern>
-                                </relocation>
-                                <relocation>
+                                    <!--
+                                    arrow depends on fastxml, and relocate to com.starrocks.streamload.shade so that
+                                    we can reuse the fastxml from streamload sdk
+                                    -->
                                     <pattern>com.fasterxml.jackson</pattern>
-                                    <shadedPattern>com.starrocks.shade.com.fasterxml.jackson</shadedPattern>
+                                    <shadedPattern>com.starrocks.streamload.shade.com.fasterxml.jackson</shadedPattern>
                                 </relocation>
                             </relocations>
                             <artifactSet>
                                 <includes>
-                                    <include>commons-codec:commons-codec</include>
-                                    <include>commons-io:commons-io</include>
-                                    <include>commons-logging:*</include>
-                                    <include>org.apache.httpcomponents:httpclient</include>
-                                    <include>org.apache.httpcomponents:httpcore</include>
                                     <include>com.alibaba:fastjson</include>
                                     <include>mysql:mysql-connector-java</include>
                                     <include>com.starrocks:starrocks-stream-load-sdk</include>
                                     <include>com.starrocks:starrocks-thrift-sdk</include>
-                                    <include>org.apache.arrow:arrow-vector</include>
-                                    <include>org.apache.arrow:arrow-memory-netty</include>
-                                    <include>org.apache.arrow:arrow-memory-core</include>
-                                    <include>org.apache.arrow:arrow-format</include>
-                                    <include>io.netty:netty-buffer</include>
-                                    <include>io.netty:netty-common</include>
+                                    <include>org.apache.arrow:*</include>
+                                    <include>io.netty:*</include>
                                     <include>com.google.flatbuffers:flatbuffers-java</include>
-                                    <include>com.google.guava:guava</include>
-                                    <include>com.fasterxml.jackson.core:jackson-annotations</include>
-                                    <include>com.fasterxml.jackson.core:jackson-core</include>
-                                    <include>com.fasterxml.jackson.core:jackson-databind</include>
+                                    <include>com.google.guava:*</include>
                                 </includes>
                             </artifactSet>
                             <filters>
