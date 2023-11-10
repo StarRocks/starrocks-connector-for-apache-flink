@@ -81,7 +81,7 @@ public class StarRocksSinkOptions implements Serializable {
     public static final ConfigOption<String> SINK_LABEL_PREFIX = ConfigOptions.key("sink.label-prefix")
             .stringType().noDefaultValue().withDescription("The prefix of the stream load label. Available values are within [-_A-Za-z0-9]");
     public static final ConfigOption<Integer> SINK_CONNECT_TIMEOUT = ConfigOptions.key("sink.connect.timeout-ms")
-            .intType().defaultValue(1000).withDescription("Timeout in millisecond for connecting to the `load-url`.");
+            .intType().defaultValue(30000).withDescription("Timeout in millisecond for connecting to the `load-url`.");
     public static final ConfigOption<Integer> SINK_WAIT_FOR_CONTINUE_TIMEOUT = ConfigOptions.key("sink.wait-for-continue.timeout-ms")
             .intType().defaultValue(30000).withDescription("Timeout in millisecond to wait for 100-continue response for http client.");
     public static final ConfigOption<Integer> SINK_IO_THREAD_COUNT = ConfigOptions.key("sink.io.thread-count")
