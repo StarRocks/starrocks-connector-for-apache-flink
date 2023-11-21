@@ -52,7 +52,7 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
     @Nullable
     private final LookupCache cache;
 
-    private DataType physicalRowDataType;
+    private final DataType physicalRowDataType;
 
     public StarRocksDynamicTableSource(StarRocksSourceOptions options,
         TableSchema schema,
@@ -86,12 +86,12 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
 
     @Override
     public LookupRuntimeProvider getLookupRuntimeProvider(LookupContext context) {
-        // JDBC only support non-nested look up keys
+        // StarRocks only support non-nested look up keys
         String[] keyNames = new String[context.getKeys().length];
         for (int i = 0; i < keyNames.length; i++) {
             int[] innerKeyArr = context.getKeys()[i];
             Preconditions.checkArgument(
-                innerKeyArr.length == 1, "JDBC only support non-nested look up keys");
+                innerKeyArr.length == 1, "StarRocks only support non-nested look up keys");
             keyNames[i] = DataType.getFieldNames(physicalRowDataType).get(innerKeyArr[0]);
         }
         final RowType rowType = (RowType) physicalRowDataType.getLogicalType();
@@ -138,7 +138,7 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
         this.pushDownHolder.setQueryType(StarRocksSourceQueryType.QuerySomeColumns);
 
         ArrayList<String> columnList = new ArrayList<>();
-        ArrayList<SelectColumn> selectColumns = new ArrayList<SelectColumn>();
+        ArrayList<SelectColumn> selectColumns = new ArrayList<>();
         for (int index : curProjectedFields) {
             String columnName = flinkSchema.getFieldName(index).get();
             columnList.add(columnName);
@@ -165,8 +165,8 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
                 continue;
             }
             String str = expression.accept(extractor);
+            remain.add(expression);
             if (str == null) {
-                remain.add(expression);
                 continue;
             }
             filters.add(str);

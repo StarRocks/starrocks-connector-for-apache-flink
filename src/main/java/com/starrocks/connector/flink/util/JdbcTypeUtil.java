@@ -50,15 +50,16 @@ import java.sql.Types;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.typeinfo.LocalTimeTypeInfo;
-import org.apache.flink.api.common.typeinfo.PrimitiveArrayTypeInfo;
 import org.apache.flink.api.common.typeinfo.SqlTimeTypeInfo;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
-import org.apache.flink.api.java.typeutils.ObjectArrayTypeInfo;
 import org.apache.flink.table.types.logical.LogicalTypeRoot;
 
-/** Utils for jdbc type. */
+/**
+ * Utils for jdbc type.
+ */
 @Internal
 public class JdbcTypeUtil {
 
@@ -109,18 +110,7 @@ public class JdbcTypeUtil {
                         }
                     });
 
-    private JdbcTypeUtil() {}
-
-    /** Drop this method once Python is not using JdbcOutputFormat. */
-    @Deprecated
-    public static int typeInformationToSqlType(TypeInformation<?> type) {
-        if (TYPE_MAPPING.containsKey(type)) {
-            return TYPE_MAPPING.get(type);
-        } else if (type instanceof ObjectArrayTypeInfo || type instanceof PrimitiveArrayTypeInfo) {
-            return Types.ARRAY;
-        } else {
-            throw new IllegalArgumentException("Unsupported type: " + type);
-        }
+    private JdbcTypeUtil() {
     }
 
     public static int logicalTypeToSqlType(LogicalTypeRoot typeRoot) {

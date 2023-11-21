@@ -31,7 +31,9 @@ import java.util.Map;
 import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
-/** Simple implementation of {@link FieldNamedPreparedStatement}. */
+/**
+ * Simple implementation of {@link FieldNamedPreparedStatement}.
+ */
 public class FieldNamedPreparedStatementImpl implements FieldNamedPreparedStatement {
 
     private final PreparedStatement statement;
@@ -42,24 +44,10 @@ public class FieldNamedPreparedStatementImpl implements FieldNamedPreparedStatem
         this.indexMapping = indexMapping;
     }
 
-    @Override
-    public void clearParameters() throws SQLException {
-        statement.clearParameters();
-    }
 
     @Override
     public ResultSet executeQuery() throws SQLException {
         return statement.executeQuery();
-    }
-
-    @Override
-    public void addBatch() throws SQLException {
-        statement.addBatch();
-    }
-
-    @Override
-    public int[] executeBatch() throws SQLException {
-        return statement.executeBatch();
     }
 
     @Override
@@ -205,7 +193,7 @@ public class FieldNamedPreparedStatementImpl implements FieldNamedPreparedStatem
      * Parses a sql with named parameters. The parameter-index mappings are put into the map, and
      * the parsed sql is returned.
      *
-     * @param sql sql to parse
+     * @param sql      sql to parse
      * @param paramMap map to hold parameter-index mappings
      * @return the parsed sql
      */

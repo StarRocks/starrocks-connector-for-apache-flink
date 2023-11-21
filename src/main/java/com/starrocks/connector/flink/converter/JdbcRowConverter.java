@@ -32,6 +32,8 @@ public interface JdbcRowConverter extends Serializable {
      * Convert data retrieved from {@link ResultSet} to internal {@link RowData}.
      *
      * @param resultSet ResultSet from JDBC
+     * @return resultSet to row
+     * @throws SQLException sql exception
      */
     RowData toInternal(ResultSet resultSet) throws SQLException;
 
@@ -41,6 +43,8 @@ public interface JdbcRowConverter extends Serializable {
      * @param rowData The given internal {@link RowData}.
      * @param statement The statement to be filled.
      * @return The filled statement.
+     * @throws SQLException if parameterIndex does not correspond to a parameter marker in the SQL statement;
+     * if a database access error occurs or this method is called on a closed PreparedStatement
      */
     FieldNamedPreparedStatement toExternal(RowData rowData, FieldNamedPreparedStatement statement)
             throws SQLException;

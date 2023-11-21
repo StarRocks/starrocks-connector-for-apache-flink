@@ -23,7 +23,6 @@ import com.starrocks.connector.flink.converter.JdbcRowConverter;
 import com.starrocks.connector.flink.dialect.MySqlDialect;
 import com.starrocks.connector.flink.statement.FieldNamedPreparedStatement;
 import com.starrocks.connector.flink.tools.EnvUtils;
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -47,10 +46,8 @@ public class StarRocksDynamicLookupFunction extends LookupFunction {
 
     private static final Logger LOG = LoggerFactory.getLogger(StarRocksDynamicLookupFunction.class);
 
-    private final StarRocksSourceOptions sourceOptions;
     private final int maxRetryTimes;
 
-    // cache for lookup data
     private final String[] keyNames;
 
     private final String query;
@@ -69,7 +66,6 @@ public class StarRocksDynamicLookupFunction extends LookupFunction {
         String[] keyNames,
         RowType rowType
     ) {
-        this.sourceOptions = sourceOptions;
 
         this.maxRetryTimes = sourceOptions.getLookupMaxRetries();
 
@@ -130,7 +126,7 @@ public class StarRocksDynamicLookupFunction extends LookupFunction {
     }
 
     @Override
-    public Collection<RowData> lookup(RowData keyRow) throws IOException {
+    public Collection<RowData> lookup(RowData keyRow) {
         for (int retry = 0; retry <= maxRetryTimes; retry++) {
             try {
                 statement = lookupKeyRowConverter.toExternal(keyRow, statement);
@@ -144,9 +140,9 @@ public class StarRocksDynamicLookupFunction extends LookupFunction {
                     return rows;
                 }
             } catch (SQLException e) {
-                LOG.error(String.format("JDBC executeBatch error, retry times = %d", retry), e);
+                LOG.error(String.format("StarRocks executeBatch error, retry times = %d", retry), e);
                 if (retry >= maxRetryTimes) {
-                    throw new RuntimeException("Execution of JDBC statement failed.", e);
+                    throw new RuntimeException("Execution of StarRocks statement failed.", e);
                 }
 
                 try {
@@ -157,9 +153,9 @@ public class StarRocksDynamicLookupFunction extends LookupFunction {
                     }
                 } catch (SQLException | ClassNotFoundException exception) {
                     LOG.error(
-                        "JDBC connection is not valid, and reestablish connection failed",
+                        "StarRocks connection is not valid, and reestablish connection failed",
                         exception);
-                    throw new RuntimeException("Reestablish JDBC connection failed", exception);
+                    throw new RuntimeException("Reestablish StarRocks connection failed", exception);
                 }
 
                 try {

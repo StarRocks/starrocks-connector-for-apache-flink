@@ -22,12 +22,8 @@ import org.apache.flink.table.types.logical.TimestampType;
 import org.apache.flink.table.types.logical.VarBinaryType;
 import org.apache.flink.table.types.logical.LogicalTypeRoot;
 import org.apache.flink.util.Preconditions;
-import java.util.Arrays;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
-
-import static java.lang.String.format;
 
 /**
  * Base class for {@link JdbcDialect JdbcDialects} that implements basic data type validation and
@@ -100,34 +96,6 @@ public abstract class AbstractDialect implements JdbcDialect {
     }
 
 
-
-
-    /**
-     * A simple {@code SELECT} statement.
-     *
-     * <pre>{@code
-     * SELECT expression [, ...]
-     * FROM table_name
-     * WHERE cond [AND ...]
-     * }</pre>
-     */
-    @Override
-    public String getSelectFromStatement(
-            String tableName, String[] selectFields, String[] conditionFields) {
-        String selectExpressions =
-                Arrays.stream(selectFields)
-                        .map(this::quoteIdentifier)
-                        .collect(Collectors.joining(", "));
-        String fieldExpressions =
-                Arrays.stream(conditionFields)
-                        .map(f -> format("%s = :%s", quoteIdentifier(f), f))
-                        .collect(Collectors.joining(" AND "));
-        return "SELECT "
-                + selectExpressions
-                + " FROM "
-                + quoteIdentifier(tableName)
-                + (conditionFields.length > 0 ? " WHERE " + fieldExpressions : "");
-    }
 
 
 

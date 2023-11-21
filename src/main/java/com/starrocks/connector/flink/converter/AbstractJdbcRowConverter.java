@@ -42,7 +42,9 @@ import java.time.LocalTime;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
-/** Base class for all converters that convert between JDBC object and Flink internal object. */
+/**
+ * Base class for all converters that convert between JDBC object and Flink internal object.
+ */
 public abstract class AbstractJdbcRowConverter implements JdbcRowConverter {
 
     protected final RowType rowType;
@@ -92,6 +94,8 @@ public abstract class AbstractJdbcRowConverter implements JdbcRowConverter {
          * Convert a jdbc field object of {@link ResultSet} to the internal data structure object.
          *
          * @param jdbcField A single field of a {@link ResultSet}
+         * @return Object
+         * @throws SQLException maybe
          */
         Object deserialize(Object jdbcField) throws SQLException;
     }
@@ -109,11 +113,18 @@ public abstract class AbstractJdbcRowConverter implements JdbcRowConverter {
     /**
      * Create a nullable runtime {@link JdbcDeserializationConverter} from given {@link
      * LogicalType}.
+     * @param type row type
+     * @return an converter for deserialize
      */
     protected JdbcDeserializationConverter createNullableInternalConverter(LogicalType type) {
         return wrapIntoNullableInternalConverter(createInternalConverter(type));
     }
 
+    /**
+     *
+     * @param jdbcDeserializationConverter converter for deserialization
+     * @return wrapped converter
+     */
     protected JdbcDeserializationConverter wrapIntoNullableInternalConverter(
             JdbcDeserializationConverter jdbcDeserializationConverter) {
         return val -> {
@@ -134,6 +145,10 @@ public abstract class AbstractJdbcRowConverter implements JdbcRowConverter {
             case DOUBLE:
             case INTERVAL_YEAR_MONTH:
             case INTERVAL_DAY_TIME:
+            case BINARY:
+            case VARBINARY:
+            case BIGINT:
+            case INTEGER:
                 return val -> val;
             case TINYINT:
                 return val -> ((Integer) val).byteValue();
@@ -142,10 +157,6 @@ public abstract class AbstractJdbcRowConverter implements JdbcRowConverter {
                 // since
                 // JDBC 1.0 use int type for small values.
                 return val -> val instanceof Integer ? ((Integer) val).shortValue() : val;
-            case INTEGER:
-                return val -> val;
-            case BIGINT:
-                return val -> val;
             case DECIMAL:
                 final int precision = ((DecimalType) type).getPrecision();
                 final int scale = ((DecimalType) type).getScale();
@@ -155,7 +166,7 @@ public abstract class AbstractJdbcRowConverter implements JdbcRowConverter {
                 return val ->
                         val instanceof BigInteger
                                 ? DecimalData.fromBigDecimal(
-                                        new BigDecimal((BigInteger) val, 0), precision, scale)
+                                new BigDecimal((BigInteger) val, 0), precision, scale)
                                 : DecimalData.fromBigDecimal((BigDecimal) val, precision, scale);
             case DATE:
                 return val -> (int) (((Date) val).toLocalDate().toEpochDay());
@@ -170,9 +181,6 @@ public abstract class AbstractJdbcRowConverter implements JdbcRowConverter {
             case CHAR:
             case VARCHAR:
                 return val -> StringData.fromString((String) val);
-            case BINARY:
-            case VARBINARY:
-                return val -> val;
             case ARRAY:
             case ROW:
             case MAP:
@@ -183,7 +191,6 @@ public abstract class AbstractJdbcRowConverter implements JdbcRowConverter {
         }
     }
 
-    /** Create a nullable JDBC f{@link JdbcSerializationConverter} from given sql type. */
     protected JdbcSerializationConverter createNullableExternalConverter(LogicalType type) {
         return wrapIntoNullableExternalConverter(createExternalConverter(type), type);
     }

@@ -38,23 +38,9 @@ public class MySqlDialect extends AbstractDialect {
     private static final int MAX_DECIMAL_PRECISION = 65;
     private static final int MIN_DECIMAL_PRECISION = 1;
 
-    // The JDBC option to enable execute multiple MySQL statements in batch mode:
-    // https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-connp-props-performance-extensions.html#cj-conn-prop_rewriteBatchedStatements
-    private static final String REWRITE_BATCHED_STATEMENTS = "rewriteBatchedStatements";
-
     @Override
     public JdbcRowConverter getRowConverter(RowType rowType) {
         return new MySQLRowConverter(rowType);
-    }
-
-    @Override
-    public String getLimitClause(long limit) {
-        return "LIMIT " + limit;
-    }
-
-    @Override
-    public Optional<String> defaultDriverName() {
-        return Optional.of("com.mysql.jdbc.Driver");
     }
 
     @Override
@@ -104,17 +90,4 @@ public class MySqlDialect extends AbstractDialect {
                 LogicalTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE);
     }
 
-    @Override
-    public String appendDefaultUrlProperties(String url) {
-        if (!url.contains(REWRITE_BATCHED_STATEMENTS)) {
-            String defaultUrlProperties = REWRITE_BATCHED_STATEMENTS + "=true";
-            if (url.contains("?")) {
-                return url + "&" + defaultUrlProperties;
-            } else {
-                return url + "?" + defaultUrlProperties;
-            }
-        } else {
-            return url;
-        }
-    }
 }
