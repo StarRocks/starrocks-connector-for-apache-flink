@@ -21,7 +21,7 @@
 package com.starrocks.connector.flink.table.sink;
 
 import com.starrocks.data.load.stream.LabelGeneratorFactory;
-import org.apache.arrow.util.VisibleForTesting;
+import org.apache.flink.annotation.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

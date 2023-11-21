@@ -22,8 +22,8 @@ package com.starrocks.connector.flink.catalog;
 
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 import com.starrocks.connector.flink.table.source.StarRocksSourceOptions;
-import org.apache.arrow.util.VisibleForTesting;
 import org.apache.commons.compress.utils.Lists;
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.table.api.Schema;

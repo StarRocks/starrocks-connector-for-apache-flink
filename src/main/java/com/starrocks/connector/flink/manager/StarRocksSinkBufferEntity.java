@@ -14,11 +14,11 @@
 
 package com.starrocks.connector.flink.manager;
 
+import com.google.common.base.Strings;
+
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.UUID;
-
-import org.apache.flink.shaded.guava30.com.google.common.base.Strings;
 
 public class StarRocksSinkBufferEntity implements Serializable {
 

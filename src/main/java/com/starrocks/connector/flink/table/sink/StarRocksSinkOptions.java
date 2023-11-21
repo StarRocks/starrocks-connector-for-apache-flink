@@ -81,7 +81,7 @@ public class StarRocksSinkOptions implements Serializable {
     public static final ConfigOption<String> SINK_LABEL_PREFIX = ConfigOptions.key("sink.label-prefix")
             .stringType().noDefaultValue().withDescription("The prefix of the stream load label. Available values are within [-_A-Za-z0-9]");
     public static final ConfigOption<Integer> SINK_CONNECT_TIMEOUT = ConfigOptions.key("sink.connect.timeout-ms")
-            .intType().defaultValue(1000).withDescription("Timeout in millisecond for connecting to the `load-url`.");
+            .intType().defaultValue(30000).withDescription("Timeout in millisecond for connecting to the `load-url`.");
     public static final ConfigOption<Integer> SINK_WAIT_FOR_CONTINUE_TIMEOUT = ConfigOptions.key("sink.wait-for-continue.timeout-ms")
             .intType().defaultValue(30000).withDescription("Timeout in millisecond to wait for 100-continue response for http client.");
     public static final ConfigOption<Integer> SINK_IO_THREAD_COUNT = ConfigOptions.key("sink.io.thread-count")
@@ -138,6 +138,13 @@ public class StarRocksSinkOptions implements Serializable {
             .intType().defaultValue(-1).withDescription("Only available when sink.exactly-once.abort-lingering-txn is enabled. " +
                     "The number of transactions to check if they are lingering. -1 indicates that check until finding the first " +
                     "transaction that is not lingering.");
+
+    public static final ConfigOption<Boolean> SINK_USE_NEW_SINK_API = ConfigOptions.key("sink.use.new-sink-api")
+            .booleanType().defaultValue(false).withDescription("Whether to use the implementation with the unified sink api " +
+                    "described in Flink FLIP-191. There is no difference for users whether to enable this flag. This is just " +
+                    "for adapting some frameworks which only support new sink api, and Flink will also remove the old sink api " +
+                    "in the coming 2.0. Note that it's not compatible after changing the flag, that's, you can't recover from " +
+                    "the previous job after changing the flag.");
 
     public static final ConfigOption<Integer> SINK_PARALLELISM = FactoryUtil.SINK_PARALLELISM;
 
@@ -349,6 +356,10 @@ public class StarRocksSinkOptions implements Serializable {
 
     public int getAbortCheckNumTxns() {
         return tableOptions.get(SINK_ABORT_CHECK_NUM_TXNS);
+    }
+
+    public boolean isUseUnifiedSinkApi() {
+        return tableOptions.get(SINK_USE_NEW_SINK_API);
     }
 
     private void validateStreamLoadUrl() {

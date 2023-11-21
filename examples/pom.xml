@@ -25,10 +25,10 @@ limitations under the License.
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <file_encoding>UTF-8</file_encoding>
-        <flink.minor.version>1.15</flink.minor.version>
-        <flink.version>1.15.0</flink.version>
+        <flink.minor.version>1.17</flink.minor.version>
+        <flink.version>1.17.0</flink.version>
         <scala.version>2.12</scala.version>
-        <connector.version>1.2.7</connector.version>
+        <connector.version>1.2.8</connector.version>
         <log4j.version>2.17.1</log4j.version>
     </properties>
 

@@ -20,7 +20,6 @@ import com.starrocks.connector.flink.table.StarRocksDataType;
 import com.starrocks.connector.flink.tools.JsonWrapper;
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
-import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.data.ArrayData;
 import org.apache.flink.table.data.GenericArrayData;
@@ -78,8 +77,9 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
 
     @Override
     public void setRuntimeContext(RuntimeContext runtimeCtx) {
-        final TypeSerializer<RowData> typeSerializer = rowDataTypeInfo.createSerializer(runtimeCtx.getExecutionConfig());
-        valueTransform = runtimeCtx.getExecutionConfig().isObjectReuseEnabled() ? typeSerializer::copy : Function.identity();
+        // No need to copy the value even if object reuse is enabled,
+        // because the raw RowData value will not be buffered
+        this.valueTransform = Function.identity();
     }
 
     @Override
