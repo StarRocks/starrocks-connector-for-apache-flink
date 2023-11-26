@@ -18,9 +18,17 @@
 
 package com.starrocks.connector.flink.table.sink;
 
-import com.starrocks.connector.flink.row.sink.StarRocksIRowTransformer;
-import com.starrocks.connector.flink.table.sink.v2.StarRocksSink;
 import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.data.RowData;
+
+import com.starrocks.connector.flink.manager.StarRocksSinkTable;
+import com.starrocks.connector.flink.row.sink.StarRocksIRowTransformer;
+import com.starrocks.connector.flink.row.sink.StarRocksISerializer;
+import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
+import com.starrocks.connector.flink.table.sink.v2.RecordSerializer;
+import com.starrocks.connector.flink.table.sink.v2.RowDataSerializer;
+import com.starrocks.connector.flink.table.sink.v2.StarRocksSink;
+import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -116,21 +124,40 @@ public class SinkFunctionFactory {
         }
     }
 
-    public static <T> StarRocksSink<T> createSink(
-            StarRocksSinkOptions sinkOptions, TableSchema schema, StarRocksIRowTransformer<T> rowTransformer) {
+    public static StarRocksSink<RowData> createSink(
+            StarRocksSinkOptions sinkOptions, TableSchema schema, StarRocksIRowTransformer<RowData> rowTransformer) {
         detectStarRocksFeature(sinkOptions);
         SinkVersion sinkVersion = getSinkVersion(sinkOptions);
         if (sinkVersion == SinkVersion.V2) {
-            return new StarRocksSink<>(sinkOptions, schema, rowTransformer);
+            StarRocksSinkTable sinkTable = StarRocksSinkTable.builder()
+                    .sinkOptions(sinkOptions)
+                    .build();
+            sinkTable.validateTableStructure(sinkOptions, schema);
+            // StarRocksJsonSerializer depends on SinkOptions#supportUpsertDelete which is decided in
+            // StarRocksSinkTable#validateTableStructure, so create serializer after validating table structure
+            StarRocksISerializer serializer = StarRocksSerializerFactory.createSerializer(sinkOptions, schema.getFieldNames());
+            rowTransformer.setStarRocksColumns(sinkTable.getFieldMapping());
+            rowTransformer.setTableSchema(schema);
+            RowDataSerializer recordSerializer = new RowDataSerializer(
+                    sinkOptions.getDatabaseName(),
+                    sinkOptions.getTableName(),
+                    sinkOptions.supportUpsertDelete(),
+                    sinkOptions.getIgnoreUpdateBefore(),
+                    serializer,
+                    rowTransformer);
+            StreamLoadProperties streamLoadProperties = sinkOptions.getProperties(sinkTable);
+            return new StarRocksSink<>(sinkOptions, recordSerializer, streamLoadProperties);
         }
         throw new UnsupportedOperationException("New sink api don't support sink type " + sinkVersion.name());
     }
 
-    public static <T> StarRocksSink<T> createSink(StarRocksSinkOptions sinkOptions) {
+    public static <T> StarRocksSink<T> createSink(
+            StarRocksSinkOptions sinkOptions, RecordSerializer<T> recordSerializer) {
         detectStarRocksFeature(sinkOptions);
         SinkVersion sinkVersion = getSinkVersion(sinkOptions);
         if (sinkVersion == SinkVersion.V2) {
-            return new StarRocksSink<>(sinkOptions);
+            StreamLoadProperties streamLoadProperties = sinkOptions.getProperties(null);
+            return new StarRocksSink<>(sinkOptions, recordSerializer, streamLoadProperties);
         }
         throw new UnsupportedOperationException("New sink api don't support sink type " + sinkVersion.name());
     }
