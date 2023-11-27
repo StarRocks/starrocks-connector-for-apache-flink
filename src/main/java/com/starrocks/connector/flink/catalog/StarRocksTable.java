@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 
@@ -172,8 +173,27 @@ public class StarRocksTable {
                 ", numBuckets=" + numBuckets +
                 ", comment='" + comment + '\'' +
                 ", properties=" + properties +
-                ", columnMap=" + columnMap +
                 '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        StarRocksTable that = (StarRocksTable) o;
+        return Objects.equals(databaseName, that.databaseName) &&
+                Objects.equals(tableName, that.tableName) &&
+                tableType == that.tableType &&
+                Objects.equals(columns, that.columns) &&
+                Objects.equals(tableKeys, that.tableKeys) &&
+                Objects.equals(distributionKeys, that.distributionKeys) &&
+                Objects.equals(numBuckets, that.numBuckets) &&
+                Objects.equals(comment, that.comment) &&
+                Objects.equals(properties, that.properties);
     }
 
     /** Build a {@link StarRocksTable}. */
@@ -219,7 +239,7 @@ public class StarRocksTable {
             return this;
         }
 
-        public Builder setNumBuckets(int numBuckets) {
+        public Builder setNumBuckets(Integer numBuckets) {
             this.numBuckets = numBuckets;
             return this;
         }
