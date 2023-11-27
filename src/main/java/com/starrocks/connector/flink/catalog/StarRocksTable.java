@@ -22,137 +22,180 @@ package com.starrocks.connector.flink.catalog;
 
 import org.apache.flink.util.Preconditions;
 
-import java.io.Serializable;
+import javax.annotation.Nullable;
+
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
-import javax.annotation.Nullable;
+import java.util.Optional;
 
-/** Describe a StarRocks table. */
-public class StarRocksTable implements Serializable {
 
-    enum TableType {
+/**
+ * Describe a StarRocks table. See <a
+ * href="https://docs.starrocks.io/docs/table_design/StarRocks_table_design">StarRocks table
+ * design</a> for how to define a StarRocks table.
+ */
+public class StarRocksTable {
+
+    /**
+     * Types of StarRocks table. See <a
+     * href="https://docs.starrocks.io/docs/table_design/table_types">StarRocks Table Types</a>.
+     */
+    public enum TableType {
         UNKNOWN,
-        DUPLICATE,
+        DUPLICATE_KEY,
         AGGREGATE,
-        UNIQUE,
-        PRIMARY
+        UNIQUE_KEY,
+        PRIMARY_KEY
     }
 
-    private static final long serialVersionUID = 1L;
+    /** The database name. */
+    private final String databaseName;
 
-    private final String database;
+    /** The table name. */
+    private final String tableName;
 
-    private final String table;
-
-    private final StarRocksSchema schema;
-
+    /** The type of StarRocks type. */
     private final TableType tableType;
 
-    // Following fields can be nullable if we can not get the metas from StarRocks
+    /** The columns sorted by the ordinal position. */
+    private final List<StarRocksColumn> columns;
 
-    // For different tables, have different meaning. It's duplicate keys for duplicate table,
-    // aggregate keys for aggregate table, unique keys for unique table, and primary keys for
-    // primary table. The list has been sorted by the ordinal positions of the columns.
-    @Nullable
-    private final List<String> tableKeys;
+    /**
+     * The table keys sorted by the ordinal position. null if it's unknown. The table keys has
+     * different meaning for different types of tables. For duplicate key table, It's duplicate
+     * keys. For aggregate table, it's aggregate keys. For unique key table, it's unique keys. For
+     * primary key table, it's primary keys.
+     */
+    @Nullable private final List<String> tableKeys;
 
-    @Nullable
-    private final List<String> partitionKeys;
+    /** The distribution keys. null if it's unknown. */
+    @Nullable private final List<String> distributionKeys;
 
-    @Nullable
-    private final Integer numBuckets;
+    /** The number of buckets. null if it's unknown or automatic. */
+    @Nullable private final Integer numBuckets;
 
-    @Nullable
-    public final String comment;
+    /** The table comment. null if there is no comment or it's unknown. */
+    @Nullable private final String comment;
 
-    @Nullable
+    /** The properties of the table. */
     private final Map<String, String> properties;
 
-    private StarRocksTable(String database, String table, StarRocksSchema schema, TableType tableType,
-                          @Nullable List<String> tableKeys, @Nullable List<String> partitionKeys,
-                          @Nullable Integer numBuckets, @Nullable String comment,
-                           @Nullable Map<String, String> properties) {
-        this.database = Preconditions.checkNotNull(database);
-        this.table = Preconditions.checkNotNull(table);
-        this.schema = Preconditions.checkNotNull(schema);
-        this.tableType = Preconditions.checkNotNull(tableType);
+    /** Map the column name to the column. May be lazily initialized. */
+    @Nullable private volatile Map<String, StarRocksColumn> columnMap;
+
+    private StarRocksTable(
+            String databaseName,
+            String tableName,
+            TableType tableType,
+            List<StarRocksColumn> columns,
+            @Nullable List<String> tableKeys,
+            @Nullable List<String> distributionKeys,
+            @Nullable Integer numBuckets,
+            @Nullable String comment,
+            Map<String, String> properties) {
+        Preconditions.checkNotNull(databaseName);
+        Preconditions.checkNotNull(tableName);
+        Preconditions.checkNotNull(tableType);
+        Preconditions.checkArgument(columns != null && !columns.isEmpty());
+        this.databaseName = databaseName;
+        this.tableName = tableName;
+        this.tableType = tableType;
+        this.columns = columns;
         this.tableKeys = tableKeys;
-        this.partitionKeys = partitionKeys;
+        this.distributionKeys = distributionKeys;
         this.numBuckets = numBuckets;
         this.comment = comment;
-        this.properties = properties;
+        this.properties = Preconditions.checkNotNull(properties);
     }
 
-    public String getDatabase() {
-        return database;
+    public String getDatabaseName() {
+        return databaseName;
     }
 
-    public String getTable() {
-        return table;
+    public String getTableName() {
+        return tableName;
     }
 
-    public StarRocksSchema getSchema() {
-        return schema;
-    }
-
-    @Nullable
     public TableType getTableType() {
         return tableType;
     }
 
-    @Nullable
-    public List<String> getTableKeys() {
-        return tableKeys;
+    public List<StarRocksColumn> getColumns() {
+        return columns;
     }
 
-    @Nullable
-    public List<String> getPartitionKeys() {
-        return partitionKeys;
+    public Optional<List<String>> getTableKeys() {
+        return Optional.ofNullable(tableKeys);
     }
 
-    @Nullable
-    public Integer getNumBuckets() {
-        return numBuckets;
+    public Optional<List<String>> getDistributionKeys() {
+        return Optional.ofNullable(distributionKeys);
     }
 
-    @Nullable
-    public String getComment() {
-        return comment;
+    public Optional<Integer> getNumBuckets() {
+        return Optional.ofNullable(numBuckets);
     }
 
-    @Nullable
+    public Optional<String> getComment() {
+        return Optional.ofNullable(comment);
+    }
+
     public Map<String, String> getProperties() {
         return properties;
     }
 
+    public StarRocksColumn getColumn(String columnName) {
+        if (columnMap == null) {
+            synchronized (this) {
+                if (columnMap == null) {
+                    columnMap = new HashMap<>();
+                    for (StarRocksColumn column : columns) {
+                        columnMap.put(column.getColumnName(), column);
+                    }
+                }
+            }
+        }
+        return columnMap.get(columnName);
+    }
+
+    @Override
+    public String toString() {
+        return "StarRocksTable{" +
+                "databaseName='" + databaseName + '\'' +
+                ", tableName='" + tableName + '\'' +
+                ", tableType=" + tableType +
+                ", columns=" + columns +
+                ", tableKeys=" + tableKeys +
+                ", distributionKeys=" + distributionKeys +
+                ", numBuckets=" + numBuckets +
+                ", comment='" + comment + '\'' +
+                ", properties=" + properties +
+                ", columnMap=" + columnMap +
+                '}';
+    }
+
+    /** Build a {@link StarRocksTable}. */
     public static class Builder {
 
-        private String database;
-        private String table;
-        private StarRocksSchema schema;
+        private String databaseName;
+        private String tableName;
         private TableType tableType;
+        private List<StarRocksColumn> columns = new ArrayList<>();
         private List<String> tableKeys;
-        private List<String> partitionKeys;
+        private List<String> distributionKeys;
         private Integer numBuckets;
         private String comment;
-        private Map<String, String> properties;
+        private Map<String, String> properties = new HashMap<>();
 
-        public Builder setDatabase(String database) {
-            this.database = database;
+        public Builder setDatabaseName(String databaseName) {
+            this.databaseName = databaseName;
             return this;
         }
 
-        public Builder setTable(String table) {
-            this.table = table;
-            return this;
-        }
-
-        public Builder setSchema(StarRocksSchema schema) {
-            this.schema = schema;
+        public Builder setTableName(String tableName) {
+            this.tableName = tableName;
             return this;
         }
 
@@ -161,13 +204,18 @@ public class StarRocksTable implements Serializable {
             return this;
         }
 
-        public Builder setTableKeys(List<String> tableKeys) {
-            this.tableKeys = new ArrayList<>(tableKeys);
+        public Builder setColumns(List<StarRocksColumn> columns) {
+            this.columns = columns;
             return this;
         }
 
-        public Builder setPartitionKeys(List<String> partitionKeys) {
-            this.partitionKeys = new ArrayList<>(partitionKeys);
+        public Builder setTableKeys(List<String> tableKeys) {
+            this.tableKeys = tableKeys;
+            return this;
+        }
+
+        public Builder setDistributionKeys(List<String> distributionKeys) {
+            this.distributionKeys = distributionKeys;
             return this;
         }
 
@@ -182,30 +230,22 @@ public class StarRocksTable implements Serializable {
         }
 
         public Builder setTableProperties(Map<String, String> properties) {
-            this.properties = new HashMap<>(properties);
+            this.properties = properties;
             return this;
         }
 
         public StarRocksTable build() {
-            Preconditions.checkNotNull(database, "database can't be null");
-            Preconditions.checkNotNull(table, "table can't be null");
-            Preconditions.checkNotNull(schema, "schema can't be null");
-            Preconditions.checkNotNull(tableType, "table type can't be null");
-
-            if (tableKeys != null) {
-                List<StarRocksColumn> tableKeyColumns = new ArrayList<>(tableKeys.size());
-                for (String name : tableKeys) {
-                    StarRocksColumn column = schema.getColumn(name);
-                    Preconditions.checkNotNull(column,
-                            String.format("%s.%s does not contain column %s", database, table, name));
-                    tableKeyColumns.add(column);
-                }
-                tableKeyColumns.sort(Comparator.comparingInt(StarRocksColumn::getOrdinalPosition));
-                tableKeys = tableKeyColumns.stream().map(StarRocksColumn::getName).collect(Collectors.toList());
-            }
-
-            return new StarRocksTable(database, table, schema, tableType, tableKeys, partitionKeys,
-                    numBuckets, comment, properties);
+            return new StarRocksTable(
+                    databaseName,
+                    tableName,
+                    tableType,
+                    columns,
+                    tableKeys,
+                    distributionKeys,
+                    numBuckets,
+                    comment,
+                    properties);
         }
     }
 }
+

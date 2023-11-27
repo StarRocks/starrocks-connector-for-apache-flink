@@ -34,7 +34,7 @@ import java.util.Set;
 import static com.starrocks.connector.flink.catalog.CatalogOptions.IDENTIFIER;
 import static com.starrocks.connector.flink.catalog.ConfigUtils.getPrefixConfigs;
 
-public class StarRocksCatalogFactory implements CatalogFactory {
+public class FlinkCatalogFactory implements CatalogFactory {
 
     @Override
     public String factoryIdentifier() {
@@ -59,7 +59,7 @@ public class StarRocksCatalogFactory implements CatalogFactory {
         Configuration tableBaseConfig =
                 Configuration.fromMap(
                         getPrefixConfigs("table.", context.getOptions(), false));
-        return new StarRocksCatalog(
+        return new FlinkCatalog(
                 context.getName(),
                 helper.getOptions().get(CatalogOptions.FE_JDBC_URL),
                 helper.getOptions().get(CatalogOptions.FE_HTTP_URL),

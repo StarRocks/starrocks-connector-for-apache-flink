@@ -30,7 +30,7 @@ import java.util.Map;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-public class StarRocksCatalogFactoryTest {
+public class FlinkCatalogFactoryTest {
 
     @Test
     public void testCreateCatalog() {
@@ -54,26 +54,26 @@ public class StarRocksCatalogFactoryTest {
                         null,
                         Thread.currentThread().getContextClassLoader()
                     );
-        assertTrue(catalog instanceof StarRocksCatalog);
-        StarRocksCatalog starRocksCatalog = (StarRocksCatalog) catalog;
-        assertEquals("test_catalog", starRocksCatalog.getName());
-        assertEquals("starrocks_db", starRocksCatalog.getDefaultDatabase());
-        assertEquals("jdbc:mysql://127.0.0.1:11903", starRocksCatalog.getJdbcUrl());
-        assertEquals("127.0.0.1:11901", starRocksCatalog.getHttpUrl());
-        assertEquals("root", starRocksCatalog.getUsername());
-        assertEquals("123456", starRocksCatalog.getPassword());
+        assertTrue(catalog instanceof FlinkCatalog);
+        FlinkCatalog flinkCatalog = (FlinkCatalog) catalog;
+        assertEquals("test_catalog", flinkCatalog.getName());
+        assertEquals("starrocks_db", flinkCatalog.getDefaultDatabase());
+        assertEquals("jdbc:mysql://127.0.0.1:11903", flinkCatalog.getJdbcUrl());
+        assertEquals("127.0.0.1:11901", flinkCatalog.getHttpUrl());
+        assertEquals("root", flinkCatalog.getUsername());
+        assertEquals("123456", flinkCatalog.getPassword());
 
-        Map<String, String> sourceBaseConfig = starRocksCatalog.getSourceBaseConfig().toMap();
+        Map<String, String> sourceBaseConfig = flinkCatalog.getSourceBaseConfig().toMap();
         assertEquals(2, sourceBaseConfig.size());
         assertEquals("2000", sourceBaseConfig.get("scan.connect.timeout-ms"));
         assertEquals("8192", sourceBaseConfig.get("scan.params.batch-rows"));
 
-        Map<String, String> sinkBaseConfig = starRocksCatalog.getSinkBaseConfig().toMap();
+        Map<String, String> sinkBaseConfig = flinkCatalog.getSinkBaseConfig().toMap();
         assertEquals(2, sinkBaseConfig.size());
         assertEquals("exactly-once", sinkBaseConfig.get("sink.semantic"));
         assertEquals("json", sinkBaseConfig.get("sink.properties.format"));
 
-        Map<String, String> tableBaseConfig = starRocksCatalog.getTableBaseConfig().toMap();
+        Map<String, String> tableBaseConfig = flinkCatalog.getTableBaseConfig().toMap();
         assertEquals(2, tableBaseConfig.size());
         assertEquals("10", tableBaseConfig.get("table.num-buckets"));
         assertEquals("1", tableBaseConfig.get("table.properties.replication_num"));
