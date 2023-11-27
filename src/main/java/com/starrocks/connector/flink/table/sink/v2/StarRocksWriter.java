@@ -20,35 +20,28 @@
 
 package com.starrocks.connector.flink.table.sink.v2;
 
-import com.google.common.base.Strings;
+import org.apache.flink.api.connector.sink2.Sink;
+import org.apache.flink.api.connector.sink2.StatefulSink;
+import org.apache.flink.api.connector.sink2.TwoPhaseCommittingSink;
+import org.apache.flink.runtime.checkpoint.CheckpointIDCounter;
+
 import com.starrocks.connector.flink.manager.StarRocksStreamLoadListener;
-import com.starrocks.connector.flink.row.sink.StarRocksIRowTransformer;
-import com.starrocks.connector.flink.row.sink.StarRocksISerializer;
 import com.starrocks.connector.flink.table.data.StarRocksRowData;
 import com.starrocks.connector.flink.table.sink.ExactlyOnceLabelGeneratorFactory;
 import com.starrocks.connector.flink.table.sink.ExactlyOnceLabelGeneratorSnapshot;
 import com.starrocks.connector.flink.table.sink.LingeringTransactionAborter;
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
-import com.starrocks.connector.flink.table.sink.StarRocksSinkRowDataWithMeta;
 import com.starrocks.connector.flink.table.sink.StarRocksSinkSemantic;
 import com.starrocks.connector.flink.tools.EnvUtils;
-import com.starrocks.connector.flink.tools.JsonWrapper;
 import com.starrocks.data.load.stream.LabelGeneratorFactory;
 import com.starrocks.data.load.stream.StreamLoadSnapshot;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import com.starrocks.data.load.stream.v2.StreamLoadManagerV2;
-import org.apache.flink.api.connector.sink2.Sink;
-import org.apache.flink.api.connector.sink2.StatefulSink;
-import org.apache.flink.api.connector.sink2.TwoPhaseCommittingSink;
-import org.apache.flink.runtime.checkpoint.CheckpointIDCounter;
-import org.apache.flink.table.data.RowData;
-import org.apache.flink.types.RowKind;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -60,9 +53,7 @@ public class StarRocksWriter<InputT>
     private static final Logger LOG = LoggerFactory.getLogger(StarRocksWriter.class);
 
     private final StarRocksSinkOptions sinkOptions;
-    private final StarRocksISerializer serializer;
-    private final StarRocksIRowTransformer<InputT> rowTransformer;
-    private final JsonWrapper jsonWrapper;
+    private final RecordSerializer<InputT> recordSerializer;
     private final StarRocksStreamLoadListener streamLoadListener;
     private final LabelGeneratorFactory labelGeneratorFactory;
     private final StreamLoadManagerV2 sinkManager;
@@ -70,25 +61,14 @@ public class StarRocksWriter<InputT>
 
     public StarRocksWriter(
             StarRocksSinkOptions sinkOptions,
-            StarRocksISerializer serializer,
-            StarRocksIRowTransformer<InputT> rowTransformer,
+            RecordSerializer<InputT> recordSerializer,
             StreamLoadProperties streamLoadProperties,
             Sink.InitContext initContext,
             Collection<StarRocksWriterState> recoveredState) throws Exception {
         this.sinkOptions = sinkOptions;
-        this.serializer = serializer;
-        this.rowTransformer = rowTransformer;
-
-        this.jsonWrapper = new JsonWrapper();
-        if (this.serializer != null) {
-            this.serializer.open(new StarRocksISerializer.SerializerContext(jsonWrapper));
-        }
-        if (this.rowTransformer != null) {
-            this.rowTransformer.setRuntimeContext(null);
-            this.rowTransformer.setFastJsonWrapper(jsonWrapper);
-        }
+        this.recordSerializer = recordSerializer;
+        this.recordSerializer.open();
         this.streamLoadListener = new StarRocksStreamLoadListener(initContext.metricGroup(), sinkOptions);
-
         long restoredCheckpointId = initContext.getRestoredCheckpointId()
                 .orElse(CheckpointIDCounter.INITIAL_CHECKPOINT_ID - 1);
         List<ExactlyOnceLabelGeneratorSnapshot> restoredGeneratorSnapshots = new ArrayList<>();
@@ -154,56 +134,12 @@ public class StarRocksWriter<InputT>
 
     @Override
     public void write(InputT element, Context context) throws IOException, InterruptedException {
-        if (serializer == null) {
-            if (element instanceof StarRocksSinkRowDataWithMeta) {
-                StarRocksSinkRowDataWithMeta data = (StarRocksSinkRowDataWithMeta) element;
-                if (Strings.isNullOrEmpty(data.getDatabase())
-                        || Strings.isNullOrEmpty(data.getTable())
-                        || data.getDataRows() == null) {
-                    LOG.warn(String.format("json row data not fulfilled. {database: %s, table: %s, dataRows: %s}",
-                            data.getDatabase(), data.getTable(), Arrays.toString(data.getDataRows())));
-                    return;
-                }
-                sinkManager.write(null, data.getDatabase(), data.getTable(), data.getDataRows());
-                return;
-            } else if (element instanceof StarRocksRowData) {
-                StarRocksRowData data = (StarRocksRowData) element;
-                if (Strings.isNullOrEmpty(data.getDatabase())
-                        || Strings.isNullOrEmpty(data.getTable())
-                        || data.getRow() == null) {
-                    LOG.warn(String.format("json row data not fulfilled. {database: %s, table: %s, dataRows: %s}",
-                            data.getDatabase(), data.getTable(), data.getRow()));
-                    return;
-                }
-                sinkManager.write(data.getUniqueKey(), data.getDatabase(), data.getTable(), data.getRow());
-                return;
-            }
-            // raw data sink
-            sinkManager.write(null, sinkOptions.getDatabaseName(), sinkOptions.getTableName(), element.toString());
-            return;
-        }
-
-        if (element instanceof RowData) {
-            if (RowKind.UPDATE_BEFORE.equals(((RowData) element).getRowKind()) &&
-                    (!sinkOptions.supportUpsertDelete() || sinkOptions.getIgnoreUpdateBefore())) {
-                return;
-            }
-            if (!sinkOptions.supportUpsertDelete() && RowKind.DELETE.equals(((RowData) element).getRowKind())) {
-                // let go the UPDATE_AFTER and INSERT rows for tables who have a group of `unique` or `duplicate` keys.
-                return;
-            }
-        }
-        String serializedValue = serializer.serialize(rowTransformer.transform(element, sinkOptions.supportUpsertDelete()));
-        sinkManager.write(
-                null,
-                sinkOptions.getDatabaseName(),
-                sinkOptions.getTableName(),
-                serializedValue);
-
+        StarRocksRowData rowData = recordSerializer.serialize(element);
+        sinkManager.write(rowData.getUniqueKey(), rowData.getDatabase(), rowData.getTable(), rowData.getRow());
         totalReceivedRows += 1;
         if (totalReceivedRows % 100 == 1) {
             LOG.debug("Received raw record: {}", element);
-            LOG.debug("Received serialized record: {}", serializedValue);
+            LOG.debug("Received serialized record: {}", rowData.getRow());
         }
     }
 
@@ -242,6 +178,7 @@ public class StarRocksWriter<InputT>
     @Override
     public void close() throws Exception {
         LOG.info("Close StarRocksWriter");
+        recordSerializer.close();
         if (sinkManager != null) {
             try {
                 StreamLoadSnapshot snapshot = sinkManager.snapshot();

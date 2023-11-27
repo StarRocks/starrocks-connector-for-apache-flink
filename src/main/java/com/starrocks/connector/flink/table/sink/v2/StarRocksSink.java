@@ -20,17 +20,13 @@
 
 package com.starrocks.connector.flink.table.sink.v2;
 
-import com.starrocks.connector.flink.manager.StarRocksSinkTable;
-import com.starrocks.connector.flink.row.sink.StarRocksIRowTransformer;
-import com.starrocks.connector.flink.row.sink.StarRocksISerializer;
-import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
-import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
-import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import org.apache.flink.api.connector.sink2.Committer;
 import org.apache.flink.api.connector.sink2.StatefulSink;
 import org.apache.flink.api.connector.sink2.TwoPhaseCommittingSink;
 import org.apache.flink.core.io.SimpleVersionedSerializer;
-import org.apache.flink.table.api.TableSchema;
+
+import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
+import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,34 +37,21 @@ import java.util.Collections;
 public class StarRocksSink<InputT>
         implements StatefulSink<InputT, StarRocksWriterState>, TwoPhaseCommittingSink<InputT, StarRocksCommittable> {
 
+    private static final long serialVersionUID = 1L;
+
     private static final Logger LOG = LoggerFactory.getLogger(StarRocksSink.class);
 
     private final StarRocksSinkOptions sinkOptions;
-    private final StarRocksISerializer serializer;
-    private final StarRocksIRowTransformer<InputT> rowTransformer;
+    private final RecordSerializer<InputT> recordSerializer;
     private final StreamLoadProperties streamLoadProperties;
 
-
-    public StarRocksSink(StarRocksSinkOptions sinkOptions, TableSchema schema, StarRocksIRowTransformer<InputT> rowTransformer) {
+    public StarRocksSink(
+            StarRocksSinkOptions sinkOptions,
+            RecordSerializer<InputT> recordSerializer,
+            StreamLoadProperties streamLoadProperties) {
         this.sinkOptions = sinkOptions;
-        this.rowTransformer = rowTransformer;
-        StarRocksSinkTable sinkTable = StarRocksSinkTable.builder()
-                .sinkOptions(sinkOptions)
-                .build();
-        sinkTable.validateTableStructure(sinkOptions, schema);
-        // StarRocksJsonSerializer depends on SinkOptions#supportUpsertDelete which is decided in
-        // StarRocksSinkTable#validateTableStructure, so create serializer after validating table structure
-        this.serializer = StarRocksSerializerFactory.createSerializer(sinkOptions, schema.getFieldNames());
-        rowTransformer.setStarRocksColumns(sinkTable.getFieldMapping());
-        rowTransformer.setTableSchema(schema);
-        this.streamLoadProperties = sinkOptions.getProperties(sinkTable);
-    }
-
-    public StarRocksSink(StarRocksSinkOptions sinkOptions) {
-        this.sinkOptions = sinkOptions;
-        this.serializer = null;
-        this.rowTransformer = null;
-        this.streamLoadProperties = sinkOptions.getProperties(null);
+        this.recordSerializer = recordSerializer;
+        this.streamLoadProperties = streamLoadProperties;
     }
 
     @Override
@@ -82,8 +65,7 @@ public class StarRocksSink<InputT>
         try {
             return new StarRocksWriter<>(
                     sinkOptions,
-                    serializer,
-                    rowTransformer,
+                    recordSerializer,
                     streamLoadProperties,
                     context,
                     Collections.emptyList());
