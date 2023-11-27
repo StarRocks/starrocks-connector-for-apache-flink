@@ -140,11 +140,17 @@ public class StarRocksCatalog implements Serializable {
                     while (resultSet.next()) {
                         String name = resultSet.getString("COLUMN_NAME");
                         String type = resultSet.getString("DATA_TYPE");
-                        int position = resultSet.getInt("ORDINAL_POSITION");
                         Integer size = resultSet.getInt("COLUMN_SIZE");
                         if (resultSet.wasNull()) {
                             size = null;
                         }
+                        // mysql does not have boolean type, and starrocks `information_schema`.`COLUMNS` will return
+                        // a "tinyint" data type for both StarRocks BOOLEAN and TINYINT type, Distinguish them by
+                        // column size, and the size of BOOLEAN is null
+                        if ("tinyint".equalsIgnoreCase(type) && size == null) {
+                            type = "boolean";
+                        }
+                        int position = resultSet.getInt("ORDINAL_POSITION");
                         Integer scale = resultSet.getInt("DECIMAL_DIGITS");
                         if (resultSet.wasNull()) {
                             scale = null;
