@@ -20,145 +20,199 @@
 
 package com.starrocks.connector.flink.catalog;
 
-import java.io.Serializable;
 import javax.annotation.Nullable;
 
-/** Describe a column of StarRocks table. */
+import java.io.Serializable;
+import java.util.Objects;
+import java.util.Optional;
+
+import static org.apache.flink.util.Preconditions.checkNotNull;
+
+/** Describe a column of StarRocks table. These metas are from information_schema.COLUMNS. */
 public class StarRocksColumn implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    private final String name;
-    // Index of column in table (starting at 0)
-    private final int ordinalPosition;
-    private final String type;
-    @Nullable
-    private final String key;
-    @Nullable
-    private final Integer size;
-    @Nullable
-    private final Integer scale;
-    @Nullable
-    private final String defaultValue;
-    private final boolean isNullable;
-    @Nullable
-    private final String comment;
+    /** The name of the column. COLUMN_NAME in information_schema.COLUMNS. */
+    private final String columnName;
 
-    private StarRocksColumn(String name, int ordinalPosition, String type, @Nullable String key,
-                            @Nullable Integer size, @Nullable Integer scale, @Nullable String defaultValue,
-                            boolean isNullable, @Nullable String comment) {
-        this.name = name;
+    /**
+     * The position of the column within the table (starting at 0). ORDINAL_POSITION in
+     * information_schema.COLUMNS.
+     */
+    private final int ordinalPosition;
+
+    /** The column data type. DATA_TYPE in information_schema.COLUMNS. */
+    private final String dataType;
+
+    /** The column nullability.IS_NULLABLE in information_schema.COLUMNS. */
+    private final boolean isNullable;
+
+    /** The default value for the column. COLUMN_DEFAULT in  information_schema.COLUMNS. */
+    @Nullable private final String defaultValue;
+
+    /**
+     * The column size. COLUMN_SIZE in information_schema.COLUMNS. For numeric data, this is the
+     * maximum precision. For character data, this is the length in characters. For other data
+     * types, this is null.
+     */
+    @Nullable private final Integer columnSize;
+
+    /**
+     * The number of fractional digits for numeric data. This is null for other data types.
+     * DECIMAL_DIGITS in information_schema.COLUMNS.
+     */
+    @Nullable private final Integer decimalDigits;
+
+    /** The column comment. COLUMN_COMMENT in information_schema.COLUMNS. */
+    @Nullable private final String columnComment;
+
+
+    private StarRocksColumn(
+            String columnName,
+            int ordinalPosition,
+            String dataType,
+            boolean isNullable,
+            @Nullable String defaultValue,
+            @Nullable Integer columnSize,
+            @Nullable Integer decimalDigits,
+            @Nullable String columnComment) {
+        this.columnName = checkNotNull(columnName);
         this.ordinalPosition = ordinalPosition;
-        this.type = type;
-        this.key = key;
-        this.size = size;
-        this.scale = scale;
-        this.defaultValue = defaultValue;
+        this.dataType = checkNotNull(dataType);
         this.isNullable = isNullable;
-        this.comment = comment;
+        this.defaultValue = defaultValue;
+        this.columnSize = columnSize;
+        this.decimalDigits = decimalDigits;
+        this.columnComment = columnComment;
     }
 
-    public String getName() {
-        return name;
+    public String getColumnName() {
+        return columnName;
     }
 
     public int getOrdinalPosition() {
         return ordinalPosition;
     }
 
-    public String getType() {
-        return type;
-    }
-
-    @Nullable
-    public String getKey() {
-        return key;
-    }
-
-    @Nullable
-    public Integer getSize() {
-        return size;
-    }
-
-    @Nullable
-    public Integer getScale() {
-        return scale;
-    }
-
-    @Nullable
-    public String getDefaultValue() {
-        return defaultValue;
+    public String getDataType() {
+        return dataType;
     }
 
     public boolean isNullable() {
         return isNullable;
     }
 
-    @Nullable
-    public String getComment() {
-        return comment;
+    public Optional<String> getDefaultValue() {
+        return Optional.ofNullable(defaultValue);
     }
 
+    public Optional<Integer> getColumnSize() {
+        return Optional.ofNullable(columnSize);
+    }
+
+    public Optional<Integer> getDecimalDigits() {
+        return Optional.ofNullable(decimalDigits);
+    }
+
+    public Optional<String> getColumnComment() {
+        return Optional.ofNullable(columnComment);
+    }
+
+    @Override
+    public String toString() {
+        return "StarRocksColumn{" +
+                "columnName='" + columnName + '\'' +
+                ", ordinalPosition=" + ordinalPosition +
+                ", dataType='" + dataType + '\'' +
+                ", isNullable=" + isNullable +
+                ", defaultValue='" + defaultValue + '\'' +
+                ", columnSize=" + columnSize +
+                ", decimalDigits=" + decimalDigits +
+                ", columnComment='" + columnComment + '\'' +
+                '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        StarRocksColumn column = (StarRocksColumn) o;
+        return ordinalPosition == column.ordinalPosition && isNullable == column.isNullable &&
+                Objects.equals(columnName, column.columnName) &&
+                dataType.equalsIgnoreCase(column.dataType) &&
+                Objects.equals(defaultValue, column.defaultValue) &&
+                Objects.equals(columnSize, column.columnSize) &&
+                Objects.equals(decimalDigits, column.decimalDigits) &&
+                Objects.equals(columnComment, column.columnComment);
+    }
+
+    /** Build a {@link StarRocksColumn}. */
     public static class Builder {
 
-        private String name;
+        private String columnName;
         private int ordinalPosition;
-        private String type;
-        private String key;
-        private Integer size;
-        private Integer scale;
+        private String dataType;
+        private boolean isNullable = true;
         private String defaultValue;
-        boolean isNullable;
-        private String comment;
+        private Integer columnSize;
+        private Integer decimalDigits;
+        private String columnComment;
 
-        public Builder setName(String name) {
-            this.name = name;
+        public StarRocksColumn.Builder setColumnName(String columnName) {
+            this.columnName = columnName;
             return this;
         }
 
-        public Builder setOrdinalPosition(int ordinalPosition) {
+        public StarRocksColumn.Builder setOrdinalPosition(int ordinalPosition) {
             this.ordinalPosition = ordinalPosition;
             return this;
         }
 
-        public Builder setType(String type) {
-            this.type = type;
+        public StarRocksColumn.Builder setDataType(String dataType) {
+            this.dataType = dataType;
             return this;
         }
 
-        public Builder setKey(String key) {
-            this.key = key;
+        public StarRocksColumn.Builder setNullable(boolean isNullable) {
+            this.isNullable = isNullable;
             return this;
         }
 
-        public Builder setSize(Integer size) {
-            this.size = size;
-            return this;
-        }
-
-        public Builder setScale(Integer scale) {
-            this.scale = scale;
-            return this;
-        }
-
-        public Builder setDefaultValue(String defaultValue) {
+        public StarRocksColumn.Builder setDefaultValue(String defaultValue) {
             this.defaultValue = defaultValue;
             return this;
         }
 
-        public Builder setNullable(boolean nullable) {
-            isNullable = nullable;
+        public StarRocksColumn.Builder setColumnSize(Integer columnSize) {
+            this.columnSize = columnSize;
             return this;
         }
 
-        public Builder setComment(String comment) {
-            this.comment = comment;
+        public StarRocksColumn.Builder setDecimalDigits(Integer decimalDigits) {
+            this.decimalDigits = decimalDigits;
+            return this;
+        }
+
+        public StarRocksColumn.Builder setColumnComment(String columnComment) {
+            this.columnComment = columnComment;
             return this;
         }
 
         public StarRocksColumn build() {
-            return new StarRocksColumn(name, ordinalPosition, type, key, size, scale,
-                    defaultValue, isNullable, comment);
+            return new StarRocksColumn(
+                    columnName,
+                    ordinalPosition,
+                    dataType,
+                    isNullable,
+                    defaultValue,
+                    columnSize,
+                    decimalDigits,
+                    columnComment);
         }
     }
 }

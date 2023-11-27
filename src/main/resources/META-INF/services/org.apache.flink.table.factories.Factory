@@ -12,4 +12,4 @@
 
 com.starrocks.connector.flink.table.sink.StarRocksDynamicTableSinkFactory
 com.starrocks.connector.flink.table.source.StarRocksDynamicTableSourceFactory
-com.starrocks.connector.flink.catalog.StarRocksCatalogFactory
+com.starrocks.connector.flink.catalog.FlinkCatalogFactory

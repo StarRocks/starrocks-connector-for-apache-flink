@@ -36,7 +36,6 @@ import org.apache.flink.table.types.logical.SmallIntType;
 import org.apache.flink.table.types.logical.TimestampType;
 import org.apache.flink.table.types.logical.TinyIntType;
 import org.apache.flink.table.types.logical.VarCharType;
-import org.apache.flink.table.types.logical.ZonedTimestampType;
 import org.apache.flink.table.types.logical.utils.LogicalTypeDefaultVisitor;
 import org.apache.flink.util.Preconditions;
 
@@ -135,89 +134,96 @@ public class TypeUtils {
 
         @Override
         public StarRocksColumn.Builder visit(CharType charType) {
-            builder.setType(CHAR);
-            builder.setSize(charType.getLength());
+            builder.setDataType(CHAR);
+            builder.setColumnSize(charType.getLength());
+            builder.setNullable(charType.isNullable());
             return builder;
         }
 
         @Override
         public StarRocksColumn.Builder visit(VarCharType varCharType) {
-            builder.setType(VARCHAR);
-            builder.setSize(Math.min(varCharType.getLength(), MAX_VARCHAR_SIZE));
+            builder.setDataType(VARCHAR);
+            builder.setColumnSize(Math.min(varCharType.getLength(), MAX_VARCHAR_SIZE));
+            builder.setNullable(varCharType.isNullable());
             return builder;
         }
 
         @Override
         public StarRocksColumn.Builder visit(BooleanType booleanType) {
-            builder.setType(BOOLEAN);
+            builder.setDataType(BOOLEAN);
+            builder.setNullable(booleanType.isNullable());
             return builder;
         }
 
         @Override
         public StarRocksColumn.Builder visit(DecimalType decimalType) {
-            builder.setType(DECIMAL);
-            builder.setSize(decimalType.getPrecision());
-            builder.setScale(decimalType.getScale());
+            builder.setDataType(DECIMAL);
+            builder.setColumnSize(decimalType.getPrecision());
+            builder.setDecimalDigits(decimalType.getScale());
+            builder.setNullable(decimalType.isNullable());
             return builder;
         }
 
         @Override
         public StarRocksColumn.Builder visit(TinyIntType tinyIntType) {
-            builder.setType(TINYINT);
+            builder.setDataType(TINYINT);
+            builder.setNullable(tinyIntType.isNullable());
             return builder;
         }
 
         @Override
         public StarRocksColumn.Builder visit(SmallIntType smallIntType) {
-            builder.setType(SMALLINT);
+            builder.setDataType(SMALLINT);
+            builder.setNullable(smallIntType.isNullable());
             return builder;
         }
 
         @Override
         public StarRocksColumn.Builder visit(IntType intType) {
-            builder.setType(INT);
+            builder.setDataType(INT);
+            builder.setNullable(intType.isNullable());
             return builder;
         }
 
         @Override
         public StarRocksColumn.Builder visit(BigIntType bigIntType) {
-            builder.setType(BIGINT);
+            builder.setDataType(BIGINT);
+            builder.setNullable(bigIntType.isNullable());
             return builder;
         }
 
         @Override
         public StarRocksColumn.Builder visit(FloatType floatType) {
-            builder.setType(FLOAT);
+            builder.setDataType(FLOAT);
+            builder.setNullable(floatType.isNullable());
             return builder;
         }
 
         @Override
         public StarRocksColumn.Builder visit(DoubleType doubleType) {
-            builder.setType(DOUBLE);
+            builder.setDataType(DOUBLE);
+            builder.setNullable(doubleType.isNullable());
             return builder;
         }
 
         @Override
         public StarRocksColumn.Builder visit(DateType dateType) {
-            builder.setType(DATE);
+            builder.setDataType(DATE);
+            builder.setNullable(dateType.isNullable());
             return builder;
         }
 
         @Override
         public StarRocksColumn.Builder visit(TimestampType timestampType) {
-            builder.setType(DATETIME);
-            return builder;
-        }
-
-        @Override
-        public StarRocksColumn.Builder visit(ZonedTimestampType zonedTimestampType) {
-            builder.setType(DATETIME);
+            builder.setDataType(DATETIME);
+            builder.setNullable(timestampType.isNullable());
             return builder;
         }
 
         @Override
         public StarRocksColumn.Builder visit(LocalZonedTimestampType localZonedTimestampType) {
-            builder.setType(DATETIME);
+            builder.setDataType(DATETIME);
+            builder.setNullable(localZonedTimestampType.isNullable());
             return builder;
         }
 

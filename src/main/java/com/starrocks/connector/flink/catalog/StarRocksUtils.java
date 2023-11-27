@@ -28,85 +28,13 @@ import org.apache.flink.table.catalog.exceptions.CatalogException;
 import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.util.Preconditions;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
+import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
-import java.util.stream.Collectors;
-import javax.annotation.Nullable;
+import java.util.Map;
 
 public class StarRocksUtils {
-
-    private static final String TABLE_SCHEMA_QUERY =
-            "SELECT `COLUMN_NAME`, `DATA_TYPE`, `ORDINAL_POSITION`, `COLUMN_SIZE`, `DECIMAL_DIGITS`, " +
-                    "`COLUMN_DEFAULT`, `IS_NULLABLE`, `COLUMN_KEY` FROM `information_schema`.`COLUMNS` " +
-                    "WHERE `TABLE_SCHEMA`=? AND `TABLE_NAME`=?;";
-
-    public static StarRocksSchema getStarRocksSchema(Connection connection, String database, String table) throws Exception {
-        StarRocksSchema.Builder schemaBuilder = new StarRocksSchema.Builder();
-        try (PreparedStatement statement = connection.prepareStatement(TABLE_SCHEMA_QUERY)) {
-            statement.setObject(1, database);
-            statement.setObject(2, table);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                while (resultSet.next()) {
-                    String name = resultSet.getString("COLUMN_NAME");
-                    String type = resultSet.getString("DATA_TYPE");
-                    int position = resultSet.getInt("ORDINAL_POSITION");
-                    Integer size = resultSet.getInt("COLUMN_SIZE");
-                    if (resultSet.wasNull()) {
-                        size = null;
-                    }
-                    Integer scale = resultSet.getInt("DECIMAL_DIGITS");
-                    if (resultSet.wasNull()) {
-                        scale = null;
-                    }
-                    String defaultValue = resultSet.getString("COLUMN_DEFAULT");
-                    String isNullable = resultSet.getString("IS_NULLABLE");
-                    String columnKey = resultSet.getString("COLUMN_KEY");
-                    StarRocksColumn column = new StarRocksColumn.Builder()
-                            .setName(name)
-                            .setOrdinalPosition(position - 1)
-                            .setType(type)
-                            .setKey(columnKey)
-                            .setSize(size)
-                            .setScale(scale)
-                            .setDefaultValue(defaultValue)
-                            .setNullable(isNullable == null || !isNullable.equalsIgnoreCase("NO"))
-                            .setComment(null)
-                            .build();
-                    schemaBuilder.addColumn(column);
-                }
-            }
-        }
-
-        return schemaBuilder.build();
-    }
-
-    public static List<String> getPrimaryKeys(StarRocksSchema starRocksSchema) {
-        return starRocksSchema.getColumns().stream()
-                .filter(column -> "PRI".equalsIgnoreCase(column.getKey()))
-                // In StarRocks, primary keys must be declared in the same order of that in schema
-                .sorted(Comparator.comparingInt(StarRocksColumn::getOrdinalPosition))
-                .map(StarRocksColumn::getName)
-                .collect(Collectors.toList());
-    }
-
-    public static StarRocksTable getStarRocksTable(Connection connection, String database, String table) throws Exception {
-        StarRocksSchema starRocksSchema = StarRocksUtils.getStarRocksSchema(connection, database, table);
-        // could be empty if this is not a primary key table
-        List<String> primaryKeys = StarRocksUtils.getPrimaryKeys(starRocksSchema);
-        StarRocksTable.TableType tableType = primaryKeys.isEmpty() ?
-                StarRocksTable.TableType.UNKNOWN : StarRocksTable.TableType.PRIMARY;
-        return new StarRocksTable.Builder()
-                .setDatabase(database)
-                .setTable(table)
-                .setSchema(starRocksSchema)
-                .setTableType(tableType)
-                .setTableKeys(primaryKeys.isEmpty() ? null : primaryKeys)
-                .build();
-    }
 
     public static StarRocksTable toStarRocksTable(
             String catalogName,
@@ -120,33 +48,47 @@ public class StarRocksUtils {
                             catalogName, tablePath.getFullName()));
         }
         RowType rowType = (RowType) flinkSchema.toPhysicalRowDataType().getLogicalType();
-        StarRocksSchema.Builder starRocksSchemaBuilder = new StarRocksSchema.Builder();
-        for (int i = 0; i < rowType.getFieldCount(); i++) {
-            RowType.RowField field = rowType.getFields().get(i);
-            StarRocksColumn.Builder columnBuilder =
-                    new StarRocksColumn.Builder()
-                            .setName(field.getName())
-                            .setOrdinalPosition(i);
-            TypeUtils.toStarRocksType(columnBuilder, field.getType());
-            starRocksSchemaBuilder.addColumn(columnBuilder.build());
+        Map<String, RowType.RowField> nameToFieldMap = new HashMap<>();
+        for (RowType.RowField field : rowType.getFields()) {
+            nameToFieldMap.put(field.getName(), field);
         }
-        StarRocksSchema starRocksSchema = starRocksSchemaBuilder.build();
-        StarRocksTable.Builder starRocksTableBuilder = new StarRocksTable.Builder()
-                .setDatabase(tablePath.getDatabaseName())
-                .setTable(tablePath.getObjectName())
-                .setSchema(starRocksSchema);
-
         List<String> primaryKeys = flinkSchema.getPrimaryKey()
                 .map(pk -> pk.getColumns())
                 .orElse(Collections.emptyList());
-        // have verified it's a primary key table above
         Preconditions.checkState(!primaryKeys.isEmpty());
-        starRocksTableBuilder.setTableType(StarRocksTable.TableType.PRIMARY);
-        starRocksTableBuilder.setTableKeys(primaryKeys);
+
+        List<RowType.RowField> orderedFields = new ArrayList<>();
+        for (String primaryKey : primaryKeys) {
+            orderedFields.add(nameToFieldMap.get(primaryKey));
+        }
+        for (RowType.RowField field : rowType.getFields()) {
+            if (!primaryKeys.contains(field.getName())) {
+                orderedFields.add(field);
+            }
+        }
+
+        List<StarRocksColumn> starRocksColumns = new ArrayList<>();
+        for (int i = 0; i < orderedFields.size(); i++) {
+            RowType.RowField field = orderedFields.get(i);
+            StarRocksColumn.Builder columnBuilder =
+                    new StarRocksColumn.Builder()
+                            .setColumnName(field.getName())
+                            .setOrdinalPosition(i);
+            TypeUtils.toStarRocksType(columnBuilder, field.getType());
+            starRocksColumns.add(columnBuilder.build());
+        }
+
+        StarRocksTable.Builder starRocksTableBuilder = new StarRocksTable.Builder()
+                .setDatabaseName(tablePath.getDatabaseName())
+                .setTableName(tablePath.getObjectName())
+                .setTableType(StarRocksTable.TableType.PRIMARY_KEY)
+                .setColumns(starRocksColumns)
+                .setTableKeys(primaryKeys)
+                .setDistributionKeys(primaryKeys)
+                .setComment(flinkTable.getComment());
         if (tableBaseConfig.contains(CatalogOptions.TABLE_NUM_BUCKETS)) {
             starRocksTableBuilder.setNumBuckets(tableBaseConfig.get(CatalogOptions.TABLE_NUM_BUCKETS));
         }
-        starRocksTableBuilder.setComment(flinkTable.getComment());
         starRocksTableBuilder.setTableProperties(
                     ConfigUtils.getPrefixConfigs(
                         CatalogOptions.TABLE_PROPERTIES_PREFIX,
@@ -155,74 +97,5 @@ public class StarRocksUtils {
                     )
                 );
         return starRocksTableBuilder.build();
-    }
-
-    public static String buildCreateTableSql(StarRocksTable table, boolean ignoreIfExists) {
-        Preconditions.checkState(table.getTableType() == StarRocksTable.TableType.PRIMARY);
-        StringBuilder builder = new StringBuilder();
-        builder.append(
-                String.format("CREATE TABLE %s`%s`.`%s`",
-                        ignoreIfExists ? "IF NOT EXISTS " : "",
-                        table.getDatabase(),
-                        table.getTable())
-        );
-        builder.append(" (\n");
-        StarRocksSchema schema = table.getSchema();
-        String columnsStmt = schema.getColumns().stream().map(StarRocksUtils::buildColumnStatement)
-                .collect(Collectors.joining(",\n"));
-        builder.append(columnsStmt);
-        builder.append("\n) ");
-        String primaryKeys = table.getTableKeys().stream()
-                .map(pk -> "`" + pk + "`").collect(Collectors.joining(", "));
-        builder.append(String.format("PRIMARY KEY (%s)\n", primaryKeys));
-        builder.append(String.format("DISTRIBUTED BY HASH (%s)", primaryKeys));
-        if (table.getNumBuckets() != null) {
-            builder.append(" BUCKETS ");
-            builder.append(table.getNumBuckets());
-        }
-        if (table.getProperties() != null && !table.getProperties().isEmpty()) {
-            builder.append("\nPROPERTIES (\n");
-            String properties = table.getProperties().entrySet().stream()
-                    .map(entry -> String.format("\"%s\" = \"%s\"", entry.getKey(), entry.getValue()))
-                    .collect(Collectors.joining(",\n"));
-            builder.append(properties);
-            builder.append("\n)");
-        }
-        builder.append(";");
-        return builder.toString();
-    }
-
-    public static String buildColumnStatement(StarRocksColumn column) {
-        StringBuilder builder = new StringBuilder();
-        builder.append("`");
-        builder.append(column.getName());
-        builder.append("` ");
-        builder.append(getFullColumnType(column.getType(), column.getSize(), column.getScale()));
-        builder.append(" ");
-        builder.append(column.isNullable() ? "NULL" : "NOT NULL");
-        if (column.getDefaultValue() != null) {
-            builder.append(" DEFAULT '");
-            builder.append(column.getDefaultValue());
-            builder.append("'");
-        }
-        if (column.getComment() != null) {
-            builder.append(" COMMENT \"");
-            builder.append(column.getComment());
-            builder.append("\"");
-        }
-        return builder.toString();
-    }
-
-    public static String getFullColumnType(String type, @Nullable Integer size, @Nullable Integer scale) {
-        String dataType = type.toUpperCase();
-        switch (dataType) {
-            case "DECIMAL":
-                return String.format("DECIMAL(%d, %s)", size, scale);
-            case "CHAR":
-            case "VARCHAR":
-                return String.format("%s(%d)", dataType, size);
-            default:
-                return dataType;
-        }
     }
 }

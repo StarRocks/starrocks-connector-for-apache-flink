@@ -52,6 +52,8 @@ public abstract class StarRocksITTestBase {
     protected static String DB_NAME;
     protected static String HTTP_URLS;
     protected static String JDBC_URLS;
+    protected static String USERNAME;
+    protected static String PASSWORD;
 
     protected static String getHttpUrls() {
         return HTTP_URLS;
@@ -69,11 +71,13 @@ public abstract class StarRocksITTestBase {
     public static void setUp() throws Exception {
         HTTP_URLS = DEBUG_MODE ? "127.0.0.1:11901" : System.getProperty("http_urls");
         JDBC_URLS = DEBUG_MODE ? "jdbc:mysql://127.0.0.1:11903" : System.getProperty("jdbc_urls");
+        USERNAME = DEBUG_MODE ? "root" : System.getProperty("username");
+        PASSWORD = DEBUG_MODE ? "" : System.getProperty("password");
         assumeTrue(HTTP_URLS != null && JDBC_URLS != null);
 
         DB_NAME = "sr_test_" + genRandomUuid();
         try {
-            DB_CONNECTION = DriverManager.getConnection(getJdbcUrl(), "root", "");
+            DB_CONNECTION = DriverManager.getConnection(getJdbcUrl(), USERNAME, PASSWORD);
             LOG.info("Success to create db connection via jdbc {}", getJdbcUrl());
         } catch (Exception e) {
             LOG.error("Failed to create db connection via jdbc {}", getJdbcUrl(), e);
