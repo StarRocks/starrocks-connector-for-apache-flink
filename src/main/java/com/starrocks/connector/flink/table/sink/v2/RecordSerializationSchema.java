@@ -20,7 +20,11 @@
 
 package com.starrocks.connector.flink.table.sink.v2;
 
+import org.apache.flink.api.common.serialization.SerializationSchema;
+
 import com.starrocks.connector.flink.table.data.StarRocksRowData;
+
+import javax.annotation.Nullable;
 
 import java.io.Serializable;
 
@@ -32,10 +36,25 @@ import java.io.Serializable;
  */
 public interface RecordSerializationSchema<T> extends Serializable {
 
-    /** Open the serializer. */
-    void open();
+    /**
+     * Initialization method for the schema. It is called before the actual working methods {@link
+     * #serialize(Object)} and thus suitable for one-time setup work.
+     *
+     * <p>The provided {@link SerializationSchema.InitializationContext} can be used to access
+     * additional features such as e.g. registering user metrics.
+     *
+     * @param context Contextual information that can be used during initialization.
+     * @param sinkContext runtime information i.e. partitions, subtaskId
+     */
+    void open(SerializationSchema.InitializationContext context, StarRocksSinkContext sinkContext);
 
-    /** Serialize the input record. */
+    /**
+     * Serializes the given record and returns it as a {@link StarRocksRowData}.
+     *
+     * @param record element to be serialized
+     * @return a {@link StarRocksRowData} or null if the given record cannot be serialized
+     */
+    @Nullable
     StarRocksRowData serialize(T record);
 
     /** Close the serializer */

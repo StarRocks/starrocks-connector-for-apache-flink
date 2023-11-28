@@ -20,6 +20,7 @@
 
 package com.starrocks.connector.flink.table.sink.v2;
 
+import org.apache.flink.api.common.serialization.SerializationSchema;
 import org.apache.flink.api.connector.sink2.Sink;
 import org.apache.flink.api.connector.sink2.StatefulSink;
 import org.apache.flink.api.connector.sink2.TwoPhaseCommittingSink;
@@ -61,13 +62,14 @@ public class StarRocksWriter<InputT>
 
     public StarRocksWriter(
             StarRocksSinkOptions sinkOptions,
+            Sink.InitContext initContext,
+            SerializationSchema.InitializationContext schemaContext,
             RecordSerializationSchema<InputT> serializationSchema,
             StreamLoadProperties streamLoadProperties,
-            Sink.InitContext initContext,
             Collection<StarRocksWriterState> recoveredState) throws Exception {
         this.sinkOptions = sinkOptions;
         this.serializationSchema = serializationSchema;
-        this.serializationSchema.open();
+        this.serializationSchema.open(schemaContext, new DefaultStarRocksSinkContext(initContext, sinkOptions));
         this.streamLoadListener = new StarRocksStreamLoadListener(initContext.metricGroup(), sinkOptions);
         long restoredCheckpointId = initContext.getRestoredCheckpointId()
                 .orElse(CheckpointIDCounter.INITIAL_CHECKPOINT_ID - 1);
@@ -135,6 +137,9 @@ public class StarRocksWriter<InputT>
     @Override
     public void write(InputT element, Context context) throws IOException, InterruptedException {
         StarRocksRowData rowData = serializationSchema.serialize(element);
+        if (rowData == null) {
+            return;
+        }
         sinkManager.write(rowData.getUniqueKey(), rowData.getDatabase(), rowData.getTable(), rowData.getRow());
         totalReceivedRows += 1;
         if (totalReceivedRows % 100 == 1) {
