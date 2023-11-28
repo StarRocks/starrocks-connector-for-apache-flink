@@ -20,6 +20,7 @@
 
 package com.starrocks.connector.flink.table.sink.v2;
 
+import org.apache.flink.api.common.serialization.SerializationSchema;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.types.RowKind;
 
@@ -58,7 +59,7 @@ public class RowDataSerializationSchema implements RecordSerializationSchema<Row
     }
 
     @Override
-    public void open() {
+    public void open(SerializationSchema.InitializationContext context, StarRocksSinkContext sinkContext) {
         JsonWrapper jsonWrapper = new JsonWrapper();
         this.serializer.open(new StarRocksISerializer.SerializerContext(jsonWrapper));
         this.rowTransformer.setRuntimeContext(null);
