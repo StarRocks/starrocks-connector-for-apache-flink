@@ -53,7 +53,7 @@ public class StarRocksWriter<InputT>
     private static final Logger LOG = LoggerFactory.getLogger(StarRocksWriter.class);
 
     private final StarRocksSinkOptions sinkOptions;
-    private final RecordSerializer<InputT> recordSerializer;
+    private final StarRocksRecordSerializationSchema<InputT> serializationSchema;
     private final StarRocksStreamLoadListener streamLoadListener;
     private final LabelGeneratorFactory labelGeneratorFactory;
     private final StreamLoadManagerV2 sinkManager;
@@ -61,13 +61,13 @@ public class StarRocksWriter<InputT>
 
     public StarRocksWriter(
             StarRocksSinkOptions sinkOptions,
-            RecordSerializer<InputT> recordSerializer,
+            StarRocksRecordSerializationSchema<InputT> serializationSchema,
             StreamLoadProperties streamLoadProperties,
             Sink.InitContext initContext,
             Collection<StarRocksWriterState> recoveredState) throws Exception {
         this.sinkOptions = sinkOptions;
-        this.recordSerializer = recordSerializer;
-        this.recordSerializer.open();
+        this.serializationSchema = serializationSchema;
+        this.serializationSchema.open();
         this.streamLoadListener = new StarRocksStreamLoadListener(initContext.metricGroup(), sinkOptions);
         long restoredCheckpointId = initContext.getRestoredCheckpointId()
                 .orElse(CheckpointIDCounter.INITIAL_CHECKPOINT_ID - 1);
@@ -134,7 +134,7 @@ public class StarRocksWriter<InputT>
 
     @Override
     public void write(InputT element, Context context) throws IOException, InterruptedException {
-        StarRocksRowData rowData = recordSerializer.serialize(element);
+        StarRocksRowData rowData = serializationSchema.serialize(element);
         sinkManager.write(rowData.getUniqueKey(), rowData.getDatabase(), rowData.getTable(), rowData.getRow());
         totalReceivedRows += 1;
         if (totalReceivedRows % 100 == 1) {
@@ -178,7 +178,7 @@ public class StarRocksWriter<InputT>
     @Override
     public void close() throws Exception {
         LOG.info("Close StarRocksWriter");
-        recordSerializer.close();
+        serializationSchema.close();
         if (sinkManager != null) {
             try {
                 StreamLoadSnapshot snapshot = sinkManager.snapshot();

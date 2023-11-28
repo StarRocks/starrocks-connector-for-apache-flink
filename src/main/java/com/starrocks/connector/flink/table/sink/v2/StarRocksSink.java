@@ -42,15 +42,15 @@ public class StarRocksSink<InputT>
     private static final Logger LOG = LoggerFactory.getLogger(StarRocksSink.class);
 
     private final StarRocksSinkOptions sinkOptions;
-    private final RecordSerializer<InputT> recordSerializer;
+    private final StarRocksRecordSerializationSchema<InputT> serializationSchema;
     private final StreamLoadProperties streamLoadProperties;
 
     public StarRocksSink(
             StarRocksSinkOptions sinkOptions,
-            RecordSerializer<InputT> recordSerializer,
+            StarRocksRecordSerializationSchema<InputT> serializationSchema,
             StreamLoadProperties streamLoadProperties) {
         this.sinkOptions = sinkOptions;
-        this.recordSerializer = recordSerializer;
+        this.serializationSchema = serializationSchema;
         this.streamLoadProperties = streamLoadProperties;
     }
 
@@ -65,7 +65,7 @@ public class StarRocksSink<InputT>
         try {
             return new StarRocksWriter<>(
                     sinkOptions,
-                    recordSerializer,
+                    serializationSchema,
                     streamLoadProperties,
                     context,
                     Collections.emptyList());

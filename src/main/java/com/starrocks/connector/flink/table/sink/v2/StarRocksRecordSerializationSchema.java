@@ -25,11 +25,12 @@ import com.starrocks.connector.flink.table.data.StarRocksRowData;
 import java.io.Serializable;
 
 /**
- * Interface for the input record serialization.
+ * A serialization schema which defines how to convert a value
+ * of type {@code T} to {@link StarRocksRowData}.
  *
  * @param <T> the type of input record being serialized
  */
-public interface RecordSerializer<T> extends Serializable {
+public interface StarRocksRecordSerializationSchema<T> extends Serializable {
 
     /** Open the serializer. */
     void open();
