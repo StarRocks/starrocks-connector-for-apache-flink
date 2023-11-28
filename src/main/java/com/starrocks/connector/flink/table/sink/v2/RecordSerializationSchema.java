@@ -30,7 +30,7 @@ import java.io.Serializable;
  *
  * @param <T> the type of input record being serialized
  */
-public interface StarRocksRecordSerializationSchema<T> extends Serializable {
+public interface RecordSerializationSchema<T> extends Serializable {
 
     /** Open the serializer. */
     void open();

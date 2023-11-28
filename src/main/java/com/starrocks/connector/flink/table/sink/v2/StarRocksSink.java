@@ -42,12 +42,12 @@ public class StarRocksSink<InputT>
     private static final Logger LOG = LoggerFactory.getLogger(StarRocksSink.class);
 
     private final StarRocksSinkOptions sinkOptions;
-    private final StarRocksRecordSerializationSchema<InputT> serializationSchema;
+    private final RecordSerializationSchema<InputT> serializationSchema;
     private final StreamLoadProperties streamLoadProperties;
 
     public StarRocksSink(
             StarRocksSinkOptions sinkOptions,
-            StarRocksRecordSerializationSchema<InputT> serializationSchema,
+            RecordSerializationSchema<InputT> serializationSchema,
             StreamLoadProperties streamLoadProperties) {
         this.sinkOptions = sinkOptions;
         this.serializationSchema = serializationSchema;

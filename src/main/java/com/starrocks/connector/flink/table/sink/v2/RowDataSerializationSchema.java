@@ -30,7 +30,7 @@ import com.starrocks.connector.flink.table.data.StarRocksRowData;
 import com.starrocks.connector.flink.tools.JsonWrapper;
 
 /** Serializer for the {@link RowData} record. */
-public class RowDataSerializationSchema implements StarRocksRecordSerializationSchema<RowData> {
+public class RowDataSerializationSchema implements RecordSerializationSchema<RowData> {
 
     private static final long serialVersionUID = 1L;
 
