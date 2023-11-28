@@ -25,7 +25,7 @@ import com.starrocks.connector.flink.manager.StarRocksSinkTable;
 import com.starrocks.connector.flink.row.sink.StarRocksIRowTransformer;
 import com.starrocks.connector.flink.row.sink.StarRocksISerializer;
 import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
-import com.starrocks.connector.flink.table.sink.v2.StarRocksRecordSerializationSchema;
+import com.starrocks.connector.flink.table.sink.v2.RecordSerializationSchema;
 import com.starrocks.connector.flink.table.sink.v2.RowDataSerializationSchema;
 import com.starrocks.connector.flink.table.sink.v2.StarRocksSink;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
@@ -152,12 +152,12 @@ public class SinkFunctionFactory {
     }
 
     public static <T> StarRocksSink<T> createSink(
-            StarRocksSinkOptions sinkOptions, StarRocksRecordSerializationSchema<T> recordSerializer) {
+            StarRocksSinkOptions sinkOptions, RecordSerializationSchema<T> serializationSchema) {
         detectStarRocksFeature(sinkOptions);
         SinkVersion sinkVersion = getSinkVersion(sinkOptions);
         if (sinkVersion == SinkVersion.V2) {
             StreamLoadProperties streamLoadProperties = sinkOptions.getProperties(null);
-            return new StarRocksSink<>(sinkOptions, recordSerializer, streamLoadProperties);
+            return new StarRocksSink<>(sinkOptions, serializationSchema, streamLoadProperties);
         }
         throw new UnsupportedOperationException("New sink api don't support sink type " + sinkVersion.name());
     }

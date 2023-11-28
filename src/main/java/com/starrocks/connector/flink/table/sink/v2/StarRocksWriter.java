@@ -53,7 +53,7 @@ public class StarRocksWriter<InputT>
     private static final Logger LOG = LoggerFactory.getLogger(StarRocksWriter.class);
 
     private final StarRocksSinkOptions sinkOptions;
-    private final StarRocksRecordSerializationSchema<InputT> serializationSchema;
+    private final RecordSerializationSchema<InputT> serializationSchema;
     private final StarRocksStreamLoadListener streamLoadListener;
     private final LabelGeneratorFactory labelGeneratorFactory;
     private final StreamLoadManagerV2 sinkManager;
@@ -61,7 +61,7 @@ public class StarRocksWriter<InputT>
 
     public StarRocksWriter(
             StarRocksSinkOptions sinkOptions,
-            StarRocksRecordSerializationSchema<InputT> serializationSchema,
+            RecordSerializationSchema<InputT> serializationSchema,
             StreamLoadProperties streamLoadProperties,
             Sink.InitContext initContext,
             Collection<StarRocksWriterState> recoveredState) throws Exception {
