@@ -30,7 +30,7 @@ import com.starrocks.connector.flink.table.data.StarRocksRowData;
 import com.starrocks.connector.flink.tools.JsonWrapper;
 
 /** Serializer for the {@link RowData} record. */
-public class RowDataSerializer implements RecordSerializer<RowData> {
+public class RowDataSerializationSchema implements StarRocksRecordSerializationSchema<RowData> {
 
     private static final long serialVersionUID = 1L;
 
@@ -42,7 +42,7 @@ public class RowDataSerializer implements RecordSerializer<RowData> {
     private final StarRocksIRowTransformer<RowData> rowTransformer;
     private transient DefaultStarRocksRowData reusableRowData;
 
-    public RowDataSerializer(
+    public RowDataSerializationSchema(
             String databaseName,
             String tableName,
             boolean supportUpsertDelete,

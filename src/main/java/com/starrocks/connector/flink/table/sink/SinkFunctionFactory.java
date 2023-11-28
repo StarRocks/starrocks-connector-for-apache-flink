@@ -25,8 +25,8 @@ import com.starrocks.connector.flink.manager.StarRocksSinkTable;
 import com.starrocks.connector.flink.row.sink.StarRocksIRowTransformer;
 import com.starrocks.connector.flink.row.sink.StarRocksISerializer;
 import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
-import com.starrocks.connector.flink.table.sink.v2.RecordSerializer;
-import com.starrocks.connector.flink.table.sink.v2.RowDataSerializer;
+import com.starrocks.connector.flink.table.sink.v2.StarRocksRecordSerializationSchema;
+import com.starrocks.connector.flink.table.sink.v2.RowDataSerializationSchema;
 import com.starrocks.connector.flink.table.sink.v2.StarRocksSink;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import org.slf4j.Logger;
@@ -138,7 +138,7 @@ public class SinkFunctionFactory {
             StarRocksISerializer serializer = StarRocksSerializerFactory.createSerializer(sinkOptions, schema.getFieldNames());
             rowTransformer.setStarRocksColumns(sinkTable.getFieldMapping());
             rowTransformer.setTableSchema(schema);
-            RowDataSerializer recordSerializer = new RowDataSerializer(
+            RowDataSerializationSchema serializationSchema = new RowDataSerializationSchema(
                     sinkOptions.getDatabaseName(),
                     sinkOptions.getTableName(),
                     sinkOptions.supportUpsertDelete(),
@@ -146,13 +146,13 @@ public class SinkFunctionFactory {
                     serializer,
                     rowTransformer);
             StreamLoadProperties streamLoadProperties = sinkOptions.getProperties(sinkTable);
-            return new StarRocksSink<>(sinkOptions, recordSerializer, streamLoadProperties);
+            return new StarRocksSink<>(sinkOptions, serializationSchema, streamLoadProperties);
         }
         throw new UnsupportedOperationException("New sink api don't support sink type " + sinkVersion.name());
     }
 
     public static <T> StarRocksSink<T> createSink(
-            StarRocksSinkOptions sinkOptions, RecordSerializer<T> recordSerializer) {
+            StarRocksSinkOptions sinkOptions, StarRocksRecordSerializationSchema<T> recordSerializer) {
         detectStarRocksFeature(sinkOptions);
         SinkVersion sinkVersion = getSinkVersion(sinkOptions);
         if (sinkVersion == SinkVersion.V2) {
