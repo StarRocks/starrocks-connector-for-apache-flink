@@ -310,9 +310,10 @@ public class StarRocksCatalog implements Serializable {
         // timeout
         long startTime = System.currentTimeMillis();
         int retries = 0;
+        AlterJobState jobState = null;
         while (System.currentTimeMillis() - startTime < timeoutSecond * 1000) {
             try {
-                AlterJobState jobState = getAlterJobState(databaseName, tableName);
+                jobState = getAlterJobState(databaseName, tableName);
                 retries = 0;
                 LOG.info("Get alter job state for {}.{}, {}", databaseName, tableName, jobState);
                 if ("FINISHED".equalsIgnoreCase(jobState.state)) {
@@ -342,6 +343,9 @@ public class StarRocksCatalog implements Serializable {
                                 databaseName, tableName));
             }
         }
+        throw new StarRocksCatalogException(
+                String.format("Alter job for %s.%s does not finish before timeout (%s second). " +
+                                "The last job state: %s", databaseName, tableName, timeoutSecond, jobState));
     }
 
     private static class AlterJobState {
