@@ -68,7 +68,7 @@ public class StarRocksCatalog implements Serializable {
                 !StringUtils.isNullOrWhitespaceOnly(databaseName),
                 "database name cannot be null or empty.");
         String querySql = String.format(
-                "SELECT `SCHEMA_NAME` FROM `INFORMATION_SCHEMA`.`SCHEMATA` WHERE SCHEMA_NAME = %s;",
+                "SELECT `SCHEMA_NAME` FROM `INFORMATION_SCHEMA`.`SCHEMATA` WHERE SCHEMA_NAME = '%s';",
                 databaseName);
         try {
             List<String> dbList = executeSingleColumnStatement(querySql);

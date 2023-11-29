@@ -168,10 +168,11 @@ public class FlinkCatalog extends AbstractCatalog {
         Preconditions.checkArgument(
                 !StringUtils.isNullOrWhitespaceOnly(databaseName),
                 "database name cannot be null or empty.");
-        List<String> dbList = executeSingleColumnStatement(
-                "SELECT `SCHEMA_NAME` FROM `INFORMATION_SCHEMA`.`SCHEMATA` WHERE SCHEMA_NAME = ?;",
-                databaseName);
-        return !dbList.isEmpty();
+        try {
+            return starRocksCatalog.databaseExists(databaseName);
+        } catch (Exception e) {
+            throw new CatalogException("Failed to check database exist", e);
+        }
     }
 
     @Override
