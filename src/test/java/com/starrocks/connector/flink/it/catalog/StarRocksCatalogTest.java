@@ -24,6 +24,7 @@ import com.starrocks.connector.flink.catalog.StarRocksCatalog;
 import com.starrocks.connector.flink.catalog.StarRocksColumn;
 import com.starrocks.connector.flink.catalog.StarRocksTable;
 import com.starrocks.connector.flink.it.StarRocksITTestBase;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -42,9 +43,10 @@ public class StarRocksCatalogTest extends StarRocksITTestBase {
     private StarRocksCatalog catalog;
 
     @Before
-    public void prepare() throws Exception {
+    public void setup() throws Exception {
         this.tableName = "test_catalog_" + genRandomUuid();
         this.catalog = new StarRocksCatalog(getJdbcUrl(), USERNAME, PASSWORD);
+        this.catalog.open();
         String createStarRocksTable =
                 String.format(
                         "CREATE TABLE `%s`.`%s` (" +
@@ -60,6 +62,13 @@ public class StarRocksCatalogTest extends StarRocksITTestBase {
                                 ")",
                         DB_NAME, tableName);
         executeSrSQL(createStarRocksTable);
+    }
+
+    @After
+    public void teardown() throws Exception {
+        if (this.catalog != null) {
+            this.catalog.close();
+        }
     }
 
     @Test

@@ -69,8 +69,8 @@ public abstract class StarRocksITTestBase {
 
     @BeforeClass
     public static void setUp() throws Exception {
-        HTTP_URLS = DEBUG_MODE ? "127.0.0.1:11901" : System.getProperty("http_urls");
-        JDBC_URLS = DEBUG_MODE ? "jdbc:mysql://127.0.0.1:11903" : System.getProperty("jdbc_urls");
+        HTTP_URLS = DEBUG_MODE ? "127.0.0.1:8030" : System.getProperty("http_urls");
+        JDBC_URLS = DEBUG_MODE ? "jdbc:mysql://127.0.0.1:9030" : System.getProperty("jdbc_urls");
         USERNAME = DEBUG_MODE ? "root" : System.getProperty("username");
         PASSWORD = DEBUG_MODE ? "" : System.getProperty("password");
         assumeTrue(HTTP_URLS != null && JDBC_URLS != null);

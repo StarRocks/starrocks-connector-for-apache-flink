@@ -20,8 +20,6 @@
 
 package com.starrocks.connector.flink.catalog;
 
-import org.apache.flink.table.api.ValidationException;
-
 public class JdbcUtils {
 
     // Driver name for mysql connector 5.1 which is deprecated in 8.0
@@ -37,7 +35,7 @@ public class JdbcUtils {
         return String.format("jdbc:mysql://%s:%d", host, port);
     }
 
-    public static void verifyJdbcDriver() {
+    public static void checkJdbcDriver() {
         try {
             Class.forName(MYSQL_80_DRIVER_NAME);
         } catch (ClassNotFoundException e) {
@@ -48,7 +46,7 @@ public class JdbcUtils {
                                 "put it in your classpath manually. You can download it from MySQL " +
                                 "site %s, or Maven Central %s",
                         MYSQL_SITE_URL, MAVEN_CENTRAL_URL);
-                throw new ValidationException(msg, ie);
+                throw new RuntimeException(msg, ie);
             }
         }
     }

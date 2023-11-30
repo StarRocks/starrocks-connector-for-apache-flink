@@ -49,11 +49,44 @@ public class StarRocksCatalog implements Serializable {
     private final String jdbcUrl;
     private final String username;
     private final String password;
+    private boolean checkDriver;
 
     public StarRocksCatalog(String jdbcUrl, String username, String password) {
         this.jdbcUrl = jdbcUrl;
         this.username = username;
         this.password = password;
+    }
+
+    /**
+     * Open the catalog. Used for any required preparation in initialization phase.
+     *
+     * @throws StarRocksCatalogException in case of any runtime exception
+     */
+    public void open() throws StarRocksCatalogException {
+        try {
+            JdbcUtils.checkJdbcDriver();
+            // test connection, fail early if we cannot connect to starrocks
+            try (Connection conn = getConnection()) {
+            } catch (SQLException e) {
+                throw new RuntimeException(
+                        String.format("Failed to connect StarRocks via JDBC: %s.", jdbcUrl), e);
+            }
+        } catch (Exception e) {
+            LOG.error("Failed to open StarRocks catalog", e);
+            throw new StarRocksCatalogException("Failed to open StarRocks catalog", e);
+        }
+
+        LOG.info("Open StarRocks catalog");
+    }
+
+    /**
+     * Close the catalog when it is no longer needed and release any resource that it might be
+     * holding.
+     *
+     * @throws StarRocksCatalogException in case of any runtime exception
+     */
+    public void close() throws StarRocksCatalogException {
+        LOG.info("Close StarRocks catalog");
     }
 
     /**
@@ -254,8 +287,10 @@ public class StarRocksCatalog implements Serializable {
         String alterSql =
                 buildAlterAddColumnsSql(databaseName, tableName, addColumns, timeoutSecond);
         try {
+            long startTimeMillis = System.currentTimeMillis();
             executeAlter(databaseName, tableName, alterSql, timeoutSecond);
-            LOG.info("Success to add columns to {}.{}, sql: {}", databaseName, tableName, alterSql);
+            LOG.info("Success to add columns to {}.{}, duration: {}ms, sql: {}",
+                    databaseName, tableName, System.currentTimeMillis() - startTimeMillis, alterSql);
         } catch (Exception e) {
             LOG.error("Failed to add columns to {}.{}, sql: {}", databaseName, tableName, alterSql, e);
             throw new StarRocksCatalogException(
@@ -286,8 +321,10 @@ public class StarRocksCatalog implements Serializable {
         String alterSql =
                 buildAlterDropColumnsSql(databaseName, tableName, dropColumns, timeoutSecond);
         try {
+            long startTimeMillis = System.currentTimeMillis();
             executeAlter(databaseName, tableName, alterSql, timeoutSecond);
-            LOG.info("Success to drop columns from {}.{}, sql: {}", databaseName, tableName, alterSql);
+            LOG.info("Success to drop columns from {}.{}, duration: {}ms, sql: {}",
+                    databaseName, tableName, System.currentTimeMillis() - startTimeMillis, alterSql);
         } catch (Exception e) {
             LOG.error("Failed to drop columns from {}.{}, sql: {}", databaseName, tableName, alterSql);
             throw new StarRocksCatalogException(

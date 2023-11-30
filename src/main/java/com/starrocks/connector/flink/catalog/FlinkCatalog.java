@@ -24,7 +24,6 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.table.api.Schema;
-import org.apache.flink.table.api.ValidationException;
 import org.apache.flink.table.catalog.AbstractCatalog;
 import org.apache.flink.table.catalog.CatalogBaseTable;
 import org.apache.flink.table.catalog.CatalogDatabase;
@@ -75,7 +74,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-import static com.starrocks.connector.flink.catalog.JdbcUtils.verifyJdbcDriver;
 import static org.apache.flink.table.factories.FactoryUtil.CONNECTOR;
 
 /** Flink catalog for StarRocks. */
@@ -126,12 +124,12 @@ public class FlinkCatalog extends AbstractCatalog {
         // Refer to flink-connector-jdbc's AbstractJdbcCatalog
         // load the Driver use userClassLoader explicitly, see FLINK-15635 for more detail
         try (TemporaryClassLoaderContext ignored = TemporaryClassLoaderContext.of(userClassLoader)) {
-            verifyJdbcDriver();
-            // test connection, fail early if we cannot connect to database
-            try (Connection conn = getConnection()) {
-            } catch (SQLException e) {
-                throw new ValidationException(
-                        String.format("Failed to connect StarRocks via JDBC: %s.", jdbcUrl), e);
+            try {
+                starRocksCatalog.open();
+            } catch (Exception e) {
+                LOG.error("Failed to open flink catalog for StarRocks {}", getName(), e);
+                throw new CatalogException(
+                        String.format("Failed to open flink catalog for StarRocks %s", getName()), e);
             }
         }
         LOG.info("Open flink catalog for StarRocks {}", getName());
@@ -139,6 +137,13 @@ public class FlinkCatalog extends AbstractCatalog {
 
     @Override
     public void close() throws CatalogException {
+        try {
+            starRocksCatalog.close();
+        } catch (Exception e) {
+            LOG.error("Failed to close flink catalog for StarRocks {}", getName(), e);
+            throw new CatalogException(
+                    String.format("Failed to close flink catalog for StarRocks %s", getName()), e);
+        }
         LOG.info("Close flink catalog for StarRocks {}", getName());
     }
 
