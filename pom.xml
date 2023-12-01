@@ -110,6 +110,11 @@ limitations under the License.
             </exclusions>
         </dependency>
         <dependency>
+            <groupId>commons-codec</groupId>
+            <artifactId>commons-codec</artifactId>
+            <version>1.15</version>
+        </dependency>
+        <dependency>
             <groupId>com.alibaba</groupId>
             <artifactId>fastjson</artifactId>
             <version>1.2.75</version>
@@ -452,6 +457,10 @@ limitations under the License.
                                     <pattern>com.fasterxml.jackson</pattern>
                                     <shadedPattern>com.starrocks.streamload.shade.com.fasterxml.jackson</shadedPattern>
                                 </relocation>
+                                <relocation>
+                                    <pattern>org.apache.commons</pattern>
+                                    <shadedPattern>com.starrocks.shade.org.apache.commons</shadedPattern>
+                                </relocation>
                             </relocations>
                             <artifactSet>
                                 <includes>
@@ -463,6 +472,7 @@ limitations under the License.
                                     <include>io.netty:*</include>
                                     <include>com.google.flatbuffers:flatbuffers-java</include>
                                     <include>com.google.guava:*</include>
+                                    <include>commons-codec:commons-codec</include>
                                 </includes>
                             </artifactSet>
                             <filters>
