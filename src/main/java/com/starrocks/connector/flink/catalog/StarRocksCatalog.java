@@ -23,7 +23,6 @@ package com.starrocks.connector.flink.catalog;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.StringUtils;
 
-import org.apache.commons.compress.utils.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -453,7 +452,7 @@ public class StarRocksCatalog implements Serializable {
     private List<String> executeSingleColumnStatement(String sql) throws SQLException {
         try (Connection conn = getConnection();
                 PreparedStatement statement = conn.prepareStatement(sql)) {
-            List<String> columnValues = Lists.newArrayList();
+            List<String> columnValues = new ArrayList<>();
             try (ResultSet rs = statement.executeQuery()) {
                 while (rs.next()) {
                     String columnValue = rs.getString(1);
