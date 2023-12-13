@@ -36,8 +36,10 @@ import org.slf4j.LoggerFactory;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Optional;
 import java.util.NoSuchElementException;
 
 public class StarRocksSourceFlinkRows {
@@ -141,14 +143,23 @@ public class StarRocksSourceFlinkRows {
             StarRocksToFlinkTrans translators = null;
             Column column = starRocksSchema.getColumn(i);
             boolean nullable = true;
+            int resultIndex = i;
             if (column != null) {
-                ColumnRichInfo richInfo = columnRichInfos.get(selectedColumns[i].getColumnIndexInFlinkTable());
-                nullable = richInfo.getDataType().getLogicalType().isNullable();
-                LogicalTypeRoot flinkTypeRoot = richInfo.getDataType().getLogicalType().getTypeRoot();
-                String srType = DataUtil.clearBracket(column.getType());
-                if (Const.DataTypeRelationMap.containsKey(flinkTypeRoot)
-                        && Const.DataTypeRelationMap.get(flinkTypeRoot).containsKey(srType)) {
-                    translators = Const.DataTypeRelationMap.get(flinkTypeRoot).get(srType);
+                Optional<SelectColumn> columnOptional = Arrays.stream(selectedColumns)
+                        .filter(k -> k.getColumnName().equals(column.getName()))
+                        .findAny();
+                if (columnOptional.isPresent()) {
+                    resultIndex = columnOptional.get().getColumnIndexInFlinkTable();
+                    ColumnRichInfo richInfo = columnRichInfos.get(resultIndex);
+                    nullable = richInfo.getDataType().getLogicalType().isNullable();
+                    LogicalTypeRoot flinkTypeRoot = richInfo.getDataType().getLogicalType().getTypeRoot();
+                    String srType = DataUtil.clearBracket(column.getType());
+                    if (Const.DataTypeRelationMap.containsKey(flinkTypeRoot)
+                            && Const.DataTypeRelationMap.get(flinkTypeRoot).containsKey(srType)) {
+                        translators = Const.DataTypeRelationMap.get(flinkTypeRoot).get(srType);
+                    }
+                } else {
+                    continue;
                 }
             }
 
@@ -167,8 +178,11 @@ public class StarRocksSourceFlinkRows {
 
             if (translators != null) {
                 Object[] result = translators.transToFlinkData(fieldVector.getMinorType(), fieldVector, rowCountOfBatch, i, nullable);
-                for (int ri = 0; ri < result.length; ri ++) {
-                    setValueToFlinkRows(ri, i, result[ri]);
+                for (int ri = 0; ri < result.length; ri++) {
+                    if (resultIndex >= selectedColumns.length) {
+                        return;
+                    }
+                    setValueToFlinkRows(ri, resultIndex, result[ri]);
                 }
             }
         }
