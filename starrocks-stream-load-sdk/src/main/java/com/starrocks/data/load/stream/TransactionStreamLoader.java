@@ -118,7 +118,11 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
         httpPost.addHeader("db", region.getDatabase());
         httpPost.addHeader("table", region.getTable());
 
-        httpPost.setConfig(RequestConfig.custom().setExpectContinueEnabled(true).setRedirectsEnabled(true).build());
+        httpPost.setConfig(RequestConfig.custom()
+                        .setSocketTimeout(properties.getSocketTimeout())
+                        .setExpectContinueEnabled(true)
+                        .setRedirectsEnabled(true)
+                        .build());
 
         String db = region.getDatabase();
         String table = region.getTable();
@@ -169,8 +173,11 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
         httpPost.addHeader("db", transaction.getDatabase());
         httpPost.addHeader("table", transaction.getTable());
 
-        httpPost.setConfig(RequestConfig.custom().setExpectContinueEnabled(true).setRedirectsEnabled(true).build());
-
+        httpPost.setConfig(RequestConfig.custom()
+                        .setSocketTimeout(properties.getSocketTimeout())
+                        .setExpectContinueEnabled(true)
+                        .setRedirectsEnabled(true)
+                        .build());
 
         log.info("Transaction prepare, label : {}, request : {}", transaction.getLabel(), httpPost);
 
@@ -237,8 +244,11 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
         httpPost.addHeader("db", transaction.getDatabase());
         httpPost.addHeader("table", transaction.getTable());
 
-        httpPost.setConfig(RequestConfig.custom().setExpectContinueEnabled(true).setRedirectsEnabled(true).build());
-
+        httpPost.setConfig(RequestConfig.custom()
+                        .setSocketTimeout(properties.getSocketTimeout())
+                        .setExpectContinueEnabled(true)
+                        .setRedirectsEnabled(true)
+                        .build());
 
         log.info("Transaction commit, label: {}, request : {}", transaction.getLabel(), httpPost);
 

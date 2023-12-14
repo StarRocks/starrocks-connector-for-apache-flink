@@ -259,7 +259,8 @@ public class StreamLoadProperties implements Serializable {
         private Map<String, StreamLoadTableProperties> tablePropertiesMap = new HashMap<>();
 
         private int connectTimeout = 60000;
-        private int socketTimeout;
+        // Default value -1 is the same as that in RequestConfig.Builder#socketTimeout
+        private int socketTimeout = -1;
         private int waitForContinueTimeoutMs = DEFAULT_WAIT_FOR_CONTINUE;
         private int ioThreadCount = Runtime.getRuntime().availableProcessors();
 
@@ -365,16 +366,13 @@ public class StreamLoadProperties implements Serializable {
         public Builder waitForContinueTimeoutMs(int waitForContinueTimeoutMs) {
             if (waitForContinueTimeoutMs < DEFAULT_WAIT_FOR_CONTINUE || waitForContinueTimeoutMs > 60000) {
                 throw new IllegalArgumentException("waitForContinueTimeoutMs `" + waitForContinueTimeoutMs +
-                        "ms` set failed, must be in range in [100, 60000]");
+                        "ms` set failed, must be in range in [3000, 60000]");
             }
             this.waitForContinueTimeoutMs = waitForContinueTimeoutMs;
             return this;
         }
 
         public Builder socketTimeout(int socketTimeout) {
-            if (socketTimeout < 0) {
-                throw new IllegalArgumentException("socketTimeout `" + socketTimeout + "ms` set failed, must greater or equals to 0");
-            }
             this.socketTimeout = socketTimeout;
             return this;
         }
