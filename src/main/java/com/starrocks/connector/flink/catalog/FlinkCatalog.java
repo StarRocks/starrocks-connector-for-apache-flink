@@ -56,7 +56,6 @@ import org.apache.flink.util.TemporaryClassLoaderContext;
 
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 import com.starrocks.connector.flink.table.source.StarRocksSourceOptions;
-import org.apache.commons.compress.utils.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,6 +65,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -278,7 +278,7 @@ public class FlinkCatalog extends AbstractCatalog {
             properties.putAll(getSourceConfig(tablePath.getDatabaseName(), tablePath.getObjectName()));
             properties.putAll(getSinkConfig(tablePath.getDatabaseName(), tablePath.getObjectName()));
 
-            return CatalogTable.of(flinkSchema, starRocksTable.getComment().orElse(null), Lists.newArrayList(), properties);
+            return CatalogTable.of(flinkSchema, starRocksTable.getComment().orElse(null), new ArrayList<>(), properties);
         } catch (StarRocksCatalogException e) {
             throw new CatalogException(
                     String.format("Failed to get table %s in catalog %s", tablePath.getFullName(), getName()), e);
@@ -387,7 +387,7 @@ public class FlinkCatalog extends AbstractCatalog {
     private List<String> executeSingleColumnStatement(String sql, Object... params) {
         try (Connection conn = getConnection();
                 PreparedStatement statement = conn.prepareStatement(sql)) {
-            List<String> columnValues = Lists.newArrayList();
+            List<String> columnValues = new ArrayList<>();
             if (params != null) {
                 for (int i = 0; i < params.length; i++) {
                     statement.setObject(i + 1, params[i]);
