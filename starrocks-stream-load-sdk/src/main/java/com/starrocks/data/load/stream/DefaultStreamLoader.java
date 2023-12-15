@@ -65,7 +65,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
 
     private static final int ERROR_LOG_MAX_LENGTH = 3000;
 
-    private StreamLoadProperties properties;
+    protected StreamLoadProperties properties;
     private StreamLoadManager manager;
 
     private HttpClientBuilder clientBuilder;
@@ -283,7 +283,11 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
             String label = region.getLabel();
 
             HttpPut httpPut = new HttpPut(sendUrl);
-            httpPut.setConfig(RequestConfig.custom().setExpectContinueEnabled(true).setRedirectsEnabled(true).build());
+            httpPut.setConfig(RequestConfig.custom()
+                        .setSocketTimeout(properties.getSocketTimeout())
+                        .setExpectContinueEnabled(true)
+                        .setRedirectsEnabled(true)
+                        .build());
             httpPut.setEntity(region.getHttpEntity());
 
             httpPut.setHeaders(defaultHeaders);

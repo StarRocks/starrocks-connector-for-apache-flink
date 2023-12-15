@@ -14,11 +14,6 @@
 
 package com.starrocks.connector.flink.table.sink;
 
-import com.starrocks.connector.flink.manager.StarRocksSinkTable;
-import com.starrocks.connector.flink.row.sink.StarRocksDelimiterParser;
-import com.starrocks.data.load.stream.StreamLoadDataFormat;
-import com.starrocks.data.load.stream.properties.StreamLoadProperties;
-import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
@@ -27,8 +22,16 @@ import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.table.api.ValidationException;
 import org.apache.flink.table.factories.FactoryUtil;
 import org.apache.flink.util.Preconditions;
+
+import com.starrocks.connector.flink.manager.StarRocksSinkTable;
+import com.starrocks.connector.flink.row.sink.StarRocksDelimiterParser;
+import com.starrocks.data.load.stream.StreamLoadDataFormat;
+import com.starrocks.data.load.stream.properties.StreamLoadProperties;
+import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javax.annotation.Nullable;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -39,7 +42,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-import javax.annotation.Nullable;
 
 import static org.apache.http.protocol.HttpRequestExecutor.DEFAULT_WAIT_FOR_CONTINUE;
 
@@ -82,6 +84,15 @@ public class StarRocksSinkOptions implements Serializable {
             .stringType().noDefaultValue().withDescription("The prefix of the stream load label. Available values are within [-_A-Za-z0-9]");
     public static final ConfigOption<Integer> SINK_CONNECT_TIMEOUT = ConfigOptions.key("sink.connect.timeout-ms")
             .intType().defaultValue(30000).withDescription("Timeout in millisecond for connecting to the `load-url`.");
+
+    public static final ConfigOption<Integer> SINK_SOCKET_TIMEOUT = ConfigOptions.key("sink.socket.timeout-ms")
+            .intType().defaultValue(-1).withDescription("Timeout in milliseconds that the http client waits for data or, put differently, " +
+                    "a maximum period inactivity between two consecutive data packets. The default value -1 is same as that of apache http " +
+                    "client which is interpreted as undefined (system default if applicable). A timeout value of zero is interpreted as " +
+                    "an infinite timeout. You can use this option to fail the stream load from the connector side if the http client does not " +
+                    "receive response from StarRocks before timeout. The other option 'sink.properties.timeout' take effects on the StarRocks " +
+                    "side, but the response to the client may delay in some unexpected cases. If you want to have a strict timeout from the " +
+                    "connector side, you can set this option to an acceptable value.");
     public static final ConfigOption<Integer> SINK_WAIT_FOR_CONTINUE_TIMEOUT = ConfigOptions.key("sink.wait-for-continue.timeout-ms")
             .intType().defaultValue(30000).withDescription("Timeout in millisecond to wait for 100-continue response for http client.");
     public static final ConfigOption<Integer> SINK_IO_THREAD_COUNT = ConfigOptions.key("sink.io.thread-count")
@@ -263,6 +274,10 @@ public class StarRocksSinkOptions implements Serializable {
             return 100;
         }
         return Math.min(connectTimeout, 60000);
+    }
+
+    public int getSocketTimeout() {
+        return tableOptions.get(SINK_SOCKET_TIMEOUT);
     }
 
     public int getWaitForContinueTimeout() {
@@ -546,6 +561,7 @@ public class StarRocksSinkOptions implements Serializable {
                 .cacheMaxBytes(getSinkMaxBytes())
                 .connectTimeout(getConnectTimeout())
                 .waitForContinueTimeoutMs(getWaitForContinueTimeout())
+                .socketTimeout(getSocketTimeout())
                 .ioThreadCount(getIoThreadCount())
                 .scanningFrequency(getScanFrequency())
                 .labelPrefix(getLabelPrefix())

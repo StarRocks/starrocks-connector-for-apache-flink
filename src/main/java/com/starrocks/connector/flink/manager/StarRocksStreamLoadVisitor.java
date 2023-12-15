@@ -290,7 +290,9 @@ public class StarRocksStreamLoadVisitor implements Serializable {
             httpPut.setHeader("label", label);
             httpPut.setHeader("Authorization", getBasicAuthHeader(sinkOptions.getUsername(), sinkOptions.getPassword()));
             httpPut.setEntity(new ByteArrayEntity(data));
-            httpPut.setConfig(RequestConfig.custom().setRedirectsEnabled(true).build());
+            httpPut.setConfig(RequestConfig.custom()
+                    .setSocketTimeout(sinkOptions.getSocketTimeout())
+                    .setRedirectsEnabled(true).build());
             try (CloseableHttpResponse resp = httpclient.execute(httpPut)) {
                 HttpEntity respEntity = getHttpEntity(resp);
                 if (respEntity == null)
