@@ -215,7 +215,7 @@ The Flink connector provides the following metrics to monitor loading.
 | totalFlushFailedTimes    | counter | number of times that the flushing been failed.                  |
 | totalFilteredRows        | counter | number of rows filtered which is also included in totalFlushRows.    |
 
-### Flink CDC Synchronization
+### Flink CDC Synchronization (Schema Change Support)
 
 You can use [Flink CDC 3.0](https://ververica.github.io/flink-cdc-connectors/master/content/overview/cdc-pipeline.html) framework
 to easily build a streaming ELT pipeline from CDC sources (such as MySQL, Kafka) to StarRocks. The pipeline can synchronize whole 
