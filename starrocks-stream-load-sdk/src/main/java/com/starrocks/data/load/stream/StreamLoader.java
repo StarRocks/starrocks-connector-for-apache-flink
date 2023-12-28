@@ -22,6 +22,7 @@ package com.starrocks.data.load.stream;
 
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 
 public interface StreamLoader {
@@ -43,4 +44,8 @@ public interface StreamLoader {
     boolean prepare(StreamLoadSnapshot snapshot);
     boolean commit(StreamLoadSnapshot snapshot);
     boolean rollback(StreamLoadSnapshot snapshot);
+
+    default ExecutorService getExecutorService() {
+        throw new UnsupportedOperationException();
+    }
 }
