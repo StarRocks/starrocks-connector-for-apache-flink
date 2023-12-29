@@ -19,16 +19,13 @@ import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
 import com.starrocks.connector.flink.table.source.struct.Const;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 import com.starrocks.connector.flink.table.source.struct.StarRocksSchema;
-import com.starrocks.connector.flink.tools.DataTypeUtils;
 import com.starrocks.connector.flink.tools.DataUtil;
 import com.starrocks.thrift.TScanBatchResult;
-
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.ArrowStreamReader;
 import org.apache.flink.table.data.GenericRowData;
-import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.LogicalTypeRoot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,7 +33,6 @@ import org.slf4j.LoggerFactory;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.NoSuchElementException;
 
@@ -138,38 +134,33 @@ public class StarRocksSourceFlinkRows {
     private void genFlinkRows() {
         for (int i = 0; i < fieldVectors.size(); i++) {
             FieldVector fieldVector = fieldVectors.get(i);
-            StarRocksToFlinkTrans translators = null;
             Column column = starRocksSchema.getColumn(i);
-            boolean nullable = true;
-            if (column != null) {
-                ColumnRichInfo richInfo = columnRichInfos.get(selectedColumns[i].getColumnIndexInFlinkTable());
-                nullable = richInfo.getDataType().getLogicalType().isNullable();
-                LogicalTypeRoot flinkTypeRoot = richInfo.getDataType().getLogicalType().getTypeRoot();
-                String srType = DataUtil.clearBracket(column.getType());
-                if (Const.DataTypeRelationMap.containsKey(flinkTypeRoot)
-                        && Const.DataTypeRelationMap.get(flinkTypeRoot).containsKey(srType)) {
-                    translators = Const.DataTypeRelationMap.get(flinkTypeRoot).get(srType);
-                }
+            if (column == null) {
+                throw new RuntimeException("Can't find StarRocks' column at index " + i);
             }
 
-            // TODO make sure what's going on here
-            if (translators == null) {
-                DataType dataType = DataTypeUtils.map(fieldVector.getMinorType());
-                if (dataType == null) {
-                    throw new RuntimeException(
-                            "Flink type not support when convert data from starrocks to flink, " +
-                                    "type is -> [" + fieldVector.getMinorType().toString() + "]"
-                    );
-                }
-                HashMap<String, StarRocksToFlinkTrans> map = Const.DataTypeRelationMap.get(dataType.getLogicalType().getTypeRoot());
-                translators = map.values().stream().findFirst().orElse(null);
+            ColumnRichInfo richInfo = columnRichInfos.get(selectedColumns[i].getColumnIndexInFlinkTable());
+            boolean nullable = richInfo.getDataType().getLogicalType().isNullable();
+            LogicalTypeRoot flinkTypeRoot = richInfo.getDataType().getLogicalType().getTypeRoot();
+            String srType = DataUtil.clearBracket(column.getType());
+
+            if (!Const.DataTypeRelationMap.containsKey(flinkTypeRoot)) {
+                throw new RuntimeException(
+                        "Flink type not supported for column " + column.getName() +
+                                ", Flink type is -> [" + flinkTypeRoot.toString() + "]");
+            }
+            if (!Const.DataTypeRelationMap.get(flinkTypeRoot).containsKey(srType)) {
+                throw new RuntimeException(
+                        "StarRocks type can not convert to Flink type for column " + column.getName() +
+                                ", StarRocks type is -> [" + srType + "], " +
+                                "Flink type is -> [" + flinkTypeRoot.toString() + "]"
+                );
             }
 
-            if (translators != null) {
-                Object[] result = translators.transToFlinkData(fieldVector.getMinorType(), fieldVector, rowCountOfBatch, i, nullable);
-                for (int ri = 0; ri < result.length; ri ++) {
-                    setValueToFlinkRows(ri, i, result[ri]);
-                }
+            StarRocksToFlinkTrans translators = Const.DataTypeRelationMap.get(flinkTypeRoot).get(srType);
+            Object[] result = translators.transToFlinkData(fieldVector.getMinorType(), fieldVector, rowCountOfBatch, i, nullable);
+            for (int ri = 0; ri < result.length; ri ++) {
+                setValueToFlinkRows(ri, i, result[ri]);
             }
         }
     }
