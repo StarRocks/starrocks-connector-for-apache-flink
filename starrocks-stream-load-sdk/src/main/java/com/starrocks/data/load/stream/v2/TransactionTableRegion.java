@@ -235,44 +235,74 @@ public class TransactionTableRegion implements TableRegion {
         return false;
     }
 
+    // Commit the load asynchronously
+    // 1. commit() should not be called concurrently
+    // 2. because commit is executed asynchronously, the caller should poll the
+    //    method to see if it executes successfully
+    // 3. a true returned value indicates a successful commit, and a false value
+    //    indicates the commit should not be triggered, such as it is FLUSHING,
+    //    or it's still doing commit asynchronously
     public boolean commit() {
+        boolean commitTriggered = false;
         if (!state.compareAndSet(State.ACTIVE, State.COMMITTING)) {
-            return false;
-        }
-
-        boolean commitSuccess;
-        if (label != null) {
-            StreamLoadSnapshot.Transaction transaction = new StreamLoadSnapshot.Transaction(database, table, label);
-            try {
-                if (!streamLoader.prepare(transaction)) {
-                    String errorMsg = "Failed to prepare transaction, please check taskmanager log for details, " + transaction;
-                    throw new StreamLoadFailException(errorMsg);
-                }
-
-                if (!streamLoader.commit(transaction)) {
-                    String errorMsg = "Failed to commit transaction, please check taskmanager log for details, " + transaction;
-                    throw new StreamLoadFailException(errorMsg);
-                }
-            } catch (Exception e) {
-                LOG.error("TransactionTableRegion commit failed, db: {}, table: {}, label: {}", database, table, label, e);
-                fail(e);
+            if (state.get() != State.COMMITTING) {
                 return false;
             }
-
-            label = null;
-            long commitTime = System.currentTimeMillis();
-            long commitDuration = commitTime - lastCommitTimeMills;
-            lastCommitTimeMills = commitTime;
-            commitSuccess = true;
-            LOG.info("Success to commit transaction: {}, duration: {} ms", transaction, commitDuration);
-        } else {
-            // if the data has never been flushed (label == null), the commit should fail so that StreamLoadManagerV2#init
-            // will schedule to flush the data first, and then trigger commit again
-            commitSuccess = cacheBytes.get() == 0;
+            commitTriggered = true;
         }
 
-        state.compareAndSet(State.COMMITTING, State.ACTIVE);
-        return commitSuccess;
+        if (commitTriggered) {
+            // label will be set to null after commit executes successfully
+            if (label == null) {
+                state.compareAndSet(State.COMMITTING, State.ACTIVE);
+                return true;
+            } else {
+                // wait for the commit to finish
+                return false;
+            }
+        }
+
+        if (label == null) {
+            // if the data has never been flushed (label == null), the commit should fail so that StreamLoadManagerV2#init
+            // will schedule to flush the data first, and then trigger commit again
+            boolean commitSuccess = cacheBytes.get() == 0;
+            state.compareAndSet(State.COMMITTING, State.ACTIVE);
+            return commitSuccess;
+        }
+
+        try {
+            streamLoader.getExecutorService().submit(this::doCommit);
+        } catch (Exception e) {
+            LOG.error("Failed to submit commit task, db: {}, table: {}, label: {}", database, table, label, e);
+            throw e;
+        }
+
+        // wait for the commit to finish
+        return false;
+    }
+
+    private void doCommit() {
+        StreamLoadSnapshot.Transaction transaction = new StreamLoadSnapshot.Transaction(database, table, label);
+        try {
+            if (!streamLoader.prepare(transaction)) {
+                String errorMsg = "Failed to prepare transaction, please check taskmanager log for details, " + transaction;
+                throw new StreamLoadFailException(errorMsg);
+            }
+
+            if (!streamLoader.commit(transaction)) {
+                String errorMsg = "Failed to commit transaction, please check taskmanager log for details, " + transaction;
+                throw new StreamLoadFailException(errorMsg);
+            }
+        } catch (Throwable e) {
+            LOG.error("TransactionTableRegion commit failed, db: {}, table: {}, label: {}", database, table, label, e);
+            fail(e);
+        }
+
+        long commitTime = System.currentTimeMillis();
+        long commitDuration = commitTime - lastCommitTimeMills;
+        lastCommitTimeMills = commitTime;
+        label = null;
+        LOG.info("Success to commit transaction: {}, duration: {} ms", transaction, commitDuration);
     }
 
     @Override
