@@ -140,6 +140,13 @@ limitations under the License.
             <version>${arrow.version}</version>
         </dependency>
 
+        <dependency>
+            <groupId>com.ververica</groupId>
+            <artifactId>flink-sql-connector-mysql-cdc</artifactId>
+            <version>2.4.1</version>
+            <scope>provided</scope>
+        </dependency>
+
         <!--Following dependencies are mainly used for tests of kafka -> starrocks pipelines, and copied from flink-->
         <dependency>
             <groupId>org.apache.flink</groupId>
