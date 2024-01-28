@@ -14,8 +14,13 @@
 
 package com.starrocks.connector.flink.table.source.struct;
 
+import javax.annotation.Nullable;
+
+import java.util.Optional;
+
 public class Column {
     private String name;
+    @Nullable
     private String type;
     private String comment;
     private int precision;
@@ -24,7 +29,7 @@ public class Column {
     public Column() {
     }
 
-    public Column(String name, String type, String comment, int precision, int scale) {
+    public Column(String name, @Nullable String type, String comment, int precision, int scale) {
         this.name = name;
         this.type = type;
         this.comment = comment;
@@ -40,8 +45,8 @@ public class Column {
         this.name = name;
     }
 
-    public String getType() {
-        return type;
+    public Optional<String> getType() {
+        return Optional.ofNullable(type);
     }
 
     public void setType(String type) {

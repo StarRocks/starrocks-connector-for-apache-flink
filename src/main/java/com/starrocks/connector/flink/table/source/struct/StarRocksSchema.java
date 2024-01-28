@@ -67,8 +67,9 @@ public class StarRocksSchema {
 
     public static StarRocksSchema genSchema(List<TScanColumnDesc> tscanColumnDescs) {
         StarRocksSchema schema = new StarRocksSchema();
-        for (TScanColumnDesc tscanColumnDesc : tscanColumnDescs) {
-            schema.put(tscanColumnDesc.getName(), tscanColumnDesc.getType().name(), "", 0, 0);
+        for (TScanColumnDesc desc : tscanColumnDescs) {
+            // The type for some columns may be null, such as json column
+            schema.put(desc.getName(), desc.getType() == null ? null : desc.getType().name(), "", 0, 0);
         }
         return schema;
     }
