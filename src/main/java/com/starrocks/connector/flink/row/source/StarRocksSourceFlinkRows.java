@@ -145,7 +145,7 @@ public class StarRocksSourceFlinkRows {
                 ColumnRichInfo richInfo = columnRichInfos.get(selectedColumns[i].getColumnIndexInFlinkTable());
                 nullable = richInfo.getDataType().getLogicalType().isNullable();
                 LogicalTypeRoot flinkTypeRoot = richInfo.getDataType().getLogicalType().getTypeRoot();
-                String srType = DataUtil.clearBracket(column.getType());
+                String srType = column.getType().isPresent() ? DataUtil.clearBracket(column.getType().get()) : null;
                 if (Const.DataTypeRelationMap.containsKey(flinkTypeRoot)
                         && Const.DataTypeRelationMap.get(flinkTypeRoot).containsKey(srType)) {
                     translators = Const.DataTypeRelationMap.get(flinkTypeRoot).get(srType);

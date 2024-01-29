@@ -18,8 +18,6 @@
 
 package com.starrocks.connector.flink.it.sink;
 
-import com.starrocks.connector.flink.it.StarRocksITTestBase;
-import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeinfo.Types;
 import org.apache.flink.api.java.typeutils.RowTypeInfo;
@@ -33,6 +31,10 @@ import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import org.apache.flink.table.connector.ChangelogMode;
 import org.apache.flink.types.Row;
 import org.apache.flink.types.RowKind;
+import org.apache.flink.util.CloseableIterator;
+
+import com.starrocks.connector.flink.it.StarRocksITTestBase;
+import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -619,5 +621,107 @@ public class StarRocksSinkITTest extends StarRocksITTestBase {
         tEnv.executeSql("INSERT INTO sink VALUES (1, '123', '{\"key\": 1, \"value\": 2}')").await();
         List<List<Object>> actualData = scanTable(DB_CONNECTION, DB_NAME, tableName);
         verifyResult(Collections.singletonList(Arrays.asList(1, "123", "{\"key\": 1, \"value\": 2}")), actualData);
+    }
+
+    @Test
+    public void testJsonType() throws Exception {
+        String tableName = createJsonTable("testJsonType");
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        StreamTableEnvironment tEnv;
+        tEnv = StreamTableEnvironment.create(env);
+        DataStream<Row> dataStream =
+                env.fromElements(
+                        Row.ofKind(RowKind.INSERT, 1, 1.0, "{\"a\": 1, \"b\": true}"),
+                        Row.ofKind(RowKind.INSERT, 2, 2.0, "{\"a\": 2, \"b\": false}"));
+        Table table = tEnv.fromChangelogStream(dataStream, Schema.newBuilder().primaryKey("f0").build(), ChangelogMode.all());
+        tEnv.createTemporaryView("src", table);
+
+        StarRocksSinkOptions sinkOptions = StarRocksSinkOptions.builder()
+                .withProperty("jdbc-url", getJdbcUrl())
+                .withProperty("load-url", getHttpUrls())
+                .withProperty("database-name", DB_NAME)
+                .withProperty("table-name", tableName)
+                .withProperty("username", "root")
+                .withProperty("password", "")
+                .build();
+
+        String createSinkSQL = "CREATE TABLE sink(" +
+                "c0 INT," +
+                "c1 DOUBLE," +
+                "c2 STRING," +
+                "PRIMARY KEY (`c0`) NOT ENFORCED" +
+                ") WITH ( " +
+                "'connector' = 'starrocks'," +
+                "'jdbc-url'='" + sinkOptions.getJdbcUrl() + "'," +
+                "'load-url'='" + String.join(";", sinkOptions.getLoadUrlList()) + "'," +
+                "'sink.version' = '" + (isSinkV2 ? "V2" : "V1") + "'," +
+                "'sink.use.new-sink-api' = '" + (newSinkApi ? "true" : "false") + "'," +
+                "'database-name' = '" + DB_NAME + "'," +
+                "'table-name' = '" + sinkOptions.getTableName() + "'," +
+                "'username' = '" + sinkOptions.getUsername() + "'," +
+                "'password' = '" + sinkOptions.getPassword() + "'" +
+                ")";
+        tEnv.executeSql(createSinkSQL);
+        tEnv.executeSql("INSERT INTO sink SELECT * FROM src").await();
+
+        String createSrcSQL = "CREATE TABLE sr_src(" +
+                "c0 INT," +
+                "c1 DOUBLE," +
+                "c2 STRING," +
+                "PRIMARY KEY (`c0`) NOT ENFORCED" +
+                ") WITH ( " +
+                "'connector' = 'starrocks'," +
+                "'jdbc-url'='" + sinkOptions.getJdbcUrl() + "'," +
+                "'scan-url'='" + String.join(";", sinkOptions.getLoadUrlList()) + "'," +
+                "'database-name' = '" + DB_NAME + "'," +
+                "'table-name' = '" + sinkOptions.getTableName() + "'," +
+                "'username' = '" + sinkOptions.getUsername() + "'," +
+                "'password' = '" + sinkOptions.getPassword() + "'" +
+                ")";
+        tEnv.executeSql(createSrcSQL);
+        List<List<Object>> actualData;
+        try (CloseableIterator<Row> result = tEnv.executeSql("SELECT * FROM sr_src").collect()) {
+            actualData = collectResult(result);
+        }
+
+        List<List<Object>> expectedData = Arrays.asList(
+                Arrays.asList(1, 1.0, "{\"a\": 1, \"b\": true}"),
+                Arrays.asList(2, 2.0, "{\"a\": 2, \"b\": false}")
+        );
+
+        verifyResult(expectedData, actualData);
+    }
+
+    private List<List<Object>> collectResult(CloseableIterator<Row> result) {
+        List<List<Object>> data = new ArrayList<>();
+        while (result.hasNext()) {
+            Row row = result.next();
+            List<Object> list = new ArrayList<>();
+            for (int i = 0; i < row.getArity(); i++) {
+                list.add(row.getField(i).toString());
+            }
+            data.add(list);
+        }
+        return data;
+    }
+
+    private String createJsonTable(String tablePrefix) throws Exception {
+        String tableName = tablePrefix + "_" + genRandomUuid();
+        String createStarRocksTable =
+                String.format(
+                        "CREATE TABLE `%s`.`%s` (" +
+                                "c0 INT," +
+                                "c1 DOUBLE," +
+                                "c2 JSON" +
+                                ") ENGINE = OLAP " +
+                                "PRIMARY KEY(c0) " +
+                                "DISTRIBUTED BY HASH (c0) BUCKETS 8 " +
+                                "PROPERTIES (" +
+                                "\"replication_num\" = \"1\"" +
+                                ")",
+                        DB_NAME, tableName);
+        executeSrSQL(createStarRocksTable);
+        return tableName;
     }
 }
