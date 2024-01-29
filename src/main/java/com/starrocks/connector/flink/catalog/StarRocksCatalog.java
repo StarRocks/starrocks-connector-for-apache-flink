@@ -20,6 +20,7 @@
 
 package com.starrocks.connector.flink.catalog;
 
+import org.apache.flink.table.catalog.exceptions.CatalogException;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.StringUtils;
 
@@ -232,6 +233,41 @@ public class StarRocksCatalog implements Serializable {
                             .build();
         }
         return Optional.ofNullable(starRocksTable);
+    }
+
+    /**
+     * check if a table exists in this databse.
+     */
+    public boolean tableExists(String database, String table){
+        List<String> tableList = executeSingleColumnStatement(
+                "SELECT TABLE_NAME FROM information_schema.`TABLES` " +
+                        "WHERE TABLE_SCHEMA=? and TABLE_NAME=?",
+                database,
+                table
+        );
+        return !tableList.isEmpty();
+    }
+
+    private List<String> executeSingleColumnStatement(String sql, Object... params) {
+        try (Connection conn = getConnection();
+             PreparedStatement statement = conn.prepareStatement(sql)) {
+            List<String> columnValues = new ArrayList<>();
+            if (params != null) {
+                for (int i = 0; i < params.length; i++) {
+                    statement.setObject(i + 1, params[i]);
+                }
+            }
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    String columnValue = rs.getString(1);
+                    columnValues.add(columnValue);
+                }
+            }
+            return columnValues;
+        } catch (Exception e) {
+            throw new CatalogException(
+                    String.format("Failed to execute sql: %s", sql), e);
+        }
     }
 
     /**
