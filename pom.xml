@@ -329,12 +329,6 @@ limitations under the License.
             <scope>test</scope>
         </dependency>
 
-        <dependency>
-            <groupId>org.apache.flink</groupId>
-            <artifactId>flink-shaded-guava</artifactId>
-            <version>31.1-jre-17.0</version>
-            <scope>test</scope>
-        </dependency>
     </dependencies>
 
     <build>
