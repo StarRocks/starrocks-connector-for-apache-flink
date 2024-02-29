@@ -32,12 +32,16 @@ public class StarRocksOptions implements Serializable {
     private String tableIdentifier;
 
     public StarRocksOptions(String username, String password, String tableIdentifier, String jdbcUrl) {
-        this.opts = new StarRocksJdbcConnectionOptions(username, password, jdbcUrl);
+        this.opts = new StarRocksJdbcConnectionOptions(jdbcUrl, username, password);
         this.tableIdentifier = tableIdentifier;
     }
 
     public String getTableIdentifier() {
         return tableIdentifier;
+    }
+
+    public StarRocksJdbcConnectionOptions getOpts() {
+        return opts;
     }
 
     public String save() throws IllegalArgumentException {

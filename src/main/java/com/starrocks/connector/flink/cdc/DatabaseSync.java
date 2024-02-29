@@ -51,6 +51,7 @@ import java.util.regex.Pattern;
 
 public abstract class DatabaseSync {
     private static final Logger LOG = LoggerFactory.getLogger(DatabaseSync.class);
+    private static final String FAST_SCHEMA_EVOLUTION = "fast_schema_evolution";
     protected Configuration config;
     protected String database;
     protected TableNameConverter converter;
@@ -79,6 +80,10 @@ public abstract class DatabaseSync {
         this.excludingPattern = excludingTables == null ? null : Pattern.compile(excludingTables);
         this.sinkConfig = sinkConfig;
         this.tableConfig = tableConfig == null ? new HashMap<>() : tableConfig;
+
+        if (!this.tableConfig.containsKey(FAST_SCHEMA_EVOLUTION)) {
+            this.tableConfig.put(FAST_SCHEMA_EVOLUTION, "true");
+        }
     }
 
     public void build() throws Exception {
