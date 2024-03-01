@@ -82,8 +82,8 @@ public class WriteMultipleTables {
         // the structure StarRocksRowData. A StarRocksRowData includes the meta (which db and table)
         // and data. The data is a json-format string whose fields correspond to partial or all columns
         // of the table.
-        StarRocksRowData[] records =
-            new StarRocksRowData[]{
+        DefaultStarRocksRowData[] records =
+            new DefaultStarRocksRowData[]{
                 // write full columns of `test`.`tbl1`: `id`, `name` and `score`
                 buildRow("test", "tbl1", "{\"id\":1, \"name\":\"starrocks-json\", \"score\":100}"),
                 // write partial columns of `test`.`tbl1`: `id`, `name`
@@ -93,7 +93,7 @@ public class WriteMultipleTables {
                 // write partial columns of `test`.`tbl2`: `order_id`, `order_state`
                 buildRow("test", "tbl2", "{\"order_id\":2, \"order_state\":2}"),
             };
-        DataStream<StarRocksRowData> source = env.fromElements(records);
+        DataStream<DefaultStarRocksRowData> source = env.fromElements(records);
 
         // Configure the connector with the required properties, and you also need to add properties
         // "sink.properties.format" and "sink.properties.strip_outer_array" to tell the connector the
@@ -127,13 +127,13 @@ public class WriteMultipleTables {
         options.addTableProperties(tbl2Properties);
 
         // Create the sink with the options
-        SinkFunction<StarRocksRowData> starRockSink = SinkFunctionFactory.createSinkFunction(options);
+        SinkFunction<DefaultStarRocksRowData> starRockSink = SinkFunctionFactory.createSinkFunction(options);
         source.addSink(starRockSink);
 
         env.execute("WriteMultipleTables");
     }
 
-    private static StarRocksRowData buildRow(String db, String table, String data) {
+    private static DefaultStarRocksRowData buildRow(String db, String table, String data) {
         return new DefaultStarRocksRowData(null, db, table, data);
     }
 }
