@@ -30,14 +30,24 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
 public class StarRocksOptions implements Serializable {
     private StarRocksJdbcConnectionOptions opts;
     private String tableIdentifier;
+    private Boolean isFastSchemaEvolution;
 
-    public StarRocksOptions(String username, String password, String tableIdentifier, String jdbcUrl) {
-        this.opts = new StarRocksJdbcConnectionOptions(username, password, jdbcUrl);
+    public StarRocksOptions(String username, String password, String tableIdentifier, String jdbcUrl, Boolean isFastSchemaEvolution) {
+        this.opts = new StarRocksJdbcConnectionOptions(jdbcUrl, username, password);
         this.tableIdentifier = tableIdentifier;
+        this.isFastSchemaEvolution = isFastSchemaEvolution;
     }
 
     public String getTableIdentifier() {
         return tableIdentifier;
+    }
+
+    public Boolean getFastSchemaEvolution() {
+        return isFastSchemaEvolution;
+    }
+
+    public StarRocksJdbcConnectionOptions getOpts() {
+        return opts;
     }
 
     public String save() throws IllegalArgumentException {
@@ -54,6 +64,7 @@ public class StarRocksOptions implements Serializable {
         private String username;
         private String password;
         private String tableIdentifier;
+        private Boolean isFastSchemaEvolution;
 
         public Builder setTableIdentifier(String tableIdentifier) {
             this.tableIdentifier = tableIdentifier;
@@ -75,9 +86,13 @@ public class StarRocksOptions implements Serializable {
             return this;
         }
 
+        public void setFastSchemaEvolution(Boolean fastSchemaEvolution) {
+            isFastSchemaEvolution = fastSchemaEvolution;
+        }
+
         public StarRocksOptions build() {
             checkNotNull(tableIdentifier, "No tableIdentifier supplied.");
-            return new StarRocksOptions(username, password, tableIdentifier, jdbcUrl);
+            return new StarRocksOptions(username, password, tableIdentifier, jdbcUrl, isFastSchemaEvolution);
         }
     }
 
