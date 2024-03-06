@@ -81,7 +81,7 @@ public class StarRocksQueryPlanVisitor implements Serializable {
                     beXTablets.put(beNode, new HashSet<>());
                     candidateBe = beNode;
                     break;
-                }
+                } 
                 if (beXTablets.get(beNode).size() < tabletCount) {
                     candidateBe = beNode;
                     tabletCount = beXTablets.get(beNode).size();
@@ -113,15 +113,10 @@ public class StarRocksQueryPlanVisitor implements Serializable {
                 post.setHeader("Content-Type", "application/json;charset=UTF-8");
                 post.setHeader("Authorization", getBasicAuthHeader(sourceOptions.getUsername(), sourceOptions.getPassword()));
                 post.setEntity(new ByteArrayEntity(body.getBytes()));
-                System.out.println("HELLO POST!");
-//                System.out.println(post.getAllHeaders());
-//                System.out.println(post.getEntity());
                 try (CloseableHttpResponse response = httpClient.execute(post)) {
                     requsetCode = response.getStatusLine().getStatusCode();
                     HttpEntity respEntity = response.getEntity();
                     respString = EntityUtils.toString(respEntity, "UTF-8");
-                    System.out.println(respString);
-                    System.out.println(requsetCode);
                 }
             }
             if (200 == requsetCode || i == sourceOptions.getScanMaxRetries() - 1) {

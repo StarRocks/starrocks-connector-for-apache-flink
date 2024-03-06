@@ -46,7 +46,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
     private final SelectColumn[] selectColumns;
     private final List<ColumnRichInfo> columnRichInfos;
     private List<StarRocksSourceDataReader> dataReaderList;
-
+    
     private StarRocksSourceQueryType queryType;
 
     private transient Counter counterTotalScannedRows;
@@ -70,7 +70,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
         this.dataReaderList = new ArrayList<>();
     }
 
-    public StarRocksDynamicSourceFunction(StarRocksSourceOptions sourceOptions, TableSchema flinkSchema,
+    public StarRocksDynamicSourceFunction(StarRocksSourceOptions sourceOptions, TableSchema flinkSchema, 
                                             String filter, long limit, SelectColumn[] selectColumns, String columns, StarRocksSourceQueryType queryType) {
         // StarRocksSourceCommonFunc.validateTableStructure(sourceOptions, flinkSchema);
         this.sourceOptions = sourceOptions;
@@ -82,8 +82,6 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
         } else {
             this.selectColumns = selectColumns;
         }
-        System.out.println("called!");
-        System.out.println(columns);
         String SQL = genSQL(queryType, columns, filter, limit);
         if (queryType == StarRocksSourceQueryType.QueryCount) {
             this.dataCount = StarRocksSourceCommonFunc.getQueryCount(this.sourceOptions, SQL);
@@ -128,7 +126,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
         }
         if (limit > 0) {
             // (not support) SQL = SQL + " limit " + limit;
-            sqlSb.append(" limit " + limit);
+            throw new RuntimeException("Read data from be not support limit now !");
         }
         return sqlSb.toString();
     }

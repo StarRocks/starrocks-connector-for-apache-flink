@@ -33,7 +33,7 @@ check_flink_version_supported $flink_minor_version
 flink_version="$(get_flink_version $flink_minor_version)"
 kafka_connector_version="$(get_kafka_connector_version $flink_minor_version)"
 
-${MVN_CMD} clean package -DskipTests \
+${MVN_CMD} clean package -DskipTests -Drat.skip=true \
   -Dflink.minor.version=${flink_minor_version} \
   -Dflink.version=${flink_version} \
   -Dkafka.connector.version=${kafka_connector_version}

@@ -149,15 +149,11 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
         }
         Optional<String> filter = Optional.of(String.join(" and ", filters));
         this.pushDownHolder.setFilter(filter.get());
-        System.out.println("filter");
-        System.out.println(filter.get());
         return Result.of(ac, remain);
     }
 
     @Override
     public void applyLimit(long limit) {
         this.pushDownHolder.setLimit(limit);
-        System.out.println("limit");
-        System.out.println(limit);
     }
 }
