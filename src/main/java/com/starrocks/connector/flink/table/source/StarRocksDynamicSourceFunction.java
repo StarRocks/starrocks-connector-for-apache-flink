@@ -128,7 +128,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
         }
         if (limit > 0) {
             // (not support) SQL = SQL + " limit " + limit;
-            throw new RuntimeException("Read data from be not support limit now !");
+            sqlSb.append(" limit " + limit);
         }
         return sqlSb.toString();
     }
