@@ -44,7 +44,7 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
     @Before
     public void init() {
         pushDownHolder = new PushDownHolder();
-        dynamicTableSource = new StarRocksDynamicTableSource(OPTIONS, TABLE_SCHEMA, pushDownHolder);
+        dynamicTableSource = new StarRocksDynamicTableSource(OPTIONS, TABLE_SCHEMA, pushDownHolder,null,null);
     }
 
     @Test
@@ -55,7 +55,7 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
         for (int i = 0; i < SELECT_COLUMNS.length; i ++) {
             assertEquals(SELECT_COLUMNS[i].getColumnIndexInFlinkTable(), pushDownHolder.getSelectColumns()[i].getColumnIndexInFlinkTable());
             assertEquals(SELECT_COLUMNS[i].getColumnName(), pushDownHolder.getSelectColumns()[i].getColumnName());
-        } 
+        }
         assertEquals(StarRocksSourceQueryType.QuerySomeColumns, pushDownHolder.getQueryType());
 
         dynamicTableSource.applyProjection(PROJECTION_ARRAY_NULL);
@@ -121,7 +121,7 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
                         BuiltInFunctionDefinitions.EQUALS,
                         Arrays.asList(c1Ref, valueLiteral(1)),
                         DataTypes.BOOLEAN());
-        
+
         dynamicTableSource.applyFilters(Arrays.asList(c1Exp,
             new CallExpression(
                 BuiltInFunctionDefinitions.NOT_EQUALS,
@@ -162,7 +162,7 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
                         BuiltInFunctionDefinitions.LIKE,
                         Arrays.asList(c1Ref, valueLiteral(1)),
                         DataTypes.BOOLEAN());
-        try { 
+        try {
             dynamicTableSource.applyFilters(Collections.singletonList(c6Exp));
         } catch (Exception e) {
             e.printStackTrace();
@@ -174,7 +174,7 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
                         BuiltInFunctionDefinitions.IN,
                         Arrays.asList(c1Ref, valueLiteral(1)),
                         DataTypes.BOOLEAN());
-        try { 
+        try {
             dynamicTableSource.applyFilters(Collections.singletonList(c7Exp));
         } catch (Exception e) {
             e.printStackTrace();
@@ -186,7 +186,7 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
                         BuiltInFunctionDefinitions.BETWEEN,
                         Arrays.asList(c1Ref, valueLiteral(1)),
                         DataTypes.BOOLEAN());
-        try { 
+        try {
             dynamicTableSource.applyFilters(Collections.singletonList(c8Exp));
         } catch (Exception e) {
             e.printStackTrace();
