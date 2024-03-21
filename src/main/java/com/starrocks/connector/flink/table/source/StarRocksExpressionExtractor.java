@@ -57,7 +57,7 @@ public class StarRocksExpressionExtractor implements ExpressionVisitor<String> {
         }
 
         if (SUPPORT_FUNC.containsKey(funcDef)) {
-            
+
             List<String> operands = new ArrayList<>();
             for (Expression child : call.getChildren()) {
                 String operand = child.accept(this);
@@ -74,8 +74,8 @@ public class StarRocksExpressionExtractor implements ExpressionVisitor<String> {
     @Override
     public String visit(ValueLiteralExpression valueLiteral) {
         LogicalTypeRoot typeRoot = valueLiteral.getOutputDataType().getLogicalType().getTypeRoot();
-        if (typeRoot.equals(LogicalTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE) || 
-            typeRoot.equals(LogicalTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE) || 
+        if (typeRoot.equals(LogicalTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE) ||
+            typeRoot.equals(LogicalTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE) ||
             typeRoot.equals(LogicalTypeRoot.TIMESTAMP_WITH_TIME_ZONE) ||
             typeRoot.equals(LogicalTypeRoot.DATE)) {
             return "'" + valueLiteral.toString() + "'";
@@ -85,7 +85,7 @@ public class StarRocksExpressionExtractor implements ExpressionVisitor<String> {
 
     @Override
     public String visit(FieldReferenceExpression fieldReference) {
-        return fieldReference.getName();
+        return "`" + fieldReference.getName() + "`";
     }
 
     @Override

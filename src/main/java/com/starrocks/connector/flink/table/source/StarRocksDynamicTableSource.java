@@ -58,12 +58,13 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
     @Override
     public ScanRuntimeProvider getScanRuntimeProvider(ScanContext scanContext) {
         StarRocksDynamicSourceFunction sourceFunction = new StarRocksDynamicSourceFunction(
-            options, flinkSchema, 
-            this.pushDownHolder.getFilter(), 
-            this.pushDownHolder.getLimit(), 
-            this.pushDownHolder.getSelectColumns(), 
-            this.pushDownHolder.getColumns(), 
+            options, flinkSchema,
+            this.pushDownHolder.getFilter(),
+            this.pushDownHolder.getLimit(),
+            this.pushDownHolder.getSelectColumns(),
+            this.pushDownHolder.getColumns(),
             this.pushDownHolder.getQueryType());
+
         return SourceFunctionProvider.of(sourceFunction, true);
     }
 
@@ -73,7 +74,7 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
         ColumnRichInfo[] filerRichInfo = new ColumnRichInfo[projectedFields.length];
         for (int i = 0; i < projectedFields.length; i ++) {
             ColumnRichInfo columnRichInfo = new ColumnRichInfo(
-                this.flinkSchema.getFieldName(projectedFields[i]).get(), 
+                this.flinkSchema.getFieldName(projectedFields[i]).get(),
                 projectedFields[i],
                 this.flinkSchema.getFieldDataType(projectedFields[i]).get()
             );
@@ -114,9 +115,9 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
         this.pushDownHolder.setQueryType(StarRocksSourceQueryType.QuerySomeColumns);
 
         ArrayList<String> columnList = new ArrayList<>();
-        ArrayList<SelectColumn> selectColumns = new ArrayList<SelectColumn>(); 
+        ArrayList<SelectColumn> selectColumns = new ArrayList<SelectColumn>();
         for (int index : curProjectedFields) {
-            String columnName = flinkSchema.getFieldName(index).get();
+            String columnName = "`" + flinkSchema.getFieldName(index).get() + "`";
             columnList.add(columnName);
             selectColumns.add(new SelectColumn(columnName, index));
         }
