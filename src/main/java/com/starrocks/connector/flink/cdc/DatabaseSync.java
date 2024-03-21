@@ -51,6 +51,7 @@ import java.util.regex.Pattern;
 
 public abstract class DatabaseSync {
     private static final Logger LOG = LoggerFactory.getLogger(DatabaseSync.class);
+    private static final String FAST_SCHEMA_EVOLUTION = "fast_schema_evolution";
     protected Configuration config;
     protected String database;
     protected TableNameConverter converter;
@@ -60,6 +61,7 @@ public abstract class DatabaseSync {
     protected Configuration sinkConfig;
     public StreamExecutionEnvironment env;
     private Map<String, String> tableMapping = new HashMap<>();
+    private Boolean isFastSchemaEvolution;
 
     public abstract Connection getConnection() throws SQLException;
 
@@ -79,6 +81,7 @@ public abstract class DatabaseSync {
         this.excludingPattern = excludingTables == null ? null : Pattern.compile(excludingTables);
         this.sinkConfig = sinkConfig;
         this.tableConfig = tableConfig == null ? new HashMap<>() : tableConfig;
+        this.isFastSchemaEvolution = checkFastSchemaEvolution();
     }
 
     public void build() throws Exception {
@@ -128,6 +131,11 @@ public abstract class DatabaseSync {
 
     }
 
+    private boolean checkFastSchemaEvolution() {
+        String tableProperty = tableConfig.get(FAST_SCHEMA_EVOLUTION);
+        return tableProperty != null && tableProperty.equalsIgnoreCase("true");
+    }
+
     private DebeziumJsonSerializer getSerializer(String table) {
         String user = sinkConfig.getString(StarRocksSinkOptions.USERNAME);
         String passwd = sinkConfig.getString(StarRocksSinkOptions.PASSWORD, "");
@@ -137,7 +145,8 @@ public abstract class DatabaseSync {
         starRocksBuilder.setTableIdentifier(database + "." + table)
                 .setUsername(user)
                 .setPassword(passwd)
-                .setJdbcUrl(jdbcUrl);
+                .setJdbcUrl(jdbcUrl)
+                .setFastSchemaEvolution(isFastSchemaEvolution);
 
         return DebeziumJsonSerializer.builder().setStarRocksOptions(starRocksBuilder.build()).build();
     }

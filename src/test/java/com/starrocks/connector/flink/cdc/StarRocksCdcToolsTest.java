@@ -61,6 +61,7 @@ class StarRocksCdcToolsTest {
 
         Map<String,String> tableConfig = new HashMap<>();
         tableConfig.put("replication_num", "1");
+        tableConfig.put("fast_schema_evolution", "true");
 
         String includingTables = "tbl1|tbl2|tbl3";
         String excludingTables = "";

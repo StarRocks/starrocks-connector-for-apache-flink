@@ -25,6 +25,8 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.starrocks.connector.flink.catalog.StarRocksCatalog;
+import com.starrocks.connector.flink.catalog.StarRocksColumn;
 import com.starrocks.connector.flink.cdc.StarRocksOptions;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.util.StringUtils;
@@ -33,9 +35,12 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.Arrays;
+import java.util.Objects;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -59,6 +64,8 @@ public class DebeziumJsonSerializer implements Serializable {
     private String table;
     //table name of the cdc upstream, format is db.tbl
     private String sourceTableName;
+    private StarRocksCatalog starRocksCatalog;
+    private Boolean isFastSchemaEvolution;
 
     public DebeziumJsonSerializer(StarRocksOptions starRocksOptions, Pattern pattern, String sourceTableName) {
         this.starRocksOptions = starRocksOptions;
@@ -71,6 +78,10 @@ public class DebeziumJsonSerializer implements Serializable {
         this.objectMapper.enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
         JsonNodeFactory jsonNodeFactory = JsonNodeFactory.withExactBigDecimals(true);
         this.objectMapper.setNodeFactory(jsonNodeFactory);
+        this.starRocksCatalog = new StarRocksCatalog(starRocksOptions.getOpts().getDbURL(),
+                starRocksOptions.getOpts().getUsername().get(), starRocksOptions.getOpts().getPassword().get());
+        this.isFastSchemaEvolution = starRocksOptions.getFastSchemaEvolution();
+        this.starRocksCatalog.open();
     }
 
     public String process(String record) throws IOException {
@@ -79,8 +90,9 @@ public class DebeziumJsonSerializer implements Serializable {
         String op = extractJsonNode(recordRoot, "op");
         if (Objects.isNull(op)) {
             // schema change ddl
-            // starrocks 存算分离版本目前不支持schemaChange, 先注释掉
-            // schemaChange(recordRoot);
+            if (isFastSchemaEvolution) {
+                schemaChange(recordRoot);
+            }
             return INVALID_RESULT;
         }
         Map<String, String> valueMap;
@@ -107,22 +119,17 @@ public class DebeziumJsonSerializer implements Serializable {
 
     @VisibleForTesting
     public boolean schemaChange(JsonNode recordRoot) {
-        boolean status = false;
+
         try{
-            if(!StringUtils.isNullOrWhitespaceOnly(sourceTableName) && !checkTable(recordRoot)){
+            if (!StringUtils.isNullOrWhitespaceOnly(sourceTableName) && !checkTable(recordRoot)) {
                 return false;
             }
-            String ddl = extractDDL(recordRoot);
-            if(StringUtils.isNullOrWhitespaceOnly(ddl)){
-                LOG.info("ddl can not do schema change:{}", recordRoot);
-                return false;
-            }
-            // TODO Exec schema change
-            LOG.info("schema change status:{}", status);
+
+            extractDDLAndExecute(recordRoot);
         }catch (Exception ex){
             LOG.warn("schema change error :", ex);
         }
-        return status;
+        return true;
     }
 
     /**
@@ -174,27 +181,46 @@ public class DebeziumJsonSerializer implements Serializable {
         return recordMap != null ? recordMap : new HashMap<>();
     }
 
-    public String extractDDL(JsonNode record) throws JsonProcessingException {
+    private void extractDDLAndExecute(JsonNode record) throws JsonProcessingException {
         String historyRecord = extractJsonNode(record, "historyRecord");
         if (Objects.isNull(historyRecord)) {
-            return null;
+            return;
         }
         String ddl = extractJsonNode(objectMapper.readTree(historyRecord), "ddl");
         LOG.debug("received debezium ddl :{}", ddl);
         if (!Objects.isNull(ddl)) {
             //filter add/drop operation
             Matcher matcher = addDropDDLPattern.matcher(ddl);
-            if(matcher.find()){
+            if (matcher.find()) {
                 String op = matcher.group(1);
                 String col = matcher.group(3);
+
+                if (op.equalsIgnoreCase("drop")) {
+                    execDropDDL(col);
+                    return;
+                }
+
                 String type = matcher.group(5);
                 type = handleType(type);
-                ddl = String.format(EXECUTE_DDL, starRocksOptions.getTableIdentifier(), op, col, type);
-                LOG.info("parse ddl:{}", ddl);
-                return ddl;
+                execAddDDL(col, type);
             }
         }
-        return null;
+    }
+
+    private void execAddDDL(String col, String type) {
+        List<StarRocksColumn> toAddColumns = new ArrayList<>();
+        StarRocksColumn.Builder builder = new StarRocksColumn.Builder()
+                .setColumnName(col)
+                .setDataType(type);
+
+        toAddColumns.add(builder.build());
+
+        starRocksCatalog.alterAddColumns(database, table, toAddColumns, 30);
+    }
+
+    private void execDropDDL(String col) {
+        List<String> cols = Arrays.asList(col);
+        starRocksCatalog.alterDropColumns(database, table, cols, 30);
     }
 
     public static DebeziumJsonSerializer.Builder builder() {

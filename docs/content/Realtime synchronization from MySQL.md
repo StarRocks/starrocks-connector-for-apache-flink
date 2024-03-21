@@ -84,7 +84,8 @@ Flink has been deployed. If Flink has not been deployed, follow these steps to d
       --sink-conf password= Password1 \
       --sink-conf jdbc-url=jdbc:mysql://ip:9030 \
       --sink-conf sink.label-prefix=superman \
-      --table-conf replication_num=1
+      --table-conf replication_num=1 \
+      --table-conf fast_schema_evolution=true
    ```
 
 ## Options
@@ -103,4 +104,4 @@ Flink has been deployed. If Flink has not been deployed, follow these steps to d
 | --sink-conf password              | Yes          | NONE              | The password of the StarRocks                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | --sink-conf sink.label-prefix     | Yes          | No                | stream load label                                                                                                                                                                                                                                                                                                                                                               |
 | --table-conf replication_num      | Yes          | 3                 | table property                                                                                                                                                                                                                 |
-
+| --table-conf fast_schema_evolution| No           | FALSE             | Versions later than 3.2, support add/drop column 
