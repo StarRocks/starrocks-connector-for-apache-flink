@@ -85,7 +85,8 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
         TScanBatchResult nextResult = new TScanBatchResult();
         nextResult.setRows(byteArray);
         StarRocksSourceFlinkRows flinkRows1 = new StarRocksSourceFlinkRows(nextResult, columnRichInfos, srSchema, selectColumns);
-        flinkRows1 = flinkRows1.genFlinkRowsFromArrow();
+        List<ArrowFieldConverter> fieldConverters = new ArrayList<>();
+        flinkRows1.init(fieldConverters);
         checkFlinkRows(flinkRows1);
     }
 
@@ -180,7 +181,8 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
         StarRocksSourceFlinkRows flinkRows = new StarRocksSourceFlinkRows(nextResult, columnRichInfos, srSchema, selectColumns);
         String eMsg = null;
         try {
-            flinkRows = flinkRows.genFlinkRowsFromArrow();
+            List<ArrowFieldConverter> fieldConverters = new ArrayList<>();
+            flinkRows.init(fieldConverters);
         } catch (Exception e){
             eMsg = e.getMessage();
         }

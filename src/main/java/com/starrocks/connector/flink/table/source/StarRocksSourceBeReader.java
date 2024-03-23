@@ -14,6 +14,9 @@
 
 package com.starrocks.connector.flink.table.source;
 
+import org.apache.flink.table.data.GenericRowData;
+
+import com.starrocks.connector.flink.row.source.ArrowFieldConverter;
 import com.starrocks.connector.flink.row.source.StarRocksSourceFlinkRows;
 import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
 import com.starrocks.connector.flink.table.source.struct.Const;
@@ -31,12 +34,12 @@ import com.starrocks.thrift.TScanOpenParams;
 import com.starrocks.thrift.TScanOpenResult;
 import com.starrocks.thrift.TStarrocksExternalService;
 import com.starrocks.thrift.TStatusCode;
-import org.apache.flink.table.data.GenericRowData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -58,6 +61,8 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
     private StarRocksSourceFlinkRows curFlinkRows;
     private GenericRowData curData;
 
+    // Lazily initialized
+    private final List<ArrowFieldConverter> fieldConverters = new ArrayList<>();
 
     public StarRocksSourceBeReader(String beNodeInfo,
                                    List<ColumnRichInfo> columnRichInfos,
@@ -178,15 +183,14 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
     }
     
     private void handleResult(TScanBatchResult result) {
-        StarRocksSourceFlinkRows flinkRows = null;
         try {
-            flinkRows = new StarRocksSourceFlinkRows(result, columnRichInfos, srSchema, selectColumns).genFlinkRowsFromArrow();
+            curFlinkRows = new StarRocksSourceFlinkRows(result, columnRichInfos, srSchema, selectColumns);
+            curFlinkRows.init(fieldConverters);
         } catch (IOException e) {
             throw new RuntimeException(e.getMessage());
         } 
-        this.readerOffset = flinkRows.getReadRowCount() + this.readerOffset;
-        this.curFlinkRows = flinkRows;
-        this.curData = flinkRows.next();
+        this.readerOffset = curFlinkRows.getReadRowCount() + this.readerOffset;
+        this.curData = curFlinkRows.next();
     }
 
     @Override
