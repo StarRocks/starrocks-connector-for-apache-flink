@@ -44,7 +44,7 @@ public abstract class StarRocksITTestBase {
 
     private static final Logger LOG = LoggerFactory.getLogger(StarRocksITTestBase.class);
 
-    private static final boolean DEBUG_MODE = true;
+    private static final boolean DEBUG_MODE = false;
 
     @Rule
     public TemporaryFolder temporaryFolder = new TemporaryFolder();

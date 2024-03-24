@@ -15,10 +15,10 @@
 package com.starrocks.connector.flink.row.source;
 
 import org.apache.flink.table.data.GenericRowData;
+import org.apache.flink.util.Preconditions;
 
 import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
-import com.starrocks.connector.flink.table.source.struct.StarRocksSchema;
 import com.starrocks.thrift.TScanBatchResult;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.FieldVector;
@@ -36,27 +36,22 @@ import java.util.List;
 
 public class StarRocksSourceFlinkRows {
 
-    private static Logger LOG = LoggerFactory.getLogger(StarRocksSourceFlinkRows.class);
+    private static final Logger LOG = LoggerFactory.getLogger(StarRocksSourceFlinkRows.class);
     private int offsetOfBatchForRead;
-    private int rowCountOfBatch;
     private int flinkRowsCount;
 
-    private List<GenericRowData> sourceFlinkRows = new ArrayList<>();
+    private final List<GenericRowData> sourceFlinkRows = new ArrayList<>();
     private final ArrowStreamReader arrowStreamReader;
     private VectorSchemaRoot root;
-    private List<FieldVector> fieldVectors;
-    private RootAllocator rootAllocator;
-    private List<ColumnRichInfo> columnRichInfos;
+    private final RootAllocator rootAllocator;
+    private final List<ColumnRichInfo> columnRichInfos;
     private final SelectColumn[] selectedColumns;
-    private final StarRocksSchema starRocksSchema;
 
     public StarRocksSourceFlinkRows(TScanBatchResult nextResult,
                                     List<ColumnRichInfo> columnRichInfos,
-                                    StarRocksSchema srSchema,
                                     SelectColumn[] selectColumns) {
         this.columnRichInfos = columnRichInfos;
         this.selectedColumns = selectColumns;
-        this.starRocksSchema = srSchema;
         this.rootAllocator = new RootAllocator(Integer.MAX_VALUE);
         byte[] bytes = nextResult.getRows();
         ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(bytes);
@@ -68,11 +63,11 @@ public class StarRocksSourceFlinkRows {
         this.root = arrowStreamReader.getVectorSchemaRoot();
         initFiledConverters(fieldConverters);
         while (arrowStreamReader.loadNextBatch()) {
-            fieldVectors = root.getFieldVectors();
+            List<FieldVector> fieldVectors = root.getFieldVectors();
             if (fieldVectors.size() == 0 || root.getRowCount() == 0) {
                 continue;
             }
-            rowCountOfBatch = root.getRowCount();
+            int rowCountOfBatch = root.getRowCount();
             for (int i = 0; i < rowCountOfBatch; i ++) {
                 sourceFlinkRows.add(new GenericRowData(this.selectedColumns.length));
             }
@@ -80,8 +75,13 @@ public class StarRocksSourceFlinkRows {
                 FieldVector fieldVector = fieldVectors.get(i);
                 ArrowFieldConverter converter = fieldConverters.get(i);
                 for (int rowIndex = 0; rowIndex < rowCountOfBatch; rowIndex++) {
-                    Object fieldValue = converter.convert(fieldVector.getObject(rowIndex));
-                    sourceFlinkRows.get(flinkRowsCount + rowIndex).setField(i, fieldValue);
+                    try {
+                        Object fieldValue = converter.convert(fieldVector, rowIndex);
+                        sourceFlinkRows.get(flinkRowsCount + rowIndex).setField(i, fieldValue);
+                    } catch (Exception e) {
+                        throw new RuntimeException(
+                                "Failed to convert arrow data for field " + fieldVector.getField().getName(), e);
+                    }
                 }
             }
             flinkRowsCount += rowCountOfBatch;
@@ -97,6 +97,10 @@ public class StarRocksSourceFlinkRows {
         for (int i = 0; i < schema.getFields().size(); i++) {
             Field field = schema.getFields().get(i);
             ColumnRichInfo flinkColumn = columnRichInfos.get(selectedColumns[i].getColumnIndexInFlinkTable());
+            Preconditions.checkState(field.getName().equals(flinkColumn.getColumnName()),
+                    "The fields at position %s are not same between arrow and flink schemas. " +
+                                        "Arrow field name is %s, and flink field name is %s.",
+                                            i, field.getName(), flinkColumn.getColumnName());
             ArrowFieldConverter converter = ArrowFieldConverter.createConverter(
                     flinkColumn.getDataType().getLogicalType(), field);
             fieldConverters.add(converter);

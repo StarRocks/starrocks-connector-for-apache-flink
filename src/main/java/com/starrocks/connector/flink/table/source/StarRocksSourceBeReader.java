@@ -19,9 +19,7 @@ import org.apache.flink.table.data.GenericRowData;
 import com.starrocks.connector.flink.row.source.ArrowFieldConverter;
 import com.starrocks.connector.flink.row.source.StarRocksSourceFlinkRows;
 import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
-import com.starrocks.connector.flink.table.source.struct.Const;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
-import com.starrocks.connector.flink.table.source.struct.StarRocksSchema;
 import com.starrocks.shade.org.apache.thrift.TException;
 import com.starrocks.shade.org.apache.thrift.protocol.TBinaryProtocol;
 import com.starrocks.shade.org.apache.thrift.protocol.TProtocol;
@@ -56,7 +54,6 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
     private final SelectColumn[] selectColumns;
     private String contextId;
     private int readerOffset = 0;
-    private StarRocksSchema srSchema;
 
     private StarRocksSourceFlinkRows curFlinkRows;
     private GenericRowData curData;
@@ -107,7 +104,7 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
         TScanOpenParams params = new TScanOpenParams();
         params.setTablet_ids(tablets);
         params.setOpaqued_query_plan(opaqued_query_plan);
-        params.setCluster(Const.DEFAULT_CLUSTER_NAME);
+        params.setCluster("default_cluster");
         params.setDatabase(sourceOptions.getDatabaseName());
         params.setTable(sourceOptions.getTableName());
         params.setUser(sourceOptions.getUsername());
@@ -136,7 +133,6 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
         } catch (TException e) {
             throw new RuntimeException("Failed to open scanner." + e.getMessage());
         }
-        this.srSchema = StarRocksSchema.genSchema(result.getSelected_columns());
         this.contextId = result.getContext_id();
         LOG.info("Open scanner for {}:{} with context id {}, and there are {} tablets {}",
                 IP, PORT, contextId, tablets.size(), tablets);
@@ -184,7 +180,7 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
     
     private void handleResult(TScanBatchResult result) {
         try {
-            curFlinkRows = new StarRocksSourceFlinkRows(result, columnRichInfos, srSchema, selectColumns);
+            curFlinkRows = new StarRocksSourceFlinkRows(result, columnRichInfos, selectColumns);
             curFlinkRows.init(fieldConverters);
         } catch (IOException e) {
             throw new RuntimeException(e.getMessage());
