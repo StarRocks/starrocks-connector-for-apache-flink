@@ -142,7 +142,7 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
                     assertTrue(currentObj instanceof DecimalData);
                     DecimalData cur = (DecimalData)currentObj;
                     assertTrue(cur.toUnscaledLong() == -3141291000L);
-                    assertTrue(cur.precision() == 10);
+                    assertTrue(cur.precision() == 27);
                     assertTrue(cur.scale() == 9);
                 }
             }

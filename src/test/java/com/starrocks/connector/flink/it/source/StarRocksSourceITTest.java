@@ -32,7 +32,9 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -40,7 +42,7 @@ public class StarRocksSourceITTest extends StarRocksITTestBase {
 
     @Test
     public void testArrayType() throws Exception {
-        String tableName = createComplexTypeTable("testComplexType");
+        String tableName = createArrayTypeTable("testArrayType");
         executeSrSQL(String.format("INSERT INTO `%s`.`%s` VALUES (%s)", DB_NAME, tableName,
                 "0, [true], [2], [3], [4], [5], [6.6], [7.7], [8.8], ['2024-03-22'], ['2024-03-22 12:00:00'], ['11'], ['12'], " +
                 "[[true], [true]], [[2], [2]], [[3], [3]], [[4], [4]], [[5], [5]], [[6.6], [6.6]], " +
@@ -128,7 +130,7 @@ public class StarRocksSourceITTest extends StarRocksITTestBase {
         assertThat(results).containsExactlyInAnyOrderElementsOf(Collections.singleton(row));
     }
 
-    private String createComplexTypeTable(String tablePrefix) throws Exception {
+    private String createArrayTypeTable(String tablePrefix) throws Exception {
         String tableName = tablePrefix + "_" + genRandomUuid();
         String createStarRocksTable =
                 String.format(
@@ -158,6 +160,171 @@ public class StarRocksSourceITTest extends StarRocksITTestBase {
                                 "c22 ARRAY<ARRAY<DATETIME>>," +
                                 "c23 ARRAY<ARRAY<CHAR(200)>>," +
                                 "c24 ARRAY<ARRAY<VARCHAR(200)>>" +
+                                ") ENGINE = OLAP " +
+                                "DUPLICATE KEY(c0) " +
+                                "DISTRIBUTED BY HASH (c0) BUCKETS 8 " +
+                                "PROPERTIES (" +
+                                "\"replication_num\" = \"1\"" +
+                                ")",
+                        DB_NAME, tableName);
+        executeSrSQL(createStarRocksTable);
+        return tableName;
+    }
+
+    @Test
+    public void testStructType() throws Exception {
+        String tableName = createStructTypeTable("testStructType");
+        executeSrSQL(String.format("INSERT INTO `%s`.`%s` VALUES (%s)", DB_NAME, tableName,
+                        "1, row(1, '1'), row('2024-03-27', 8.9)"
+                )
+        );
+
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
+
+        String createSrcSQL = "CREATE TABLE sr_src(" +
+                "c0 INT," +
+                "c1 ROW<id INT, name STRING>," +
+                "c2 ROW<ts DATE, score DECIMAL(38, 10)>" +
+                ") WITH ( " +
+                "'connector' = 'starrocks'," +
+                "'jdbc-url'='" + getJdbcUrl() + "'," +
+                "'scan-url'='" + String.join(";", getHttpUrls()) + "'," +
+                "'database-name' = '" + DB_NAME + "'," +
+                "'table-name' = '" + tableName + "'," +
+                "'username' = 'root'," +
+                "'password' = ''" +
+                ")";
+        tEnv.executeSql(createSrcSQL);
+        List<Row> results =
+                CollectionUtil.iteratorToList(
+                        tEnv.executeSql("SELECT * FROM sr_src").collect());
+        Row row = Row.of(
+                1,
+                Row.of(1, "1"),
+                Row.of(LocalDate.of(2024, 3, 27), new BigDecimal("8.9000000000"))
+            );
+        assertThat(results).containsExactlyInAnyOrderElementsOf(Collections.singleton(row));
+
+    }
+
+    private String createStructTypeTable(String tablePrefix) throws Exception {
+        String tableName = tablePrefix + "_" + genRandomUuid();
+        String createStarRocksTable =
+                String.format(
+                        "CREATE TABLE `%s`.`%s` (" +
+                                "c0 INT," +
+                                "c1 STRUCT<id INT, name STRING>," +
+                                "c2 STRUCT<ts DATE, score DECIMAL(38, 10)>" +
+                                ") ENGINE = OLAP " +
+                                "DUPLICATE KEY(c0) " +
+                                "DISTRIBUTED BY HASH (c0) BUCKETS 8 " +
+                                "PROPERTIES (" +
+                                "\"replication_num\" = \"1\"" +
+                                ")",
+                        DB_NAME, tableName);
+        executeSrSQL(createStarRocksTable);
+        return tableName;
+    }
+
+    @Test
+    public void testMapType() throws Exception {
+        String tableName = createMapTypeTable("testMapType");
+        executeSrSQL(String.format("INSERT INTO `%s`.`%s` VALUES (%s)", DB_NAME, tableName,
+                        "1, map{1:'1'}, map{'2024-03-27':8.9}"
+                )
+        );
+
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
+
+        String createSrcSQL = "CREATE TABLE sr_src(" +
+                "c0 INT," +
+                "c1 MAP<INT, STRING>," +
+                "c2 MAP<DATE, DECIMAL(38, 10)>" +
+                ") WITH ( " +
+                "'connector' = 'starrocks'," +
+                "'jdbc-url'='" + getJdbcUrl() + "'," +
+                "'scan-url'='" + String.join(";", getHttpUrls()) + "'," +
+                "'database-name' = '" + DB_NAME + "'," +
+                "'table-name' = '" + tableName + "'," +
+                "'username' = 'root'," +
+                "'password' = ''" +
+                ")";
+        tEnv.executeSql(createSrcSQL);
+        List<Row> results =
+                CollectionUtil.iteratorToList(
+                        tEnv.executeSql("SELECT * FROM sr_src").collect());
+        Map<Integer, String> c1 = new HashMap<>();
+        c1.put(1, "1");
+        Map<LocalDate, BigDecimal> c2 = new HashMap<>();
+        c2.put(LocalDate.of(2024, 3, 27), new BigDecimal("8.9000000000"));
+        Row row = Row.of(1, c1, c2);
+        assertThat(results).containsExactlyInAnyOrderElementsOf(Collections.singleton(row));
+    }
+
+    private String createMapTypeTable(String tablePrefix) throws Exception {
+        String tableName = tablePrefix + "_" + genRandomUuid();
+        String createStarRocksTable =
+                String.format(
+                        "CREATE TABLE `%s`.`%s` (" +
+                                "c0 INT," +
+                                "c1 MAP<INT, STRING>," +
+                                "c2 MAP<DATE, DECIMAL(38, 10)>" +
+                                ") ENGINE = OLAP " +
+                                "DUPLICATE KEY(c0) " +
+                                "DISTRIBUTED BY HASH (c0) BUCKETS 8 " +
+                                "PROPERTIES (" +
+                                "\"replication_num\" = \"1\"" +
+                                ")",
+                        DB_NAME, tableName);
+        executeSrSQL(createStarRocksTable);
+        return tableName;
+    }
+
+    @Test
+    public void testNestedType() throws Exception {
+        String tableName = createNestedTypeTable("testNestedType");
+        executeSrSQL(String.format("INSERT INTO `%s`.`%s` VALUES (%s)", DB_NAME, tableName,
+                        "1, row(1, [1, 11, 111], map{1:'1'})"
+                )
+        );
+
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
+
+        String createSrcSQL = "CREATE TABLE sr_src(" +
+                "c0 INT," +
+                "c1 ROW<a INT, b ARRAY<INT>, c MAP<INT, STRING>>" +
+                ") WITH ( " +
+                "'connector' = 'starrocks'," +
+                "'jdbc-url'='" + getJdbcUrl() + "'," +
+                "'scan-url'='" + String.join(";", getHttpUrls()) + "'," +
+                "'database-name' = '" + DB_NAME + "'," +
+                "'table-name' = '" + tableName + "'," +
+                "'username' = 'root'," +
+                "'password' = ''" +
+                ")";
+        tEnv.executeSql(createSrcSQL);
+        List<Row> results =
+                CollectionUtil.iteratorToList(
+                        tEnv.executeSql("SELECT * FROM sr_src").collect());
+        Map<Integer, String> c = new HashMap<>();
+        c.put(1, "1");
+        Row row = Row.of(1, Row.of(1, new Integer[] {1, 11, 111}, c));
+        assertThat(results).containsExactlyInAnyOrderElementsOf(Collections.singleton(row));
+    }
+
+    private String createNestedTypeTable(String tablePrefix) throws Exception {
+        String tableName = tablePrefix + "_" + genRandomUuid();
+        String createStarRocksTable =
+                String.format(
+                        "CREATE TABLE `%s`.`%s` (" +
+                                "c0 INT," +
+                                "c1 STRUCT<a INT, b ARRAY<INT>, c MAP<INT, STRING>>" +
                                 ") ENGINE = OLAP " +
                                 "DUPLICATE KEY(c0) " +
                                 "DISTRIBUTED BY HASH (c0) BUCKETS 8 " +

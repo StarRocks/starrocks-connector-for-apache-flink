@@ -476,7 +476,7 @@ public interface ArrowFieldConverter {
                 ArrowFieldConverter keyConverter = createConverter(
                         mapType.getKeyType(), structField.getChildren().get(0));
                 ArrowFieldConverter valueConverter = createConverter(
-                        mapType.getKeyType(), structField.getChildren().get(1));
+                        mapType.getValueType(), structField.getChildren().get(1));
                 return new MapConverter(mapType.isNullable(), keyConverter, valueConverter);
             default:
                 throw new UnsupportedOperationException("Unsupported type " + flinkType);
