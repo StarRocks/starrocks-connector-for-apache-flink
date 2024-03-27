@@ -14,26 +14,23 @@
 
 package com.starrocks.connector.flink.row.source;
 
-import com.starrocks.connector.flink.it.source.StarRocksSourceBaseTest;
-import com.starrocks.connector.flink.table.source.StarRocksSourceCommonFunc;
-import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
-import com.starrocks.connector.flink.table.source.struct.Const;
-import com.starrocks.connector.flink.table.source.struct.SelectColumn;
-import com.starrocks.connector.flink.table.source.struct.StarRocksSchema;
-import com.starrocks.thrift.TPrimitiveType;
-import com.starrocks.thrift.TScanBatchResult;
-import com.starrocks.thrift.TScanColumnDesc;
 import org.apache.flink.table.data.DecimalData;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.StringData;
 import org.apache.flink.table.data.TimestampData;
-import org.apache.flink.table.types.logical.LogicalTypeRoot;
+
+import com.starrocks.connector.flink.it.source.StarRocksSourceBaseTest;
+import com.starrocks.connector.flink.table.source.StarRocksSourceCommonFunc;
+import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
+import com.starrocks.connector.flink.table.source.struct.SelectColumn;
+import com.starrocks.thrift.TPrimitiveType;
+import com.starrocks.thrift.TScanBatchResult;
+import com.starrocks.thrift.TScanColumnDesc;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.io.BufferedReader;
-import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -42,50 +39,45 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
-    
-    protected StarRocksSchema srSchema = new StarRocksSchema();
-    protected StarRocksSchema srWrongOrderSchema = new StarRocksSchema();
-    protected StarRocksSchema srLessSchema = new StarRocksSchema();
+
     protected SelectColumn[] selectColumns;
     protected List<ColumnRichInfo> columnRichInfos;
     protected String curPath = System.getProperty("user.dir");
     protected Map<String, ColumnRichInfo> columnMap;
 
     @Before
-    public void initParams() {  
-        
-        srSchema = StarRocksSchema.genSchema(this.rightOrderList());
-        srWrongOrderSchema = StarRocksSchema.genSchema(this.wrongOrderList());
-        srLessSchema = StarRocksSchema.genSchema(this.lessList());
+    public void initParams() {
         columnMap = StarRocksSourceCommonFunc.genColumnMap(TABLE_SCHEMA_NOT_NULL);
         columnRichInfos = StarRocksSourceCommonFunc.genColumnRichInfo(columnMap);
         selectColumns = StarRocksSourceCommonFunc.genSelectedColumns(columnMap, OPTIONS, columnRichInfos);
     }
 
     @Test
-    public void testGenFlinkRows() throws FileNotFoundException, IOException {
+    public void testGenFlinkRows() throws IOException {
         String fileName = curPath + "/src/test/resources/data/source/rowsData";
         String line;
         try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
             line = br.readLine();
         }
-        assertTrue(line != null);
-        String dataStrArray[] = line.split(",");
+        assertNotNull(line);
+        String[] dataStrArray = line.split(",");
         ArrayList<Byte> byteList = new ArrayList<>();
-        for (int i = 0; i < dataStrArray.length; i ++) {
-            byteList.add((byte)Integer.parseInt(dataStrArray[i].trim()));
+        for (String s : dataStrArray) {
+            byteList.add((byte) Integer.parseInt(s.trim()));
         }
         byte[] byteArray = new byte[byteList.size()];
         for (int i = 0; i < byteArray.length; i ++) {
-            byteArray[i] = byteList.get(i).byteValue();
+            byteArray[i] = byteList.get(i);
         }
         TScanBatchResult nextResult = new TScanBatchResult();
         nextResult.setRows(byteArray);
-        StarRocksSourceFlinkRows flinkRows1 = new StarRocksSourceFlinkRows(nextResult, columnRichInfos, srSchema, selectColumns);
-        flinkRows1 = flinkRows1.genFlinkRowsFromArrow();
+        StarRocksSourceFlinkRows flinkRows1 = new StarRocksSourceFlinkRows(nextResult, columnRichInfos, selectColumns);
+        List<ArrowFieldConverter> fieldConverters = new ArrayList<>();
+        flinkRows1.init(fieldConverters);
         checkFlinkRows(flinkRows1);
     }
 
@@ -150,7 +142,7 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
                     assertTrue(currentObj instanceof DecimalData);
                     DecimalData cur = (DecimalData)currentObj;
                     assertTrue(cur.toUnscaledLong() == -3141291000L);
-                    assertTrue(cur.precision() == 10);
+                    assertTrue(cur.precision() == 27);
                     assertTrue(cur.scale() == 9);
                 }
             }
@@ -159,32 +151,33 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
     }
 
     @Test
-    public void testGenFlinkRowsWithNull() throws FileNotFoundException, IOException {
+    public void testGenFlinkRowsWithNull() throws IOException {
         String fileName = curPath + "/src/test/resources/data/source/rowsDataWithNull";
         String line;
         try (BufferedReader br = new BufferedReader(new FileReader(fileName))){
             line = br.readLine();
         }
-        assertTrue(line != null);
-        String dataStrArray[] = line.split(",");
+        assertNotNull(line);
+        String[] dataStrArray = line.split(",");
         ArrayList<Byte> byteList = new ArrayList<>();
-        for (int i = 0; i < dataStrArray.length; i ++) {
-            byteList.add((byte)Integer.parseInt(dataStrArray[i].trim()));
+        for (String s : dataStrArray) {
+            byteList.add((byte) Integer.parseInt(s.trim()));
         }
         byte[] byteArray = new byte[byteList.size()];
         for (int i = 0; i < byteArray.length; i ++) {
-            byteArray[i] = byteList.get(i).byteValue();
+            byteArray[i] = byteList.get(i);
         }
         TScanBatchResult nextResult = new TScanBatchResult();
         nextResult.setRows(byteArray);
-        StarRocksSourceFlinkRows flinkRows = new StarRocksSourceFlinkRows(nextResult, columnRichInfos, srSchema, selectColumns);
+        StarRocksSourceFlinkRows flinkRows = new StarRocksSourceFlinkRows(nextResult, columnRichInfos, selectColumns);
         String eMsg = null;
         try {
-            flinkRows = flinkRows.genFlinkRowsFromArrow();
+            List<ArrowFieldConverter> fieldConverters = new ArrayList<>();
+            flinkRows.init(fieldConverters);
         } catch (Exception e){
-            eMsg = e.getMessage();
+            eMsg = e.getCause().getMessage();
         }
-        assertTrue(eMsg.contains("Data could not be null. please check create table SQL, column index is"));
+        assertTrue(eMsg.contains("The value is null for a non-nullable column"));
     }
 
     @Test 
@@ -200,126 +193,6 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
             Integer item = (Integer) columnAndIndex[0];
             int colIndex = (int) columnAndIndex[1];
             Assert.assertTrue(item == colIndex);
-        });
-    }
-
-    @Test
-    public void testDataTypeTrans() {
-
-        Const.DataTypeRelationMap.entrySet().stream().forEach(entry -> {
-            if (entry.getKey().equals(LogicalTypeRoot.DATE)) {
-                entry.getValue().entrySet().stream().forEach(type -> {
-                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_DATE)) {
-                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkDate);
-                    }
-                });
-            }
-            if (entry.getKey().equals(LogicalTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE)) {
-                entry.getValue().entrySet().stream().forEach(type -> {
-                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_DATETIME)) {
-                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkTimestamp);
-                    }
-                });
-            }
-            if (entry.getKey().equals(LogicalTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE)) {
-                entry.getValue().entrySet().stream().forEach(type -> {
-                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_DATETIME)) {
-                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkTimestamp);
-                    }
-                });
-            }
-            if (entry.getKey().equals(LogicalTypeRoot.TIMESTAMP_WITH_TIME_ZONE)) {
-                entry.getValue().entrySet().stream().forEach(type -> {
-                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_DATETIME)) {
-                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkTimestamp);
-                    }
-                });
-            }
-            if (entry.getKey().equals(LogicalTypeRoot.CHAR)) {
-                entry.getValue().entrySet().stream().forEach(type -> {
-                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_CHAR)) {
-                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkChar);
-                    }
-                });
-            }
-            if (entry.getKey().equals(LogicalTypeRoot.VARCHAR)) {
-                entry.getValue().entrySet().stream().forEach(type -> {
-                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_VARCHAR)) {
-                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkChar);
-                    }
-                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_LARGEINT)) {
-                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkChar);
-                    }
-                });
-            }
-            if (entry.getKey().equals(LogicalTypeRoot.BOOLEAN)) {
-                entry.getValue().entrySet().stream().forEach(type -> {
-                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_BOOLEAN)) {
-                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkBoolean);
-                    }
-                });
-            }
-            if (entry.getKey().equals(LogicalTypeRoot.TINYINT)) {
-                entry.getValue().entrySet().stream().forEach(type -> {
-                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_TINYINT)) {
-                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkTinyInt);
-                    }
-                });
-            }
-            if (entry.getKey().equals(LogicalTypeRoot.SMALLINT)) {
-                entry.getValue().entrySet().stream().forEach(type -> {
-                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_SMALLINT)) {
-                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkSmallInt);
-                    }
-                });
-            }
-            if (entry.getKey().equals(LogicalTypeRoot.INTEGER)) {
-                entry.getValue().entrySet().stream().forEach(type -> {
-                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_INT)) {
-                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkInt);
-                    }
-                });
-            }
-            if (entry.getKey().equals(LogicalTypeRoot.BIGINT)) {
-                entry.getValue().entrySet().stream().forEach(type -> {
-                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_BIGINT)) {
-                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkBigInt);
-                    }
-                });
-            }
-            if (entry.getKey().equals(LogicalTypeRoot.FLOAT)) {
-                entry.getValue().entrySet().stream().forEach(type -> {
-                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_FLOAT)) {
-                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkFloat);
-                    }
-                });
-            }
-            if (entry.getKey().equals(LogicalTypeRoot.DOUBLE)) {
-                entry.getValue().entrySet().stream().forEach(type -> {
-                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_DOUBLE)) {
-                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkDouble);
-                    }
-                });
-            }
-            if (entry.getKey().equals(LogicalTypeRoot.DECIMAL)) {
-                entry.getValue().entrySet().stream().forEach(type -> {
-                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_DECIMAL)) {
-                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkDecimal);
-                    }
-                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_DECIMALV2)) {
-                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkDecimal);
-                    }
-                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_DECIMAL32)) {
-                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkDecimal);
-                    }
-                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_DECIMAL64)) {
-                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkDecimal);
-                    }
-                    if (type.getKey().equals(Const.DATA_TYPE_STARROCKS_DECIMAL128)) {
-                        assertTrue(type.getValue() instanceof StarRocksToFlinkTranslators.ToFlinkDecimal);
-                    }
-                });
-            }
         });
     }
 

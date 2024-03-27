@@ -23,7 +23,6 @@ public class SelectColumn implements Serializable {
     private String columnName;
     private int columnIndexInFlinkTable;
 
-
     public SelectColumn(String columnName, int columnIndexInFlinkTable){
         this.columnName = columnName;
         this.columnIndexInFlinkTable = columnIndexInFlinkTable;

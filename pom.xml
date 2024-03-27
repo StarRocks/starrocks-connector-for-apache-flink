@@ -311,6 +311,13 @@ limitations under the License.
         </dependency>
 
         <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-shaded-guava</artifactId>
+            <version>31.1-jre-17.0</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
             <groupId>org.jmockit</groupId>
             <artifactId>jmockit</artifactId>
             <version>1.48</version>

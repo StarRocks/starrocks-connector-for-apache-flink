@@ -24,7 +24,6 @@ public class ColumnRichInfo implements Serializable {
     private final int columnIndexInSchema;
     private final DataType dataType;
 
-
     public ColumnRichInfo(String columnName, int columnIndexInSchema, DataType dataType) {
         this.columnName = columnName;
         this.columnIndexInSchema = columnIndexInSchema;
