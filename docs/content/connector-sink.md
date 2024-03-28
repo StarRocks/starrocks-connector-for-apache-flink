@@ -217,17 +217,17 @@ The Flink connector provides the following metrics to monitor loading.
 
 ### Flink CDC Synchronization (Schema Change Support)
 
-You can use [Flink CDC 3.0](https://ververica.github.io/flink-cdc-connectors/master/content/overview/cdc-pipeline.html) framework
+You can use [Flink CDC](https://nightlies.apache.org/flink/flink-cdc-docs-stable) framework
 to easily build a streaming ELT pipeline from CDC sources (such as MySQL, Kafka) to StarRocks. The pipeline can synchronize whole 
 database, merged sharding tables, and schema changes from sources to StarRocks.
 
-The flink connector has been integrated into the framework as [StarRocks Pipeline Connector](https://ververica.github.io/flink-cdc-connectors/master/content/pipelines/starrocks-pipeline.html).
+The flink connector has been integrated into the framework as [StarRocks Pipeline Connector](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/connectors/starrocks).
 The pipeline connector supports
 * create database/table automatically
 * schema change synchronization
 * full and incremental data synchronization
 
-You can see [Streaming ELT from MySQL to StarRocks using Flink CDC 3.0](https://ververica.github.io/flink-cdc-connectors/master/content/quickstart/mysql-starrocks-pipeline-tutorial.html)
+You can see [Streaming ELT from MySQL to StarRocks using Flink CDC](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/get-started/quickstart/mysql-to-starrocks)
 for a quick start.
 
 ## Examples
