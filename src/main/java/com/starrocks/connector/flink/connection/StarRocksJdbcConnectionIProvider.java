@@ -15,7 +15,9 @@
 package com.starrocks.connector.flink.connection;
 
 import org.apache.flink.annotation.Internal;
+
 import java.sql.Connection;
+import java.sql.SQLException;
 
 /**
  * connection provider.
@@ -27,6 +29,17 @@ public interface StarRocksJdbcConnectionIProvider {
 
     Connection reestablishConnection() throws Exception;
 
+    boolean isConnectionValid() throws SQLException;
+
+    /**
+     * Get existing connection or establish an new one if there is none.
+     *
+     * @return existing connection or newly established connection
+     * @throws SQLException           sql exception
+     * @throws ClassNotFoundException driver class not found
+     */
+    Connection getOrEstablishConnection() throws SQLException, ClassNotFoundException;
+
     void close();
-    
+
 }
