@@ -27,6 +27,7 @@ import java.io.ByteArrayOutputStream;
 
 import static com.starrocks.data.load.stream.ChunkInputStreamTest.genChunk;
 import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertTrue;
 
 public class ChunkHttpEntityTest {
 
@@ -34,6 +35,7 @@ public class ChunkHttpEntityTest {
     public void testWrite() throws Exception {
         ChunkInputStreamTest.ChunkMeta chunkMeta = genChunk();
         ChunkHttpEntity entity = new ChunkHttpEntity("test", chunkMeta.chunk);
+        assertTrue(entity.isRepeatable());
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         entity.writeTo(outputStream);
         assertArrayEquals(chunkMeta.expectedData, outputStream.toByteArray());

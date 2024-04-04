@@ -41,18 +41,18 @@ public class ChunkHttpEntity extends AbstractHttpEntity {
     private static final Header CONTENT_TYPE =
             new BasicHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_OCTET_STREAM.toString());
     private final String tableUniqueKey;
-    private final InputStream content;
+    private final Chunk chunk;
     private final long contentLength;
 
     public ChunkHttpEntity(String tableUniqueKey, Chunk chunk) {
         this.tableUniqueKey = tableUniqueKey;
-        this.content = new ChunkInputStream(chunk);
+        this.chunk = chunk;
         this.contentLength = chunk.chunkBytes();
     }
 
     @Override
     public boolean isRepeatable() {
-        return false;
+        return true;
     }
 
     @Override
@@ -77,13 +77,13 @@ public class ChunkHttpEntity extends AbstractHttpEntity {
 
     @Override
     public InputStream getContent() {
-        return content;
+        return new ChunkInputStream(chunk);
     }
 
     @Override
     public void writeTo(OutputStream outputStream) throws IOException {
         long total = 0;
-        try (InputStream inputStream = this.content) {
+        try (InputStream inputStream = new ChunkInputStream(chunk)) {
             final byte[] buffer = new byte[OUTPUT_BUFFER_SIZE];
             int l;
             while ((l = inputStream.read(buffer)) != -1) {
