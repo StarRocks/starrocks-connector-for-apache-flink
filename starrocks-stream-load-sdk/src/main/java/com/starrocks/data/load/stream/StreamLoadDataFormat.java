@@ -29,6 +29,10 @@ public interface StreamLoadDataFormat {
     StreamLoadDataFormat JSON = new JSONFormat();
     StreamLoadDataFormat CSV = new CSVFormat();
 
+    default String name() {
+        return "";
+    }
+
     byte[] first();
     byte[] delimiter();
     byte[] end();
@@ -49,6 +53,11 @@ public interface StreamLoadDataFormat {
             }
 
             this.delimiter = rowDelimiter.getBytes(StandardCharsets.UTF_8);
+        }
+
+        @Override
+        public String name() {
+            return "csv";
         }
 
         @Override
@@ -88,6 +97,11 @@ public interface StreamLoadDataFormat {
         private static final byte[] first = "[".getBytes(StandardCharsets.UTF_8);
         private static final byte[] delimiter = ",".getBytes(StandardCharsets.UTF_8);
         private static final byte[] end = "]".getBytes(StandardCharsets.UTF_8);
+
+        @Override
+        public String name() {
+            return "json";
+        }
 
         @Override
         public byte[] first() {

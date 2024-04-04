@@ -25,6 +25,8 @@ import com.starrocks.data.load.stream.StreamLoadResponse;
 import com.starrocks.data.load.stream.StreamLoadSnapshot;
 import com.starrocks.data.load.stream.StreamLoader;
 import com.starrocks.data.load.stream.TableRegion;
+import com.starrocks.data.load.stream.compress.CompressionCodec;
+import com.starrocks.data.load.stream.compress.CompressionHttpEntity;
 import com.starrocks.data.load.stream.exception.StreamLoadFailException;
 import com.starrocks.data.load.stream.http.StreamLoadEntityMeta;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
@@ -32,6 +34,7 @@ import org.apache.http.HttpEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Optional;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -57,6 +60,7 @@ public class TransactionTableRegion implements TableRegion {
     private final String database;
     private final String table;
     private final StreamLoadTableProperties properties;
+    private final Optional<CompressionCodec> compressionCodec;
     private final AtomicLong age = new AtomicLong(0L);
     private final AtomicLong cacheBytes = new AtomicLong();
     private final AtomicLong cacheRows = new AtomicLong();
@@ -91,6 +95,10 @@ public class TransactionTableRegion implements TableRegion {
         this.properties = properties;
         this.streamLoader = streamLoader;
         this.labelGenerator = labelGenerator;
+        this.compressionCodec = CompressionCodec.createCompressionCodec(
+                properties.getDataFormat(),
+                Optional.ofNullable(properties.getProperties().get("compression")),
+                properties.getTableProperties());
         this.state = new AtomicReference<>(State.ACTIVE);
         this.lastCommitTimeMills = System.currentTimeMillis();
         this.activeChunk = new Chunk(properties.getDataFormat());
@@ -366,7 +374,10 @@ public class TransactionTableRegion implements TableRegion {
 
     @Override
     public HttpEntity getHttpEntity() {
-        return new ChunkHttpEntity(uniqueKey, inactiveChunks.peek());
+        ChunkHttpEntity entity = new ChunkHttpEntity(uniqueKey, inactiveChunks.peek());
+        return compressionCodec
+                .map(codec -> (HttpEntity) new CompressionHttpEntity(entity, codec))
+                .orElse(entity);
     }
 
     @Override
