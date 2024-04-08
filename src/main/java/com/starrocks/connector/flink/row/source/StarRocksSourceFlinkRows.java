@@ -15,7 +15,6 @@
 package com.starrocks.connector.flink.row.source;
 
 import org.apache.flink.table.data.GenericRowData;
-import org.apache.flink.util.Preconditions;
 
 import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
@@ -97,10 +96,6 @@ public class StarRocksSourceFlinkRows {
         for (int i = 0; i < schema.getFields().size(); i++) {
             Field field = schema.getFields().get(i);
             ColumnRichInfo flinkColumn = columnRichInfos.get(selectedColumns[i].getColumnIndexInFlinkTable());
-            Preconditions.checkState(field.getName().equals(flinkColumn.getColumnName()),
-                    "The fields at position %s are not same between arrow and flink schemas. " +
-                                        "Arrow field name is %s, and flink field name is %s.",
-                                            i, field.getName(), flinkColumn.getColumnName());
             ArrowFieldConverter converter = ArrowFieldConverter.createConverter(
                     flinkColumn.getDataType().getLogicalType(), field);
             fieldConverters.add(converter);

@@ -93,7 +93,7 @@ public class StarRocksSourceITTest extends StarRocksITTestBase {
         tEnv.executeSql(createSrcSQL);
         List<Row> results =
                 CollectionUtil.iteratorToList(
-                        tEnv.executeSql("SELECT * FROM sr_src").collect());
+                        tEnv.executeSql("SELECT * FROM sr_src WHERE c0 = 0").collect());
         Row row = Row.of(
                 0,
                 new Boolean[] {true},
