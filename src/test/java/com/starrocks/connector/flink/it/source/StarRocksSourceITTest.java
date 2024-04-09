@@ -31,6 +31,7 @@ import org.junit.Test;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -335,4 +336,54 @@ public class StarRocksSourceITTest extends StarRocksITTestBase {
         executeSrSQL(createStarRocksTable);
         return tableName;
     }
+
+    @Test
+    public void testDim() throws Exception {
+        String tableName = createDimTable("testDim");
+        executeSrSQL(
+                String.format(
+                        "INSERT INTO `%s`.`%s` VALUES (%s), (%s)", DB_NAME, tableName, "1", "2"));
+
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
+
+        String srcSQL = "CREATE TABLE sr_src(" +
+                "c0 INT," +
+                "proc_time AS PROCTIME()" +
+                ") WITH ( " +
+                "'connector' = 'starrocks'," +
+                "'jdbc-url'='" + getJdbcUrl() + "'," +
+                "'scan-url'='" + String.join(";", getHttpUrls()) + "'," +
+                "'database-name' = '" + DB_NAME + "'," +
+                "'table-name' = '" + tableName + "'," +
+                "'username' = 'root'," +
+                "'password' = ''" +
+                ")";
+        tEnv.executeSql(srcSQL);
+        List<Row> results =
+                CollectionUtil.iteratorToList(tEnv.executeSql(
+                    "SELECT t0.c0 FROM sr_src AS t0 JOIN sr_src " +
+                            "FOR SYSTEM_TIME AS OF t0.proc_time AS t1 ON t0.c0 = t1.c0;")
+                    .collect());
+        assertThat(results).containsExactlyInAnyOrderElementsOf(Arrays.asList(Row.of(1), Row.of(2)));
+    }
+
+    private String createDimTable(String tablePrefix) throws Exception {
+        String tableName = tablePrefix + "_" + genRandomUuid();
+        String createStarRocksTable =
+                String.format(
+                        "CREATE TABLE `%s`.`%s` (" +
+                                "c0 INT" +
+                                ") ENGINE = OLAP " +
+                                "DUPLICATE KEY(c0) " +
+                                "DISTRIBUTED BY HASH (c0) BUCKETS 8 " +
+                                "PROPERTIES (" +
+                                "\"replication_num\" = \"1\"" +
+                                ")",
+                        DB_NAME, tableName);
+        executeSrSQL(createStarRocksTable);
+        return tableName;
+    }
+
 }
