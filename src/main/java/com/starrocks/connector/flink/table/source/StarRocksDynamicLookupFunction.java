@@ -14,16 +14,17 @@
 
 package com.starrocks.connector.flink.table.source;
 
-import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
-import com.starrocks.connector.flink.table.source.struct.QueryBeXTablets;
-import com.starrocks.connector.flink.table.source.struct.QueryInfo;
-import com.starrocks.connector.flink.table.source.struct.SelectColumn;
-import com.starrocks.connector.flink.tools.EnvUtils;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.functions.FunctionContext;
 import org.apache.flink.table.functions.TableFunction;
 import org.apache.flink.types.Row;
+
+import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
+import com.starrocks.connector.flink.table.source.struct.QueryBeXTablets;
+import com.starrocks.connector.flink.table.source.struct.QueryInfo;
+import com.starrocks.connector.flink.table.source.struct.SelectColumn;
+import com.starrocks.connector.flink.tools.EnvUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -103,29 +104,54 @@ public class StarRocksDynamicLookupFunction extends TableFunction<RowData> {
         LOG.info("LookUpFunction SQL [{}]", sqlSb.toString());
         this.queryInfo = StarRocksSourceCommonFunc.getQueryInfo(this.sourceOptions, sqlSb.toString());
         List<List<QueryBeXTablets>> lists = StarRocksSourceCommonFunc.splitQueryBeXTablets(1, queryInfo);
-        cacheMap = lists.get(0).parallelStream().flatMap(beXTablets -> {
-            StarRocksSourceBeReader beReader = new StarRocksSourceBeReader(
-                    beXTablets.getBeNode(),
-                    columnRichInfos,
-                    selectColumns,
+        cacheMap = lists.get(0).parallelStream()
+                .flatMap(beXTablets -> scanBeTablets(beXTablets).stream())
+                .collect(Collectors.groupingBy(row -> {
+                    GenericRowData gRowData = (GenericRowData)row;
+                    Object[] keyObj = new Object[filterRichInfos.length];
+                    for (int i = 0; i < filterRichInfos.length; i ++) {
+                        keyObj[i] = gRowData.getField(filterRichInfos[i].getColumnIndexInSchema());
+                    }
+                    return Row.of(keyObj);
+                }));
+        nextLoadTime = System.currentTimeMillis() + this.cacheExpireMs;
+    }
+
+    private List<RowData> scanBeTablets(QueryBeXTablets beXTablets) {
+        List<RowData> tmpDataList = new ArrayList<>();
+        RuntimeException exception = null;
+        StarRocksSourceBeReader beReader = new StarRocksSourceBeReader(
+                beXTablets.getBeNode(),
+                columnRichInfos,
+                selectColumns,
+                sourceOptions);
+        try {
+            beReader.openScanner(beXTablets.getTabletIds(), queryInfo.getQueryPlan().getOpaqued_query_plan(),
                     sourceOptions);
-            beReader.openScanner(beXTablets.getTabletIds(), queryInfo.getQueryPlan().getOpaqued_query_plan(), sourceOptions);
             beReader.startToRead();
-            List<RowData> tmpDataList = new ArrayList<>();
             while (beReader.hasNext()) {
                 RowData row = beReader.getNext();
                 tmpDataList.add(row);
             }
-            return tmpDataList.stream();
-        }).collect(Collectors.groupingBy(row -> {
-            GenericRowData gRowData = (GenericRowData)row;
-            Object[] keyObj = new Object[filterRichInfos.length];
-            for (int i = 0; i < filterRichInfos.length; i ++) {
-                keyObj[i] = gRowData.getField(filterRichInfos[i].getColumnIndexInSchema());
+        } catch (Exception e) {
+            LOG.error("Failed to scan tablets for BE node {}", beXTablets.getBeNode(), e);
+            exception = new RuntimeException("Failed to scan tablets for BE node " + beXTablets.getBeNode(), e);
+        } finally {
+            try {
+                beReader.close();
+                LOG.info("Close reader for BE {}", beXTablets.getBeNode());
+            } catch (Exception ie) {
+                LOG.error("Failed to close reader for BE {}", beXTablets.getBeNode(), ie);
+                if (exception == null) {
+                    exception = new RuntimeException("Failed to close reader for BE node " + beXTablets.getBeNode(), ie);
+                }
             }
-            return Row.of(keyObj);
-        }));
-        nextLoadTime = System.currentTimeMillis() + this.cacheExpireMs;
+        }
+
+        if (exception != null) {
+            throw exception;
+        }
+        return tmpDataList;
     }
 
     @Override
