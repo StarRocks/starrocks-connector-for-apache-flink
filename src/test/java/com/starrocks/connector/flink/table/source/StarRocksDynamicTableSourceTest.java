@@ -14,9 +14,6 @@
 
 package com.starrocks.connector.flink.table.source;
 
-import com.starrocks.connector.flink.it.source.StarRocksSourceBaseTest;
-import com.starrocks.connector.flink.table.source.struct.PushDownHolder;
-
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.TableEnvironment;
@@ -24,6 +21,9 @@ import org.apache.flink.table.expressions.CallExpression;
 import org.apache.flink.table.expressions.FieldReferenceExpression;
 import org.apache.flink.table.expressions.ResolvedExpression;
 import org.apache.flink.table.functions.BuiltInFunctionDefinitions;
+
+import com.starrocks.connector.flink.it.source.StarRocksSourceBaseTest;
+import com.starrocks.connector.flink.table.source.struct.PushDownHolder;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -50,7 +50,6 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
     @Test
     public void testApplyProjection() {
         dynamicTableSource.applyProjection(PROJECTION_ARRAY);
-        assertEquals("char_1, int_1", pushDownHolder.getColumns());
 
         for (int i = 0; i < SELECT_COLUMNS.length; i ++) {
             assertEquals(SELECT_COLUMNS[i].getColumnIndexInFlinkTable(), pushDownHolder.getSelectColumns()[i].getColumnIndexInFlinkTable());

@@ -14,12 +14,6 @@
 
 package com.starrocks.connector.flink.table.source;
 
-import com.google.common.base.Strings;
-import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
-import com.starrocks.connector.flink.table.source.struct.QueryBeXTablets;
-import com.starrocks.connector.flink.table.source.struct.QueryInfo;
-import com.starrocks.connector.flink.table.source.struct.SelectColumn;
-import com.starrocks.connector.flink.tools.EnvUtils;
 import org.apache.flink.api.common.typeinfo.TypeHint;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
@@ -28,13 +22,22 @@ import org.apache.flink.metrics.Counter;
 import org.apache.flink.streaming.api.functions.source.RichParallelSourceFunction;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.data.RowData;
+
+import com.google.common.base.Strings;
+import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
+import com.starrocks.connector.flink.table.source.struct.QueryBeXTablets;
+import com.starrocks.connector.flink.table.source.struct.QueryInfo;
+import com.starrocks.connector.flink.table.source.struct.SelectColumn;
+import com.starrocks.connector.flink.tools.EnvUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<RowData> implements ResultTypeQueryable<RowData> {
 
@@ -71,7 +74,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
     }
 
     public StarRocksDynamicSourceFunction(StarRocksSourceOptions sourceOptions, TableSchema flinkSchema, 
-                                            String filter, long limit, SelectColumn[] selectColumns, String columns, StarRocksSourceQueryType queryType) {
+                                            String filter, long limit, SelectColumn[] selectColumns, StarRocksSourceQueryType queryType) {
         // StarRocksSourceCommonFunc.validateTableStructure(sourceOptions, flinkSchema);
         this.sourceOptions = sourceOptions;
         Map<String, ColumnRichInfo> columnMap = StarRocksSourceCommonFunc.genColumnMap(flinkSchema);
@@ -82,7 +85,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
         } else {
             this.selectColumns = selectColumns;
         }
-        String SQL = genSQL(queryType, columns, filter, limit);
+        String SQL = genSQL(queryType, this.selectColumns, filter, limit);
         if (queryType == StarRocksSourceQueryType.QueryCount) {
             this.dataCount = StarRocksSourceCommonFunc.getQueryCount(this.sourceOptions, SQL);
         } else {
@@ -103,16 +106,17 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
                 filter;
     }
 
-    private String genSQL(StarRocksSourceQueryType queryType, String columns, String filter, long limit) {
+    private String genSQL(StarRocksSourceQueryType queryType, SelectColumn[] selectColumns, String filter, long limit) {
         StringBuilder sqlSb = new StringBuilder("select ");
         switch (queryType) {
         case QueryCount:
             sqlSb.append("count(*)");
             break;
         case QueryAllColumns:
-            sqlSb.append("*");
-            break;
         case QuerySomeColumns:
+            String columns = Arrays.stream(selectColumns)
+                    .map(SelectColumn::getColumnName)
+                            .collect(Collectors.joining(","));
             sqlSb.append(columns);
             break;
         }
