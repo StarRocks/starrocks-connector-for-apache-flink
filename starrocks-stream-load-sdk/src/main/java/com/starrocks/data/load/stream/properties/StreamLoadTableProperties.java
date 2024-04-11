@@ -205,11 +205,6 @@ public class StreamLoadTableProperties implements Serializable {
             return this;
         }
 
-        public Builder enableLZ4BlockIndependence() {
-            tableProperties.put(CompressionOptions.LZ4_BLOCK_INDEPENDENCE, true);
-            return this;
-        }
-
         public StreamLoadTableProperties build() {
             if (database == null || table == null) {
                 throw new IllegalArgumentException(String.format("database `%s` or table `%s` can't be null", database, table));

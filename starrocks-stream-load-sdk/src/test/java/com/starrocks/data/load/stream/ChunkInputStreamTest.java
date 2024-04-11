@@ -107,8 +107,8 @@ public class ChunkInputStreamTest {
     }
 
     public static class ChunkMeta {
-        Chunk chunk;
-        byte[] expectedData;
+        public Chunk chunk;
+        public byte[] expectedData;
 
         public ChunkMeta(Chunk chunk, byte[] expectedData) {
             this.chunk = chunk;

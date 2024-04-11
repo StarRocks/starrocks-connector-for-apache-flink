@@ -36,39 +36,32 @@ public class LZ4FrameCompressionCodec implements CompressionCodec {
     public static final String NAME = "LZ4_FRAME";
 
     private final LZ4FrameOutputStream.BLOCKSIZE blockSize;
-    private final boolean blockIndependence;
     private final LZ4Compressor compressor;
     private final XXHash32 hash;
 
-    public LZ4FrameCompressionCodec(LZ4FrameOutputStream.BLOCKSIZE blockSize, boolean blockIndependence) {
+    public LZ4FrameCompressionCodec(LZ4FrameOutputStream.BLOCKSIZE blockSize) {
         this.blockSize = blockSize;
-        this.blockIndependence = blockIndependence;
         this.compressor = LZ4Factory.fastestInstance().fastCompressor();
         this.hash = XXHashFactory.fastestInstance().hash32();
     }
 
     @Override
     public OutputStream createCompressionStream(OutputStream rawOutputStream, long contentSize) throws IOException {
-        if (contentSize < 0) {
-            return blockIndependence ?
-                    new LZ4FrameOutputStream(rawOutputStream, blockSize, -1, compressor, hash,
-                            LZ4FrameOutputStream.FLG.Bits.BLOCK_INDEPENDENCE) :
-                    new LZ4FrameOutputStream(rawOutputStream, blockSize, -1, compressor, hash);
-        } else {
-            return blockIndependence ?
-                    new LZ4FrameOutputStream(rawOutputStream, blockSize, contentSize, compressor, hash,
-                            LZ4FrameOutputStream.FLG.Bits.CONTENT_SIZE,
-                            LZ4FrameOutputStream.FLG.Bits.BLOCK_INDEPENDENCE) :
-                    new LZ4FrameOutputStream(rawOutputStream, blockSize, contentSize, compressor, hash,
-                            LZ4FrameOutputStream.FLG.Bits.CONTENT_SIZE);
-        }
+        return contentSize < 0 ?
+                new LZ4FrameOutputStream(rawOutputStream, blockSize, -1, compressor, hash,
+                        LZ4FrameOutputStream.FLG.Bits.BLOCK_INDEPENDENCE) :
+                new LZ4FrameOutputStream(rawOutputStream, blockSize, contentSize, compressor, hash,
+                        LZ4FrameOutputStream.FLG.Bits.CONTENT_SIZE,
+                        LZ4FrameOutputStream.FLG.Bits.BLOCK_INDEPENDENCE);
+    }
+
+    LZ4FrameOutputStream.BLOCKSIZE getBlockSize() {
+        return blockSize;
     }
 
     public static LZ4FrameCompressionCodec create(Map<String, Object> properties) {
         LZ4FrameOutputStream.BLOCKSIZE blockSize = (LZ4FrameOutputStream.BLOCKSIZE) properties.getOrDefault(
                 CompressionOptions.LZ4_BLOCK_SIZE, CompressionOptions.DEFAULT_LZ4_BLOCK_SIZE);
-        boolean blockIndependence = (boolean) properties.getOrDefault(
-                CompressionOptions.LZ4_BLOCK_INDEPENDENCE, CompressionOptions.DEFAULT_LZ4_BLOCK_INDEPENDENCE);
-        return new LZ4FrameCompressionCodec(blockSize, blockIndependence);
+       return new LZ4FrameCompressionCodec(blockSize);
     }
 }
