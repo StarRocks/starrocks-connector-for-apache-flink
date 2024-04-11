@@ -97,7 +97,7 @@ public class TransactionTableRegion implements TableRegion {
         this.labelGenerator = labelGenerator;
         this.compressionCodec = CompressionCodec.createCompressionCodec(
                 properties.getDataFormat(),
-                Optional.ofNullable(properties.getProperties().get("compression")),
+                properties.getProperty("compression"),
                 properties.getTableProperties());
         this.state = new AtomicReference<>(State.ACTIVE);
         this.lastCommitTimeMills = System.currentTimeMillis();

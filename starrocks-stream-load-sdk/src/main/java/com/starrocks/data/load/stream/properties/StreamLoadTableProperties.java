@@ -29,6 +29,7 @@ import net.jpountz.lz4.LZ4FrameOutputStream;
 import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 public class StreamLoadTableProperties implements Serializable {
 
@@ -37,12 +38,13 @@ public class StreamLoadTableProperties implements Serializable {
     private final String table;
     private final StreamLoadDataFormat dataFormat;
     private final Map<String, Object> tableProperties;
-    // stream load properties
+    // individual stream load properties
     private final Map<String, String> properties;
     private final boolean enableUpsertDelete;
     private final long chunkLimit;
     private final int maxBufferRows;
     private final String columns;
+    private final Map<String, String> commonProperties;
 
     private StreamLoadTableProperties(Builder builder) {
         this.database = builder.database;
@@ -66,6 +68,7 @@ public class StreamLoadTableProperties implements Serializable {
         this.tableProperties = new HashMap<>(builder.tableProperties);
         this.properties = new HashMap<>(builder.properties);
         this.columns = builder.columns;
+        this.commonProperties = new HashMap<>(builder.commonProperties);
     }
 
     public String getColumns() {return columns; }
@@ -107,6 +110,19 @@ public class StreamLoadTableProperties implements Serializable {
         return properties;
     }
 
+    public Map<String, String> getCommonProperties() {
+        return commonProperties;
+    }
+
+    public Optional<String> getProperty(String name) {
+        String value = properties.get(name);
+        if (value != null) {
+            return Optional.of(value);
+        }
+
+        return Optional.ofNullable(commonProperties.get(name));
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -125,6 +141,8 @@ public class StreamLoadTableProperties implements Serializable {
 
         // Stream load properties
         private final Map<String, String> properties = new HashMap<>();
+
+        private final Map<String, String> commonProperties = new HashMap<>();
 
         private Builder() {
 
@@ -147,6 +165,7 @@ public class StreamLoadTableProperties implements Serializable {
             chunkLimit(streamLoadTableProperties.getChunkLimit());
             maxBufferRows(streamLoadTableProperties.getMaxBufferRows());
             tableProperties.putAll(streamLoadTableProperties.getTableProperties());
+            commonProperties.putAll(streamLoadTableProperties.getCommonProperties());
             return this;
         }
 
@@ -202,6 +221,11 @@ public class StreamLoadTableProperties implements Serializable {
 
         public Builder setLZ4BlockSize(LZ4FrameOutputStream.BLOCKSIZE blockSize) {
             tableProperties.put(CompressionOptions.LZ4_BLOCK_SIZE, blockSize);
+            return this;
+        }
+
+        public Builder addCommonProperties(Map<String, String> properties) {
+            this.commonProperties.putAll(properties);
             return this;
         }
 
