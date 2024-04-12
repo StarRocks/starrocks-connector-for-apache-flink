@@ -92,6 +92,7 @@ public class ChunkHttpEntity extends AbstractHttpEntity {
 
     @Override
     public void writeTo(OutputStream outputStream) throws IOException {
+        long startTime = System.nanoTime();
         try (InputStream inputStream = new ChunkInputStream(chunk)) {
             final byte[] buffer = new byte[OUTPUT_BUFFER_SIZE];
             int len;
@@ -100,8 +101,8 @@ public class ChunkHttpEntity extends AbstractHttpEntity {
             }
         }
         if (logAfterWrite || LOG.isDebugEnabled()) {
-            LOG.info("Finish to write entity for table {}, contentLength : {}",
-                    tableUniqueKey, contentLength);
+            LOG.info("Write entity for table {}, size:{}, time:{}us",
+                    tableUniqueKey, contentLength, (System.nanoTime() - startTime) / 1000);
         }
     }
 

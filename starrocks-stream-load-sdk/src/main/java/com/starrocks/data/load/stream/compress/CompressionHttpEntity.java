@@ -60,6 +60,7 @@ public class CompressionHttpEntity extends HttpEntityWrapper {
 
     @Override
     public void writeTo(final OutputStream outStream) throws IOException {
+        long startTime = System.nanoTime();
         ChunkHttpEntity entity = (ChunkHttpEntity) wrappedEntity;
         final CountingOutputStream countingOutputStream = new CountingOutputStream(outStream);
         final OutputStream compressOutputStream =
@@ -69,8 +70,8 @@ public class CompressionHttpEntity extends HttpEntityWrapper {
         long rawSize = entity.getContentLength();
         long compressSize = countingOutputStream.getCount();
         float compressRatio = compressSize == 0 ? 1 : (float) rawSize / compressSize;
-        LOG.info("Finish to write entity for table {}, raw size : {}, compressed size: {}, compress ratio: {}",
-                entity.getTableUniqueKey(), rawSize, compressSize, compressRatio) ;
+        LOG.info("Write entity for table {}, raw/compressed size:{}/{}, compress ratio:{}, time:{}us",
+                entity.getTableUniqueKey(), rawSize, compressSize, compressRatio, (System.nanoTime() - startTime) / 1000) ;
     }
 
     @Override
