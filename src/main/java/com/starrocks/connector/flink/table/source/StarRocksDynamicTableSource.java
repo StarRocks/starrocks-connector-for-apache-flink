@@ -14,10 +14,6 @@
 
 package com.starrocks.connector.flink.table.source;
 
-import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
-import com.starrocks.connector.flink.table.source.struct.PushDownHolder;
-import com.starrocks.connector.flink.table.source.struct.SelectColumn;
-
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.connector.ChangelogMode;
@@ -30,6 +26,10 @@ import org.apache.flink.table.connector.source.abilities.SupportsFilterPushDown;
 import org.apache.flink.table.connector.source.abilities.SupportsLimitPushDown;
 import org.apache.flink.table.connector.source.abilities.SupportsProjectionPushDown;
 import org.apache.flink.table.expressions.ResolvedExpression;
+
+import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
+import com.starrocks.connector.flink.table.source.struct.PushDownHolder;
+import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -62,7 +62,6 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
             this.pushDownHolder.getFilter(), 
             this.pushDownHolder.getLimit(), 
             this.pushDownHolder.getSelectColumns(), 
-            this.pushDownHolder.getColumns(), 
             this.pushDownHolder.getQueryType());
         return SourceFunctionProvider.of(sourceFunction, true);
     }
@@ -120,8 +119,6 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
             columnList.add(columnName);
             selectColumns.add(new SelectColumn(columnName, index));
         }
-        String columns = String.join(", ", columnList);
-        this.pushDownHolder.setColumns(columns);
         this.pushDownHolder.setSelectColumns(selectColumns.toArray(new SelectColumn[selectColumns.size()]));
     }
 

@@ -25,7 +25,6 @@ public class PushDownHolder implements Serializable {
     private String filter = "";
     private long limit;
     private SelectColumn[] selectColumns; 
-    private String columns;
     private StarRocksSourceQueryType queryType;
 
     public String getFilter() {
@@ -45,12 +44,6 @@ public class PushDownHolder implements Serializable {
     }
     public void setSelectColumns(SelectColumn[] selectColumns) {
         this.selectColumns = selectColumns;
-    }
-    public String getColumns() {
-        return columns;
-    }
-    public void setColumns(String columns) {
-        this.columns = columns;
     }
     public StarRocksSourceQueryType getQueryType() {
         return queryType;

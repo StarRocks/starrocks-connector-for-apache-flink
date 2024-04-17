@@ -14,6 +14,9 @@
 
 package com.starrocks.connector.flink.it.source;
 
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.TableSchema;
+
 import com.alibaba.fastjson.JSONObject;
 import com.starrocks.connector.flink.table.source.StarRocksSourceOptions;
 import com.starrocks.connector.flink.table.source.StarrocksExternalServiceImpl;
@@ -26,8 +29,6 @@ import com.starrocks.shade.org.apache.thrift.transport.TServerTransport;
 import com.starrocks.shade.org.apache.thrift.transport.TTransportException;
 import com.starrocks.shade.org.apache.thrift.transport.TTransportFactory;
 import com.starrocks.thrift.TStarrocksExternalService;
-import org.apache.flink.table.api.DataTypes;
-import org.apache.flink.table.api.TableSchema;
 import org.junit.After;
 import org.junit.Before;
 
@@ -38,8 +39,10 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
 
@@ -66,7 +69,6 @@ public abstract class StarRocksSourceBaseTest {
     private ServerSocket thriftSocket;
     protected int AVAILABLE_THRIFT_PORT = 21592;
     protected String mockResonse = "";
-    protected String querySQL = "select * from `test`.`test_source`";
     protected int tabletCount = 50;
 
     @Before
@@ -174,7 +176,9 @@ public abstract class StarRocksSourceBaseTest {
                                 sb.append((char) bd.read());
                             }
                         }
-                        assertEquals("{\"sql\":\""+ querySQL +"\"}", sb.toString());
+
+
+                        assertEquals("{\"sql\":\"" + getQuerySql() + "\"}", sb.toString());
                         PrintWriter pw = new PrintWriter(socket.getOutputStream());
                         pw.println("HTTP/1.1 200 OK");
                         pw.println("Content-type:application/json");
@@ -207,6 +211,12 @@ public abstract class StarRocksSourceBaseTest {
             }
         });
         thriftThread.start();
+    }
+
+    protected String getQuerySql() {
+        return String.format("select %s from `test`.`test_source`",
+                Arrays.stream(TABLE_SCHEMA.getFieldNames()).map(col -> "`" + col + "`")
+                        .collect(Collectors.joining(",")));
     }
 
     protected void mockResonsefunc() {

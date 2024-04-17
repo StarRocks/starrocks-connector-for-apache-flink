@@ -42,6 +42,83 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class StarRocksSourceITTest extends StarRocksITTestBase {
 
     @Test
+    public void testMapSubsetColumns() throws Exception {
+        String tableName = createPartialTables("testMapSubsetColumns");
+        executeSrSQL(String.format("INSERT INTO `%s`.`%s` VALUES (%s)", DB_NAME, tableName,
+                        "0, 1.1, '1', [1], map{1:'1'}"));
+
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
+
+        String createSrcSQL = "CREATE TABLE sr_src(" +
+                "c3 ARRAY<BIGINT>," +
+                "c4 MAP<INT, STRING>," +
+                "c1 FLOAT," +
+                "c2 STRING" +
+                ") WITH ( " +
+                "'connector' = 'starrocks'," +
+                "'jdbc-url'='" + getJdbcUrl() + "'," +
+                "'scan-url'='" + String.join(";", getHttpUrls()) + "'," +
+                "'database-name' = '" + DB_NAME + "'," +
+                "'table-name' = '" + tableName + "'," +
+                "'username' = 'root'," +
+                "'password' = ''" +
+                ")";
+        tEnv.executeSql(createSrcSQL);
+        List<Row> result1 =
+                CollectionUtil.iteratorToList(
+                        tEnv.executeSql("SELECT * FROM sr_src").collect());
+        Map<Integer, String> c4 = new HashMap<>();
+        c4.put(1, "1");
+        Row row1 = Row.of(
+                new Long[]{1L},
+                c4,
+                1.1f,
+                "1"
+            );
+        assertThat(result1).containsExactlyInAnyOrderElementsOf(Collections.singleton(row1));
+
+        List<Row> result2 =
+                CollectionUtil.iteratorToList(
+                        tEnv.executeSql("SELECT c4 FROM sr_src").collect());
+        Row row2 = Row.of(c4);
+        assertThat(result2).containsExactlyInAnyOrderElementsOf(Collections.singleton(row2));
+
+        List<Row> result3 =
+                CollectionUtil.iteratorToList(
+                        tEnv.executeSql("SELECT c1, c2, c3, c4 FROM sr_src WHERE c2 = '1'").collect());
+        Row row3 = Row.of(
+                1.1f,
+                "1",
+                new Long[]{1L},
+                c4
+            );
+        assertThat(result3).containsExactlyInAnyOrderElementsOf(Collections.singleton(row3));
+    }
+
+    private String createPartialTables(String tablePrefix) throws Exception {
+        String tableName = tablePrefix + "_" + genRandomUuid();
+        String createStarRocksTable =
+                String.format(
+                        "CREATE TABLE `%s`.`%s` (" +
+                                "c0 INT," +
+                                "c1 FLOAT," +
+                                "c2 STRING," +
+                                "c3 ARRAY<BIGINT>," +
+                                "c4 MAP<INT, STRING>" +
+                                ") ENGINE = OLAP " +
+                                "DUPLICATE KEY(c0) " +
+                                "DISTRIBUTED BY HASH (c0) BUCKETS 8 " +
+                                "PROPERTIES (" +
+                                "\"replication_num\" = \"1\"" +
+                                ")",
+                        DB_NAME, tableName);
+        executeSrSQL(createStarRocksTable);
+        return tableName;
+    }
+
+    @Test
     public void testArrayType() throws Exception {
         String tableName = createArrayTypeTable("testArrayType");
         executeSrSQL(String.format("INSERT INTO `%s`.`%s` VALUES (%s)", DB_NAME, tableName,
