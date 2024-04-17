@@ -43,7 +43,7 @@ public class StarRocksQueryPlanVisitorTest extends StarRocksSourceBaseTest {
     public void testGetQueryPlan() throws IOException {
         mockResonsefunc();
         StarRocksQueryPlanVisitor visitor = new StarRocksQueryPlanVisitor(OPTIONS);
-        QueryInfo queryInfo = visitor.getQueryInfo(querySQL);
+        QueryInfo queryInfo = visitor.getQueryInfo(getQuerySql());
         List<Long> tabletsList = new ArrayList<>();
         List<Integer> countList = new ArrayList<>();
         queryInfo.getBeXTablets().forEach(beXTablets -> {

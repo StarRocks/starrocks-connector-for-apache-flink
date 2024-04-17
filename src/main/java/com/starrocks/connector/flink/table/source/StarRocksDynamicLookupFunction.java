@@ -29,6 +29,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -82,7 +83,7 @@ public class StarRocksDynamicLookupFunction extends TableFunction<RowData> {
         Row keyRow = Row.of(keys);
         List<RowData> curList = cacheMap.get(keyRow);
         if (curList != null) {
-            curList.parallelStream().forEach(this::collect);
+            curList.forEach(this::collect);
         }
     }
 
@@ -96,13 +97,14 @@ public class StarRocksDynamicLookupFunction extends TableFunction<RowData> {
             LOG.info("Populating lookup join cache");
         }
         cacheMap.clear();
-        
-        StringBuilder sqlSb = new StringBuilder("select * from ");
-        sqlSb.append("`").append(sourceOptions.getDatabaseName()).append("`");
-        sqlSb.append(".");
-        sqlSb.append("`" + sourceOptions.getTableName() + "`");
-        LOG.info("LookUpFunction SQL [{}]", sqlSb.toString());
-        this.queryInfo = StarRocksSourceCommonFunc.getQueryInfo(this.sourceOptions, sqlSb.toString());
+
+        String columns = Arrays.stream(selectColumns)
+                .map(col -> "`" + col.getColumnName() + "`")
+                .collect(Collectors.joining(","));
+        String sql = String.format("select %s from `%s`.`%s`", columns,
+                sourceOptions.getDatabaseName(), sourceOptions.getTableName());
+        LOG.info("LookUpFunction SQL [{}]", sql);
+        this.queryInfo = StarRocksSourceCommonFunc.getQueryInfo(this.sourceOptions, sql);
         List<List<QueryBeXTablets>> lists = StarRocksSourceCommonFunc.splitQueryBeXTablets(1, queryInfo);
         cacheMap = lists.get(0).parallelStream()
                 .flatMap(beXTablets -> scanBeTablets(beXTablets).stream())

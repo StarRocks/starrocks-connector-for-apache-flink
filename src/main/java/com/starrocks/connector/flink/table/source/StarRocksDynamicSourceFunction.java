@@ -115,7 +115,7 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
         case QueryAllColumns:
         case QuerySomeColumns:
             String columns = Arrays.stream(selectColumns)
-                    .map(SelectColumn::getColumnName)
+                    .map(col -> "`" + col.getColumnName() + "`")
                             .collect(Collectors.joining(","));
             sqlSb.append(columns);
             break;
