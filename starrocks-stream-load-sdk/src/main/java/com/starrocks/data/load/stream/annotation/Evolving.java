@@ -18,26 +18,15 @@
  * limitations under the License.
  */
 
-package com.starrocks.data.load.stream;
+package com.starrocks.data.load.stream.annotation;
 
-import com.starrocks.data.load.stream.v2.ChunkHttpEntity;
-import org.junit.Test;
+import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Target;
 
-import java.io.ByteArrayOutputStream;
-
-import static com.starrocks.data.load.stream.ChunkInputStreamTest.genChunk;
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertTrue;
-
-public class ChunkHttpEntityTest {
-
-    @Test
-    public void testWrite() throws Exception {
-        ChunkInputStreamTest.ChunkMeta chunkMeta = genChunk();
-        ChunkHttpEntity entity = new ChunkHttpEntity("test", chunkMeta.chunk);
-        assertTrue(entity.isRepeatable());
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        entity.writeTo(outputStream);
-        assertArrayEquals(chunkMeta.expectedData, outputStream.toByteArray());
-    }
-}
+/**
+ * APIs that are not stable yet.
+ */
+@Documented
+@Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD})
+public @interface Evolving {}

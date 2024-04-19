@@ -18,26 +18,54 @@
  * limitations under the License.
  */
 
-package com.starrocks.data.load.stream;
+package com.starrocks.data.load.stream.compress;
 
+import com.starrocks.data.load.stream.ChunkInputStreamTest;
 import com.starrocks.data.load.stream.v2.ChunkHttpEntity;
 import org.junit.Test;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 import static com.starrocks.data.load.stream.ChunkInputStreamTest.genChunk;
 import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertEquals;
 
-public class ChunkHttpEntityTest {
+/** Tests for {@link CompressionHttpEntity}. */
+public class CompressionHttpEntityTest {
 
     @Test
-    public void testWrite() throws Exception {
+    public void testBasic() throws Exception {
         ChunkInputStreamTest.ChunkMeta chunkMeta = genChunk();
         ChunkHttpEntity entity = new ChunkHttpEntity("test", chunkMeta.chunk);
-        assertTrue(entity.isRepeatable());
+        MockCompressionCodec compressionCodec = new MockCompressionCodec();
+        CompressionHttpEntity compressionEntity = new CompressionHttpEntity(entity, compressionCodec);
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        entity.writeTo(outputStream);
+        compressionEntity.writeTo(outputStream);
         assertArrayEquals(chunkMeta.expectedData, outputStream.toByteArray());
+        assertEquals(1, compressionCodec.getStreams().size());
+        assertEquals(entity.getContentLength(), compressionCodec.getStreams().get(0).getCount());
+    }
+
+    private static class MockCompressionCodec implements CompressionCodec {
+
+        private final List<CountingOutputStream> streams;
+
+        public MockCompressionCodec() {
+            this.streams = new ArrayList<>();
+        }
+
+        public List<CountingOutputStream> getStreams() {
+            return streams;
+        }
+
+        @Override
+        public OutputStream createCompressionStream(OutputStream rawOutputStream, long contentSize) throws IOException {
+            this.streams.add(new CountingOutputStream(rawOutputStream));
+            return streams.get(streams.size() - 1);
+        }
     }
 }

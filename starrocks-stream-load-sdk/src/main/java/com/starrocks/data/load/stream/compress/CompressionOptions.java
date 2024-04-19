@@ -18,26 +18,12 @@
  * limitations under the License.
  */
 
-package com.starrocks.data.load.stream;
+package com.starrocks.data.load.stream.compress;
 
-import com.starrocks.data.load.stream.v2.ChunkHttpEntity;
-import org.junit.Test;
+import net.jpountz.lz4.LZ4FrameOutputStream;
 
-import java.io.ByteArrayOutputStream;
+public class CompressionOptions {
 
-import static com.starrocks.data.load.stream.ChunkInputStreamTest.genChunk;
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertTrue;
-
-public class ChunkHttpEntityTest {
-
-    @Test
-    public void testWrite() throws Exception {
-        ChunkInputStreamTest.ChunkMeta chunkMeta = genChunk();
-        ChunkHttpEntity entity = new ChunkHttpEntity("test", chunkMeta.chunk);
-        assertTrue(entity.isRepeatable());
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        entity.writeTo(outputStream);
-        assertArrayEquals(chunkMeta.expectedData, outputStream.toByteArray());
-    }
+    public static final String LZ4_BLOCK_SIZE = "compression.lz4.block.size";
+    public static final LZ4FrameOutputStream.BLOCKSIZE DEFAULT_LZ4_BLOCK_SIZE = LZ4FrameOutputStream.BLOCKSIZE.SIZE_4MB;
 }

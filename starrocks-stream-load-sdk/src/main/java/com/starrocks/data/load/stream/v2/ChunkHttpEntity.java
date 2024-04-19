@@ -35,24 +35,34 @@ import java.io.OutputStream;
 
 public class ChunkHttpEntity extends AbstractHttpEntity {
 
-    private static final Logger log = LoggerFactory.getLogger(ChunkHttpEntity.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ChunkHttpEntity.class);
 
     protected static final int OUTPUT_BUFFER_SIZE = 2048;
     private static final Header CONTENT_TYPE =
             new BasicHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_OCTET_STREAM.toString());
     private final String tableUniqueKey;
-    private final InputStream content;
+    private final Chunk chunk;
     private final long contentLength;
+    private boolean logAfterWrite;
 
     public ChunkHttpEntity(String tableUniqueKey, Chunk chunk) {
         this.tableUniqueKey = tableUniqueKey;
-        this.content = new ChunkInputStream(chunk);
+        this.chunk = chunk;
         this.contentLength = chunk.chunkBytes();
+        this.logAfterWrite = true;
+    }
+
+    public String getTableUniqueKey() {
+        return tableUniqueKey;
+    }
+
+    public void setLogAfterWrite(boolean logAfterWrite) {
+        this.logAfterWrite = logAfterWrite;
     }
 
     @Override
     public boolean isRepeatable() {
-        return false;
+        return true;
     }
 
     @Override
@@ -77,26 +87,27 @@ public class ChunkHttpEntity extends AbstractHttpEntity {
 
     @Override
     public InputStream getContent() {
-        return content;
+        return new ChunkInputStream(chunk);
     }
 
     @Override
     public void writeTo(OutputStream outputStream) throws IOException {
-        long total = 0;
-        try (InputStream inputStream = this.content) {
+        long startTime = System.nanoTime();
+        try (InputStream inputStream = new ChunkInputStream(chunk)) {
             final byte[] buffer = new byte[OUTPUT_BUFFER_SIZE];
-            int l;
-            while ((l = inputStream.read(buffer)) != -1) {
-                total += l;
-                outputStream.write(buffer, 0, l);
+            int len;
+            while ((len = inputStream.read(buffer)) != -1) {
+                outputStream.write(buffer, 0, len);
             }
         }
-        log.info("Entity write end, uniqueKey: {}, contentLength : {}, total : {}",
-                tableUniqueKey, contentLength, total);
+        if (logAfterWrite || LOG.isDebugEnabled()) {
+            LOG.info("Write entity for table {}, size:{}, time:{}us",
+                    tableUniqueKey, contentLength, (System.nanoTime() - startTime) / 1000);
+        }
     }
 
     @Override
     public boolean isStreaming() {
-        return true;
+        return false;
     }
 }

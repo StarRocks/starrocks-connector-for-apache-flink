@@ -511,7 +511,8 @@ public class StarRocksSinkOptions implements Serializable {
                 .table(getTableName())
                 .streamLoadDataFormat(dataFormat)
                 .chunkLimit(getChunkLimit())
-                .enableUpsertDelete(supportUpsertDelete());
+                .enableUpsertDelete(supportUpsertDelete())
+                .addCommonProperties(getSinkStreamLoadProperties());
 
         if (hasColumnMappingProperty()) {
             defaultTablePropertiesBuilder.columns(streamLoadProps.get("columns"));

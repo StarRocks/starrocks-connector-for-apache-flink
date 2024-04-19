@@ -724,4 +724,17 @@ public class StarRocksSinkITTest extends StarRocksITTestBase {
         executeSrSQL(createStarRocksTable);
         return tableName;
     }
+
+    @Test
+    public void testJsonLz4Compression() throws Exception {
+        assumeTrue(isSinkV2);
+        Map<String, String> map = new HashMap<>();
+        map.put("sink.properties.format", "json");
+        map.put("sink.properties.strip_outer_array", "true");
+        map.put("sink.properties.compression", "lz4_frame");
+        testConfigurationBase(map, env -> null);
+
+        map.put("sink.at-least-once.use-transaction-stream-load", "false");
+        testConfigurationBase(map, env -> null);
+    }
 }

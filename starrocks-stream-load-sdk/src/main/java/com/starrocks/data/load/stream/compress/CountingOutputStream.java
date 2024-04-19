@@ -18,26 +18,33 @@
  * limitations under the License.
  */
 
-package com.starrocks.data.load.stream;
+package com.starrocks.data.load.stream.compress;
 
-import com.starrocks.data.load.stream.v2.ChunkHttpEntity;
-import org.junit.Test;
+import java.io.FilterOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
 
-import java.io.ByteArrayOutputStream;
+/** Count how many bytes written. */
+public class CountingOutputStream extends FilterOutputStream {
 
-import static com.starrocks.data.load.stream.ChunkInputStreamTest.genChunk;
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertTrue;
+    private long count;
 
-public class ChunkHttpEntityTest {
-
-    @Test
-    public void testWrite() throws Exception {
-        ChunkInputStreamTest.ChunkMeta chunkMeta = genChunk();
-        ChunkHttpEntity entity = new ChunkHttpEntity("test", chunkMeta.chunk);
-        assertTrue(entity.isRepeatable());
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        entity.writeTo(outputStream);
-        assertArrayEquals(chunkMeta.expectedData, outputStream.toByteArray());
+    public CountingOutputStream(OutputStream out) {
+        super(out);
     }
+
+    public long getCount() {
+        return this.count;
+    }
+
+    public void write(byte[] b, int off, int len) throws IOException {
+        this.out.write(b, off, len);
+        this.count += len;
+    }
+
+    public void write(int b) throws IOException {
+        this.out.write(b);
+        ++this.count;
+    }
+
 }
