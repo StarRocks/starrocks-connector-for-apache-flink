@@ -26,10 +26,13 @@ package com.starrocks.data.load.stream.v2;
 public enum FlushReason {
     // No need to flush
     NONE,
-    // Should commit the data
+    // Trigger the commit condition, such as flush interval,
+    // and should flush first
     COMMIT,
     // Cache is full, and need flush on or more tables
     CACHE_FULL,
     // The number of buffered rows reaches the limit
-    BUFFER_ROWS_REACH_LIMIT
+    BUFFER_ROWS_REACH_LIMIT,
+    // Force flush, such as StreamLoadManagerV2.flush
+    FORCE
 }
