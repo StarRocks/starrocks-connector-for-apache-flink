@@ -176,7 +176,7 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
 
                     if (savepoint) {
                         for (TransactionTableRegion region : flushQ) {
-                            boolean flush = region.flush(FlushReason.COMMIT);
+                            boolean flush = region.flush(FlushReason.FORCE);
                             LOG.debug("Trigger flush table region {} because of savepoint, region cache bytes: {}, flush: {}",
                                     region.getUniqueKey(), region.getCacheBytes(), flush);
                         }
@@ -187,19 +187,20 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
                             for (TransactionTableRegion region : flushQ) {
                                 // savepoint makes sure no more data is written, so these conditions
                                 // can guarantee commit after all data has been written to StarRocks
-                                if (region.getCacheBytes() == 0 && !region.isFlushing()) {
-                                    boolean success = region.commit();
-                                    if (success) {
-                                        committedRegions += 1;
-                                        region.resetAge();
-                                    }
-                                    LOG.debug("Commit region {} for savepoint, success: {}", region.getUniqueKey(), success);
+                                boolean success = region.commit();
+                                if (success && region.getCacheBytes() == 0) {
+                                    committedRegions += 1;
+                                    region.resetAge();
                                 }
+                                LOG.debug("Commit region {} for savepoint, success: {}", region.getUniqueKey(), success);
                             }
 
                             if (committedRegions == flushQ.size()) {
                                 allRegionsCommitted = true;
                                 LOG.info("All regions committed for savepoint, number of regions: {}", committedRegions);
+                            } else {
+                                LOG.debug("Some regions not committed for savepoint, expected num: {}, actual num: {}",
+                                        flushQ.size(), committedRegions);
                             }
                         }
                         LockSupport.unpark(current);

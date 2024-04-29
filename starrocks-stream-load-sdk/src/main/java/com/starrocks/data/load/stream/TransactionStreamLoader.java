@@ -72,6 +72,10 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
         } else {
             beginHeaders.put("timeout", timeout);
         }
+        String warehouse = properties.getHeaders().get("warehouse");
+        if (warehouse != null) {
+            beginHeaders.put("warehouse", warehouse);
+        }
         this.beginTxnHeader = beginHeaders.entrySet().stream()
                 .map(entry -> new BasicHeader(entry.getKey(), entry.getValue()))
                 .toArray(Header[]::new);
