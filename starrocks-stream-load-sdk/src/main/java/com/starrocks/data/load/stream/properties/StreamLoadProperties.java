@@ -167,7 +167,7 @@ public class StreamLoadProperties implements Serializable {
 
     public StreamLoadTableProperties getTableProperties(String uniqueKey, String database, String table) {
         StreamLoadTableProperties tableProperties = tablePropertiesMap.getOrDefault(uniqueKey, defaultTableProperties);
-        if (!tableProperties.getDatabase().equals(database) || !tableProperties.getDatabase().equals(table)) {
+        if (!tableProperties.getDatabase().equals(database) || !tableProperties.getTable().equals(table)) {
             StreamLoadTableProperties.Builder tablePropertiesBuilder = StreamLoadTableProperties.builder();
             tablePropertiesBuilder = tablePropertiesBuilder.copyFrom(tableProperties).database(database).table(table);
             return tablePropertiesBuilder.build();
