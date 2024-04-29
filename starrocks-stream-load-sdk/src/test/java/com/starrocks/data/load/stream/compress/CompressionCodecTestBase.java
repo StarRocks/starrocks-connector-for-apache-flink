@@ -18,26 +18,29 @@
  * limitations under the License.
  */
 
-package com.starrocks.data.load.stream;
+package com.starrocks.data.load.stream.compress;
 
+import com.starrocks.data.load.stream.ChunkInputStreamTest;
 import com.starrocks.data.load.stream.v2.ChunkHttpEntity;
-import org.junit.Test;
 
 import java.io.ByteArrayOutputStream;
 
 import static com.starrocks.data.load.stream.ChunkInputStreamTest.genChunk;
 import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertTrue;
 
-public class ChunkHttpEntityTest {
+/** Test base for {@link CompressionCodec}. */
+public abstract class CompressionCodecTestBase {
 
-    @Test
-    public void testWrite() throws Exception {
+    protected abstract byte[] decompress(byte[] compressedData, int rawSize) throws Exception;
+
+    public void testCompressBase(CompressionCodec compressionCodec) throws Exception {
         ChunkInputStreamTest.ChunkMeta chunkMeta = genChunk();
         ChunkHttpEntity entity = new ChunkHttpEntity("test", chunkMeta.chunk);
-        assertTrue(entity.isRepeatable());
+        CompressionHttpEntity compressionEntity = new CompressionHttpEntity(entity, compressionCodec);
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        entity.writeTo(outputStream);
-        assertArrayEquals(chunkMeta.expectedData, outputStream.toByteArray());
+        compressionEntity.writeTo(outputStream);
+        byte[] result = outputStream.toByteArray();
+        byte[] descompressData = decompress(result, (int) entity.getContentLength());
+        assertArrayEquals(chunkMeta.expectedData, descompressData);
     }
 }

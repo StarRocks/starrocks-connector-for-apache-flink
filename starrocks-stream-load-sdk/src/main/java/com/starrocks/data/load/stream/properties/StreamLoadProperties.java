@@ -356,17 +356,17 @@ public class StreamLoadProperties implements Serializable {
         }
 
         public Builder connectTimeout(int connectTimeout) {
-            if (connectTimeout < 100 || connectTimeout > 60000) {
-                throw new IllegalArgumentException("connectTimeout `" + connectTimeout + "ms` set failed, must range in [100, 60000]");
+            if (connectTimeout < 100) {
+                throw new IllegalArgumentException("connectTimeout `" + connectTimeout + "ms` set failed, must be larger than 100ms");
             }
             this.connectTimeout = connectTimeout;
             return this;
         }
 
         public Builder waitForContinueTimeoutMs(int waitForContinueTimeoutMs) {
-            if (waitForContinueTimeoutMs < DEFAULT_WAIT_FOR_CONTINUE || waitForContinueTimeoutMs > 60000) {
+            if (waitForContinueTimeoutMs < DEFAULT_WAIT_FOR_CONTINUE) {
                 throw new IllegalArgumentException("waitForContinueTimeoutMs `" + waitForContinueTimeoutMs +
-                        "ms` set failed, must be in range in [3000, 60000]");
+                        "ms` set failed, must be be larger than 3000ms");
             }
             this.waitForContinueTimeoutMs = waitForContinueTimeoutMs;
             return this;

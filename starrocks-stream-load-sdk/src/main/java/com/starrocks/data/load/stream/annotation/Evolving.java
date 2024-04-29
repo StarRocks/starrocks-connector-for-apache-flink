@@ -18,21 +18,15 @@
  * limitations under the License.
  */
 
-package com.starrocks.data.load.stream.v2;
+package com.starrocks.data.load.stream.annotation;
+
+import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Target;
 
 /**
- * Reason to trigger flush for a table.
+ * APIs that are not stable yet.
  */
-public enum FlushReason {
-    // No need to flush
-    NONE,
-    // Trigger the commit condition, such as flush interval,
-    // and should flush first
-    COMMIT,
-    // Cache is full, and need flush on or more tables
-    CACHE_FULL,
-    // The number of buffered rows reaches the limit
-    BUFFER_ROWS_REACH_LIMIT,
-    // Force flush, such as StreamLoadManagerV2.flush
-    FORCE
-}
+@Documented
+@Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD})
+public @interface Evolving {}

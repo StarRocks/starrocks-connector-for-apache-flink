@@ -25,6 +25,8 @@ import com.starrocks.data.load.stream.StreamLoadResponse;
 import com.starrocks.data.load.stream.StreamLoadSnapshot;
 import com.starrocks.data.load.stream.StreamLoader;
 import com.starrocks.data.load.stream.TableRegion;
+import com.starrocks.data.load.stream.compress.CompressionCodec;
+import com.starrocks.data.load.stream.compress.CompressionHttpEntity;
 import com.starrocks.data.load.stream.exception.StreamLoadFailException;
 import com.starrocks.data.load.stream.http.StreamLoadEntityMeta;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
@@ -32,6 +34,7 @@ import org.apache.http.HttpEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Optional;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -57,6 +60,7 @@ public class TransactionTableRegion implements TableRegion {
     private final String database;
     private final String table;
     private final StreamLoadTableProperties properties;
+    private final Optional<CompressionCodec> compressionCodec;
     private final AtomicLong age = new AtomicLong(0L);
     private final AtomicLong cacheBytes = new AtomicLong();
     private final AtomicLong cacheRows = new AtomicLong();
@@ -91,6 +95,10 @@ public class TransactionTableRegion implements TableRegion {
         this.properties = properties;
         this.streamLoader = streamLoader;
         this.labelGenerator = labelGenerator;
+        this.compressionCodec = CompressionCodec.createCompressionCodec(
+                properties.getDataFormat(),
+                properties.getProperty("compression"),
+                properties.getTableProperties());
         this.state = new AtomicReference<>(State.ACTIVE);
         this.lastCommitTimeMills = System.currentTimeMillis();
         this.activeChunk = new Chunk(properties.getDataFormat());
@@ -211,11 +219,11 @@ public class TransactionTableRegion implements TableRegion {
     }
 
     public boolean flush(FlushReason reason) {
+        LOG.debug("Try to flush db: {}, table: {}, label: {}, cacheBytes: {}, cacheRows: {}, reason: {}",
+                database, table, label, cacheBytes, cacheRows, reason);
         if (state.compareAndSet(State.ACTIVE, State.FLUSHING)) {
             for (;;) {
                 if (ctl.compareAndSet(false, true)) {
-                    LOG.info("Flush uniqueKey : {}, label : {}, bytes : {}, rows: {}, reason: {}",
-                            uniqueKey, label, cacheBytes.get(), cacheRows.get(), reason);
                     if (reason != FlushReason.BUFFER_ROWS_REACH_LIMIT ||
                             activeChunk.numRows() >= properties.getMaxBufferRows()) {
                         switchChunk();
@@ -225,6 +233,8 @@ public class TransactionTableRegion implements TableRegion {
                 }
             }
             if (!inactiveChunks.isEmpty()) {
+                LOG.info("Flush db: {}, table: {}, label: {}, cacheBytes: {}, cacheRows: {}, reason: {}",
+                        database, table, label, cacheBytes.get(), cacheRows.get(), reason);
                 streamLoad(0);
                 return true;
             } else {
@@ -243,6 +253,7 @@ public class TransactionTableRegion implements TableRegion {
     //    indicates the commit should not be triggered, such as it is FLUSHING,
     //    or it's still doing commit asynchronously
     public boolean commit() {
+        LOG.debug("Try to commit, db: {}, table: {}, label: {}", database, table, label);
         boolean commitTriggered = false;
         if (!state.compareAndSet(State.ACTIVE, State.COMMITTING)) {
             if (state.get() != State.COMMITTING) {
@@ -255,6 +266,7 @@ public class TransactionTableRegion implements TableRegion {
             // label will be set to null after commit executes successfully
             if (label == null) {
                 state.compareAndSet(State.COMMITTING, State.ACTIVE);
+                LOG.debug("Success to commit, db: {}, table: {}", database, table);
                 return true;
             } else {
                 // wait for the commit to finish
@@ -263,10 +275,14 @@ public class TransactionTableRegion implements TableRegion {
         }
 
         if (label == null) {
-            // if the data has never been flushed (label == null), the commit should fail so that StreamLoadManagerV2#init
-            // will schedule to flush the data first, and then trigger commit again
+            // if the data has never been flushed (label == null), the commit should fail
+            // so that StreamLoadManagerV2#init will schedule to flush the data first, and
+            // then trigger commit again
             boolean commitSuccess = cacheBytes.get() == 0;
             state.compareAndSet(State.COMMITTING, State.ACTIVE);
+            if (commitSuccess) {
+                LOG.debug("Success to commit, db: {}, table: {}", database, table);
+            }
             return commitSuccess;
         }
 
@@ -337,14 +353,15 @@ public class TransactionTableRegion implements TableRegion {
         numRetries = 0;
         firstException = null;
 
-        LOG.info("Stream load flushed, db: {}, table: {}, label : {}", database, table, label);
         if (!inactiveChunks.isEmpty()) {
-            LOG.info("Stream load continue, db: {}, table: {}, label : {}", database, table, label);
+            LOG.info("Stream load continue, db: {}, table: {}, label: {}, cacheBytes: {}, cacheRows: {}",
+                    database, table, label, cacheBytes, cacheRows);
             streamLoad(0);
             return;
         }
         if (state.compareAndSet(State.FLUSHING, State.ACTIVE)) {
-            LOG.info("Stream load completed, db: {}, table: {}, label : {}", database, table, label);
+            LOG.info("Stream load completed, db: {}, table: {}, label: {}, cacheBytes: {}, cacheRows: {}",
+                    database, table, label, cacheBytes, cacheRows);
         }
     }
 
@@ -366,7 +383,10 @@ public class TransactionTableRegion implements TableRegion {
 
     @Override
     public HttpEntity getHttpEntity() {
-        return new ChunkHttpEntity(uniqueKey, inactiveChunks.peek());
+        ChunkHttpEntity entity = new ChunkHttpEntity(uniqueKey, inactiveChunks.peek());
+        return compressionCodec
+                .map(codec -> (HttpEntity) new CompressionHttpEntity(entity, codec))
+                .orElse(entity);
     }
 
     @Override

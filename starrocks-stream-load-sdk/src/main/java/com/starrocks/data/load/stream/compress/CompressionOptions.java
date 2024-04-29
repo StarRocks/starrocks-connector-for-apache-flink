@@ -18,21 +18,12 @@
  * limitations under the License.
  */
 
-package com.starrocks.data.load.stream.v2;
+package com.starrocks.data.load.stream.compress;
 
-/**
- * Reason to trigger flush for a table.
- */
-public enum FlushReason {
-    // No need to flush
-    NONE,
-    // Trigger the commit condition, such as flush interval,
-    // and should flush first
-    COMMIT,
-    // Cache is full, and need flush on or more tables
-    CACHE_FULL,
-    // The number of buffered rows reaches the limit
-    BUFFER_ROWS_REACH_LIMIT,
-    // Force flush, such as StreamLoadManagerV2.flush
-    FORCE
+import net.jpountz.lz4.LZ4FrameOutputStream;
+
+public class CompressionOptions {
+
+    public static final String LZ4_BLOCK_SIZE = "compression.lz4.block.size";
+    public static final LZ4FrameOutputStream.BLOCKSIZE DEFAULT_LZ4_BLOCK_SIZE = LZ4FrameOutputStream.BLOCKSIZE.SIZE_4MB;
 }

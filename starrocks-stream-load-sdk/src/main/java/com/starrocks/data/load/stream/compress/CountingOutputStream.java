@@ -18,21 +18,33 @@
  * limitations under the License.
  */
 
-package com.starrocks.data.load.stream.v2;
+package com.starrocks.data.load.stream.compress;
 
-/**
- * Reason to trigger flush for a table.
- */
-public enum FlushReason {
-    // No need to flush
-    NONE,
-    // Trigger the commit condition, such as flush interval,
-    // and should flush first
-    COMMIT,
-    // Cache is full, and need flush on or more tables
-    CACHE_FULL,
-    // The number of buffered rows reaches the limit
-    BUFFER_ROWS_REACH_LIMIT,
-    // Force flush, such as StreamLoadManagerV2.flush
-    FORCE
+import java.io.FilterOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+
+/** Count how many bytes written. */
+public class CountingOutputStream extends FilterOutputStream {
+
+    private long count;
+
+    public CountingOutputStream(OutputStream out) {
+        super(out);
+    }
+
+    public long getCount() {
+        return this.count;
+    }
+
+    public void write(byte[] b, int off, int len) throws IOException {
+        this.out.write(b, off, len);
+        this.count += len;
+    }
+
+    public void write(int b) throws IOException {
+        this.out.write(b);
+        ++this.count;
+    }
+
 }

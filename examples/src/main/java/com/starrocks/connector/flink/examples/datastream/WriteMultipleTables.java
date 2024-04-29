@@ -71,8 +71,8 @@ public class WriteMultipleTables {
         //
         // 2. replace the connector options with your cluster configurations
         MultipleParameterTool params = MultipleParameterTool.fromArgs(args);
-        String jdbcUrl = params.get("jdbcUrl", "jdbc:mysql://127.0.0.1:11903");
-        String loadUrl = params.get("loadUrl", "127.0.0.1:11901");
+        String jdbcUrl = params.get("jdbcUrl", "jdbc:mysql://127.0.0.1:9030");
+        String loadUrl = params.get("loadUrl", "127.0.0.1:8030");
         String userName = params.get("userName", "root");
         String password = params.get("password", "");
 
