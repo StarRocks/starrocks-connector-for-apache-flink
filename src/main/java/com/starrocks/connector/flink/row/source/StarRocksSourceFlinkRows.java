@@ -70,7 +70,7 @@ public class StarRocksSourceFlinkRows {
             for (int i = 0; i < rowCountOfBatch; i ++) {
                 sourceFlinkRows.add(new GenericRowData(this.selectedColumns.length));
             }
-            for (int i = 0; i < fieldVectors.size(); i++) {
+            for (int i = 0; i < selectedColumns.length; i++) {
                 FieldVector fieldVector = fieldVectors.get(i);
                 ArrowFieldConverter converter = fieldConverters.get(i);
                 for (int rowIndex = 0; rowIndex < rowCountOfBatch; rowIndex++) {
