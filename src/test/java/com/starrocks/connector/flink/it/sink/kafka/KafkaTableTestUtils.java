@@ -49,65 +49,12 @@ import static org.junit.Assert.assertThat;
  * Utils for kafka table tests. Refer to Flink's KafkaTableTestUtils.
  */
 public class KafkaTableTestUtils {
-    public static List<Row> collectRows(Table table, int expectedSize) throws Exception {
-        final TableResult result = table.execute();
-        final List<Row> collectedRows = new ArrayList<>();
-        try (CloseableIterator<Row> iterator = result.collect()) {
-            while (collectedRows.size() < expectedSize && iterator.hasNext()) {
-                collectedRows.add(iterator.next());
-            }
-        }
-        result.getJobClient()
-                .ifPresent(
-                        jc -> {
-                            try {
-                                jc.cancel().get(5, TimeUnit.SECONDS);
-                            } catch (Exception e) {
-                                throw new RuntimeException(e);
-                            }
-                        });
-
-        return collectedRows;
-    }
 
     public static List<String> readLines(String resource) throws IOException {
         final URL url = KafkaToStarRocksITTest.class.getClassLoader().getResource(resource);
         assert url != null;
         Path path = new File(url.getFile()).toPath();
         return Files.readAllLines(path);
-    }
-
-    public static void waitingExpectedResults(
-            String sinkName, List<String> expected, Duration timeout)
-            throws InterruptedException, TimeoutException {
-        Collections.sort(expected);
-        CommonTestUtils.waitUtil(
-                () -> {
-                    List<String> actual = TestValuesTableFactory.getResults(sinkName);
-                    Collections.sort(actual);
-                    return expected.equals(actual);
-                },
-                timeout,
-                "Can not get the expected result.");
-    }
-
-    public static void comparedWithKeyAndOrder(
-            Map<Row, List<Row>> expectedData, List<Row> actual, int[] keyLoc) {
-        Map<Row, LinkedList<Row>> actualData = new HashMap<>();
-        for (Row row : actual) {
-            Row key = Row.project(row, keyLoc);
-            // ignore row kind
-            key.setKind(RowKind.INSERT);
-            actualData.computeIfAbsent(key, k -> new LinkedList<>()).add(row);
-        }
-        // compare key first
-        assertEquals("Actual result: " + actual, expectedData.size(), actualData.size());
-        // compare by value
-        for (Row key : expectedData.keySet()) {
-            assertThat(
-                    actualData.get(key),
-                    TableTestMatchers.deepEqualTo(expectedData.get(key), false));
-        }
     }
 }
 
