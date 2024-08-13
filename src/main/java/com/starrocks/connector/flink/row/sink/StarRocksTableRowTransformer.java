@@ -130,8 +130,10 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
                 }
                 StarRocksDataType starRocksDataType =
                         columns.getOrDefault(columnNames[pos], StarRocksDataType.UNKNOWN);
-                if ((starRocksDataType == StarRocksDataType.JSON ||
-                        starRocksDataType == StarRocksDataType.UNKNOWN)
+                if (starRocksDataType == StarRocksDataType.UNKNOWN) {
+                    return sValue;
+                }
+                if ((starRocksDataType == StarRocksDataType.JSON)
                     && (sValue.charAt(0) == '{' || sValue.charAt(0) == '[')) {
                     // The json string need to be converted to a json object, and to the json string
                     // again via JSON.toJSONString in StarRocksJsonSerializer#serialize. Otherwise,
