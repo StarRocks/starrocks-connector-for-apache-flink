@@ -132,7 +132,7 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
                         columns.getOrDefault(columnNames[pos], StarRocksDataType.UNKNOWN);
                 if ((starRocksDataType == StarRocksDataType.JSON ||
                         starRocksDataType == StarRocksDataType.UNKNOWN)
-                    && (sValue.charAt(0) == '{' || sValue.charAt(0) == '[')) {
+                    && !sValue.isEmpty() && (sValue.charAt(0) == '{' || sValue.charAt(0) == '[')) {
                     // The json string need to be converted to a json object, and to the json string
                     // again via JSON.toJSONString in StarRocksJsonSerializer#serialize. Otherwise,
                     // the final json string in stream load will not be correct. For example, the received

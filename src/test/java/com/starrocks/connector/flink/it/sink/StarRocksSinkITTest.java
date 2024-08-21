@@ -633,7 +633,8 @@ public class StarRocksSinkITTest extends StarRocksITTestBase {
         DataStream<Row> dataStream =
                 env.fromElements(
                         Row.ofKind(RowKind.INSERT, 1, 1.0, "{\"a\": 1, \"b\": true}"),
-                        Row.ofKind(RowKind.INSERT, 2, 2.0, "{\"a\": 2, \"b\": false}"));
+                        Row.ofKind(RowKind.INSERT, 2, 2.0, "{\"a\": 2, \"b\": false}"),
+                        Row.ofKind(RowKind.INSERT, 3, 3.0, ""));
         Table table = tEnv.fromChangelogStream(dataStream, Schema.newBuilder().primaryKey("f0").build(), ChangelogMode.all());
         tEnv.createTemporaryView("src", table);
 
@@ -687,7 +688,8 @@ public class StarRocksSinkITTest extends StarRocksITTestBase {
 
         List<List<Object>> expectedData = Arrays.asList(
                 Arrays.asList(1, 1.0, "{\"a\": 1, \"b\": true}"),
-                Arrays.asList(2, 2.0, "{\"a\": 2, \"b\": false}")
+                Arrays.asList(2, 2.0, "{\"a\": 2, \"b\": false}"),
+                Arrays.asList(3, 3.0, "\"\"")
         );
 
         verifyResult(expectedData, actualData);
