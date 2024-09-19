@@ -34,7 +34,6 @@ import org.apache.flink.table.types.logical.MapType;
 import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.util.Preconditions;
 
-import com.starrocks.connector.flink.tools.DataUtil;
 import org.apache.arrow.vector.BigIntVector;
 import org.apache.arrow.vector.BitVector;
 import org.apache.arrow.vector.DecimalVector;
@@ -270,8 +269,8 @@ public interface ArrowFieldConverter {
     // Convert from arrow varchar to flink timestamp-related type
     class TimestampConverter implements ArrowFieldConverter {
 
-        private static final String DATETIME_FORMAT_LONG = "yyyy-MM-dd HH:mm:ss.SSSSSS";
-        private static final String DATETIME_FORMAT_SHORT = "yyyy-MM-dd HH:mm:ss";
+        private static final DateTimeFormatter DATETIME_FORMATTER =
+                DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss[.SSSSSS]");
 
         private final boolean isNullable;
 
@@ -287,15 +286,7 @@ public interface ArrowFieldConverter {
             if (value == null) {
                 return null;
             }
-            if (value.length() < DATETIME_FORMAT_SHORT.length()) {
-                throw new IllegalArgumentException("Date value length shorter than DATETIME_FORMAT_SHORT");
-            }
-            if (value.length() == DATETIME_FORMAT_SHORT.length()) {
-                value = DataUtil.addZeroForNum(value + ".", DATETIME_FORMAT_LONG.length());
-            }
-            value = DataUtil.addZeroForNum(value, DATETIME_FORMAT_LONG.length());
-            DateTimeFormatter df = DateTimeFormatter.ofPattern(DATETIME_FORMAT_LONG);
-            LocalDateTime ldt = LocalDateTime.parse(value, df);
+            LocalDateTime ldt = LocalDateTime.parse(value, DATETIME_FORMATTER);
             return TimestampData.fromLocalDateTime(ldt);
         }
     }
