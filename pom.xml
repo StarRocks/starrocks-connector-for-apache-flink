@@ -61,6 +61,7 @@ limitations under the License.
         <scala.binary.version>2.12</scala.binary.version>
         <guava.version>31.1-jre</guava.version>
         <shading.prefix>com.starrocks.shade</shading.prefix>
+        <alibaba-fastjson.version>1.2.83</alibaba-fastjson.version>
     </properties>
 
     <dependencies>
@@ -117,7 +118,7 @@ limitations under the License.
         <dependency>
             <groupId>com.alibaba</groupId>
             <artifactId>fastjson</artifactId>
-            <version>1.2.75</version>
+            <version>${alibaba-fastjson.version}</version>
         </dependency>
         <dependency>
             <groupId>mysql</groupId>
