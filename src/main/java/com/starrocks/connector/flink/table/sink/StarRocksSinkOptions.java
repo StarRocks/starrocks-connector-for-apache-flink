@@ -95,6 +95,8 @@ public class StarRocksSinkOptions implements Serializable {
                     "connector side, you can set this option to an acceptable value.");
     public static final ConfigOption<Integer> SINK_WAIT_FOR_CONTINUE_TIMEOUT = ConfigOptions.key("sink.wait-for-continue.timeout-ms")
             .intType().defaultValue(30000).withDescription("Timeout in millisecond to wait for 100-continue response for http client.");
+    public static final ConfigOption<Integer> SINK_TRANSACTION_COMMIT_TIMEOUT = ConfigOptions.key("sink.transaction-commit.timeout-ms")
+            .intType().defaultValue(30000).withDescription("Timeout in millisecond for commit transaction to FE.");
     public static final ConfigOption<Integer> SINK_IO_THREAD_COUNT = ConfigOptions.key("sink.io.thread-count")
             .intType().defaultValue(2).withDescription("Stream load thread count");
 
@@ -286,6 +288,14 @@ public class StarRocksSinkOptions implements Serializable {
             return DEFAULT_WAIT_FOR_CONTINUE;
         }
         return Math.min(waitForContinueTimeoutMs, 600000);
+    }
+
+    public int getTransactionCommitTimeout() {
+        int waitForContinueTimeoutMs = tableOptions.get(SINK_TRANSACTION_COMMIT_TIMEOUT);
+        if (waitForContinueTimeoutMs < 500) {
+            return 500;
+        }
+        return Math.min(waitForContinueTimeoutMs, 60000);
     }
 
     public int getIoThreadCount() {
@@ -563,6 +573,7 @@ public class StarRocksSinkOptions implements Serializable {
                 .connectTimeout(getConnectTimeout())
                 .waitForContinueTimeoutMs(getWaitForContinueTimeout())
                 .socketTimeout(getSocketTimeout())
+                .transactionTimeout(getTransactionCommitTimeout())
                 .ioThreadCount(getIoThreadCount())
                 .scanningFrequency(getScanFrequency())
                 .labelPrefix(getLabelPrefix())

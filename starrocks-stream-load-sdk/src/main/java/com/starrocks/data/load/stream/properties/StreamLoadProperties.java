@@ -71,6 +71,7 @@ public class StreamLoadProperties implements Serializable {
      */
     private final int connectTimeout;
     private final int socketTimeout;
+    private final int transactionTimeout;
     private final int waitForContinueTimeoutMs;
     private final int ioThreadCount;
 
@@ -111,6 +112,7 @@ public class StreamLoadProperties implements Serializable {
 
         this.connectTimeout = builder.connectTimeout;
         this.socketTimeout = builder.socketTimeout;
+        this.transactionTimeout = builder.transactionTimeout;
         this.waitForContinueTimeoutMs = builder.waitForContinueTimeoutMs;
         this.ioThreadCount = builder.ioThreadCount;
 
@@ -203,7 +205,9 @@ public class StreamLoadProperties implements Serializable {
     public int getSocketTimeout() {
         return socketTimeout;
     }
-
+    public int getTransactionTimeout() {
+        return transactionTimeout;
+    }
     public int getIoThreadCount() {
         return ioThreadCount;
     }
@@ -261,6 +265,7 @@ public class StreamLoadProperties implements Serializable {
         private int connectTimeout = 60000;
         // Default value -1 is the same as that in RequestConfig.Builder#socketTimeout
         private int socketTimeout = -1;
+        private int transactionTimeout = 30000;
         private int waitForContinueTimeoutMs = DEFAULT_WAIT_FOR_CONTINUE;
         private int ioThreadCount = Runtime.getRuntime().availableProcessors();
 
@@ -374,6 +379,11 @@ public class StreamLoadProperties implements Serializable {
 
         public Builder socketTimeout(int socketTimeout) {
             this.socketTimeout = socketTimeout;
+            return this;
+        }
+
+        public Builder transactionTimeout(int transactionTimeout) {
+            this.transactionTimeout = transactionTimeout;
             return this;
         }
 
