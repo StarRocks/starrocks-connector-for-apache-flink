@@ -247,6 +247,7 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
         httpPost.addHeader("label", transaction.getLabel());
         httpPost.addHeader("db", transaction.getDatabase());
         httpPost.addHeader("table", transaction.getTable());
+        httpPost.addHeader("timeout", String.valueOf(properties.getTransactionTimeout()));
 
         httpPost.setConfig(RequestConfig.custom()
                         .setSocketTimeout(properties.getSocketTimeout())
