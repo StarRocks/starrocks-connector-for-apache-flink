@@ -155,10 +155,17 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
                     (!sinkOptions.supportUpsertDelete() || sinkOptions.getIgnoreUpdateBefore())) {
                 return;
             }
+
+            if (RowKind.DELETE.equals(((RowData)value).getRowKind()) &&
+                    (!sinkOptions.supportUpsertDelete() || sinkOptions.getIgnoreDelete())) {
+                return;
+            }
+
             if (!sinkOptions.supportUpsertDelete() && RowKind.DELETE.equals(((RowData)value).getRowKind())) {
                 // let go the UPDATE_AFTER and INSERT rows for tables who have a group of `unique` or `duplicate` keys.
                 return;
             }
+
         }
         flushLegacyData();
         String serializedValue = serializer.serialize(rowTransformer.transform(value, sinkOptions.supportUpsertDelete()));
