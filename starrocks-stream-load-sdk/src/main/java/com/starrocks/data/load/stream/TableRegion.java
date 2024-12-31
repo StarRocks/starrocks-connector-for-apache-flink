@@ -25,11 +25,15 @@ import com.starrocks.data.load.stream.http.StreamLoadEntityMeta;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
 import org.apache.http.HttpEntity;
 
+import java.util.Map;
 import java.util.concurrent.Future;
 
 public interface TableRegion {
 
     StreamLoadTableProperties getProperties();
+    default Map<String, String> getHeaders() {
+        throw new UnsupportedOperationException();
+    }
     String getUniqueKey();
     String getDatabase();
     String getTable();

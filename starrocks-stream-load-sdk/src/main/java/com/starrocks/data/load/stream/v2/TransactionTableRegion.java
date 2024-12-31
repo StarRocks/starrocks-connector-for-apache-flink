@@ -20,6 +20,7 @@ package com.starrocks.data.load.stream.v2;
 
 import com.starrocks.data.load.stream.Chunk;
 import com.starrocks.data.load.stream.LabelGenerator;
+import com.starrocks.data.load.stream.StreamLoadDataFormat;
 import com.starrocks.data.load.stream.StreamLoadManager;
 import com.starrocks.data.load.stream.StreamLoadResponse;
 import com.starrocks.data.load.stream.StreamLoadSnapshot;
@@ -27,6 +28,7 @@ import com.starrocks.data.load.stream.StreamLoader;
 import com.starrocks.data.load.stream.TableRegion;
 import com.starrocks.data.load.stream.compress.CompressionCodec;
 import com.starrocks.data.load.stream.compress.CompressionHttpEntity;
+import com.starrocks.data.load.stream.compress.LZ4FrameCompressionCodec;
 import com.starrocks.data.load.stream.exception.StreamLoadFailException;
 import com.starrocks.data.load.stream.http.StreamLoadEntityMeta;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
@@ -34,6 +36,8 @@ import org.apache.http.HttpEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
@@ -60,6 +64,7 @@ public class TransactionTableRegion implements TableRegion {
     private final String database;
     private final String table;
     private final StreamLoadTableProperties properties;
+    private final Map<String, String> headers = new HashMap<>();
     private final Optional<CompressionCodec> compressionCodec;
     private final AtomicLong age = new AtomicLong(0L);
     private final AtomicLong cacheBytes = new AtomicLong();
@@ -95,6 +100,7 @@ public class TransactionTableRegion implements TableRegion {
         this.properties = properties;
         this.streamLoader = streamLoader;
         this.labelGenerator = labelGenerator;
+        initHeaders(properties);
         this.compressionCodec = CompressionCodec.createCompressionCodec(
                 properties.getDataFormat(),
                 properties.getProperty("compression"),
@@ -104,11 +110,38 @@ public class TransactionTableRegion implements TableRegion {
         this.activeChunk = new Chunk(properties.getDataFormat());
         this.maxRetries = maxRetries;
         this.retryIntervalInMs = retryIntervalInMs;
+        initHeaders(properties);
+    }
+
+    private void initHeaders(StreamLoadTableProperties properties) {
+        headers.putAll(properties.getProperties());
+        Optional<String> compressionType = properties.getProperty("compression");
+        // To enable csv compression, at the connector side, the user need to set two properties:
+        // "format = csv" and "compression = <compression type>". It needs to be converted to one
+        // header "format = <compression type>" which matches the server usage. In the future, the
+        // server will be refactored to configure the compression type in the same way as the connector,
+        // and this conversion will be removed.
+        if (properties.getDataFormat() instanceof StreamLoadDataFormat.CSVFormat && compressionType.isPresent()) {
+            // You can see the format name for different compression types here
+            // https://github.com/StarRocks/starrocks/blob/main/be/src/http/action/stream_load.cpp#L96
+            if (LZ4FrameCompressionCodec.NAME.equalsIgnoreCase(compressionType.get())) {
+                headers.put("format", "lz4");
+            } else {
+                throw new UnsupportedOperationException(
+                        "CSV format does not support compression type: " + compressionType.get());
+            }
+
+        }
     }
 
     @Override
     public StreamLoadTableProperties getProperties() {
         return properties;
+    }
+
+    @Override
+    public Map<String, String> getHeaders() {
+        return headers;
     }
 
     @Override
