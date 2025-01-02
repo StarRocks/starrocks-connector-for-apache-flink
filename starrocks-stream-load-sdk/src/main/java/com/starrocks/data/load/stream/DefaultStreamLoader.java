@@ -25,7 +25,6 @@ import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.starrocks.data.load.stream.exception.StreamLoadFailException;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
-import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpHeaders;
@@ -297,8 +296,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
             httpPut.setEntity(region.getHttpEntity());
 
             httpPut.setHeaders(defaultHeaders);
-            StreamLoadTableProperties tableProperties = region.getProperties();
-            for (Map.Entry<String, String> entry : tableProperties.getProperties().entrySet()) {
+            for (Map.Entry<String, String> entry : region.getHeaders().entrySet()) {
                 httpPut.removeHeaders(entry.getKey());
                 httpPut.addHeader(entry.getKey(), entry.getValue());
             }

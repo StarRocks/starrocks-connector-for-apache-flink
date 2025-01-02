@@ -742,6 +742,20 @@ public class StarRocksSinkITTest extends StarRocksITTestBase {
     }
 
     @Test
+    public void testCsvLz4Compression() throws Exception {
+        assumeTrue(isSinkV2);
+        Map<String, String> map = new HashMap<>();
+        map.put("sink.properties.compression", "lz4_frame");
+        testConfigurationBase(map, env -> null);
+
+        map.put("sink.properties.format", "csv");
+        testConfigurationBase(map, env -> null);
+
+        map.put("sink.at-least-once.use-transaction-stream-load", "false");
+        testConfigurationBase(map, env -> null);
+    }
+
+    @Test
     public void testTimestampType() throws Exception {
         String tableName = createDatetimeTable("testTimestampType");
         StarRocksSinkOptions sinkOptions = StarRocksSinkOptions.builder()
