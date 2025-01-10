@@ -32,9 +32,9 @@ if ! ${MVN_CMD} --version; then
 fi
 export MVN_CMD
 
-SUPPORTED_MINOR_VERSION=("1.15" "1.16" "1.17" "1.18" "1.19")
+SUPPORTED_MINOR_VERSION=("1.15" "1.16" "1.17" "1.18" "1.19" "1.20")
 # version formats are different among flink versions
-SUPPORTED_KAFKA_CONNECTOR_VERSION=("1.15.0" "1.16.0" "1.17.0" "3.0.1-1.18" "3.2.0-1.19")
+SUPPORTED_KAFKA_CONNECTOR_VERSION=("1.15.0" "1.16.0" "1.17.0" "3.0.1-1.18" "3.2.0-1.19" "3.4.0-1.20")
 VERSION_MESSAGE=$(IFS=, ; echo "${SUPPORTED_MINOR_VERSION[*]}")
 
 function check_flink_version_supported() {
