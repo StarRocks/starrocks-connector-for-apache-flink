@@ -24,6 +24,7 @@ import com.starrocks.data.load.stream.ChunkInputStreamTest;
 import com.starrocks.data.load.stream.v2.ChunkHttpEntity;
 
 import java.io.ByteArrayOutputStream;
+import java.util.Arrays;
 
 import static com.starrocks.data.load.stream.ChunkInputStreamTest.genChunk;
 import static org.junit.Assert.assertArrayEquals;
@@ -37,10 +38,16 @@ public abstract class CompressionCodecTestBase {
         ChunkInputStreamTest.ChunkMeta chunkMeta = genChunk();
         ChunkHttpEntity entity = new ChunkHttpEntity("test", chunkMeta.chunk);
         CompressionHttpEntity compressionEntity = new CompressionHttpEntity(entity, compressionCodec);
+        ChunkInputStreamTest.ChunkMeta chunkMeta1 = genChunk();
+        ChunkHttpEntity entity1 = new ChunkHttpEntity("test", chunkMeta1.chunk);
+        CompressionHttpEntity compressionEntity1 = new CompressionHttpEntity(entity1, compressionCodec);
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         compressionEntity.writeTo(outputStream);
+        compressionEntity1.writeTo(outputStream);
         byte[] result = outputStream.toByteArray();
-        byte[] descompressData = decompress(result, (int) entity.getContentLength());
-        assertArrayEquals(chunkMeta.expectedData, descompressData);
+        byte[] descompressData = decompress(result, (int) (entity.getContentLength() + entity1.getContentLength()));
+        assertArrayEquals(chunkMeta.expectedData, Arrays.copyOfRange(descompressData, 0, (int) entity.getContentLength()));
+        assertArrayEquals(chunkMeta1.expectedData,
+                Arrays.copyOfRange(descompressData, (int) entity.getContentLength(), descompressData.length));
     }
 }

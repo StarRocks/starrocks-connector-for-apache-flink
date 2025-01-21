@@ -39,6 +39,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -633,7 +634,8 @@ public class StarRocksSinkITTest extends StarRocksITTestBase {
         DataStream<Row> dataStream =
                 env.fromElements(
                         Row.ofKind(RowKind.INSERT, 1, 1.0, "{\"a\": 1, \"b\": true}"),
-                        Row.ofKind(RowKind.INSERT, 2, 2.0, "{\"a\": 2, \"b\": false}"));
+                        Row.ofKind(RowKind.INSERT, 2, 2.0, "{\"a\": 2, \"b\": false}"),
+                        Row.ofKind(RowKind.INSERT, 3, 3.0, ""));
         Table table = tEnv.fromChangelogStream(dataStream, Schema.newBuilder().primaryKey("f0").build(), ChangelogMode.all());
         tEnv.createTemporaryView("src", table);
 
@@ -687,7 +689,8 @@ public class StarRocksSinkITTest extends StarRocksITTestBase {
 
         List<List<Object>> expectedData = Arrays.asList(
                 Arrays.asList(1, 1.0, "{\"a\": 1, \"b\": true}"),
-                Arrays.asList(2, 2.0, "{\"a\": 2, \"b\": false}")
+                Arrays.asList(2, 2.0, "{\"a\": 2, \"b\": false}"),
+                Arrays.asList(3, 3.0, "\"\"")
         );
 
         verifyResult(expectedData, actualData);
@@ -736,5 +739,85 @@ public class StarRocksSinkITTest extends StarRocksITTestBase {
 
         map.put("sink.at-least-once.use-transaction-stream-load", "false");
         testConfigurationBase(map, env -> null);
+    }
+
+    @Test
+    public void testCsvLz4Compression() throws Exception {
+        assumeTrue(isSinkV2);
+        Map<String, String> map = new HashMap<>();
+        map.put("sink.properties.compression", "lz4_frame");
+        testConfigurationBase(map, env -> null);
+
+        map.put("sink.properties.format", "csv");
+        testConfigurationBase(map, env -> null);
+
+        map.put("sink.at-least-once.use-transaction-stream-load", "false");
+        testConfigurationBase(map, env -> null);
+    }
+
+    @Test
+    public void testTimestampType() throws Exception {
+        String tableName = createDatetimeTable("testTimestampType");
+        StarRocksSinkOptions sinkOptions = StarRocksSinkOptions.builder()
+                .withProperty("jdbc-url", getJdbcUrl())
+                .withProperty("load-url", getHttpUrls())
+                .withProperty("database-name", DB_NAME)
+                .withProperty("table-name", tableName)
+                .withProperty("username", "root")
+                .withProperty("password", "")
+                .build();
+
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        StreamTableEnvironment tEnv;
+        tEnv = StreamTableEnvironment.create(env);
+        String createSQL = "CREATE TABLE sink(" +
+                "c0 INT," +
+                "c1 TIMESTAMP" +
+                ", PRIMARY KEY (`c0`) NOT ENFORCED" +
+                ") WITH ( " +
+                "'connector' = 'starrocks'," +
+                "'jdbc-url'='" + sinkOptions.getJdbcUrl() + "'," +
+                "'load-url'='" + String.join(";", sinkOptions.getLoadUrlList()) + "'," +
+                "'sink.version' = '" + (isSinkV2 ? "V2" : "V1") + "'," +
+                "'sink.use.new-sink-api' = '" + (newSinkApi ? "true" : "false") + "'," +
+                "'database-name' = '" + DB_NAME + "'," +
+                "'table-name' = '" + sinkOptions.getTableName() + "'," +
+                "'username' = '" + sinkOptions.getUsername() + "'," +
+                "'password' = '" + sinkOptions.getPassword() + "'" +
+                ")";
+        tEnv.executeSql(createSQL);
+        tEnv.executeSql("INSERT INTO sink VALUES " +
+                "(0, CAST('2024-09-19 14:00:00' AS TIMESTAMP(9)))," +
+                "(1, CAST('2024-09-19 14:01:00.123' AS TIMESTAMP(9)))," +
+                "(2, CAST('2024-09-19 14:02:00.123456' AS TIMESTAMP(9)))," +
+                "(3, CAST('2024-09-19 14:03:00.123456789' AS TIMESTAMP(9)))"
+            ).await();
+        List<List<Object>> expectedData = Arrays.asList(
+                Arrays.asList(0, Timestamp.valueOf("2024-09-19 14:00:00")),
+                Arrays.asList(1, Timestamp.valueOf("2024-09-19 14:01:00.123")),
+                Arrays.asList(2, Timestamp.valueOf("2024-09-19 14:02:00.123456")),
+                Arrays.asList(3, Timestamp.valueOf("2024-09-19 14:03:00.123456"))
+        );
+        List<List<Object>> actualData = scanTable(DB_CONNECTION, DB_NAME, tableName);
+        verifyResult(expectedData, actualData);
+    }
+
+    private String createDatetimeTable(String tablePrefix) throws Exception {
+        String tableName = tablePrefix + "_" + genRandomUuid();
+        String createStarRocksTable =
+                String.format(
+                        "CREATE TABLE `%s`.`%s` (" +
+                                "c0 INT," +
+                                "c1 DATETIME" +
+                                ") ENGINE = OLAP " +
+                                "PRIMARY KEY(c0) " +
+                                "DISTRIBUTED BY HASH (c0) BUCKETS 8 " +
+                                "PROPERTIES (" +
+                                "\"replication_num\" = \"1\"" +
+                                ")",
+                        DB_NAME, tableName);
+        executeSrSQL(createStarRocksTable);
+        return tableName;
     }
 }

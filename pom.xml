@@ -46,21 +46,22 @@ limitations under the License.
     <version>${srfc.version}_flink-${flink.minor.version}-SNAPSHOT</version>
 
     <properties>
-        <srfc.version>1.2.10</srfc.version>
+        <srfc.version>1.2.11</srfc.version>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <file_encoding>UTF-8</file_encoding>
         <maven-enforcer-plugin.version>3.0.0-M3</maven-enforcer-plugin.version>
         <maven-surefire-plugin.version>3.0.0-M4</maven-surefire-plugin.version>
-        <flink.minor.version>1.18</flink.minor.version>
-        <flink.version>1.18.0</flink.version>
-        <kafka.connector.version>3.0.1-1.18</kafka.connector.version>
+        <flink.minor.version>1.20</flink.minor.version>
+        <flink.version>1.20.0</flink.version>
+        <kafka.connector.version>3.4.0-1.20</kafka.connector.version>
         <arrow.version>5.0.0</arrow.version>
         <kafka.version>2.8.1</kafka.version>
         <scala.binary.version>2.12</scala.binary.version>
         <guava.version>31.1-jre</guava.version>
         <shading.prefix>com.starrocks.shade</shading.prefix>
+        <alibaba-fastjson.version>1.2.83</alibaba-fastjson.version>
     </properties>
 
     <dependencies>
@@ -117,7 +118,7 @@ limitations under the License.
         <dependency>
             <groupId>com.alibaba</groupId>
             <artifactId>fastjson</artifactId>
-            <version>1.2.75</version>
+            <version>${alibaba-fastjson.version}</version>
         </dependency>
         <dependency>
             <groupId>mysql</groupId>
@@ -160,6 +161,13 @@ limitations under the License.
             <artifactId>flink-connector-kafka</artifactId>
             <version>${kafka.connector.version}</version>
             <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-connector-base</artifactId>
+            <version>${flink.version}</version>
             <scope>test</scope>
         </dependency>
 

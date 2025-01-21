@@ -463,4 +463,58 @@ public class StarRocksSourceITTest extends StarRocksITTestBase {
         return tableName;
     }
 
+    @Test
+    public void testTimestampType() throws Exception {
+        String tableName = createDatetimeTable("testNestedType");
+        executeSrSQL("INSERT INTO " + DB_NAME + "." + tableName + " VALUES " +
+                "(0, '2024-09-19 14:00:00')," +
+                "(1, '2024-09-19 14:01:00.123')," +
+                "(2, '2024-09-19 14:02:00.123456')"
+            );
+
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
+
+        String createSrcSQL = "CREATE TABLE sr_src(" +
+                "c0 INT," +
+                "c1 TIMESTAMP" +
+                ") WITH ( " +
+                "'connector' = 'starrocks'," +
+                "'jdbc-url'='" + getJdbcUrl() + "'," +
+                "'scan-url'='" + String.join(";", getHttpUrls()) + "'," +
+                "'database-name' = '" + DB_NAME + "'," +
+                "'table-name' = '" + tableName + "'," +
+                "'username' = 'root'," +
+                "'password' = ''" +
+                ")";
+        tEnv.executeSql(createSrcSQL);
+        List<Row> results =
+                CollectionUtil.iteratorToList(
+                        tEnv.executeSql("SELECT * FROM sr_src").collect());
+        List<Row> expected = Arrays.asList(
+                Row.of(0, LocalDateTime.of(2024, 9, 19, 14, 0, 0)),
+                Row.of(1, LocalDateTime.of(2024, 9, 19, 14, 1, 0, 123000000)),
+                Row.of(2, LocalDateTime.of(2024, 9, 19, 14, 2, 0, 123456000))
+            );
+        assertThat(results).containsExactlyInAnyOrderElementsOf(expected);
+    }
+
+    private String createDatetimeTable(String tablePrefix) throws Exception {
+        String tableName = tablePrefix + "_" + genRandomUuid();
+        String createStarRocksTable =
+                String.format(
+                        "CREATE TABLE `%s`.`%s` (" +
+                                "c0 INT," +
+                                "c1 DATETIME" +
+                                ") ENGINE = OLAP " +
+                                "PRIMARY KEY(c0) " +
+                                "DISTRIBUTED BY HASH (c0) BUCKETS 8 " +
+                                "PROPERTIES (" +
+                                "\"replication_num\" = \"1\"" +
+                                ")",
+                        DB_NAME, tableName);
+        executeSrSQL(createStarRocksTable);
+        return tableName;
+    }
 }
