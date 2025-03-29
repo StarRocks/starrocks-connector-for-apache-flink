@@ -50,7 +50,6 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -128,7 +127,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
                         || Strings.isNullOrEmpty(data.getTable())
                         || data.getDataRows() == null) {
                     log.warn(String.format("json row data not fulfilled. {database: %s, table: %s, dataRows: %s}",
-                            data.getDatabase(), data.getTable(), Arrays.toString(data.getDataRows())));
+                            data.getDatabase(), data.getTable(), data.getDataRows() == null ? "null" : "Redacted"));
                     return;
                 }
                 sinkManager.write(null, data.getDatabase(), data.getTable(), data.getDataRows());
@@ -139,7 +138,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
                         || Strings.isNullOrEmpty(data.getTable())
                         || data.getRow() == null) {
                     log.warn(String.format("json row data not fulfilled. {database: %s, table: %s, dataRows: %s}",
-                            data.getDatabase(), data.getTable(), data.getRow()));
+                            data.getDatabase(), data.getTable(), data.getRow() == null ? "null" : "Redacted"));
                     return;
                 }
                 sinkManager.write(data.getUniqueKey(), data.getDatabase(), data.getTable(), data.getRow());
