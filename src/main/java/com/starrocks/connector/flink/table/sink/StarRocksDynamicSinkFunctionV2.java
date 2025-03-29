@@ -126,7 +126,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
                 if (Strings.isNullOrEmpty(data.getDatabase())
                         || Strings.isNullOrEmpty(data.getTable())
                         || data.getDataRows() == null) {
-                    log.warn(String.format("json row data not fulfilled. {database: %s, table: %s, dataRows:%s}",
+                    log.warn(String.format("json row data not fulfilled. {database: %s, table: %s, dataRows: %s}",
                             data.getDatabase(), data.getTable(), data.getDataRows() == null ? "null" : "Redacted"));
                     return;
                 }
@@ -137,7 +137,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
                 if (Strings.isNullOrEmpty(data.getDatabase())
                         || Strings.isNullOrEmpty(data.getTable())
                         || data.getRow() == null) {
-                    log.warn(String.format("json row data not fulfilled. {database: %s, table: %s, dataRows:%s}",
+                    log.warn(String.format("json row data not fulfilled. {database: %s, table: %s, dataRows: %s}",
                             data.getDatabase(), data.getTable(), data.getRow() == null ? "null" : "Redacted"));
                     return;
                 }
