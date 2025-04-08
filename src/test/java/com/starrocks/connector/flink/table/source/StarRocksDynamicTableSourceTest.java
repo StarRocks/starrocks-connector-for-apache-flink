@@ -17,6 +17,7 @@ package com.starrocks.connector.flink.table.source;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.TableEnvironment;
+import org.apache.flink.table.connector.source.DynamicTableSource;
 import org.apache.flink.table.expressions.CallExpression;
 import org.apache.flink.table.expressions.FieldReferenceExpression;
 import org.apache.flink.table.expressions.ResolvedExpression;
@@ -34,6 +35,8 @@ import java.util.List;
 
 import static org.apache.flink.table.expressions.ApiExpressionUtils.valueLiteral;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertTrue;
 
 public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
 
@@ -212,5 +215,29 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
         List<String> s = Collections.singletonList("a");
 
         System.out.println(String.join(" is not null", s));
+    }
+
+    @Test
+    public void testDynamicTableSourceDeepCopy() {
+        DynamicTableSource copied = dynamicTableSource.copy();
+        assertTrue(copied instanceof StarRocksDynamicTableSource);
+        StarRocksDynamicTableSource copiedSource = (StarRocksDynamicTableSource) copied;
+        assertNotEquals(dynamicTableSource, copiedSource);
+
+        long currentLimit = pushDownHolder.getLimit();
+        long newLimit = currentLimit + 10;
+        copiedSource.applyLimit(newLimit);
+
+        assertEquals(currentLimit, pushDownHolder.getLimit());
+
+        ResolvedExpression c5Ref = new FieldReferenceExpression("c5", DataTypes.TIMESTAMP(), 0, 2);
+        ResolvedExpression c5Exp =
+                new CallExpression(
+                        BuiltInFunctionDefinitions.EQUALS,
+                        Arrays.asList(c5Ref, valueLiteral("2022-1-22 00:00:00")),
+                        DataTypes.BOOLEAN());
+        String currentFilter = pushDownHolder.getFilter();
+        copiedSource.applyFilters(Collections.singletonList(c5Exp));
+        assertEquals(currentFilter, pushDownHolder.getFilter());
     }
 }

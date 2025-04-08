@@ -189,12 +189,8 @@ public class StarRocksSourceOptions implements Serializable {
                 newMap.put(entry.getKey(), (String) entry.getValue());
             }
         }
-        return (Map<String, String>) newMap;
+        return newMap;
     }
-
-    // public int getLimit() {
-    //     return tableOptions.get(SCAN_LIMIT).intValue();
-    // }
 
     public int getKeepAliveMin() {
         return tableOptions.get(SCAN_KEEP_ALIVE_MIN).intValue();
@@ -238,6 +234,11 @@ public class StarRocksSourceOptions implements Serializable {
 
     public static Builder builder() {
         return new Builder();
+    }
+
+    public StarRocksSourceOptions copy() {
+        return new StarRocksSourceOptions(
+                Configuration.fromMap(this.tableOptionsMap), new HashMap<>(this.tableOptionsMap));
     }
 
     /**
