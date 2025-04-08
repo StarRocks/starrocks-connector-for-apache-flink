@@ -87,9 +87,15 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
         return TableFunctionProvider.of(tableFunction);
     }
 
+    /**
+     * NOTE: this function need deep copy according to the comment of {@link DynamicTableSource#copy()}
+     */
     @Override
     public DynamicTableSource copy() {
-        return new StarRocksDynamicTableSource(this.options, this.flinkSchema, this.pushDownHolder);
+        StarRocksSourceOptions options = this.options.copy();
+        TableSchema flinkSchema = this.flinkSchema.copy();
+        PushDownHolder pushDownHolder = this.pushDownHolder.copy();
+        return new StarRocksDynamicTableSource(options, flinkSchema, pushDownHolder);
     }
 
     @Override
