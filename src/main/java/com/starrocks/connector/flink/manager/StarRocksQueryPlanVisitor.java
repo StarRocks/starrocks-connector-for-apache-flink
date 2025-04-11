@@ -112,6 +112,7 @@ public class StarRocksQueryPlanVisitor implements Serializable {
                 HttpPost post = new HttpPost(url);
                 post.setHeader("Content-Type", "application/json;charset=UTF-8");
                 post.setHeader("Authorization", getBasicAuthHeader(sourceOptions.getUsername(), sourceOptions.getPassword()));
+                post.setHeader("warehouse", sourceOptions.getWarehouseName());
                 post.setEntity(new ByteArrayEntity(body.getBytes()));
                 try (CloseableHttpResponse response = httpClient.execute(post)) {
                     requsetCode = response.getStatusLine().getStatusCode();
