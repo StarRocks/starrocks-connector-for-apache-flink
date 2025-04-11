@@ -33,6 +33,7 @@ public class StarRocksSourceOptions implements Serializable {
     private final ReadableConfig tableOptions;
     private final Map<String, String> tableOptionsMap;
     private final Map<String, String> beScanProps = new HashMap<>();
+    public static final String SOURCE_PROPERTIES_PREFIX = "scan.params.";
 
 
     // required Options
@@ -53,6 +54,9 @@ public class StarRocksSourceOptions implements Serializable {
 
     public static final ConfigOption<String> TABLE_NAME = ConfigOptions.key("table-name")
             .stringType().noDefaultValue().withDescription("Table name");
+
+    public static final ConfigOption<String> WAREHOUSE_NAME = ConfigOptions.key(SOURCE_PROPERTIES_PREFIX + "warehouse")
+            .stringType().noDefaultValue().withDescription("Warehouse name");
     
     
     // optional Options
@@ -103,7 +107,6 @@ public class StarRocksSourceOptions implements Serializable {
             .intType().defaultValue(1).withDescription("the max retry times if lookup database failed.");
 
 
-    public static final String SOURCE_PROPERTIES_PREFIX = "scan.params.";
 
     public StarRocksSourceOptions(ReadableConfig options, Map<String, String> optionsMap) {
         this.tableOptions = options;
@@ -165,6 +168,10 @@ public class StarRocksSourceOptions implements Serializable {
 
     public String getTableName() {
         return tableOptions.get(TABLE_NAME);
+    }
+
+    public String getWarehouseName() {
+        return tableOptions.get(WAREHOUSE_NAME);
     }
 
 
