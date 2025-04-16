@@ -161,7 +161,7 @@ public class StarRocksSinkOptions implements Serializable {
 
     public static final ConfigOption<Boolean> SINK_WRAP_JSON_AS_ARRAY = ConfigOptions.key("sink.wrap-json-as-array")
             .booleanType()
-            .defaultValue(true)
+            .defaultValue(false)
             .withDescription("Whether wrap data as array or not.");
 
     // Sink semantic
@@ -557,9 +557,12 @@ public class StarRocksSinkOptions implements Serializable {
         // By default, using json format should enable strip_outer_array and ignore_json_size,
         // which will simplify the configurations
         if (dataFormat instanceof StreamLoadDataFormat.JSONFormat) {
-            if (!streamLoadProperties.containsKey("strip_outer_array")) {
+            if (!streamLoadProperties.containsKey("strip_outer_array") || isWrapJsonAsArray()) {
+                // When sink.wrap_json_as_array is enabled, strip_outer_array should be set to true as well.
+                // Because users know the source data contains json array, and they need strip_outer_array.
                 streamLoadProperties.put("strip_outer_array", "true");
             }
+
             if (!streamLoadProperties.containsKey("ignore_json_size")) {
                 streamLoadProperties.put("ignore_json_size", "true");
             }
