@@ -90,6 +90,9 @@ public class StarRocksSourceOptions implements Serializable {
             .stringType().defaultValue("").withDescription("List of be host mapping");
     
     // lookup Options
+    public static final ConfigOption<Boolean> LOOKUP_ENABLE_CACHE = ConfigOptions.key("lookup.cache.enabled")
+            .booleanType().defaultValue(false).withDescription("Enable cache or not for lookup.");
+
     public static final ConfigOption<Long> LOOKUP_CACHE_MAX_ROWS = ConfigOptions.key("lookup.cache.max-rows")
             .longType().defaultValue(-1L).withDescription(
                             "the max number of rows of lookup cache, over this value, the oldest rows will "
@@ -218,6 +221,10 @@ public class StarRocksSourceOptions implements Serializable {
 
     public String getBeHostMappingList() {
         return tableOptions.get(SCAN_BE_HOST_MAPPING_LIST);
+    }
+
+    public boolean isCacheEnabled() {
+        return tableOptions.get(LOOKUP_ENABLE_CACHE);
     }
 
     public long getLookupCacheMaxRows() {

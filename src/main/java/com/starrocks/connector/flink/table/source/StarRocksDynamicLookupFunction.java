@@ -14,150 +14,253 @@
 
 package com.starrocks.connector.flink.table.source;
 
-import org.apache.flink.table.data.GenericRowData;
-import org.apache.flink.table.data.RowData;
-import org.apache.flink.table.functions.FunctionContext;
-import org.apache.flink.table.functions.TableFunction;
-import org.apache.flink.types.Row;
-
+import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
 import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
-import com.starrocks.connector.flink.table.source.struct.QueryBeXTablets;
-import com.starrocks.connector.flink.table.source.struct.QueryInfo;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 import com.starrocks.connector.flink.tools.EnvUtils;
+import org.apache.flink.table.data.DecimalData;
+import org.apache.flink.table.data.GenericRowData;
+import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.data.StringData;
+import org.apache.flink.table.data.TimestampData;
+import org.apache.flink.table.functions.FunctionContext;
+import org.apache.flink.table.functions.LookupFunction;
+import org.apache.flink.table.types.DataType;
+import org.apache.flink.table.types.logical.DecimalType;
+import org.apache.flink.table.types.logical.LogicalType;
+import org.apache.flink.table.types.logical.TimestampType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.sql.Connection;
+import java.sql.Date;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Time;
+import java.sql.Timestamp;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.stream.Collectors;
 
-public class StarRocksDynamicLookupFunction extends TableFunction<RowData> {
-    
+public class StarRocksDynamicLookupFunction extends LookupFunction {
+
     private static final Logger LOG = LoggerFactory.getLogger(StarRocksDynamicLookupFunction.class);
-    
+
+    private final int maxRetryTimes;
     private final ColumnRichInfo[] filterRichInfos;
     private final StarRocksSourceOptions sourceOptions;
-    private QueryInfo queryInfo;
     private final SelectColumn[] selectColumns;
-    private final List<ColumnRichInfo> columnRichInfos;
-    
-    private final long cacheMaxSize;
-    private final long cacheExpireMs;
-    private final int maxRetryTimes;
+    private final StarRocksJdbcConnectionProvider jdbcConnProvider;
+    private final String query;
 
-    // cache for lookup data
-    private Map<Row, List<RowData>> cacheMap;
+    private PreparedStatement statement;
 
-    private transient long nextLoadTime;
-
-    public StarRocksDynamicLookupFunction(StarRocksSourceOptions sourceOptions, 
+    public StarRocksDynamicLookupFunction(StarRocksSourceOptions sourceOptions,
                                           ColumnRichInfo[] filterRichInfos,
-                                          List<ColumnRichInfo> columnRichInfos,
-                                          SelectColumn[] selectColumns
-                                          ) {
+                                          SelectColumn[] selectColumns,
+                                          StarRocksJdbcConnectionProvider jdbcConnProvider) {
+        this.maxRetryTimes = sourceOptions.getScanMaxRetries();
         this.sourceOptions = sourceOptions;
         this.filterRichInfos = filterRichInfos;
-        this.columnRichInfos = columnRichInfos;
         this.selectColumns = selectColumns;
-
-        this.cacheMaxSize = sourceOptions.getLookupCacheMaxRows();
-        this.cacheExpireMs = sourceOptions.getLookupCacheTTL();
-        this.maxRetryTimes = sourceOptions.getLookupMaxRetries();
-        
-        this.cacheMap = new HashMap<>();
-        this.nextLoadTime = -1L;
+        this.jdbcConnProvider = jdbcConnProvider;
+        this.query = genPreparedSQL();
     }
-    
+
     @Override
     public void open(FunctionContext context) throws Exception {
         super.open(context);
         LOG.info("Open lookup function. {}", EnvUtils.getGitInformation());
     }
 
-    public void eval(Object... keys) {
-        reloadData();
-        Row keyRow = Row.of(keys);
-        List<RowData> curList = cacheMap.get(keyRow);
-        if (curList != null) {
-            curList.forEach(this::collect);
-        }
-    }
-
-    private void reloadData() {
-        if (nextLoadTime > System.currentTimeMillis()) {
-            return;
-        }
-        if (nextLoadTime > 0) {
-            LOG.info("Lookup join cache has expired after {} (ms), reloading", this.cacheExpireMs);
-        } else {
-            LOG.info("Populating lookup join cache");
-        }
-        cacheMap.clear();
-
-        String columns = Arrays.stream(selectColumns)
-                .map(col -> "`" + col.getColumnName() + "`")
-                .collect(Collectors.joining(","));
-        String sql = String.format("select %s from `%s`.`%s`", columns,
-                sourceOptions.getDatabaseName(), sourceOptions.getTableName());
-        LOG.info("LookUpFunction SQL [{}]", sql);
-        this.queryInfo = StarRocksSourceCommonFunc.getQueryInfo(this.sourceOptions, sql);
-        List<List<QueryBeXTablets>> lists = StarRocksSourceCommonFunc.splitQueryBeXTablets(1, queryInfo);
-        cacheMap = lists.get(0).parallelStream()
-                .flatMap(beXTablets -> scanBeTablets(beXTablets).stream())
-                .collect(Collectors.groupingBy(row -> {
-                    GenericRowData gRowData = (GenericRowData)row;
-                    Object[] keyObj = new Object[filterRichInfos.length];
-                    for (int i = 0; i < filterRichInfos.length; i ++) {
-                        keyObj[i] = gRowData.getField(filterRichInfos[i].getColumnIndexInSchema());
-                    }
-                    return Row.of(keyObj);
-                }));
-        nextLoadTime = System.currentTimeMillis() + this.cacheExpireMs;
-    }
-
-    private List<RowData> scanBeTablets(QueryBeXTablets beXTablets) {
-        List<RowData> tmpDataList = new ArrayList<>();
-        RuntimeException exception = null;
-        StarRocksSourceBeReader beReader = new StarRocksSourceBeReader(
-                beXTablets.getBeNode(),
-                columnRichInfos,
-                selectColumns,
-                sourceOptions);
-        try {
-            beReader.openScanner(beXTablets.getTabletIds(), queryInfo.getQueryPlan().getOpaqued_query_plan(),
-                    sourceOptions);
-            beReader.startToRead();
-            while (beReader.hasNext()) {
-                RowData row = beReader.getNext();
-                tmpDataList.add(row);
-            }
-        } catch (Exception e) {
-            LOG.error("Failed to scan tablets for BE node {}", beXTablets.getBeNode(), e);
-            exception = new RuntimeException("Failed to scan tablets for BE node " + beXTablets.getBeNode(), e);
-        } finally {
+    @Override
+    public Collection<RowData> lookup(RowData rowData) {
+        for (int retry = 0; retry <= maxRetryTimes; ++retry) {
             try {
-                beReader.close();
-                LOG.info("Close reader for BE {}", beXTablets.getBeNode());
-            } catch (Exception ie) {
-                LOG.error("Failed to close reader for BE {}", beXTablets.getBeNode(), ie);
-                if (exception == null) {
-                    exception = new RuntimeException("Failed to close reader for BE node " + beXTablets.getBeNode(), ie);
+                statement.clearParameters();
+                for (int index = 0; index < rowData.getArity(); index++) {
+                    serialize(filterRichInfos[index].getDataType(), rowData, index, statement);
+                }
+                try (ResultSet resultSet = statement.executeQuery()) {
+                    ArrayList<RowData> rows = new ArrayList<>();
+                    while (resultSet.next()) {
+                        RowData row = buildRowData(resultSet);
+                        rows.add(row);
+                    }
+                    rows.trimToSize();
+                    return rows;
+                }
+            } catch (SQLException e) {
+                LOG.error("JDBC executeBatch error, retry times = {}", retry, e);
+                if (retry >= maxRetryTimes) {
+                    throw new RuntimeException("Execution of JDBC statement failed.", e);
+                }
+
+                try {
+                    statement.close();
+                    Connection conn = jdbcConnProvider.reestablishConnection();
+                    statement = conn.prepareStatement(query, ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY);
+                } catch (SQLException | ClassNotFoundException exception) {
+                    LOG.error(
+                            "JDBC connection is not valid, and reestablish connection failed",
+                            exception);
+                    throw new RuntimeException("Reestablish JDBC connection failed", exception);
+                }
+
+                try {
+                    Thread.sleep(1000L * retry);
+                } catch (InterruptedException e1) {
+                    throw new RuntimeException(e1);
                 }
             }
         }
-
-        if (exception != null) {
-            throw exception;
-        }
-        return tmpDataList;
+        return Collections.emptyList();
     }
 
-    @Override
-    public void close() throws Exception {
-        super.close();
+    private String genPreparedSQL() {
+        String columns = Arrays.stream(selectColumns)
+                .map(col -> "`" + col.getColumnName() + "`")
+                .collect(Collectors.joining(","));
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format("select %s from `%s`.`%s`", columns,
+                sourceOptions.getDatabaseName(), sourceOptions.getTableName()));
+        if (filterRichInfos != null && filterRichInfos.length > 0) {
+            sb.append(" where ").append(Arrays.stream(filterRichInfos)
+                    .map(ColumnRichInfo::getColumnName)
+                    .collect(Collectors.joining(" and ")));
+        }
+        String sql = sb.toString();
+        LOG.info("LookUpFunction SQL [{}]", sql);
+        return sql;
+    }
+
+    private void serialize(DataType dataType, RowData val, int index, PreparedStatement statement) throws SQLException {
+        LogicalType type = dataType.getLogicalType();
+        switch (type.getTypeRoot()) {
+            case BOOLEAN:
+                statement.setBoolean(index, val.getBoolean(index));
+                break;
+            case TINYINT:
+                statement.setByte(index, val.getByte(index));
+                break;
+            case SMALLINT:
+                statement.setShort(index, val.getShort(index));
+                break;
+            case INTEGER:
+            case INTERVAL_YEAR_MONTH:
+                statement.setInt(index, val.getInt(index));
+                break;
+            case BIGINT:
+            case INTERVAL_DAY_TIME:
+                statement.setLong(index, val.getLong(index));
+                break;
+            case FLOAT:
+                statement.setFloat(index, val.getFloat(index));
+                break;
+            case DOUBLE:
+                statement.setDouble(index, val.getDouble(index));
+                break;
+            case CHAR:
+            case VARCHAR:
+                // value is BinaryString
+                statement.setString(index, val.getString(index).toString());
+                break;
+            case BINARY:
+            case VARBINARY:
+                statement.setBytes(index, val.getBinary(index));
+                break;
+            case DATE:
+                statement.setDate(
+                        index, Date.valueOf(LocalDate.ofEpochDay(val.getInt(index))));
+                break;
+            case TIME_WITHOUT_TIME_ZONE:
+                statement.setTime(
+                        index,
+                        Time.valueOf(
+                                LocalTime.ofNanoOfDay(val.getInt(index) * 1_000_000L)));
+                break;
+            case TIMESTAMP_WITH_TIME_ZONE:
+            case TIMESTAMP_WITHOUT_TIME_ZONE:
+                final int timestampPrecision = ((TimestampType) type).getPrecision();
+                statement.setTimestamp(
+                        index, val.getTimestamp(index, timestampPrecision).toTimestamp());
+                break;
+            case DECIMAL:
+                final int decimalPrecision = ((DecimalType) type).getPrecision();
+                final int decimalScale = ((DecimalType) type).getScale();
+                statement.setBigDecimal(
+                        index,
+                        val.getDecimal(index, decimalPrecision, decimalScale)
+                                .toBigDecimal());
+                break;
+            default:
+                throw new UnsupportedOperationException("Unsupported type:" + type);
+        }
+    }
+
+    private Object deserialize(DataType dataType, Object field) {
+        LogicalType type = dataType.getLogicalType();
+        switch (type.getTypeRoot()) {
+            case NULL:
+                return null;
+            case BOOLEAN:
+            case FLOAT:
+            case DOUBLE:
+            case INTERVAL_YEAR_MONTH:
+            case INTERVAL_DAY_TIME:
+            case INTEGER:
+            case BIGINT:
+            case BINARY:
+            case VARBINARY:
+                return field;
+            case TINYINT:
+                return ((Integer) field).byteValue();
+            case SMALLINT:
+                // Converter for small type that casts value to int and then return short value,
+                // since
+                // JDBC 1.0 use int type for small values.
+                return field instanceof Integer ? ((Integer) field).shortValue() : field;
+            case DECIMAL:
+                final int precision = ((DecimalType) type).getPrecision();
+                final int scale = ((DecimalType) type).getScale();
+                // using decimal(20, 0) to support db type bigint unsigned, user should define
+                // decimal(20, 0) in SQL,
+                // but other precision like decimal(30, 0) can work too from lenient consideration.
+                return field instanceof BigInteger
+                                ? DecimalData.fromBigDecimal(
+                                new BigDecimal((BigInteger) field, 0), precision, scale)
+                                : DecimalData.fromBigDecimal((BigDecimal) field, precision, scale);
+            case DATE:
+                return (int) (((Date) field).toLocalDate().toEpochDay());
+            case TIME_WITHOUT_TIME_ZONE:
+                return (int) (((Time) field).toLocalTime().toNanoOfDay() / 1_000_000L);
+            case TIMESTAMP_WITH_TIME_ZONE:
+            case TIMESTAMP_WITHOUT_TIME_ZONE:
+                return field instanceof LocalDateTime
+                        ? TimestampData.fromLocalDateTime((LocalDateTime) field)
+                        : TimestampData.fromTimestamp((Timestamp) field);
+            case CHAR:
+            case VARCHAR:
+                return StringData.fromString((String) field);
+            default:
+                throw new UnsupportedOperationException("Unsupported type:" + type);
+        }
+    }
+
+    private RowData buildRowData(ResultSet resultSet) throws SQLException {
+        GenericRowData genericRowData = new GenericRowData(filterRichInfos.length);
+        for (int col = 0; col < filterRichInfos.length; ++col) {
+            Object field = resultSet.getObject(col + 1);
+            genericRowData.setField(col, deserialize(filterRichInfos[col].getDataType(), field));
+        }
+        return genericRowData;
     }
 }
