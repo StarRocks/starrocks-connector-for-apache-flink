@@ -60,6 +60,10 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
 
     protected void initTxHeaders(StreamLoadProperties properties) {
         Map<String, String> headers = new HashMap<>();
+        String warehouse = properties.getHeaders().get("warehouse");
+        if (warehouse != null && !warehouse.isEmpty()) {
+            headers.put("warehouse", warehouse);
+        }
         headers.put(HttpHeaders.AUTHORIZATION, StreamLoadUtils.getBasicAuthHeader(properties.getUsername(), properties.getPassword()));
         this.defaultTxnHeaders = headers.entrySet().stream()
                 .map(entry -> new BasicHeader(entry.getKey(), entry.getValue()))
