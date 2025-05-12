@@ -82,10 +82,10 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
         }
 
         Map<String, ColumnRichInfo> columnMap = StarRocksSourceCommonFunc.genColumnMap(flinkSchema);
-        List<ColumnRichInfo> ColumnRichInfos = StarRocksSourceCommonFunc.genColumnRichInfo(columnMap);
-        SelectColumn[] selectColumns = StarRocksSourceCommonFunc.genSelectedColumns(columnMap, this.options, ColumnRichInfos);
+        List<ColumnRichInfo> columnRichInfos = StarRocksSourceCommonFunc.genColumnRichInfo(columnMap);
+        SelectColumn[] selectColumns = StarRocksSourceCommonFunc.genSelectedColumns(columnMap, this.options, columnRichInfos);
 
-        LookupFunction function = getLookupFunction(filterRichInfo, ColumnRichInfos, selectColumns);
+        LookupFunction function = getLookupFunction(filterRichInfo, columnRichInfos, selectColumns);
         return LookupFunctionProvider.of(function);
     }
 
@@ -96,7 +96,7 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
         } else {
             StarRocksJdbcConnectionOptions jdbcOptions = new StarRocksJdbcConnectionOptions(options.getJdbcUrl(), options.getUsername(), options.getPassword());
             StarRocksJdbcConnectionProvider provider = new StarRocksJdbcConnectionProvider(jdbcOptions);
-            function = new StarRocksDynamicLookupFunction(this.options, filterRichInfo, selectColumns, provider);
+            function = new StarRocksDynamicLookupFunction(this.options, filterRichInfo, columnRichInfos, selectColumns, provider);
         }
         return function;
     }

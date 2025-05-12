@@ -14,17 +14,16 @@
 
 package com.starrocks.connector.flink.table.source;
 
-import org.apache.flink.table.data.GenericRowData;
-import org.apache.flink.table.data.RowData;
-import org.apache.flink.table.functions.FunctionContext;
-import org.apache.flink.table.functions.LookupFunction;
-import org.apache.flink.types.Row;
-
 import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
 import com.starrocks.connector.flink.table.source.struct.QueryBeXTablets;
 import com.starrocks.connector.flink.table.source.struct.QueryInfo;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 import com.starrocks.connector.flink.tools.EnvUtils;
+import org.apache.flink.table.data.GenericRowData;
+import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.functions.FunctionContext;
+import org.apache.flink.table.functions.LookupFunction;
+import org.apache.flink.types.Row;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -75,7 +74,7 @@ public class StarRocksDynamicCachedLookupFunction extends LookupFunction {
     @Override
     public void open(FunctionContext context) throws Exception {
         super.open(context);
-        LOG.info("Open lookup function. {}", EnvUtils.getGitInformation());
+        LOG.info("Open cached lookup function. {}", EnvUtils.getGitInformation());
     }
 
     @Override

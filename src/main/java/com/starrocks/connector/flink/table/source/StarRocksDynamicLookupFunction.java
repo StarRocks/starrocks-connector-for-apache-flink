@@ -48,6 +48,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.stream.Collectors;
 
 public class StarRocksDynamicLookupFunction extends LookupFunction {
@@ -56,6 +57,7 @@ public class StarRocksDynamicLookupFunction extends LookupFunction {
 
     private final int maxRetryTimes;
     private final ColumnRichInfo[] filterRichInfos;
+    private final List<ColumnRichInfo> columnRichInfos;
     private final StarRocksSourceOptions sourceOptions;
     private final SelectColumn[] selectColumns;
     private final StarRocksJdbcConnectionProvider jdbcConnProvider;
@@ -65,11 +67,13 @@ public class StarRocksDynamicLookupFunction extends LookupFunction {
 
     public StarRocksDynamicLookupFunction(StarRocksSourceOptions sourceOptions,
                                           ColumnRichInfo[] filterRichInfos,
+                                          List<ColumnRichInfo> columnRichInfos,
                                           SelectColumn[] selectColumns,
                                           StarRocksJdbcConnectionProvider jdbcConnProvider) {
         this.maxRetryTimes = sourceOptions.getScanMaxRetries();
         this.sourceOptions = sourceOptions;
         this.filterRichInfos = filterRichInfos;
+        this.columnRichInfos = columnRichInfos;
         this.selectColumns = selectColumns;
         this.jdbcConnProvider = jdbcConnProvider;
         this.query = genPreparedSQL();
@@ -78,11 +82,25 @@ public class StarRocksDynamicLookupFunction extends LookupFunction {
     @Override
     public void open(FunctionContext context) throws Exception {
         super.open(context);
+        statement = jdbcConnProvider.getConnection().prepareStatement(query);
         LOG.info("Open lookup function. {}", EnvUtils.getGitInformation());
     }
 
     @Override
+    public void close() throws Exception {
+        super.close();
+        if (statement != null) {
+            statement.close();
+        }
+    }
+
+    @Override
     public Collection<RowData> lookup(RowData rowData) {
+        if (rowData.getArity() != filterRichInfos.length) {
+            throw new IllegalArgumentException(String.format(
+                    "RowData contains different size of columns from filterRichInfos, expect %d, actual %d.",
+                    filterRichInfos.length, rowData.getArity()));
+        }
         for (int retry = 0; retry <= maxRetryTimes; ++retry) {
             try {
                 statement.clearParameters();
@@ -107,7 +125,7 @@ public class StarRocksDynamicLookupFunction extends LookupFunction {
                 try {
                     statement.close();
                     Connection conn = jdbcConnProvider.reestablishConnection();
-                    statement = conn.prepareStatement(query, ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY);
+                    statement = conn.prepareStatement(query);
                 } catch (SQLException | ClassNotFoundException exception) {
                     LOG.error(
                             "JDBC connection is not valid, and reestablish connection failed",
@@ -134,7 +152,7 @@ public class StarRocksDynamicLookupFunction extends LookupFunction {
                 sourceOptions.getDatabaseName(), sourceOptions.getTableName()));
         if (filterRichInfos != null && filterRichInfos.length > 0) {
             sb.append(" where ").append(Arrays.stream(filterRichInfos)
-                    .map(ColumnRichInfo::getColumnName)
+                    .map(info -> String.format("%s = ?", info.getColumnName()))
                     .collect(Collectors.joining(" and ")));
         }
         String sql = sb.toString();
@@ -144,62 +162,60 @@ public class StarRocksDynamicLookupFunction extends LookupFunction {
 
     private void serialize(DataType dataType, RowData val, int index, PreparedStatement statement) throws SQLException {
         LogicalType type = dataType.getLogicalType();
+        int pos = index + 1;
         switch (type.getTypeRoot()) {
             case BOOLEAN:
-                statement.setBoolean(index, val.getBoolean(index));
+                statement.setBoolean(pos, val.getBoolean(index));
                 break;
             case TINYINT:
-                statement.setByte(index, val.getByte(index));
+                statement.setByte(pos, val.getByte(index));
                 break;
             case SMALLINT:
-                statement.setShort(index, val.getShort(index));
+                statement.setShort(pos, val.getShort(index));
                 break;
             case INTEGER:
             case INTERVAL_YEAR_MONTH:
-                statement.setInt(index, val.getInt(index));
+                statement.setInt(pos, val.getInt(index));
                 break;
             case BIGINT:
             case INTERVAL_DAY_TIME:
-                statement.setLong(index, val.getLong(index));
+                statement.setLong(pos, val.getLong(index));
                 break;
             case FLOAT:
-                statement.setFloat(index, val.getFloat(index));
+                statement.setFloat(pos, val.getFloat(index));
                 break;
             case DOUBLE:
-                statement.setDouble(index, val.getDouble(index));
+                statement.setDouble(pos, val.getDouble(index));
                 break;
             case CHAR:
             case VARCHAR:
                 // value is BinaryString
-                statement.setString(index, val.getString(index).toString());
+                statement.setString(pos, val.getString(index).toString());
                 break;
             case BINARY:
             case VARBINARY:
-                statement.setBytes(index, val.getBinary(index));
+                statement.setBytes(pos, val.getBinary(index));
                 break;
             case DATE:
-                statement.setDate(
-                        index, Date.valueOf(LocalDate.ofEpochDay(val.getInt(index))));
+                statement.setDate(pos, Date.valueOf(LocalDate.ofEpochDay(val.getInt(index))));
                 break;
             case TIME_WITHOUT_TIME_ZONE:
                 statement.setTime(
-                        index,
-                        Time.valueOf(
-                                LocalTime.ofNanoOfDay(val.getInt(index) * 1_000_000L)));
+                        pos,
+                        Time.valueOf(LocalTime.ofNanoOfDay(val.getInt(index) * 1_000_000L)));
                 break;
             case TIMESTAMP_WITH_TIME_ZONE:
             case TIMESTAMP_WITHOUT_TIME_ZONE:
                 final int timestampPrecision = ((TimestampType) type).getPrecision();
                 statement.setTimestamp(
-                        index, val.getTimestamp(index, timestampPrecision).toTimestamp());
+                        pos, val.getTimestamp(index, timestampPrecision).toTimestamp());
                 break;
             case DECIMAL:
                 final int decimalPrecision = ((DecimalType) type).getPrecision();
                 final int decimalScale = ((DecimalType) type).getScale();
                 statement.setBigDecimal(
-                        index,
-                        val.getDecimal(index, decimalPrecision, decimalScale)
-                                .toBigDecimal());
+                        pos,
+                        val.getDecimal(index, decimalPrecision, decimalScale).toBigDecimal());
                 break;
             default:
                 throw new UnsupportedOperationException("Unsupported type:" + type);
@@ -256,10 +272,16 @@ public class StarRocksDynamicLookupFunction extends LookupFunction {
     }
 
     private RowData buildRowData(ResultSet resultSet) throws SQLException {
-        GenericRowData genericRowData = new GenericRowData(filterRichInfos.length);
-        for (int col = 0; col < filterRichInfos.length; ++col) {
+        GenericRowData genericRowData = new GenericRowData(selectColumns.length);
+        for (int col = 0; col < selectColumns.length; ++col) {
             Object field = resultSet.getObject(col + 1);
-            genericRowData.setField(col, deserialize(filterRichInfos[col].getDataType(), field));
+            int colIndex = selectColumns[col].getColumnIndexInFlinkTable();
+            if (colIndex < 0 || colIndex > columnRichInfos.size()) {
+                throw new RuntimeException(String.format(
+                        "Cannot get ColumnRichInfo from selected column, since its index %d is invalid.", colIndex));
+            }
+            ColumnRichInfo colInfo = columnRichInfos.get(colIndex);
+            genericRowData.setField(col, deserialize(colInfo.getDataType(), field));
         }
         return genericRowData;
     }
