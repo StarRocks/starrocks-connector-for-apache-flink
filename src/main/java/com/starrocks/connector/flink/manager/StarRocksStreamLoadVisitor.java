@@ -242,7 +242,7 @@ public class StarRocksStreamLoadVisitor implements Serializable {
     }
 
     private byte[] joinJsonRows(List<byte[]> rows, int totalBytes) {
-        if (sinkOptions.isWrapJsonAsArray()) {
+        if (!sinkOptions.isWrapJsonAsArray()) {
             ByteBuffer bos = ByteBuffer.allocate(totalBytes + (rows.isEmpty() ? 2 : rows.size() + 1));
             bos.put("[".getBytes(StandardCharsets.UTF_8));
             byte[] jsonDelimiter = ",".getBytes(StandardCharsets.UTF_8);
