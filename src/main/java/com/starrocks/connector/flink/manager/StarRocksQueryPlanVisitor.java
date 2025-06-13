@@ -39,6 +39,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 
@@ -112,6 +113,8 @@ public class StarRocksQueryPlanVisitor implements Serializable {
                 HttpPost post = new HttpPost(url);
                 post.setHeader("Content-Type", "application/json;charset=UTF-8");
                 post.setHeader("Authorization", getBasicAuthHeader(sourceOptions.getUsername(), sourceOptions.getPassword()));
+                Optional.ofNullable(sourceOptions.getWarehouseName())
+                        .ifPresent(warehouse -> post.setHeader("warehouse", warehouse));
                 post.setEntity(new ByteArrayEntity(body.getBytes()));
                 try (CloseableHttpResponse response = httpClient.execute(post)) {
                     requsetCode = response.getStatusLine().getStatusCode();
