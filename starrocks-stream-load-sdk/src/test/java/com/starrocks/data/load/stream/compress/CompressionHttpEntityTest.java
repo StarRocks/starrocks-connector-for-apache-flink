@@ -50,7 +50,7 @@ public class CompressionHttpEntityTest {
         assertEquals(entity.getContentLength(), compressionCodec.getStreams().get(0).getCount());
     }
 
-    private static class MockCompressionCodec implements CompressionCodec {
+    public static class MockCompressionCodec implements CompressionCodec {
 
         private final List<CountingOutputStream> streams;
 

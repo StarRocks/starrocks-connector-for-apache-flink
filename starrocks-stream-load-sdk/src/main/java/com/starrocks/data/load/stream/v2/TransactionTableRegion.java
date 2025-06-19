@@ -107,7 +107,7 @@ public class TransactionTableRegion implements TableRegion {
                 properties.getTableProperties());
         this.state = new AtomicReference<>(State.ACTIVE);
         this.lastCommitTimeMills = System.currentTimeMillis();
-        this.activeChunk = new Chunk(properties.getDataFormat());
+        this.activeChunk = new Chunk(properties.getDataFormat(), 1);
         this.maxRetries = maxRetries;
         this.retryIntervalInMs = retryIntervalInMs;
         initHeaders(properties);
@@ -224,7 +224,7 @@ public class TransactionTableRegion implements TableRegion {
             return;
         }
         inactiveChunks.add(activeChunk);
-        activeChunk = new Chunk(properties.getDataFormat());
+        activeChunk = new Chunk(properties.getDataFormat(), 1);
     }
 
     protected int write0(byte[] row) {
@@ -309,7 +309,7 @@ public class TransactionTableRegion implements TableRegion {
 
         if (label == null) {
             // if the data has never been flushed (label == null), the commit should fail
-            // so that StreamLoadManagerV2#init will schedule to flush the data first, and
+            // so that NormalStreamLoadManager#init will schedule to flush the data first, and
             // then trigger commit again
             boolean commitSuccess = cacheBytes.get() == 0;
             state.compareAndSet(State.COMMITTING, State.ACTIVE);

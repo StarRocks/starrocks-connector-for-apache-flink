@@ -18,12 +18,27 @@
  * limitations under the License.
  */
 
-package com.starrocks.data.load.stream.compress;
+package com.starrocks.data.load.stream.mergecommit;
 
-import net.jpountz.lz4.LZ4FrameOutputStream;
+import com.starrocks.data.load.stream.Chunk;
+import com.starrocks.data.load.stream.compress.CompressionCodec;
 
-public class CompressionOptions {
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.util.Iterator;
 
-    public static final String LZ4_BLOCK_SIZE = "compression.lz4.block.size";
-    public static final LZ4FrameOutputStream.BLOCKSIZE DEFAULT_LZ4_BLOCK_SIZE = LZ4FrameOutputStream.BLOCKSIZE.SIZE_64KB;
+public class ChunkCompressUtil {
+
+    public static byte[] compress(Chunk chunk, CompressionCodec compressionCodec) throws IOException {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        try (OutputStream compressOutputStream =
+                compressionCodec.createCompressionStream(outputStream, chunk.chunkBytes())) {
+            Iterator<byte[]> iterator = chunk.iterator();
+            while (iterator.hasNext()) {
+                compressOutputStream.write(iterator.next());
+            }
+        }
+        return outputStream.toByteArray();
+    }
 }

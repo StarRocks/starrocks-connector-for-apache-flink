@@ -12,23 +12,22 @@
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <file_encoding>UTF-8</file_encoding>
-
         <slf4j-api.version>1.7.36</slf4j-api.version>
         <httpclient.version>4.5.13</httpclient.version>
         <httpcore.version>4.4.15</httpcore.version>
         <fastjson.version>1.2.83</fastjson.version>
         <fasterxml.version>2.12.4</fasterxml.version>
         <lz4.version>1.8.0</lz4.version>
+        <protobuf.version>3.16.3</protobuf.version>
+        <jprotobuf.version>2.4.19</jprotobuf.version>
+        <jprotobuf.plugin.version>1.2.15</jprotobuf.plugin.version>
+        <brpc.java.version>3.0.5-debug</brpc.java.version>
+        <lombok.version>1.18.34</lombok.version>
+        <log4j.version>2.17.1</log4j.version>
+        <log4j.scope>compile</log4j.scope>
     </properties>
 
     <dependencies>
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-            <version>${slf4j-api.version}</version>
-            <scope>provided</scope>
-        </dependency>
-
         <dependency>
             <groupId>org.apache.httpcomponents</groupId>
             <artifactId>httpclient</artifactId>
@@ -66,11 +65,76 @@
         </dependency>
 
         <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>${lombok.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+            <version>${protobuf.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.baidu</groupId>
+            <artifactId>jprotobuf</artifactId>
+            <version>${jprotobuf.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.google.auto.value</groupId>
+                    <artifactId>auto-value</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>com.baidu</groupId>
+            <artifactId>brpc-java</artifactId>
+            <version>${brpc.java.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>${slf4j-api.version}</version>
+            <scope>${log4j.scope}</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j-impl</artifactId>
+            <version>${log4j.version}</version>
+            <scope>${log4j.scope}</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-api</artifactId>
+            <version>${log4j.version}</version>
+            <scope>${log4j.scope}</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-core</artifactId>
+            <version>${log4j.version}</version>
+            <scope>${log4j.scope}</scope>
+        </dependency>
+
+        <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
             <version>3.4.6</version>
             <type>jar</type>
             <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.baidu</groupId>
+            <artifactId>jprotobuf-precompile-plugin</artifactId>
+            <version>${jprotobuf.plugin.version}</version>
         </dependency>
 
         <dependency>
@@ -105,6 +169,23 @@
                     <target>1.8</target>
                     <encoding>${file_encoding}</encoding>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>com.baidu</groupId>
+                <artifactId>jprotobuf-precompile-plugin</artifactId>
+                <version>${jprotobuf.plugin.version}</version>
+                <configuration>
+                    <filterClassPackage>com.baidu</filterClassPackage>
+                    <generateProtoFile>true</generateProtoFile>
+                </configuration>
+                <executions>
+                    <execution>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>precompile</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
             <plugin>
                 <artifactId>maven-clean-plugin</artifactId>
@@ -209,19 +290,27 @@
                                 </relocation>
                             </relocations>
                             <artifactSet>
-                                <includes>
-                                    <include>commons-codec:commons-codec</include>
-                                    <include>commons-io:commons-io</include>
-                                    <include>commons-logging:*</include>
-                                    <include>org.apache.httpcomponents.client5:httpclient5</include>
-                                    <include>org.apache.httpcomponents.core5:httpcore5</include>
-                                    <include>org.apache.httpcomponents.core5:httpcore5-h2</include>
-                                    <include>org.apache.httpcomponents:httpcore</include>
-                                    <include>org.apache.httpcomponents:httpcore-nio</include>
-                                    <include>org.apache.httpcomponents:httpclient</include>
-                                    <include>org.apache.httpcomponents:httpasyncclient</include>
-                                    <include>com.fasterxml.jackson.core:*</include>
-                                </includes>
+<!--                                <includes>-->
+<!--                                    <include>commons-codec:commons-codec</include>-->
+<!--                                    <include>commons-io:commons-io</include>-->
+<!--                                    <include>commons-logging:*</include>-->
+<!--                                    <include>org.apache.commons:*</include>-->
+<!--                                    <include>org.apache.httpcomponents.client5:httpclient5</include>-->
+<!--                                    <include>org.apache.httpcomponents.core5:httpcore5</include>-->
+<!--                                    <include>org.apache.httpcomponents.core5:httpcore5-h2</include>-->
+<!--                                    <include>org.apache.httpcomponents:httpcore</include>-->
+<!--                                    <include>org.apache.httpcomponents:httpcore-nio</include>-->
+<!--                                    <include>org.apache.httpcomponents:httpclient</include>-->
+<!--                                    <include>org.apache.httpcomponents:httpasyncclient</include>-->
+<!--                                    <include>com.fasterxml.jackson.core:*</include>-->
+<!--                                    <include>com.google.protobuf:*</include>-->
+<!--                                    <include>com.baidu:*</include>-->
+<!--                                </includes>-->
+                                <excludes>
+                                    <exclude>org.lz4:*</exclude>
+                                    <exclude>org.slf4j:*</exclude>
+                                    <exclude>org.apache.logging.log4j:*</exclude>
+                                </excludes>
                             </artifactSet>
                             <filters>
                                 <filter>

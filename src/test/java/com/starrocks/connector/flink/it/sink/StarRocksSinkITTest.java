@@ -820,4 +820,78 @@ public class StarRocksSinkITTest extends StarRocksITTestBase {
         executeSrSQL(createStarRocksTable);
         return tableName;
     }
+
+    @Test
+    public void testMergeCommit() throws Exception {
+        assumeTrue(isSinkV2);
+        for (boolean isPrimaryKey : Arrays.asList(false, true)) {
+            for (boolean async : Arrays.asList(false, true)) {
+                testMergeCommitBase(isPrimaryKey, async, "http");
+                testMergeCommitBase(isPrimaryKey, async, "brpc");
+            }
+        }
+    }
+
+    private void testMergeCommitBase(boolean isPrimaryKey, boolean async, String protocol) throws Exception {
+        String tableName = createMergeCommitTable("testMergeCommitBase", isPrimaryKey);
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
+        String createSQL =
+                "CREATE TABLE sink(" +
+                        "c0 INT," +
+                        "c1 FLOAT," +
+                        "c2 STRING" +
+                        (!isPrimaryKey ? "" : ", PRIMARY KEY (`c0`) NOT ENFORCED") +
+                        ") WITH ( " +
+                        "'connector' = 'starrocks'," +
+                        "'jdbc-url'='" + getJdbcUrl() + "'," +
+                        "'load-url'='" + getHttpUrls() + "'," +
+                        "'database-name' = '" + DB_NAME + "'," +
+                        "'table-name' = '" + tableName + "'," +
+                        "'username' = 'root'," +
+                        "'password' = ''," +
+                        "'sink.properties.enable_merge_commit' = 'true'," +
+                        "'sink.properties.merge_commit_async' = '" + (async ? "true" : "false") + "'," +
+                        "'sink.properties.merge_commit_interval_ms' = '1000'," +
+                        "'sink.merge-commit.protocol' = '" + protocol + "'" +
+                        ")";
+        tEnv.executeSql(createSQL);
+
+        List<Row> testData = new ArrayList<>();
+        testData.add(Row.of(1, 10.1f, "abc"));
+        testData.add(Row.of(2, 20.2f, "def"));
+        RowTypeInfo rowTypeInfo = new RowTypeInfo(
+                new TypeInformation[]{Types.INT, Types.FLOAT, Types.STRING},
+                new String[]{"c0", "c1", "c2"});
+        List<List<Object>> expectedData = Arrays.asList(
+                Arrays.asList(1, 10.1f, "abc"),
+                Arrays.asList(2, 20.2f, "def")
+        );
+        DataStream<Row> srcDs = env.fromCollection(testData).returns(rowTypeInfo);
+        Table in = tEnv.fromDataStream(srcDs);
+        tEnv.createTemporaryView("src", in);
+        tEnv.executeSql("INSERT INTO sink SELECT * FROM src").await();
+        List<List<Object>> actualData = scanTable(DB_CONNECTION, DB_NAME, tableName);
+        verifyResult(expectedData, actualData);
+    }
+
+    private String createMergeCommitTable(String tablePrefix, boolean isPrimaryKey) throws Exception {
+        String tableName = tablePrefix + "_" + genRandomUuid();
+        String createStarRocksTable =
+                String.format(
+                        "CREATE TABLE `%s`.`%s` (" +
+                                "c0 INT," +
+                                "c1 FLOAT," +
+                                "c2 STRING" +
+                                ") ENGINE = OLAP " +
+                                (isPrimaryKey ? "PRIMARY KEY(`c0`)" : "DUPLICATE KEY(`c0`)") +
+                                "DISTRIBUTED BY HASH (c0) BUCKETS 8 " +
+                                "PROPERTIES (" +
+                                "\"replication_num\" = \"1\"" +
+                                ")",
+                        DB_NAME, tableName);
+        executeSrSQL(createStarRocksTable);
+        return tableName;
+    }
 }

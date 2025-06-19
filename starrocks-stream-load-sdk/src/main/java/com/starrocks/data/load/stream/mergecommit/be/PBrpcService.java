@@ -1,6 +1,4 @@
 /*
- * Copyright 2021-present StarRocks, Inc. All rights reserved.
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,12 +16,12 @@
  * limitations under the License.
  */
 
-package com.starrocks.data.load.stream.compress;
+package com.starrocks.data.load.stream.mergecommit.be;
 
-import net.jpountz.lz4.LZ4FrameOutputStream;
+import com.baidu.brpc.protocol.BrpcMeta;
 
-public class CompressionOptions {
+public interface PBrpcService {
 
-    public static final String LZ4_BLOCK_SIZE = "compression.lz4.block.size";
-    public static final LZ4FrameOutputStream.BLOCKSIZE DEFAULT_LZ4_BLOCK_SIZE = LZ4FrameOutputStream.BLOCKSIZE.SIZE_64KB;
+    @BrpcMeta(serviceName = "PInternalService", methodName = "stream_load")
+    PStreamLoadResponse streamLoad(PStreamLoadRequest request);
 }

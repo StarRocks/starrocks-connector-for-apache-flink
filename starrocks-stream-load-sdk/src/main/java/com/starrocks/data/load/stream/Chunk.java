@@ -22,6 +22,7 @@ package com.starrocks.data.load.stream;
 
 import java.util.Iterator;
 import java.util.LinkedList;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -32,27 +33,36 @@ import java.util.concurrent.atomic.AtomicLong;
 public class Chunk {
 
     private final StreamLoadDataFormat format;
-    private final LinkedList<byte[]> buffer;
+    private volatile LinkedList<byte[]> buffer;
+    private final AtomicInteger numRows; // Total bytes of all rows in this chunk
     private final AtomicLong rowBytes;
     private final AtomicLong chunkBytes;
+    private final long chunkId;
 
-    public Chunk(StreamLoadDataFormat format) {
+    public Chunk(StreamLoadDataFormat format, long chunkId) {
         this.format = format;
         this.buffer = new LinkedList<>();
-        this.rowBytes = new AtomicLong();
-        this.chunkBytes = new AtomicLong();
+        this.numRows = new AtomicInteger(0);
+        this.rowBytes = new AtomicLong(0);
+        this.chunkBytes = new AtomicLong(0);
         chunkBytes.addAndGet(format.first().length);
         chunkBytes.addAndGet(format.end().length);
+        this.chunkId = chunkId;
+    }
+
+    public long getChunkId() {
+        return chunkId;
     }
 
     public void addRow(byte[] data) {
+        numRows.addAndGet(1);
         rowBytes.addAndGet(data.length);
         chunkBytes.addAndGet(data.length + (buffer.isEmpty() ?  0 : format.delimiter().length));
         buffer.add(data);
     }
 
     public int numRows() {
-        return buffer.size();
+        return numRows.get();
     }
 
     public long rowBytes() {
@@ -67,7 +77,18 @@ public class Chunk {
         return chunkBytes.get() + data.length + format.delimiter().length;
     }
 
+    public long estimateChunkSize() {
+        return chunkBytes.get() + format.delimiter().length;
+    }
+
+    public void release() {
+        buffer = null;
+    }
+
     public Iterator<byte[]> iterator() {
+        if (buffer == null) {
+            throw new RuntimeException("Buffer has been released");
+        }
         return new DataIterator();
     }
 

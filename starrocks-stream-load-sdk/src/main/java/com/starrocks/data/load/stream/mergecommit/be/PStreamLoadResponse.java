@@ -1,6 +1,4 @@
 /*
- * Copyright 2021-present StarRocks, Inc. All rights reserved.
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,12 +16,23 @@
  * limitations under the License.
  */
 
-package com.starrocks.data.load.stream.compress;
+package com.starrocks.data.load.stream.mergecommit.be;
 
-import net.jpountz.lz4.LZ4FrameOutputStream;
+import com.baidu.bjf.remoting.protobuf.annotation.ProtobufClass;
+import lombok.Getter;
+import lombok.Setter;
 
-public class CompressionOptions {
+@ProtobufClass
+@Setter
+@Getter
+public class PStreamLoadResponse {
 
-    public static final String LZ4_BLOCK_SIZE = "compression.lz4.block.size";
-    public static final LZ4FrameOutputStream.BLOCKSIZE DEFAULT_LZ4_BLOCK_SIZE = LZ4FrameOutputStream.BLOCKSIZE.SIZE_64KB;
+    private String json_result;
+
+    @Override
+    public String toString() {
+        return "PStreamLoadResponse{" +
+                "json_result='" + json_result + '\'' +
+                '}';
+    }
 }

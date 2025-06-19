@@ -56,6 +56,10 @@ public class ChunkHttpEntity extends AbstractHttpEntity {
         return tableUniqueKey;
     }
 
+    public Chunk getChunk() {
+        return chunk;
+    }
+
     public void setLogAfterWrite(boolean logAfterWrite) {
         this.logAfterWrite = logAfterWrite;
     }
@@ -101,8 +105,8 @@ public class ChunkHttpEntity extends AbstractHttpEntity {
             }
         }
         if (logAfterWrite || LOG.isDebugEnabled()) {
-            LOG.info("Write entity for table {}, size:{}, time:{}us",
-                    tableUniqueKey, contentLength, (System.nanoTime() - startTime) / 1000);
+            LOG.info("Write entity for table {}, chunkId: {}, size:{}, time:{}us",
+                    tableUniqueKey, chunk.getChunkId(), contentLength, (System.nanoTime() - startTime) / 1000);
         }
     }
 

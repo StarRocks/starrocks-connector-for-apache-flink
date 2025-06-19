@@ -87,7 +87,7 @@ public class ChunkInputStreamTest {
 
     public static ChunkMeta genChunk() {
         ThreadLocalRandom random = ThreadLocalRandom.current();
-        Chunk chunk = new Chunk(StreamLoadDataFormat.CSV);
+        Chunk chunk = new Chunk(StreamLoadDataFormat.CSV, 1);
         for (int i = 0; i < 1000; i++) {
             int len = random.nextInt( 100) + 1;
             byte[] row = new byte[len];

@@ -50,7 +50,7 @@ public class ChunkTest {
         long expectedRowBytes = 0;
         List<byte[]> expectedData = new ArrayList<>();
         expectedData.add(format.first());
-        Chunk chunk = new Chunk(format);
+        Chunk chunk = new Chunk(format, 1);
         int numRows = 100;
         for (int i = 0; i < numRows; i++) {
             int len = random.nextInt( 10) + 1;

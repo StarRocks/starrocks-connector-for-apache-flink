@@ -210,6 +210,7 @@ public class StarRocksSinkOptions implements Serializable {
         validateStreamLoadUrl();
         validateSinkSemantic();
         validateParamsRange();
+        validateMergeCommit();
     }
 
     public void setTableSchemaFieldNames(String[] fieldNames) {
@@ -468,6 +469,16 @@ public class StarRocksSinkOptions implements Serializable {
                 "Either all or none of the following options should be provided:\n" + String.join("\n", propertyNames));
     }
 
+    private void validateMergeCommit() {
+        if (!"true".equalsIgnoreCase(streamLoadProps.get(MergeCommitOptions.ENABLE_MERGE_COMMIT))) {
+            return;
+        }
+        if (!streamLoadProps.containsKey(MergeCommitOptions.MERGE_COMMIT_INTERVAL_MS)) {
+            throw new IllegalArgumentException("Must set 'sink.properties.merge_commit_interval_ms' when " +
+                    "'sink.properties.enable_merge_commit' is true");
+        }
+    }
+
     private void parseSinkStreamLoadProperties() {
         tableOptionsMap.keySet().stream()
                 .filter(key -> key.startsWith(SINK_PROPERTIES_PREFIX))
@@ -515,13 +526,20 @@ public class StarRocksSinkOptions implements Serializable {
             throw new RuntimeException("data format are not support");
         }
 
+        long chunkSize = -1;
+        boolean mergeCommit = "true".equalsIgnoreCase(streamLoadProps.get("enable_merge_commit"));
+        if (mergeCommit) {
+            chunkSize =  tableOptions.get(MergeCommitOptions.CHUNK_SIZE);
+        } else {
+            chunkSize = tableOptions.get(SINK_CHUNK_LIMIT);
+        }
+
         StreamLoadTableProperties.Builder defaultTablePropertiesBuilder = StreamLoadTableProperties.builder()
                 .database(getDatabaseName())
                 .table(getTableName())
                 .streamLoadDataFormat(dataFormat)
-                .chunkLimit(getChunkLimit())
-                .enableUpsertDelete(supportUpsertDelete())
-                .addCommonProperties(getSinkStreamLoadProperties());
+                .chunkLimit(chunkSize)
+                .enableUpsertDelete(supportUpsertDelete());
 
         if (hasColumnMappingProperty()) {
             defaultTablePropertiesBuilder.columns(streamLoadProps.get("columns"));
@@ -567,10 +585,10 @@ public class StarRocksSinkOptions implements Serializable {
                 streamLoadProperties.put("ignore_json_size", "true");
             }
         }
+
         StreamLoadProperties.Builder builder = StreamLoadProperties.builder()
                 .loadUrls(getLoadUrlList().toArray(new String[0]))
                 .jdbcUrl(getJdbcUrl())
-                .defaultTableProperties(defaultTablePropertiesBuilder.build())
                 .cacheMaxBytes(getSinkMaxBytes())
                 .connectTimeout(getConnectTimeout())
                 .waitForContinueTimeoutMs(getWaitForContinueTimeout())
@@ -582,11 +600,12 @@ public class StarRocksSinkOptions implements Serializable {
                 .password(getPassword())
                 .version(sinkTable.getVersion())
                 .expectDelayTime(getSinkMaxFlushInterval())
-                // TODO not support retry currently
-                .maxRetries(0)
-                .retryIntervalInMs(getRetryIntervalMs())
-                .addHeaders(streamLoadProperties);
-
+                .maxRetries(getSinkMaxRetries())
+                .retryIntervalInMs(getRetryIntervalMs());
+        MergeCommitOptions.buildMergeCommitOptions(tableOptions, streamLoadProperties, builder);
+        defaultTablePropertiesBuilder.addCommonProperties(streamLoadProperties);
+        builder.addHeaders(streamLoadProperties)
+                .defaultTableProperties(defaultTablePropertiesBuilder.build());
         for (StreamLoadTableProperties tableProperties : tablePropertiesList) {
             builder.addTableProperties(tableProperties);
         }

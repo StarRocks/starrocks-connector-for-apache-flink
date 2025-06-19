@@ -1,6 +1,4 @@
 /*
- * Copyright 2021-present StarRocks, Inc. All rights reserved.
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,12 +16,12 @@
  * limitations under the License.
  */
 
-package com.starrocks.data.load.stream.compress;
+package com.starrocks.data.load.stream.mergecommit.be;
 
-import net.jpountz.lz4.LZ4FrameOutputStream;
+import com.baidu.brpc.client.RpcCallback;
 
-public class CompressionOptions {
+import java.util.concurrent.Future;
 
-    public static final String LZ4_BLOCK_SIZE = "compression.lz4.block.size";
-    public static final LZ4FrameOutputStream.BLOCKSIZE DEFAULT_LZ4_BLOCK_SIZE = LZ4FrameOutputStream.BLOCKSIZE.SIZE_64KB;
+public interface PBrpcServiceAsync extends PBrpcService {
+    Future<PStreamLoadResponse> streamLoad(PStreamLoadRequest request, RpcCallback<PStreamLoadResponse> callback);
 }

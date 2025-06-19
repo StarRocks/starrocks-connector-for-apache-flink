@@ -18,21 +18,39 @@
  * limitations under the License.
  */
 
-package com.starrocks.data.load.stream;
+package com.starrocks.data.load.stream.mergecommit;
 
-public enum TransactionStatus {
-    UNKNOWN,
-    PREPARE,
-    COMMITTED,
-    VISIBLE,
-    ABORTED,
-    PREPARED;
+import java.util.Objects;
 
-    public boolean isSame(String status) {
-        return name().equalsIgnoreCase(status);
+public class TableId {
+    public String db;
+    public String table;
+
+    public static TableId of(String db, String table) {
+        TableId tableId = new TableId();
+        tableId.db = db;
+        tableId.table = table;
+        return tableId;
     }
 
-    public static boolean isFinalStatus(TransactionStatus status) {
-        return status == VISIBLE || status == ABORTED || status == UNKNOWN;
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        TableId tableId = (TableId) o;
+        return Objects.equals(db, tableId.db) && Objects.equals(table, tableId.table);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(db, table);
+    }
+
+    @Override
+    public String toString() {
+        return "TableId{" +
+                "db='" + db + '\'' +
+                ", table='" + table + '\'' +
+                '}';
     }
 }

@@ -20,15 +20,19 @@
 
 package com.starrocks.connector.flink.manager;
 
-import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
-import com.starrocks.data.load.stream.StreamLoadResponse;
-import com.starrocks.data.load.stream.v2.StreamLoadListener;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Histogram;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.runtime.metrics.DescriptiveStatisticsHistogram;
 
-public class StarRocksStreamLoadListener implements StreamLoadListener {
+import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
+import com.starrocks.data.load.stream.StreamLoadResponse;
+import com.starrocks.data.load.stream.mergecommit.MetricListener;
+import com.starrocks.data.load.stream.v2.StreamLoadListener;
+
+import java.util.concurrent.atomic.AtomicLong;
+
+public class StarRocksStreamLoadListener implements StreamLoadListener, MetricListener {
 
     private transient Counter totalFlushBytes;
     private transient Counter totalFlushRows;
@@ -46,6 +50,20 @@ public class StarRocksStreamLoadListener implements StreamLoadListener {
     private transient Histogram writeDataTimeMs;
     private transient Histogram loadTimeMs;
 
+    private transient AtomicLong maxBufferSize;
+    private transient AtomicLong currentBufferSize;
+    private transient Counter numBufferFull;
+    private transient Histogram waitBufferTimeMs;
+    private transient Counter numFlush;
+    private transient AtomicLong numFlushTable;
+    private transient Counter numFailLoads;
+    private transient Counter numSuccessLoads;
+    private transient Counter numLoadRetry;
+    private transient Histogram serverTimeMs;
+    private transient AtomicLong numInflightLoads;
+    private transient AtomicLong numInflightRows;
+    private transient AtomicLong numInflightBytes;
+
     public StarRocksStreamLoadListener(MetricGroup metricGroup, StarRocksSinkOptions sinkOptions) {
         totalFlushBytes = metricGroup.counter(COUNTER_TOTAL_FLUSH_BYTES);
         totalFlushRows = metricGroup.counter(COUNTER_TOTAL_FLUSH_ROWS);
@@ -62,6 +80,26 @@ public class StarRocksStreamLoadListener implements StreamLoadListener {
         readDataTimeMs = metricGroup.histogram(HISTOGRAM_READ_DATA_TIME_MS, new DescriptiveStatisticsHistogram(sinkOptions.getSinkHistogramWindowSize()));
         writeDataTimeMs = metricGroup.histogram(HISTOGRAM_WRITE_DATA_TIME_MS, new DescriptiveStatisticsHistogram(sinkOptions.getSinkHistogramWindowSize()));
         loadTimeMs = metricGroup.histogram(HISTOGRAM_LOAD_TIME_MS, new DescriptiveStatisticsHistogram(sinkOptions.getSinkHistogramWindowSize()));
+
+        maxBufferSize = new AtomicLong(0L);
+        currentBufferSize = new AtomicLong(0L);
+        metricGroup.gauge(GAUGE_MAX_BUFFER_BYTES, () -> maxBufferSize.get());
+        metricGroup.gauge(GAUGE_CURRENT_BUFFER_BYTES, () -> currentBufferSize.get());
+        numBufferFull = metricGroup.counter(COUNTER_NUM_BUFFER_FULL);
+        waitBufferTimeMs = metricGroup.histogram(HISTOGRAM_WAIT_BUFFER_TIME_MS, new DescriptiveStatisticsHistogram(sinkOptions.getSinkHistogramWindowSize()));
+        numFlush = metricGroup.counter(COUNTER_NUM_FLUSH);
+        numFlushTable = new AtomicLong(0);
+        metricGroup.gauge(GAUGE_NUM_FLUSH_TABLE, () -> numFlushTable.get());
+        numFailLoads = metricGroup.counter(COUNTER_NUM_FAIL_LOADS);
+        numSuccessLoads = metricGroup.counter(COUNTER_NUM_SUCCESS_LOADS);
+        numLoadRetry = metricGroup.counter(COUNTER_NUM_LOAD_RETRY);
+        serverTimeMs = metricGroup.histogram(HISTOGRAM_SERVER_TIME_MS, new DescriptiveStatisticsHistogram(sinkOptions.getSinkHistogramWindowSize()));
+        numInflightLoads = new AtomicLong(0);
+        numInflightRows = new AtomicLong(0);
+        numInflightBytes = new AtomicLong(0);
+        metricGroup.gauge(GAUGE_NUM_INFLIGHT_LOADS, () -> numInflightLoads.get());
+        metricGroup.gauge(GAUGE_NUM_INFLIGHT_ROWS, () -> numInflightRows.get());
+        metricGroup.gauge(GAUGE_NUM_INFLIGHT_BYTES, () -> numInflightBytes.get());
     }
 
     @Override
@@ -138,4 +176,72 @@ public class StarRocksStreamLoadListener implements StreamLoadListener {
     private static final String HISTOGRAM_READ_DATA_TIME_MS = "readDataTimeMs";
     private static final String HISTOGRAM_WRITE_DATA_TIME_MS = "writeDataTimeMs";
     private static final String HISTOGRAM_LOAD_TIME_MS = "loadTimeMs";
+
+    private static final String GAUGE_MAX_BUFFER_BYTES = "maxBufferBytes";
+    private static final String GAUGE_CURRENT_BUFFER_BYTES = "currentBufferBytes";
+    private static final String COUNTER_NUM_BUFFER_FULL = "numBufferFull";
+    private static final String HISTOGRAM_WAIT_BUFFER_TIME_MS = "waitBufferTimeMs";
+    private static final String COUNTER_NUM_FLUSH = "numFlush";
+    private static final String GAUGE_NUM_FLUSH_TABLE = "numFlushTable";
+    private static final String COUNTER_NUM_FAIL_LOADS = "numFailLoads";
+    private static final String COUNTER_NUM_SUCCESS_LOADS = "numSuccessLoads";
+    private static final String COUNTER_NUM_LOAD_RETRY = "numLoadRetry";
+    private static final String HISTOGRAM_SERVER_TIME_MS = "serverTimeMs";
+    private static final String GAUGE_NUM_INFLIGHT_LOADS = "numInflightLoads";
+    private static final String GAUGE_NUM_INFLIGHT_ROWS = "numInflightRows";
+    private static final String GAUGE_NUM_INFLIGHT_BYTES = "numInflightBytes";
+
+    // merge commit metrics =============================
+
+    @Override
+    public void onWrite(int numRows, int dataSize) {
+        totalFlushRows.inc(numRows);
+        totalFlushBytes.inc(dataSize);
+    }
+
+    @Override
+    public void onCacheChange(long maxCacheBytes, long currentCacheBytes) {
+        maxBufferSize.set(maxCacheBytes);
+        currentBufferSize.set(currentCacheBytes);
+    }
+
+    @Override
+    public void onCacheFull(long blockTimeMs) {
+        numBufferFull.inc(1);
+        waitBufferTimeMs.update(blockTimeMs);
+    }
+
+    @Override
+    public void onFlush(int numTables, long flushTimeMs) {
+        numFlush.inc(1);
+        this.numFlushTable.set(numTables);
+        this.flushTimeNs.update(flushTimeMs * 1000000);
+    }
+
+    @Override
+    public void onLoadStart(long dataSize, int numRows) {
+        updateInflightLoads(1, numRows, dataSize);
+    }
+
+    @Override
+    public void onLoadFailure(long dataSize, int numRows, int numRetry, long totalTimeMs) {
+        updateInflightLoads(-1, -numRows, -dataSize);
+        this.numFailLoads.inc(1);
+        this.numLoadRetry.inc(numRetry);
+    }
+
+    @Override
+    public void onLoadSuccess(long dataSize, int numRows, int numRetry, long totalTimeMs, long serverTimeMs) {
+        updateInflightLoads(-1, -numRows, -dataSize);
+        this.numSuccessLoads.inc(1);
+        this.numLoadRetry.inc(numRetry);
+        this.loadTimeMs.update(totalTimeMs);
+        this.serverTimeMs.update(serverTimeMs);
+    }
+
+    private void updateInflightLoads(int deltaNum, int deltaRows, long deltaBytes) {
+        this.numInflightLoads.addAndGet(deltaNum);
+        this.numInflightRows.addAndGet(deltaRows);
+        this.numInflightBytes.addAndGet(deltaBytes);
+    }
 }

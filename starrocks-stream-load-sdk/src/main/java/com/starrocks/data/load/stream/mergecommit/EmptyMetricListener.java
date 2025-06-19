@@ -18,12 +18,42 @@
  * limitations under the License.
  */
 
-package com.starrocks.data.load.stream.compress;
+package com.starrocks.data.load.stream.mergecommit;
 
-import net.jpountz.lz4.LZ4FrameOutputStream;
+public class EmptyMetricListener implements MetricListener {
 
-public class CompressionOptions {
+    @Override
+    public void onWrite(int numRows, int dataSize) {
 
-    public static final String LZ4_BLOCK_SIZE = "compression.lz4.block.size";
-    public static final LZ4FrameOutputStream.BLOCKSIZE DEFAULT_LZ4_BLOCK_SIZE = LZ4FrameOutputStream.BLOCKSIZE.SIZE_64KB;
+    }
+
+    @Override
+    public void onCacheChange(long maxCacheBytes, long currentCacheBytes) {
+
+    }
+
+    @Override
+    public void onCacheFull(long blockTimeMs) {
+
+    }
+
+    @Override
+    public void onFlush(int numTables, long flushTimeMs) {
+
+    }
+
+    @Override
+    public void onLoadStart(long dataSize, int numRows) {
+
+    }
+
+    @Override
+    public void onLoadFailure(long dataSize, int numRows, int numRetry, long totalTimeMs) {
+
+    }
+
+    @Override
+    public void onLoadSuccess(long dataSize, int numRows, int numRetry, long totalTimeMs, long serverTimeMs) {
+
+    }
 }

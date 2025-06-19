@@ -20,10 +20,13 @@
 
 package com.starrocks.data.load.stream.compress;
 
-import net.jpountz.lz4.LZ4FrameOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
 
-public class CompressionOptions {
+public class NoCompressCodec implements CompressionCodec {
 
-    public static final String LZ4_BLOCK_SIZE = "compression.lz4.block.size";
-    public static final LZ4FrameOutputStream.BLOCKSIZE DEFAULT_LZ4_BLOCK_SIZE = LZ4FrameOutputStream.BLOCKSIZE.SIZE_64KB;
+    @Override
+    public OutputStream createCompressionStream(OutputStream rawOutputStream, long contentSize) throws IOException {
+        return rawOutputStream;
+    }
 }

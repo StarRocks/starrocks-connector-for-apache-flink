@@ -102,6 +102,12 @@ public class StreamLoadResponse implements Serializable {
         private Long writeDataTimeMs;
         private Long commitAndPublishTimeMs;
 
+        // =================== merge commit ===================
+        private Long pendingTimeMs;
+        private Long waitPlanTimeMs;
+        private Long waitFinishTimeMs;
+        private Long leftMergeTimeMs;
+
         public Long getNumberTotalRows() {
             return numberTotalRows;
         }
@@ -186,6 +192,10 @@ public class StreamLoadResponse implements Serializable {
             this.commitAndPublishTimeMs = commitAndPublishTimeMs;
         }
 
+        public String getLabel() {
+            return label;
+        }
+
         public String getState() {
             return state;
         }
@@ -232,6 +242,42 @@ public class StreamLoadResponse implements Serializable {
 
         public String getErrorURL() {
             return errorURL;
+        }
+
+        public Long getLeftTimeMs() {
+            return leftMergeTimeMs;
+        }
+
+        public Long getPendingTimeMs() {
+            return pendingTimeMs;
+        }
+
+        public void setPendingTimeMs(Long pendingTimeMs) {
+            this.pendingTimeMs = pendingTimeMs;
+        }
+
+        public Long getWaitPlanTimeMs() {
+            return waitPlanTimeMs;
+        }
+
+        public void setWaitPlanTimeMs(Long waitPlanTimeMs) {
+            this.waitPlanTimeMs = waitPlanTimeMs;
+        }
+
+        public Long getWaitFinishTimeMs() {
+            return waitFinishTimeMs;
+        }
+
+        public void setWaitFinishTimeMs(Long waitFinishTimeMs) {
+            this.waitFinishTimeMs = waitFinishTimeMs;
+        }
+
+        public Long getLeftMergeTimeMs() {
+            return leftMergeTimeMs;
+        }
+
+        public void setLeftMergeTimeMs(Long leftMergeTimeMs) {
+            this.leftMergeTimeMs = leftMergeTimeMs;
         }
     }
 }

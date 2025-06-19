@@ -70,8 +70,9 @@ public class CompressionHttpEntity extends HttpEntityWrapper {
         long rawSize = entity.getContentLength();
         long compressSize = countingOutputStream.getCount();
         float compressRatio = compressSize == 0 ? 1 : (float) rawSize / compressSize;
-        LOG.info("Write entity for table {}, raw/compressed size:{}/{}, compress ratio:{}, time:{}us",
-                entity.getTableUniqueKey(), rawSize, compressSize, compressRatio, (System.nanoTime() - startTime) / 1000) ;
+        LOG.info("Write entity for table {}, chunkId: {}. raw/compressed size:{}/{}, compress ratio:{}, time:{}us",
+                entity.getTableUniqueKey(), entity.getChunk().getChunkId(), rawSize, compressSize,
+                compressRatio, (System.nanoTime() - startTime) / 1000);
     }
 
     @Override
