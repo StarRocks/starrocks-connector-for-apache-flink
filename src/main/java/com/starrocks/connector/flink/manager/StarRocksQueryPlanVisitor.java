@@ -28,6 +28,7 @@ import com.starrocks.streamload.shade.org.apache.http.impl.client.CloseableHttpC
 import com.starrocks.streamload.shade.org.apache.http.impl.client.HttpClients;
 import com.starrocks.streamload.shade.org.apache.http.util.EntityUtils;
 import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,14 +36,14 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
-
 
 
 public class StarRocksQueryPlanVisitor implements Serializable {
@@ -61,8 +62,7 @@ public class StarRocksQueryPlanVisitor implements Serializable {
 
     public QueryInfo getQueryInfo(String SQL) throws IOException {
         LOG.info("query sql [{}]", SQL);
-        String[] httpNodes = sourceOptions.getScanUrl().split(",");
-        QueryPlan plan = getQueryPlan(SQL, httpNodes[new Random().nextInt(httpNodes.length)], sourceOptions);
+        QueryPlan plan = getQueryPlan(SQL, sourceOptions);
         Map<String, Set<Long>> beXTablets = transferQueryPlanToBeXTablet(plan);
         List<QueryBeXTablets> queryBeXTabletsList = new ArrayList<>();
         beXTablets.entrySet().stream().forEach(entry -> {
@@ -82,7 +82,7 @@ public class StarRocksQueryPlanVisitor implements Serializable {
                     beXTablets.put(beNode, new HashSet<>());
                     candidateBe = beNode;
                     break;
-                } 
+                }
                 if (beXTablets.get(beNode).size() < tabletCount) {
                     candidateBe = beNode;
                     tabletCount = beXTablets.get(beNode).size();
@@ -93,52 +93,29 @@ public class StarRocksQueryPlanVisitor implements Serializable {
         return beXTablets;
     }
 
-    private static QueryPlan getQueryPlan(String querySQL, String httpNode, StarRocksSourceOptions sourceOptions) throws IOException {
-        String url = new StringBuilder("http://")
-            .append(httpNode)
-            .append("/api/")
-            .append(sourceOptions.getDatabaseName())
-            .append("/")
-            .append(sourceOptions.getTableName())
-            .append("/_query_plan")
-            .toString();
+    private static QueryPlan getQueryPlan(String querySQL, StarRocksSourceOptions sourceOptions) throws IOException {
 
+        List<String> httpNodes = Arrays.asList(sourceOptions.getScanUrl().split(","));
+        // shuffle scan urls to ensure support for both random fe node selection and high availability
+        Collections.shuffle(httpNodes);
+        int requestCode = 0;
+        String respString = "";
         Map<String, Object> bodyMap = new HashMap<>();
         bodyMap.put("sql", querySQL);
         String body = new JSONObject(bodyMap).toString();
-        int requsetCode = 0;
-        String respString = "";
-        for (int i = 0; i < sourceOptions.getScanMaxRetries(); i ++) {
-            try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
-                HttpPost post = new HttpPost(url);
-                post.setHeader("Content-Type", "application/json;charset=UTF-8");
-                post.setHeader("Authorization", getBasicAuthHeader(sourceOptions.getUsername(), sourceOptions.getPassword()));
-                Optional.ofNullable(sourceOptions.getWarehouseName())
-                        .ifPresent(warehouse -> post.setHeader("warehouse", warehouse));
-                post.setEntity(new ByteArrayEntity(body.getBytes()));
-                try (CloseableHttpResponse response = httpClient.execute(post)) {
-                    requsetCode = response.getStatusLine().getStatusCode();
-                    HttpEntity respEntity = response.getEntity();
-                    respString = EntityUtils.toString(respEntity, "UTF-8");
-                }
-            }
-            if (200 == requsetCode || i == sourceOptions.getScanMaxRetries() - 1) {
+        for (String httpNode : httpNodes) {
+            respString = executeOnNodeWithMaxRetries(constructUrl(httpNode, sourceOptions),
+                    body,
+                    sourceOptions
+            );
+            if (StringUtils.isNotEmpty(respString)) {
                 break;
             }
-            LOG.warn("Request of get query plan failed with code:{}", requsetCode);
-            try {
-                Thread.sleep(1000l * (i + 1));
-            } catch (InterruptedException ex) {
-                Thread.currentThread().interrupt();
-                throw new IOException("Unable to get query plan, interrupted while doing another attempt", ex);
-            }
+            LOG.warn("Request to get query plan failed on node: {}", httpNode);
         }
-        if (200 != requsetCode) {
-            throw new RuntimeException("Request of get query plan failed with code " + requsetCode + " " + respString);
-        }
-        if (respString.isEmpty() || respString.equals("")) {
+        if (respString.isEmpty()) {
             LOG.warn("Request failed with empty response.");
-            throw new RuntimeException("Request failed with empty response." + requsetCode);
+            throw new RuntimeException("Request failed with empty response." + requestCode);
         }
         return new JsonWrapper().parseObject(respString, QueryPlan.class);
     }
@@ -147,5 +124,49 @@ public class StarRocksQueryPlanVisitor implements Serializable {
         String auth = username + ":" + password;
         byte[] encodedAuth = Base64.encodeBase64(auth.getBytes(StandardCharsets.UTF_8));
         return new StringBuilder("Basic ").append(new String(encodedAuth)).toString();
+    }
+
+    private static String constructUrl(String httpNode, StarRocksSourceOptions sourceOptions) {
+        return new StringBuilder("http://")
+                .append(httpNode)
+                .append("/api/")
+                .append(sourceOptions.getDatabaseName())
+                .append("/")
+                .append(sourceOptions.getTableName())
+                .append("/_query_plan")
+                .toString();
+    }
+
+    private static String executeOnNodeWithMaxRetries(String url, String body,
+                                                      StarRocksSourceOptions sourceOptions) throws IOException {
+
+        String responseString = "";
+        for (int attempt = 0; attempt < sourceOptions.getScanMaxRetries(); attempt++) {
+            try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+                HttpPost post = new HttpPost(url);
+                post.setHeader("Content-Type", "application/json;charset=UTF-8");
+                post.setHeader("Authorization", getBasicAuthHeader(sourceOptions.getUsername(), sourceOptions.getPassword()));
+                post.setEntity(new ByteArrayEntity(body.getBytes()));
+                try (CloseableHttpResponse response = httpClient.execute(post)) {
+                    int requestCode = response.getStatusLine().getStatusCode();
+                    responseString = EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
+                    if (200 == requestCode || attempt == sourceOptions.getScanMaxRetries() - 1) {
+                        break;
+                    }
+                    LOG.warn("Request to get query plan failed with status code: {}", requestCode);
+                }
+            } catch (IOException e) {
+                LOG.error("Error while executing query plan request: {}", e.getMessage(), e);
+            }
+            if (attempt < sourceOptions.getScanMaxRetries() - 1) {
+                try {
+                    Thread.sleep(1000l * (attempt + 1));
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("Interrupted while retrying query plan request", ex);
+                }
+            }
+        }
+        return responseString;
     }
 }
