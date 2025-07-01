@@ -192,13 +192,25 @@ public class StarRocksSourceBeReader implements StarRocksSourceDataReader, Seria
     @Override
     public void close() {
         LOG.info("Close reader for {}:{} with context id {}", IP, PORT, contextId);
+        if (contextId == null) {
+            // not opened yet
+            return;
+        }
         TScanCloseParams tScanCloseParams = new TScanCloseParams();
         tScanCloseParams.setContext_id(this.contextId);
-        try {
-            this.client.close_scanner(tScanCloseParams);
-        } catch (TException e) {
-            LOG.error("Failed to close reader {}:{} with context id {}", IP, PORT, contextId, e);
-            throw new RuntimeException(e.getMessage());
+        for (int i = 0; i < 3; i++) {
+            try {
+                this.client.close_scanner(tScanCloseParams);
+                break;
+            } catch (Exception e) {
+                LOG.error("Failed to close reader {}:{} with context id {}, retries: {}", IP, PORT, contextId, i, e);
+            }
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                LOG.error("Waiting for closing is interrupted, reader {}:{} with context id {}", IP, PORT, contextId);
+                break;
+            }
         }
     }
 }
