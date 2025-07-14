@@ -88,7 +88,7 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
     }
 
     @Override
-    public Object[] transform(RowData record, boolean supportUpsertDelete) {
+    public Object[] transform(RowData record, boolean supportUpsertDelete, boolean ignoreDelete) {
         RowData transformRecord = valueTransform.apply(record);
         Object[] values = new Object[columnDataTypes.length + (supportUpsertDelete ? 1 : 0)];
         int idx = 0;
@@ -98,7 +98,13 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
         }
         if (supportUpsertDelete) {
             // set `__op` column
-            values[idx] = StarRocksSinkOP.parse(record.getRowKind()).ordinal();
+            if (ignoreDelete && StarRocksSinkOP.parse(record.getRowKind()) == StarRocksSinkOP.DELETE) {
+                // Convert DELETE to UPSERT when ignoreDelete is true
+                values[idx] = StarRocksSinkOP.UPSERT.ordinal();
+            } else {
+                // Use the original operation type
+                values[idx] = StarRocksSinkOP.parse(record.getRowKind()).ordinal();
+            }
         }
         return values;
     }

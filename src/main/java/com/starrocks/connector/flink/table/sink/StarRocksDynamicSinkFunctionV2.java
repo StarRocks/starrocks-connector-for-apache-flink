@@ -160,7 +160,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
             }
         }
         flushLegacyData();
-        String serializedValue = serializer.serialize(rowTransformer.transform(value, sinkOptions.supportUpsertDelete()));
+        String serializedValue = serializer.serialize(rowTransformer.transform(value, sinkOptions.supportUpsertDelete(), sinkOptions.getIgnoreDelete()));
         sinkManager.write(
                 null,
                 sinkOptions.getDatabaseName(),
