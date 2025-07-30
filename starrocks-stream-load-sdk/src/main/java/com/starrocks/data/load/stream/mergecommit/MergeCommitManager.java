@@ -108,9 +108,14 @@ public class MergeCommitManager implements StreamLoadManager, Serializable {
         int totalBytes = 0;
         for (String row : rows) {
             checkException();
-            int bytes = table.write(row.getBytes(StandardCharsets.UTF_8));
-            totalBytes += bytes;
-            currentCacheBytes.addAndGet(bytes);
+            byte[] data = row.getBytes(StandardCharsets.UTF_8);
+            if (properties.isBlackhole()) {
+                totalBytes += data.length;
+            } else {
+                int bytes = table.write(data);
+                totalBytes += bytes;
+                currentCacheBytes.addAndGet(bytes);
+            }
             if (LOG.isTraceEnabled()) {
                 LOG.trace("Write record, database {}, table {}, row {}", database, tableName, row);
             }

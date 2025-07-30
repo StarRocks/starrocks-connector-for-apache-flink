@@ -157,6 +157,8 @@ public class StarRocksSinkOptions implements Serializable {
                     "in the coming 2.0. Note that it's not compatible after changing the flag, that's, you can't recover from " +
                     "the previous job after changing the flag.");
 
+    public static final ConfigOption<Boolean> SINK_BLACKHOLE = ConfigOptions.key("sink.blackhole").booleanType().defaultValue(false);
+
     public static final ConfigOption<Integer> SINK_PARALLELISM = FactoryUtil.SINK_PARALLELISM;
 
     public static final ConfigOption<Boolean> SINK_WRAP_JSON_AS_ARRAY = ConfigOptions.key("sink.wrap-json-as-array")
@@ -387,6 +389,10 @@ public class StarRocksSinkOptions implements Serializable {
         return tableOptions.get(SINK_WRAP_JSON_AS_ARRAY);
     }
 
+    public boolean isBlackhole() {
+        return tableOptions.get(SINK_BLACKHOLE);
+    }
+
     private void validateStreamLoadUrl() {
         tableOptions.getOptional(LOAD_URL).ifPresent(urlList -> {
             for (String host : urlList) {
@@ -601,7 +607,8 @@ public class StarRocksSinkOptions implements Serializable {
                 .version(sinkTable.getVersion())
                 .expectDelayTime(getSinkMaxFlushInterval())
                 .maxRetries(getSinkMaxRetries())
-                .retryIntervalInMs(getRetryIntervalMs());
+                .retryIntervalInMs(getRetryIntervalMs())
+                .setBlackhole(isBlackhole());
         MergeCommitOptions.buildMergeCommitOptions(tableOptions, streamLoadProperties, builder);
         defaultTablePropertiesBuilder.addCommonProperties(streamLoadProperties);
         builder.addHeaders(streamLoadProperties)

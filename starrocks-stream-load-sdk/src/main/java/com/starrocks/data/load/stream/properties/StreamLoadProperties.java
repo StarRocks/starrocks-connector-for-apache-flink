@@ -109,6 +109,7 @@ public class StreamLoadProperties implements Serializable {
     private final int nodeMetaUpdateIntervalMs;
     private final int maxInflightRequests;
     private final String protocol;
+    private final boolean blackhole;
 
     private StreamLoadProperties(Builder builder) {
         this.jdbcUrl = builder.jdbcUrl;
@@ -160,7 +161,8 @@ public class StreamLoadProperties implements Serializable {
         this.httpIdleConnectionTimeoutMs = builder.httpIdleConnectionTimeoutMs;
         this.nodeMetaUpdateIntervalMs = builder.nodeMetaUpdateIntervalMs;
         this.maxInflightRequests = builder.maxInflightRequests;
-        this.protocol = builder().protocol;
+        this.protocol = builder.protocol;
+        this.blackhole = builder.blackhole;
     }
 
     public boolean isEnableTransaction() {
@@ -346,6 +348,10 @@ public class StreamLoadProperties implements Serializable {
         return protocol;
     }
 
+    public boolean isBlackhole() {
+        return blackhole;
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -399,6 +405,7 @@ public class StreamLoadProperties implements Serializable {
         private int nodeMetaUpdateIntervalMs = 2000;
         private int maxInflightRequests = 5;
         private String protocol = "http";
+        private boolean blackhole = false;
 
         public Builder jdbcUrl(String jdbcUrl) {
             this.jdbcUrl = jdbcUrl;
@@ -649,6 +656,11 @@ public class StreamLoadProperties implements Serializable {
 
         public Builder setProtocol(String protocol) {
             this.protocol = protocol;
+            return this;
+        }
+
+        public Builder setBlackhole(boolean blackhole) {
+            this.blackhole = blackhole;
             return this;
         }
 
