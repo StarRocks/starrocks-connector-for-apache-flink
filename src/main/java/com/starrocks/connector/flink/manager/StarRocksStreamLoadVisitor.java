@@ -19,6 +19,7 @@ import com.starrocks.connector.flink.row.sink.StarRocksSinkOP;
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 import com.starrocks.connector.flink.tools.JsonWrapper;
 import com.starrocks.data.load.stream.exception.StreamLoadFailException;
+import com.starrocks.data.load.stream.StreamLoadUtils;
 import com.starrocks.streamload.shade.org.apache.http.HttpEntity;
 import com.starrocks.streamload.shade.org.apache.http.client.config.RequestConfig;
 import com.starrocks.streamload.shade.org.apache.http.client.methods.CloseableHttpResponse;
@@ -192,7 +193,7 @@ public class StarRocksStreamLoadVisitor implements Serializable {
                 if (errorLog != null && errorLog.length() > ERROR_LOG_MAX_LENGTH) {
                     errorLog = errorLog.substring(0, ERROR_LOG_MAX_LENGTH);
                 }
-                return errorLog;
+                return StreamLoadUtils.sanitizeErrorLog(errorLog);
             }
         } catch (Exception e) {
             LOG.warn("Failed to get error log.", e);
