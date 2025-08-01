@@ -467,10 +467,10 @@ limitations under the License.
                                     <pattern>io.netty</pattern>
                                     <shadedPattern>${shading.prefix}.io.netty</shadedPattern>
                                 </relocation>
-                                <relocation>
-                                    <pattern>com.google</pattern>
-                                    <shadedPattern>${shading.prefix}.com.google</shadedPattern>
-                                </relocation>
+<!--                                <relocation>-->
+<!--                                    <pattern>com.google</pattern>-->
+<!--                                    <shadedPattern>${shading.prefix}.com.google</shadedPattern>-->
+<!--                                </relocation>-->
                                 <relocation>
                                     <!--
                                     arrow depends on fastxml, and relocate to com.starrocks.streamload.shade so that
