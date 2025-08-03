@@ -79,27 +79,32 @@ public class StreamLoadUtils {
             return errorLog;
         }
 
-        // Split into lines for processing
-        String[] lines = errorLog.split("\n");
+        // Split by any combination of \r and \n
+        String[] lines = errorLog.split("\\r?\\n|\\r");
         StringBuilder sanitized = new StringBuilder();
 
         for (String line : lines) {
-            if (line.contains("Error:") && line.contains("Row:")) {
-                // Remove the entire Row part and sanitize column values
-                String sanitizedLine = line.replaceAll("\\. Row: \\[.*?\\].*$", ".");
-                
-                // Remove specific column values from error messages but keep column names and types
-                sanitizedLine = sanitizedLine.replaceAll("Value\\s+''[^']*''", "column value");
-                sanitizedLine = sanitizedLine.replaceAll("Value\\s+'[^']*'", "column value");
-                sanitizedLine = sanitizedLine.replaceAll("Value\\s+\"[^\"]*\"", "column value");
-                
-                sanitized.append(sanitizedLine).append("\n");
-            } else if (line.trim().startsWith("Row:") || line.contains("Row: [")) {
-                // Skip lines that are continuation of row data
+            if (line.trim().isEmpty()) {
                 continue;
-            } else if (!line.trim().isEmpty()) {
-                // Keep other non-empty lines (error descriptions, etc.)
-                sanitized.append(line).append("\n");
+            }
+            
+            String sanitizedLine = line;
+            
+            // First, sanitize column values in all lines
+            sanitizedLine = sanitizedLine.replaceAll("Value\\s+''[^']*''", "column value");
+            sanitizedLine = sanitizedLine.replaceAll("Value\\s+'[^']*'", "column value");
+            sanitizedLine = sanitizedLine.replaceAll("Value\\s+\"[^\"]*\"", "column value");
+            
+            // Then, if line contains Row:, remove the row data
+            if (sanitizedLine.contains("Row:")) {
+                // Remove all types of Row data (array, JSON, or any other format)
+                sanitizedLine = sanitizedLine.replaceAll("Row:\\s*\\[.*?].*$", "");
+                sanitizedLine = sanitizedLine.replaceAll("Row:\\s*\\{.*?}.*$", "");
+                sanitizedLine = sanitizedLine.replaceAll("Row:\\s*.*$", "");
+            }
+            
+            if (!sanitizedLine.trim().isEmpty()) {
+                sanitized.append(sanitizedLine).append("\n");
             }
         }
 
