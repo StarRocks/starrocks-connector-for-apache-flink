@@ -33,6 +33,7 @@ public class StarRocksSourceOptions implements Serializable {
     private final ReadableConfig tableOptions;
     private final Map<String, String> tableOptionsMap;
     private final Map<String, String> beScanProps = new HashMap<>();
+    public static final String SOURCE_PROPERTIES_PREFIX = "scan.params.";
 
 
     // required Options
@@ -53,6 +54,9 @@ public class StarRocksSourceOptions implements Serializable {
 
     public static final ConfigOption<String> TABLE_NAME = ConfigOptions.key("table-name")
             .stringType().noDefaultValue().withDescription("Table name");
+
+    public static final ConfigOption<String> WAREHOUSE_NAME = ConfigOptions.key(SOURCE_PROPERTIES_PREFIX + "warehouse")
+            .stringType().noDefaultValue().withDescription("Warehouse name");
     
     
     // optional Options
@@ -103,7 +107,6 @@ public class StarRocksSourceOptions implements Serializable {
             .intType().defaultValue(1).withDescription("the max retry times if lookup database failed.");
 
 
-    public static final String SOURCE_PROPERTIES_PREFIX = "scan.params.";
 
     public StarRocksSourceOptions(ReadableConfig options, Map<String, String> optionsMap) {
         this.tableOptions = options;
@@ -167,6 +170,10 @@ public class StarRocksSourceOptions implements Serializable {
         return tableOptions.get(TABLE_NAME);
     }
 
+    public String getWarehouseName() {
+        return tableOptions.get(WAREHOUSE_NAME);
+    }
+
 
     // optional Options
     public int getConnectTimeoutMs() { 
@@ -189,12 +196,8 @@ public class StarRocksSourceOptions implements Serializable {
                 newMap.put(entry.getKey(), (String) entry.getValue());
             }
         }
-        return (Map<String, String>) newMap;
+        return newMap;
     }
-
-    // public int getLimit() {
-    //     return tableOptions.get(SCAN_LIMIT).intValue();
-    // }
 
     public int getKeepAliveMin() {
         return tableOptions.get(SCAN_KEEP_ALIVE_MIN).intValue();
@@ -238,6 +241,11 @@ public class StarRocksSourceOptions implements Serializable {
 
     public static Builder builder() {
         return new Builder();
+    }
+
+    public StarRocksSourceOptions copy() {
+        return new StarRocksSourceOptions(
+                Configuration.fromMap(this.tableOptionsMap), new HashMap<>(this.tableOptionsMap));
     }
 
     /**

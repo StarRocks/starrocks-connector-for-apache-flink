@@ -51,4 +51,17 @@ public class PushDownHolder implements Serializable {
     public void setQueryType(StarRocksSourceQueryType queryType) {
         this.queryType = queryType;
     }
+
+    public PushDownHolder copy() {
+        PushDownHolder holder = new PushDownHolder();
+        holder.setLimit(limit);
+        holder.setFilter(filter);
+        if (selectColumns != null) {
+            holder.setSelectColumns(selectColumns.clone());
+        }
+        if (queryType != null) {
+            holder.setQueryType(queryType);
+        }
+        return holder;
+    }
 }

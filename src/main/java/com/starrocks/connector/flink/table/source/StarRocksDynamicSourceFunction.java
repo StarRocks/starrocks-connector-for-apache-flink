@@ -151,9 +151,9 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
             List<List<QueryBeXTablets>> lists = StarRocksSourceCommonFunc.splitQueryBeXTablets(getRuntimeContext().getNumberOfParallelSubtasks(), queryInfo);
             lists.get(subTaskId).forEach(beXTablets -> {
                 StarRocksSourceBeReader beReader = new StarRocksSourceBeReader(beXTablets.getBeNode(), columnRichInfos, selectColumns, sourceOptions);
+                this.dataReaderList.add(beReader);
                 beReader.openScanner(beXTablets.getTabletIds(), queryInfo.getQueryPlan().getOpaqued_query_plan(), sourceOptions);
                 beReader.startToRead();
-                this.dataReaderList.add(beReader);
             });
         }
         LOG.info("Open source function. {}", EnvUtils.getGitInformation());

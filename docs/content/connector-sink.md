@@ -10,12 +10,13 @@ The Flink connector supports DataStream API, Table API & SQL, and Python API. It
 
 ## Version requirements
 
-| Connector | Flink                    | StarRocks     | Java | Scala     |
-|-----------|--------------------------|---------------| ---- |-----------|
-| 1.2.10    | 1.15,1.16,1.17,1.18,1.19 | 2.1 and later| 8    | 2.11,2.12 |
-| 1.2.9     | 1.15,1.16,1.17,1.18      | 2.1 and later| 8    | 2.11,2.12 |
-| 1.2.8     | 1.13,1.14,1.15,1.16,1.17 | 2.1 and later| 8    | 2.11,2.12 |
-| 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 and later| 8    | 2.11,2.12 |
+| Connector | Flink                         | StarRocks     | Java | Scala     |
+|-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 and later| 8    | 2.11,2.12 |
+| 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 and later| 8    | 2.11,2.12 |
+| 1.2.9     | 1.15,1.16,1.17,1.18           | 2.1 and later| 8    | 2.11,2.12 |
+| 1.2.8     | 1.13,1.14,1.15,1.16,1.17      | 2.1 and later| 8    | 2.11,2.12 |
+| 1.2.7     | 1.11,1.12,1.13,1.14,1.15      | 2.1 and later| 8    | 2.11,2.12 |
 
 ## Obtain Flink connector
 
@@ -113,7 +114,7 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 | sink.properties.row_delimiter     | No           | \n                | The row delimiter for CSV-formatted data.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | sink.properties.max_filter_ratio  | No           | 0                 | The maximum error tolerance of the Stream Load. It's the maximum percentage of data records that can be filtered out due to inadequate data quality. Valid values: `0` to `1`. Default value: `0`. See [Stream Load](https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD) for details.                                                                                                                                                                                                                                                                                                                                                                      |
 | sink.properties.strict_mode       | No           | false             | Specifies whether to enable the strict mode for Stream Load. It affects the loading behavior when there are unqualified rows, such as inconsistent column values. Valid values: `true` and `false`. Default value: `false`. See [Stream Load](https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD) for details.                                                                                                                                                                                                                                                                                                                                                                      |
-| sink.properties.compression       | No           | NONE              | Supported since 1.2.10. The compression algorithm used for Stream Load. Currently, compression is only supported for the JSON format. Valid values: `lz4_frame`. Compression for json format is supported only in StarRocks v3.2.7 and later.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| sink.properties.compression       | No           | NONE              | The compression algorithm used for Stream Load. Valid values: `lz4_frame`. Compression for json format needs connector 1.2.10 and StarRocks v3.2.7 or later. Compression for csv format needs connector 1.2.11 and there is no requirements for StarRocks version.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
 ## Data type mapping between Flink and StarRocks
 
