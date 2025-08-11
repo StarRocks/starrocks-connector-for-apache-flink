@@ -193,7 +193,9 @@ public class StarRocksStreamLoadVisitor implements Serializable {
                 if (errorLog != null && errorLog.length() > ERROR_LOG_MAX_LENGTH) {
                     errorLog = errorLog.substring(0, ERROR_LOG_MAX_LENGTH);
                 }
-                return StreamLoadUtils.sanitizeErrorLog(errorLog);
+                return sinkOptions != null && sinkOptions.isSanitizeErrorLog()
+                        ? StreamLoadUtils.sanitizeErrorLog(errorLog)
+                        : errorLog;
             }
         } catch (Exception e) {
             LOG.warn("Failed to get error log.", e);

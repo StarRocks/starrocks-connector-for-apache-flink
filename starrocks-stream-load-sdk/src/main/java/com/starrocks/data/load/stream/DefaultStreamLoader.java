@@ -512,8 +512,9 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
                 String errorLog = EntityUtils.toString(respEntity);
                 if (errorLog != null && errorLog.length() > ERROR_LOG_MAX_LENGTH) {
                     errorLog = errorLog.substring(0, ERROR_LOG_MAX_LENGTH);
-                }
-                return StreamLoadUtils.sanitizeErrorLog(errorLog);
+                }return properties != null && properties.isSanitizeErrorLog()
+                        ? StreamLoadUtils.sanitizeErrorLog(errorLog)
+                        : errorLog;
             }
         } catch (Exception e) {
             log.warn("Failed to get error log: {}.", errorUrl, e);

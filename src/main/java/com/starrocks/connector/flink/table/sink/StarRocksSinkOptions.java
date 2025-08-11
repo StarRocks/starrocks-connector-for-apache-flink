@@ -164,6 +164,11 @@ public class StarRocksSinkOptions implements Serializable {
             .defaultValue(false)
             .withDescription("Whether wrap data as array or not.");
 
+    public static final ConfigOption<Boolean> SINK_SANITIZE_ERROR_LOG = ConfigOptions.key("sink.sanitize-error-log")
+            .booleanType()
+            .defaultValue(false)
+            .withDescription("When true, row data and column values in Stream-Load error logs are redacted.");
+
     // Sink semantic
     private static final Set<String> SINK_SEMANTIC_ENUMS = Arrays.stream(StarRocksSinkSemantic.values()).map(s -> s.getName()).collect(Collectors.toSet());
     // wild stream load properties' prefix
@@ -386,6 +391,10 @@ public class StarRocksSinkOptions implements Serializable {
         return tableOptions.get(SINK_WRAP_JSON_AS_ARRAY);
     }
 
+    public boolean isSanitizeErrorLog() {
+        return tableOptions.get(SINK_SANITIZE_ERROR_LOG);
+    }
+
     private void validateStreamLoadUrl() {
         tableOptions.getOptional(LOAD_URL).ifPresent(urlList -> {
             for (String host : urlList) {
@@ -585,7 +594,8 @@ public class StarRocksSinkOptions implements Serializable {
                 // TODO not support retry currently
                 .maxRetries(0)
                 .retryIntervalInMs(getRetryIntervalMs())
-                .addHeaders(streamLoadProperties);
+                .addHeaders(streamLoadProperties)
+                .sanitizeErrorLog(isSanitizeErrorLog());
 
         for (StreamLoadTableProperties tableProperties : tablePropertiesList) {
             builder.addTableProperties(tableProperties);
