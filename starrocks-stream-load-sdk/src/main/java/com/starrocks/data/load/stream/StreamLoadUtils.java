@@ -67,6 +67,51 @@ public class StreamLoadUtils {
         return "Basic " + new String(encodedAuth);
     }
 
+    /**
+     * Sanitizes error logs by removing sensitive row data and column values while preserving
+     * essential debugging information for data validation errors.
+     * 
+     * @param errorLog the raw error log from StarRocks
+     * @return sanitized error log with sensitive data removed
+     */
+    public static String sanitizeErrorLog(String errorLog) {
+        if (errorLog == null || errorLog.trim().isEmpty()) {
+            return errorLog;
+        }
+
+        // Split by any combination of \r and \n
+        String[] lines = errorLog.split("\\r?\\n|\\r");
+        StringBuilder sanitized = new StringBuilder();
+
+        for (String line : lines) {
+            if (line.trim().isEmpty()) {
+                continue;
+            }
+            
+            String sanitizedLine = line;
+            
+            // First, sanitize column values in all lines
+            sanitizedLine = sanitizedLine.replaceAll("Value\\s+''[^']*''", "column value");
+            sanitizedLine = sanitizedLine.replaceAll("Value\\s+'[^']*'", "column value");
+            sanitizedLine = sanitizedLine.replaceAll("Value\\s+\"[^\"]*\"", "column value");
+            
+            // Then, if line contains Row:, remove the row data
+            if (sanitizedLine.contains("Row:")) {
+                // Remove all types of Row data (array, JSON, or any other format)
+                sanitizedLine = sanitizedLine.replaceAll("Row:\\s*\\[.*?].*$", "");
+                sanitizedLine = sanitizedLine.replaceAll("Row:\\s*\\{.*?}.*$", "");
+                sanitizedLine = sanitizedLine.replaceAll("Row:\\s*.*$", "");
+            }
+            
+            if (!sanitizedLine.trim().isEmpty()) {
+                sanitized.append(sanitizedLine).append("\n");
+            }
+        }
+
+        String result = sanitized.toString().trim();
+        return result.isEmpty() ? "Data validation errors detected. Row data has been redacted for security." : result;
+    }
+
     public static boolean isStarRocksSupportTransactionLoad(List<String> httpUrls, int connectTimeout, String userName, String password) {
         String host = selectAvailableHttpHost(httpUrls, connectTimeout);
         if (host == null) {

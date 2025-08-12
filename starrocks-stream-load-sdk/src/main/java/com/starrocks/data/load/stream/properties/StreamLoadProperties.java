@@ -90,6 +90,9 @@ public class StreamLoadProperties implements Serializable {
     private final int retryIntervalInMs;
     private final Map<String, String> headers;
 
+    // Controls whether client should sanitize StarRocks error logs before logging
+    private final boolean sanitizeErrorLog;
+
     private StreamLoadProperties(Builder builder) {
         this.jdbcUrl = builder.jdbcUrl;
         this.loadUrls = builder.loadUrls;
@@ -123,6 +126,7 @@ public class StreamLoadProperties implements Serializable {
         this.retryIntervalInMs = builder.retryIntervalInMs;
 
         this.headers = Collections.unmodifiableMap(builder.headers);
+        this.sanitizeErrorLog = builder.sanitizeErrorLog;
     }
 
     public boolean isEnableTransaction() {
@@ -236,6 +240,10 @@ public class StreamLoadProperties implements Serializable {
         return headers;
     }
 
+    public boolean isSanitizeErrorLog() {
+        return sanitizeErrorLog;
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -271,6 +279,8 @@ public class StreamLoadProperties implements Serializable {
         private int maxRetries = 0;
         private int retryIntervalInMs = 10000;
         private Map<String, String> headers = new HashMap<>();
+
+        private boolean sanitizeErrorLog = false;
 
         public Builder jdbcUrl(String jdbcUrl) {
             this.jdbcUrl = jdbcUrl;
@@ -431,6 +441,11 @@ public class StreamLoadProperties implements Serializable {
 
         public Builder addHeaders(Map<String, String> headers) {
             this.headers.putAll(headers);
+            return this;
+        }
+
+        public Builder sanitizeErrorLog(boolean sanitizeErrorLog) {
+            this.sanitizeErrorLog = sanitizeErrorLog;
             return this;
         }
 
