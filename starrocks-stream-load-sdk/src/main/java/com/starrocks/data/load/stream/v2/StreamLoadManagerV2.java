@@ -417,6 +417,7 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
     }
 
     private boolean isSavepointFinished() {
+        AssertNotException();
         return currentCacheBytes.compareAndSet(0L, 0L) && (!enableAutoCommit || allRegionsCommitted);
     }
 
