@@ -353,7 +353,6 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
         allRegionsCommitted = false;
         current = Thread.currentThread();
         while (!isSavepointFinished()) {
-            AssertNotException();
             lock.lock();
             try {
                 flushable.signal();
@@ -375,6 +374,7 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
                 LOG.warn("Flush get result failed", ex);
             }
         }
+        AssertNotException();
         savepoint = false;
     }
 
@@ -417,7 +417,9 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
     }
 
     private boolean isSavepointFinished() {
-        AssertNotException();
+        if (e != null) {
+            return true;
+        }
         return currentCacheBytes.compareAndSet(0L, 0L) && (!enableAutoCommit || allRegionsCommitted);
     }
 
