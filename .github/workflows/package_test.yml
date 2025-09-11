@@ -47,7 +47,39 @@ jobs:
           MAVEN_OPTS: -Xmx4096m
         run: mvn -B -ntp clean install
         working-directory: starrocks-stream-load-sdk
-      - name: Build connector
+      - name: Build Flink 1.20 Connector
         env:
           MAVEN_OPTS: -Xmx4096m
-        run: mvn -B -ntp clean package
+        run: |
+          chmod +x build.sh
+          ./build.sh 1.20 --run-tests
+      - name: Build Flink 1.19 Connector
+        env:
+          MAVEN_OPTS: -Xmx4096m
+        run: |
+          chmod +x build.sh
+          ./build.sh 1.19 --run-tests
+      - name: Build Flink 1.18 Connector
+        env:
+          MAVEN_OPTS: -Xmx4096m
+        run: |
+          chmod +x build.sh
+          ./build.sh 1.18 --run-tests
+      - name: Build Flink 1.17 Connector
+        env:
+          MAVEN_OPTS: -Xmx4096m
+        run: |
+          chmod +x build.sh
+          ./build.sh 1.17 --run-tests
+      - name: Build Flink 1.16 Connector
+        env:
+          MAVEN_OPTS: -Xmx4096m
+        run: |
+          chmod +x build.sh
+          ./build.sh 1.16 --run-tests
+      - name: Build Flink 1.15 Connector
+        env:
+          MAVEN_OPTS: -Xmx4096m
+        run: |
+          chmod +x build.sh
+          ./build.sh 1.15 --run-tests
