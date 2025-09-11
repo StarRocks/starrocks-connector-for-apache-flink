@@ -34,7 +34,7 @@ jobs:
           distribution: 'zulu'
           java-version: '8'
           cache: 'maven'
-      - name: Machine info
+      - name: Machine Info
         run: |
           echo "== OS Release ==" && cat /etc/os-release || true
           echo "== Kernel ==" && uname -a
@@ -42,32 +42,10 @@ jobs:
           echo "== Memory ==" && free -h || true
           echo "== Workspace ==" && pwd
           echo "== Disk Usage ==" && df -hT .
-      - name: Install Docker
+      - name: Docker Info
         shell: bash
         run: |
-          set -euo pipefail
-          if ! command -v docker >/dev/null 2>&1; then
-            echo "Docker CLI not found. Installing Docker..."
-            sudo apt-get update
-            sudo apt-get remove -y docker docker-engine docker.io containerd runc || true
-            sudo apt-get install -y ca-certificates curl gnupg lsb-release
-            sudo install -m 0755 -d /etc/apt/keyrings
-            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-            echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo \"$VERSION_CODENAME\") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-            sudo apt-get update
-            sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-          fi
-          if command -v systemctl >/dev/null 2>&1; then
-            if ! sudo systemctl is-active --quiet docker; then
-              echo "Starting Docker daemon via systemd..."
-              sudo systemctl start docker || true
-            fi
-          else
-            echo "Systemd not available. Trying service start..."
-            sudo service docker start || true
-          fi
-          echo "Docker version:" && (docker --version || true)
-          echo "Docker info:" && (docker info || true)
+          docker info || true
       - name: Build starrocks-stream-load-sdk
         run: mvn -B -ntp -Dsurefire.forkCount=2 clean install
         working-directory: starrocks-stream-load-sdk
