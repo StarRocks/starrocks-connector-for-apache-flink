@@ -20,6 +20,7 @@
 
 package com.starrocks.connector.flink.it;
 
+import com.starrocks.connector.flink.it.env.StarRocksTestEnvironment;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Rule;
@@ -38,7 +39,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-import static org.junit.Assume.assumeTrue;
+import static org.junit.Assert.assertTrue;
 
 public abstract class StarRocksITTestBase {
 
@@ -49,31 +50,29 @@ public abstract class StarRocksITTestBase {
     @Rule
     public TemporaryFolder temporaryFolder = new TemporaryFolder();
 
+    protected static String HTTP_URLS = "127.0.0.1:8030";
+    protected static String JDBC_URLS = "jdbc:mysql://127.0.0.1:9030";
+    protected static String USERNAME = "root";
+    protected static String PASSWORD = "";
     protected static String DB_NAME;
-    protected static String HTTP_URLS;
-    protected static String JDBC_URLS;
-    protected static String USERNAME;
-    protected static String PASSWORD;
-
-    protected static String getHttpUrls() {
-        return HTTP_URLS;
-    }
-
-    protected static String getJdbcUrl() {
-        return JDBC_URLS;
-    }
-
     protected static Connection DB_CONNECTION;
-
     protected static Set<String> DATABASE_SET_TO_CLEAN;
 
     @BeforeClass
     public static void setUp() throws Exception {
-        HTTP_URLS = DEBUG_MODE ? "127.0.0.1:8030" : System.getProperty("http_urls");
-        JDBC_URLS = DEBUG_MODE ? "jdbc:mysql://127.0.0.1:9030" : System.getProperty("jdbc_urls");
-        USERNAME = DEBUG_MODE ? "root" : System.getProperty("username");
-        PASSWORD = DEBUG_MODE ? "" : System.getProperty("password");
-        assumeTrue(HTTP_URLS != null && JDBC_URLS != null);
+        if (!DEBUG_MODE) {
+            try {
+                StarRocksTestEnvironment env = StarRocksTestEnvironment.getInstance();
+                env.startIfNeeded();
+                HTTP_URLS = env.getHttpAddress();
+                JDBC_URLS = env.getJdbcUrl();
+                USERNAME = env.getUsername();
+                PASSWORD = env.getPassword();
+            } catch (Throwable t) {
+                LOG.warn("Failed to start StarRocks container, ITs may be skipped if no external cluster is provided.", t);
+            }
+        }
+        assertTrue(HTTP_URLS != null && JDBC_URLS != null);
 
         DB_NAME = "sr_test_" + genRandomUuid();
         try {
@@ -161,6 +160,14 @@ public abstract class StarRocksITTestBase {
                 return value;
             }
         }
+    }
+
+    protected static String getHttpUrls() {
+        return HTTP_URLS;
+    }
+
+    protected static String getJdbcUrl() {
+        return JDBC_URLS;
     }
 
     public static class TransactionInfo {

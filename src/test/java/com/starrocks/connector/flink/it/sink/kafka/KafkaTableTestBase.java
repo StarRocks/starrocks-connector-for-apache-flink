@@ -22,6 +22,8 @@ import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import org.apache.flink.test.util.AbstractTestBase;
+
+import com.starrocks.connector.flink.it.env.StarRocksTestEnvironment;
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.ListConsumerGroupOffsetsResult;
@@ -60,7 +62,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static org.junit.Assume.assumeTrue;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Base class for Kafka Table IT Cases. Refer to Flink's KafkaTableTestBase.
@@ -75,8 +77,8 @@ public abstract class KafkaTableTestBase extends AbstractTestBase {
     private static final int zkTimeoutMills = 30000;
 
     protected static String SR_DB_NAME;
-    protected static String SR_HTTP_URLS;
-    protected static String SR_JDBC_URLS;
+    protected static String SR_HTTP_URLS = "127.0.0.1:8030";
+    protected static String SR_JDBC_URLS = "jdbc:mysql://127.0.0.1:9030";
 
     protected static String getSrHttpUrls() {
         return SR_HTTP_URLS;
@@ -114,9 +116,13 @@ public abstract class KafkaTableTestBase extends AbstractTestBase {
 
     @BeforeClass
     public static void setUp() throws Exception {
-        SR_HTTP_URLS = DEBUG_MODE ? "127.0.0.1:11901" : System.getProperty("http_urls");
-        SR_JDBC_URLS = DEBUG_MODE ? "jdbc:mysql://127.0.0.1:11903" : System.getProperty("jdbc_urls");
-        assumeTrue(SR_HTTP_URLS != null && SR_JDBC_URLS != null);
+        if (!DEBUG_MODE) {
+            StarRocksTestEnvironment env = StarRocksTestEnvironment.getInstance();
+            env.startIfNeeded();
+            SR_HTTP_URLS = env.getHttpAddress();
+            SR_JDBC_URLS = env.getJdbcUrl();
+        }
+        assertTrue(SR_HTTP_URLS != null && SR_JDBC_URLS != null);
 
         SR_DB_NAME = "sr_sink_test_" + genRandomUuid();
         try {

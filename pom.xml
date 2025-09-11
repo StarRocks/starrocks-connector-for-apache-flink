@@ -63,7 +63,6 @@ limitations under the License.
         <shading.prefix>com.starrocks.shade</shading.prefix>
         <alibaba-fastjson.version>1.2.83</alibaba-fastjson.version>
         <jmockit.version>1.49</jmockit.version>
-        <surefire.forkCount>1</surefire.forkCount>
     </properties>
 
     <dependencies>
@@ -225,6 +224,13 @@ limitations under the License.
 
         <dependency>
             <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers</artifactId>
+            <version>1.18.3</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.testcontainers</groupId>
             <artifactId>junit-jupiter</artifactId>
             <version>1.18.3</version>
             <scope>test</scope>
@@ -353,9 +359,6 @@ limitations under the License.
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.2.5</version>
                 <configuration>
-                    <forkCount>${surefire.forkCount}</forkCount>
-                    <!-->not reuse forked jvm, so that each unit test will run in separate jvm. to avoid singleton confict<-->
-                    <reuseForks>false</reuseForks>
                     <argLine>
                         -Xmx2048m -javaagent:${settings.localRepository}/org/jmockit/jmockit/${jmockit.version}/jmockit-${jmockit.version}.jar
                     </argLine>
