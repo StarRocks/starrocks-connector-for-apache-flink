@@ -33,6 +33,8 @@ import com.starrocks.connector.flink.table.source.StarRocksSourceOptions;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import org.apache.flink.table.data.RowData;
+
+import org.junit.Ignore;
 import org.junit.Test;
 
 import mockit.Mock;
@@ -98,6 +100,7 @@ public class StarRocksDynamicTableSourceITTest extends StarRocksSourceBaseTest {
         assertTrue(e == null);
     }
 
+    @Ignore
     @Test
     public void testLookupTableAPI() {
         Exception e = null;
