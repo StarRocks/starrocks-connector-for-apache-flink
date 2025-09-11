@@ -23,8 +23,10 @@ source "$(dirname "$0")"/common.sh
 if [ ! $1 ]
 then
     echo "Usage:"
-    echo "   sh build.sh <flink_version>"
+    echo "   sh build.sh <flink_version> [--run-tests]"
     echo "   supported flink version: ${VERSION_MESSAGE}"
+    echo "Options:"
+    echo "  --run-tests        Run mvn tests (by default tests are skipped)"
     exit 1
 fi
 
@@ -33,7 +35,23 @@ check_flink_version_supported $flink_minor_version
 flink_version="$(get_flink_version $flink_minor_version)"
 kafka_connector_version="$(get_kafka_connector_version $flink_minor_version)"
 
-${MVN_CMD} clean package -DskipTests \
+# control whether to run tests (default: skip tests)
+skip_tests=true
+if [ "$2" = "--run-tests" ]; then
+    skip_tests=false
+elif [ -n "$2" ]; then
+    echo "Unknown option: $2"
+    echo "Use --run-tests to enable tests."
+    exit 1
+fi
+
+if [ "$skip_tests" = true ]; then
+  mvn_skip_flag="-DskipTests"
+else
+  mvn_skip_flag="-DskipTests=false"
+fi
+
+${MVN_CMD} clean package ${mvn_skip_flag} \
   -Dflink.minor.version=${flink_minor_version} \
   -Dflink.version=${flink_version} \
   -Dkafka.connector.version=${kafka_connector_version}
