@@ -102,7 +102,7 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
 
     public DefaultStreamLoadManager(StreamLoadProperties properties, StreamLoadStrategy loadStrategy) {
         this.properties = properties;
-        this.streamLoader = properties.isEnableTransaction() ? new TransactionStreamLoader() : new DefaultStreamLoader();
+        this.streamLoader = properties.isEnableTransaction() ? new TransactionStreamLoader(false) : new DefaultStreamLoader();
         this.maxCacheBytes = properties.getMaxCacheBytes();
         this.maxWriteBlockCacheBytes = 2 * maxCacheBytes;
         this.scanningFrequency = properties.getScanningFrequency();

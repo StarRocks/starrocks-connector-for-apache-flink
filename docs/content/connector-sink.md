@@ -116,6 +116,7 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 | sink.properties.max_filter_ratio  | No           | 0                 | The maximum error tolerance of the Stream Load. It's the maximum percentage of data records that can be filtered out due to inadequate data quality. Valid values: `0` to `1`. Default value: `0`. See [Stream Load](https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD) for details.                                                                                                                                                                                                                                                                                                                                                                      |
 | sink.properties.strict_mode       | No           | false             | Specifies whether to enable the strict mode for Stream Load. It affects the loading behavior when there are unqualified rows, such as inconsistent column values. Valid values: `true` and `false`. Default value: `false`. See [Stream Load](https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD) for details.                                                                                                                                                                                                                                                                                                                                                                      |
 | sink.properties.compression       | No           | NONE              | The compression algorithm used for Stream Load. Valid values: `lz4_frame`. Compression for json format needs connector 1.2.10 and StarRocks v3.2.7 or later. Compression for csv format needs connector 1.2.11 and there is no requirements for StarRocks version.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| sink.properties.prepared_timeout  | No           | NONE              | Supported since 1.2.12 and only effective when `sink.version` is `V2`. Requires StarRocks 3.5.4 or later. Sets the timeout in seconds for the Transaction Stream Load phase from `PREPARED` to `COMMITTED`. Typically only needed for exactly-once; at-least-once usually does not require setting this (the connector defaults to 300s). If not set in exactly-once, StarRocks FE configuration `prepared_transaction_default_timeout_second` (default 86400s) applies. See [StarRocks Transaction timeout management](https://docs.starrocks.io/docs/loading/Stream_Load_transaction_interface/#transaction-timeout-management). |
 
 ## Data type mapping between Flink and StarRocks
 
@@ -167,33 +168,30 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
       mechanism to implement the exactly-once. When the Flink job exits, the Flink connector has not received the notification from
       Flink checkpoint coordinator whether the transactions should be included in a successful checkpoint, and it may
       lead to data loss if these transactions are aborted anyway. You can have an overview about how to achieve end-to-end exactly-once
-      in Flink in this [blogpost](https://flink.apache.org/2018/02/28/an-overview-of-end-to-end-exactly-once-processing-in-apache-flink-with-apache-kafka-too/).
-    
+      in Flink in this [blogpost](https://flink.apache.org/2018/02/28/an-overview-of-end-to-end-exactly-once-processing-in-apache-flink-with-apache-kafka-too/). 
+
     - If the label prefix is not specified, lingering transactions will be cleaned up by StarRocks only after they time out. However the number of running transactions can reach the limitation of StarRocks `max_running_txn_num_per_db` if
-      Flink jobs fail frequently before transactions time out. The timeout length is controlled by StarRocks FE configuration
-      `prepared_transaction_default_timeout_second` whose default value is `86400` (1 day). You can set a smaller value to it
-      to make transactions expired faster when the label prefix is not specified.
+      Flink jobs fail frequently before transactions time out. You can set a smaller timeout for `PREPARED` transactions
+      to make them expired faster when the label prefix is not specified. See the following about how to set the prepared timeout.
         
 - If you are certain that the Flink job will eventually recover from checkpoint or savepoint after a long downtime because of stop or continuous failover,
   please adjust the following StarRocks configurations accordingly, to avoid data loss.
-  
-  - `prepared_transaction_default_timeout_second`: StarRocks FE configuration, default value is `86400`. The value of this configuration needs to be larger than the downtime
-    of the Flink job. Otherwise, the lingering transactions that are included in a successful checkpoint may be aborted because of timeout before you restart the
-    Flink job, which leads to data loss.
-    
+
+  - Adjust `PREPARED` transaction timeout. See the following about how to set the timeout.
+
+    The timeout needs to be larger than the downtime of the Flink job. Otherwise, the lingering transactions that are included in a successful checkpoint may be aborted because of timeout before you restart the Flink job, which leads to data loss.
+
     Note that when you set a larger value to this configuration, it is better to specify the value of `sink.label-prefix` so that the lingering transactions can be cleaned according to the label prefix and some information in
-      checkpoint, instead of due to timeout (which may cause data loss).
+    checkpoint, instead of due to timeout (which may cause data loss).
   
   - `label_keep_max_second` and `label_keep_max_num`: StarRocks FE configurations, default values are `259200` and `1000`
     respectively. For details, see [FE configurations](https://docs.starrocks.io/en-us/latest/loading/Loading_intro#fe-configurations). The value of `label_keep_max_second` needs to be larger than the downtime of the Flink job. Otherwise, the Flink connector can not check the state of transactions in StarRocks by using the transaction labels saved in the Flink's savepoint or checkpoint and figure out whether these transactions are committed or not, which may eventually lead to data loss.
 
-  These configurations are mutable and can be modified by using `ADMIN SET FRONTEND CONFIG`:
-
-  ```SQL
-    ADMIN SET FRONTEND CONFIG ("prepared_transaction_default_timeout_second" = "3600");
-    ADMIN SET FRONTEND CONFIG ("label_keep_max_second" = "259200");
-    ADMIN SET FRONTEND CONFIG ("label_keep_max_num" = "1000");
-  ```
+- How to set the timeout for PREPARED transactions
+   
+  - For connector 1.2.12+ and StarRocks 3.5.4+, you can set the timeout by configuring the connector parameter `sink.properties.prepared_timeout`. By default, the value is not set, and it falls back to the StarRocks FE's global configuration `prepared_transaction_default_timeout_second` (default value is `86400`).
+  
+  - For other versions of connector or StarRocks, you can set the timeout by configuring the StarRocks FE's global configuration `prepared_transaction_default_timeout_second` (default value is `86400`).
   
 ### Flush Policy
 

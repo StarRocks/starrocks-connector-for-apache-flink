@@ -50,13 +50,18 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
 
     private static final Logger log = LoggerFactory.getLogger(TransactionStreamLoader.class);
 
+    private final boolean enableAutoCommit;
     private Header[] defaultTxnHeaders;
-
     private Header[] beginTxnHeader;
+    private Header[] preparedTxnHeader;
 
     private HttpClientBuilder clientBuilder;
 
     private StreamLoadManager manager;
+
+    public TransactionStreamLoader(boolean enableAutoCommit) {
+        this.enableAutoCommit = enableAutoCommit;
+    }
 
     protected void initTxHeaders(StreamLoadProperties properties) {
         Map<String, String> headers = new HashMap<>();
@@ -77,6 +82,17 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
             beginHeaders.put("warehouse", warehouse);
         }
         this.beginTxnHeader = beginHeaders.entrySet().stream()
+                .map(entry -> new BasicHeader(entry.getKey(), entry.getValue()))
+                .toArray(Header[]::new);
+
+        Map<String, String> preparedHeaders = new HashMap<>(headers);
+        String preparedTimeout = properties.getHeaders().get("prepared_timeout");
+        if (preparedTimeout != null) {
+            preparedHeaders.put("prepared_timeout", preparedTimeout);
+        } else if (enableAutoCommit) {
+            preparedHeaders.put("prepared_timeout", "180");
+        }
+        this.preparedTxnHeader = preparedHeaders.entrySet().stream()
                 .map(entry -> new BasicHeader(entry.getKey(), entry.getValue()))
                 .toArray(Header[]::new);
     }
@@ -172,7 +188,7 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
         String prepareUrl = getPrepareUrl(host);
 
         HttpPost httpPost = new HttpPost(prepareUrl);
-        httpPost.setHeaders(defaultTxnHeaders);
+        httpPost.setHeaders(preparedTxnHeader);
         httpPost.addHeader("label", transaction.getLabel());
         httpPost.addHeader("db", transaction.getDatabase());
         httpPost.addHeader("table", transaction.getTable());

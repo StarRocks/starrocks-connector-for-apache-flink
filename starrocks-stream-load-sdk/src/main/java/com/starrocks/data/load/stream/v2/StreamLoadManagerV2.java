@@ -127,13 +127,13 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
         }
         this.enableAutoCommit = enableAutoCommit;
         if (!enableAutoCommit) {
-            streamLoader = new TransactionStreamLoader();
+            streamLoader = new TransactionStreamLoader(false);
             maxRetries = 0;
             retryIntervalInMs = 0;
         } else {
             // TODO transaction stream load can't support retry currently
             streamLoader = (properties.getMaxRetries() > 0 || !properties.isEnableTransaction())
-                    ? new DefaultStreamLoader() : new TransactionStreamLoader();
+                    ? new DefaultStreamLoader() : new TransactionStreamLoader(true);
             maxRetries = properties.getMaxRetries();
             retryIntervalInMs = properties.getRetryIntervalInMs();
         }

@@ -141,4 +141,100 @@ public abstract class StarRocksITTestBase {
             statement.execute();
         }
     }
+
+    protected static String getStarRocksFeConfigure(String configureName) throws Exception {
+        String sql = String.format("admin show frontend config like \"%s\"", configureName);
+        try (PreparedStatement statement = DB_CONNECTION.prepareStatement(sql)) {
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (!resultSet.next()) {
+                    throw new IllegalStateException(
+                            String.format("No row returned for FE config '%s'", configureName));
+                }
+
+                String value = resultSet.getString("Value");
+
+                if (resultSet.next()) {
+                    throw new IllegalStateException(
+                            String.format("More than one row returned for FE config '%s'", configureName));
+                }
+
+                return value;
+            }
+        }
+    }
+
+    public static class TransactionInfo {
+        public final long transactionId;
+        public final String label;
+        public final String coordinator;
+        public final String transactionStatus;
+        public final String loadJobSourceType;
+        public final String prepareTime;
+        public final String preparedTime;
+        public final String commitTime;
+        public final String publishTime;
+        public final String finishTime;
+        public final String reason;
+        public final int errorReplicasCount;
+        public final String listenerId;
+        public final long timeoutMs;
+        public final long preparedTimeoutMs;
+        public final String errMsg;
+
+        public TransactionInfo(long transactionId, String label, String coordinator, String transactionStatus,
+                               String loadJobSourceType, String prepareTime, String preparedTime, String commitTime,
+                               String publishTime, String finishTime, String reason, int errorReplicasCount,
+                               String listenerId, long timeoutMs, long preparedTimeoutMs, String errMsg) {
+            this.transactionId = transactionId;
+            this.label = label;
+            this.coordinator = coordinator;
+            this.transactionStatus = transactionStatus;
+            this.loadJobSourceType = loadJobSourceType;
+            this.prepareTime = prepareTime;
+            this.preparedTime = preparedTime;
+            this.commitTime = commitTime;
+            this.publishTime = publishTime;
+            this.finishTime = finishTime;
+            this.reason = reason;
+            this.errorReplicasCount = errorReplicasCount;
+            this.listenerId = listenerId;
+            this.timeoutMs = timeoutMs;
+            this.preparedTimeoutMs = preparedTimeoutMs;
+            this.errMsg = errMsg;
+        }
+    }
+
+    protected static List<TransactionInfo> getFinishedTransactionInfo(String labelPrefix) throws Exception {
+        String sql = String.format("show proc '/transactions/%s/finished'", DB_NAME);
+        List<TransactionInfo> transactionInfoList = new ArrayList<>();
+        try (PreparedStatement statement = DB_CONNECTION.prepareStatement(sql)) {
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    String label = rs.getString(2);
+                    if (labelPrefix == null || (label != null && label.startsWith(labelPrefix))) {
+                        long transactionId = rs.getLong(1);
+                        String coordinator = rs.getString(3);
+                        String transactionStatus = rs.getString(4);
+                        String loadJobSourceType = rs.getString(5);
+                        String prepareTime = rs.getString(6);
+                        String preparedTime = rs.getString(7);
+                        String commitTime = rs.getString(8);
+                        String publishTime = rs.getString(9);
+                        String finishTime = rs.getString(10);
+                        String reason = rs.getString(11);
+                        int errorReplicasCount = rs.getInt(12);
+                        String listenerId = rs.getString(13);
+                        long timeoutMs = rs.getLong(14);
+                        long preparedTimeoutMs = rs.getLong(15);
+                        String errMsg = rs.getString(16);
+                        transactionInfoList.add(new TransactionInfo(
+                                transactionId, label, coordinator, transactionStatus, loadJobSourceType,
+                                prepareTime, preparedTime, commitTime, publishTime, finishTime, reason,
+                                errorReplicasCount, listenerId, timeoutMs, preparedTimeoutMs, errMsg));
+                    }
+                }
+            }
+        }
+        return transactionInfoList;
+    }
 }
