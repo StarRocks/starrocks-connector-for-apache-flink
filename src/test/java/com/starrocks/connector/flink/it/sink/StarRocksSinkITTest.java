@@ -39,6 +39,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import javax.annotation.Nullable;
+
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -46,11 +48,14 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.StringJoiner;
 import java.util.function.Function;
 
 import static com.starrocks.connector.flink.it.sink.StarRocksTableUtils.scanTable;
 import static com.starrocks.connector.flink.it.sink.StarRocksTableUtils.verifyResult;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assume.assumeTrue;
 
 @RunWith(Parameterized.class)
@@ -511,6 +516,47 @@ public class StarRocksSinkITTest extends StarRocksITTestBase {
             map.put("sink.properties.format", "json");
             map.put("sink.properties.strip_outer_array", "true");
             testConfigurationBase(map, env -> null);
+        }
+    }
+
+    @Test
+    public void testAtLeastOncePreparedTimeout() throws Exception {
+        testPreparedTimeoutBase("at-least-once", null, "180");
+        testPreparedTimeoutBase("at-least-once", "60", "60");
+    }
+
+    @Test
+    public void testExactlyOncePreparedTimeout() throws Exception {
+        String starrocksFeTimeout = getStarRocksFeConfigure("prepared_transaction_default_timeout_second");
+        testPreparedTimeoutBase("exactly-once", null, starrocksFeTimeout);
+        testPreparedTimeoutBase("exactly-once", "600", "600");
+    }
+
+    private void testPreparedTimeoutBase(String sinkSemantic, @Nullable String configuredPreparedTimeout,
+                                         String expectedPreparedTimeout) throws Exception {
+        assumeTrue(isSinkV2);
+        String labelPrefix = "prepared_timeout_" + genRandomUuid();
+        Map<String, String> options = new HashMap<>();
+        options.put("sink.semantic", sinkSemantic);
+        options.put("sink.label-prefix", labelPrefix);
+        if (configuredPreparedTimeout != null) {
+            options.put("sink.properties.prepared_timeout", configuredPreparedTimeout);
+        }
+        String checkpointDir = temporaryFolder.newFolder().toURI().toString();
+        testConfigurationBase(options,
+                env -> {
+                    env.enableCheckpointing(1000);
+                    env.getCheckpointConfig().setCheckpointStorage(checkpointDir);
+                    Configuration config = new Configuration();
+                    config.set(ExecutionCheckpointingOptions.ENABLE_CHECKPOINTS_AFTER_TASKS_FINISH, true);
+                    env.configure(config);
+                    return null;
+                }
+        );
+        List<TransactionInfo> transactionInfos = getFinishedTransactionInfo(labelPrefix);
+        assertFalse(transactionInfos.isEmpty());
+        for (TransactionInfo transactionInfo : transactionInfos) {
+            assertEquals(expectedPreparedTimeout, Objects.toString(transactionInfo.preparedTimeoutMs / 1000));
         }
     }
 
