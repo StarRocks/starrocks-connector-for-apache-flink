@@ -28,7 +28,56 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
-      - name: Pacakge Test
-        uses: xlui/action-maven-cli@jdk8
+      - name: Set up JDK 8
+        uses: actions/setup-java@v3
         with:
-          lifecycle: 'clean validate package'
+          distribution: 'zulu'
+          java-version: '8'
+          cache: 'maven'
+      - name: Show runner machine info
+        run: |
+          echo "== OS Release ==" && cat /etc/os-release || true
+          echo "== Kernel ==" && uname -a
+          echo "== CPU ==" && lscpu || true
+          echo "== Memory ==" && free -h || true
+          echo "== Workspace ==" && pwd
+          echo "== Disk Usage ==" && df -hT .
+      - name: Build starrocks-stream-load-sdk
+        run: mvn -B -ntp -Dsurefire.forkCount=2 clean install
+        working-directory: starrocks-stream-load-sdk
+      - name: Build Flink 1.20 Connector
+        env:
+          CUSTOM_MVN: mvn -B -ntp -Dsurefire.forkCount=2
+        run: |
+          chmod +x build.sh
+          ./build.sh 1.20 --run-tests
+      - name: Build Flink 1.19 Connector
+        env:
+          CUSTOM_MVN: mvn -B -ntp -Dsurefire.forkCount=2
+        run: |
+          chmod +x build.sh
+          ./build.sh 1.19 --run-tests
+      - name: Build Flink 1.18 Connector
+        env:
+          CUSTOM_MVN: mvn -B -ntp -Dsurefire.forkCount=2
+        run: |
+          chmod +x build.sh
+          ./build.sh 1.18 --run-tests
+      - name: Build Flink 1.17 Connector
+        env:
+          CUSTOM_MVN: mvn -B -ntp -Dsurefire.forkCount=2
+        run: |
+          chmod +x build.sh
+          ./build.sh 1.17 --run-tests
+      - name: Build Flink 1.16 Connector
+        env:
+          CUSTOM_MVN: mvn -B -ntp -Dsurefire.forkCount=2
+        run: |
+          chmod +x build.sh
+          ./build.sh 1.16 --run-tests
+      - name: Build Flink 1.15 Connector
+        env:
+          CUSTOM_MVN: mvn -B -ntp -Dsurefire.forkCount=2
+        run: |
+          chmod +x build.sh
+          ./build.sh 1.15 --run-tests

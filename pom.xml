@@ -62,6 +62,8 @@ limitations under the License.
         <guava.version>31.1-jre</guava.version>
         <shading.prefix>com.starrocks.shade</shading.prefix>
         <alibaba-fastjson.version>1.2.83</alibaba-fastjson.version>
+        <jmockit.version>1.49</jmockit.version>
+        <surefire.forkCount>1</surefire.forkCount>
     </properties>
 
     <dependencies>
@@ -328,7 +330,7 @@ limitations under the License.
         <dependency>
             <groupId>org.jmockit</groupId>
             <artifactId>jmockit</artifactId>
-            <version>1.48</version>
+            <version>${jmockit.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -349,15 +351,14 @@ limitations under the License.
         <plugins>
             <plugin>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>2.22.2</version>
+                <version>3.2.5</version>
                 <configuration>
+                    <forkCount>${surefire.forkCount}</forkCount>
                     <!-->not reuse forked jvm, so that each unit test will run in separate jvm. to avoid singleton confict<-->
                     <reuseForks>false</reuseForks>
                     <argLine>
-                        -javaagent:${settings.localRepository}/org/jmockit/jmockit/1.48/jmockit-1.48.jar
+                        -Xmx2048m -javaagent:${settings.localRepository}/org/jmockit/jmockit/${jmockit.version}/jmockit-${jmockit.version}.jar
                     </argLine>
-                    <!-- Set maven to use independent class loading to avoid unit test failure due to the early shutdown of the JVM -->
-                    <useSystemClassLoader>false</useSystemClassLoader>
                 </configuration>
             </plugin>
             <plugin>
@@ -384,21 +385,7 @@ limitations under the License.
                     </filesets>
                 </configuration>
             </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-jar-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>jar</goal>
-                        </goals>
-                    </execution>
-                </executions>
-                <configuration>
-                    <outputDirectory>./target/</outputDirectory>
-                </configuration>
-            </plugin>
+            
             <plugin>
                 <groupId>org.apache.rat</groupId>
                 <artifactId>apache-rat-plugin</artifactId>
