@@ -99,6 +99,7 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
     private Thread manager;
     private volatile boolean savepoint = false;
     private volatile boolean allRegionsCommitted;
+    private long flushTimeoutMs = 660000L; // default stream load timeout is 600s, 1.1x for flush
 
     private final Lock lock = new ReentrantLock();
     private final Condition writable = lock.newCondition();
@@ -141,6 +142,15 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
         this.maxWriteBlockCacheBytes = 2 * maxCacheBytes;
         this.scanningFrequency = properties.getScanningFrequency();
         this.flushAndCommitStrategy = new FlushAndCommitStrategy(properties, enableAutoCommit);
+        // get timeout from properties's header
+        String timeoutStr = properties.getHeaders().get("timeout");
+        if (timeoutStr != null) {
+            try {
+                this.flushTimeoutMs = Long.parseLong(timeoutStr) * 1100; // 1.1x for flush
+            } catch (NumberFormatException ex) {
+                LOG.warn("Invalid timeout value in properties header: {}, using default", timeoutStr);
+            }
+        }
     }
 
     @Override
@@ -348,32 +358,86 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
 
     @Override
     public void flush() {
-        LOG.info("Stream load manager flush");
-        savepoint = true;
-        allRegionsCommitted = false;
-        current = Thread.currentThread();
+        LOG.info("Stream load manager flush start - currentCacheBytes: {}, maxCacheBytes: {}",
+                currentCacheBytes.get(), maxCacheBytes);
+
+        initializeFlushState();
+
+        long startTime = System.currentTimeMillis();
+        long waitTime = 100; // Initial wait time: 100ms
+
         while (!isSavepointFinished()) {
-            lock.lock();
-            try {
-                flushable.signal();
-            } finally {
-                lock.unlock();
-            }
+            checkFlushTimeout(startTime);
+
+            triggerFlushSignal();
             LockSupport.park(current);
+
             if (!savepoint) {
                 break;
             }
-            try {
-                for (TableRegion tableRegion : regions.values()) {
-                    Future<?> result = tableRegion.getResult();
-                    if (result != null) {
-                        result.get();
-                    }
-                }
-            } catch (ExecutionException | InterruptedException ex) {
-                LOG.warn("Flush get result failed", ex);
-            }
+
+            waitForRegionResults(waitTime);
+            waitTime = calculateNextWaitTime(waitTime);
         }
+
+        finishFlush();
+    }
+
+    private void initializeFlushState() {
+        savepoint = true;
+        allRegionsCommitted = false;
+        current = Thread.currentThread();
+    }
+
+    private void checkFlushTimeout(long startTime) {
+        long elapsedMs = System.currentTimeMillis() - startTime;
+        if (elapsedMs > flushTimeoutMs) {
+            String errorMsg = String.format(
+                "Stream load manager flush timeout: elapsed %dms, timeout %dms, " +
+                "currentCacheBytes: %d, allRegionsCommitted: %s, savepoint: %s",
+                elapsedMs, flushTimeoutMs, currentCacheBytes.get(), allRegionsCommitted, savepoint);
+
+            LOG.error(errorMsg);
+            throw new RuntimeException(String.format(
+                "Stream load manager flush timeout: elapsed %dms, timeout %dms", elapsedMs, flushTimeoutMs));
+        }
+    }
+
+    private void triggerFlushSignal() {
+        lock.lock();
+        try {
+            flushable.signal();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void waitForRegionResults(long waitTime) {
+        try {
+            for (TableRegion tableRegion : regions.values()) {
+                Future<?> result = tableRegion.getResult();
+                if (result != null) {
+                    result.get();
+                }
+            }
+
+            if (waitTime > 200) {
+                LockSupport.parkNanos(waitTime * 1_000_000L);
+                LOG.info("Stream load manager flush waiting: {}ms", waitTime);
+            }
+        } catch (ExecutionException | InterruptedException ex) {
+            LOG.warn("Stream load manager flush get result failed", ex);
+            throw new RuntimeException(ex);
+        }
+    }
+
+    private long calculateNextWaitTime(long currentWaitTime) {
+        return Math.min(currentWaitTime * 2, 10000); // Max wait time: 10s
+    }
+
+    private void finishFlush() {
+        LOG.info("Stream load manager flush finished - currentCacheBytes: {}, maxCacheBytes: {}, allRegionsCommitted: {}",
+                currentCacheBytes.get(), maxCacheBytes, allRegionsCommitted);
         AssertNotException();
         savepoint = false;
     }
