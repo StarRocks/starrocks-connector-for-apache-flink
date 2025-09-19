@@ -22,6 +22,7 @@ Unlike the JDBC connector provided by Flink, the Flink connector of StarRocks su
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later| 8    | 2.11,2.12 |
 | 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 and later| 8    | 2.11,2.12 |
 | 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 and later| 8    | 2.11,2.12 |
 | 1.2.9     | 1.15,1.16,1.17,1.18           | 2.1 and later| 8    | 2.11,2.12 |
