@@ -29,7 +29,7 @@ import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.DefaultRedirectStrategy;
+
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.message.BasicHeader;
@@ -104,12 +104,9 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
         enableTransaction();
         initTxHeaders(properties);
         clientBuilder = HttpClients.custom()
-                .setRedirectStrategy(new DefaultRedirectStrategy() {
-                    @Override
-                    protected boolean isRedirectable(String method) {
-                        return true;
-                    }
-                });
+                .setRedirectStrategy(new ContainerAwareRedirectStrategy(
+                        properties.getLoadUrls().length > 0 ? properties.getLoadUrls()[0] : null,
+                        properties.getLoadUrls()));
     }
 
     @Override
