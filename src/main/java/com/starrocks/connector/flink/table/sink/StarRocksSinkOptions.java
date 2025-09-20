@@ -176,7 +176,6 @@ public class StarRocksSinkOptions implements Serializable {
 
     private final ReadableConfig tableOptions;
     private final Map<String, String> streamLoadProps = new HashMap<>();
-    private final Map<String, String> tableOptionsMap;
     private StarRocksSinkSemantic sinkSemantic;
     private boolean supportUpsertDelete;
     private String[] tableSchemaFieldNames;
@@ -185,10 +184,8 @@ public class StarRocksSinkOptions implements Serializable {
 
     private final List<StreamLoadTableProperties> tablePropertiesList = new ArrayList<>();
 
-    public StarRocksSinkOptions(ReadableConfig options, Map<String, String> optionsMap) {
+    public StarRocksSinkOptions(ReadableConfig options) {
         this.tableOptions = options;
-        this.tableOptionsMap = optionsMap;
-        parseSinkStreamLoadProperties();
         this.validate();
     }
 
@@ -477,16 +474,6 @@ public class StarRocksSinkOptions implements Serializable {
                 "Either all or none of the following options should be provided:\n" + String.join("\n", propertyNames));
     }
 
-    private void parseSinkStreamLoadProperties() {
-        tableOptionsMap.keySet().stream()
-                .filter(key -> key.startsWith(SINK_PROPERTIES_PREFIX))
-                .forEach(key -> {
-                    final String value = tableOptionsMap.get(key);
-                    final String subKey = key.substring((SINK_PROPERTIES_PREFIX).length()).toLowerCase();
-                    streamLoadProps.put(subKey, value);
-                });
-    }
-
     /**
      * Builder for {@link StarRocksSinkOptions}.
      */
@@ -502,7 +489,7 @@ public class StarRocksSinkOptions implements Serializable {
         }
 
         public StarRocksSinkOptions build() {
-            return new StarRocksSinkOptions(conf, conf.toMap());
+            return new StarRocksSinkOptions(conf);
         }
     }
 
