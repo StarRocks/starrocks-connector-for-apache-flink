@@ -76,6 +76,7 @@ public final class StarRocksDynamicTableSourceFactory implements DynamicTableSou
         options.add(StarRocksSourceOptions.SCAN_MEM_LIMIT);
         options.add(StarRocksSourceOptions.SCAN_MAX_RETRIES);
         options.add(StarRocksSourceOptions.SCAN_BE_HOST_MAPPING_LIST);
+        options.add(StarRocksSourceOptions.LOOKUP_ENABLE_CACHE);
         options.add(StarRocksSourceOptions.LOOKUP_CACHE_TTL_MS);
         options.add(StarRocksSourceOptions.LOOKUP_CACHE_MAX_ROWS);
         options.add(StarRocksSourceOptions.LOOKUP_MAX_RETRIES);
