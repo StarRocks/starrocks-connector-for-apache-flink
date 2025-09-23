@@ -136,6 +136,11 @@ public class StarRocksSinkOptions implements Serializable {
                     "insert the update_after row in StarRocks, and this options should be set false for this case. Note that how " +
                     "to set this options depends on the user case.");
 
+    public static final ConfigOption<Boolean> SINK_IGNORE_DELETE = ConfigOptions.key("sink.ignore.delete")
+            .booleanType().defaultValue(false).withDescription("Whether to ignore delete records. When set to true, delete operations " +
+                    "will be ignored even for tables with primary keys. This is useful when you want to keep all historical data " +
+                    "in the target table and don't want any records to be deleted. Default is false.");
+
     public static final ConfigOption<Boolean> SINK_ENABLE_EXACTLY_ONCE_LABEL_GEN = ConfigOptions.key("sink.exactly-once.enable-label-gen")
             .booleanType().defaultValue(true).withDescription("Only available when using exactly-once and sink.label-prefix is set. " +
                     "When it's true, the connector will generate label in the format '{labelPrefix}-{tableName}-{subtaskIndex}-{id}'. " +
@@ -324,6 +329,10 @@ public class StarRocksSinkOptions implements Serializable {
 
     public boolean getIgnoreUpdateBefore() {
         return tableOptions.get(SINK_IGNORE_UPDATE_BEFORE);
+    }
+
+    public boolean getIgnoreDelete() {
+        return tableOptions.get(SINK_IGNORE_DELETE);
     }
 
     public static Builder builder() {
