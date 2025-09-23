@@ -4,9 +4,35 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
+    <name>starrocks-stream-load-sdk</name>
+    <description>StarRocks Stream Load SDK for Java applications.</description>
+    <url>https://github.com/StarRocks/flink-connector-starrocks</url>
+
+    <licenses>
+        <license>
+            <name>The Apache Software License, Version 2.0</name>
+            <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+        </license>
+    </licenses>
+    <scm>
+        <url>https://github.com/StarRocks/starrocks-connector-for-apache-flink/tree/main/starrocks-stream-load-sdk</url>
+        <connection>https://github.com/StarRocks/flink-connector-starrocks.git</connection>
+    </scm>
+    <developers>
+        <developer>
+            <name>starrocks</name>
+            <id>starrocks</id>
+            <email>open@starrocks.com</email>
+            <roles>
+                <role>Developer</role>
+            </roles>
+            <timezone>+8</timezone>
+        </developer>
+    </developers>
+
     <groupId>com.starrocks</groupId>
     <artifactId>starrocks-stream-load-sdk</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.0</version>
 
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
@@ -290,6 +316,31 @@
                         <goals>
                             <goal>jar</goal>
                         </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>flatten-maven-plugin</artifactId>
+                <version>1.5.0</version>
+                <configuration>
+                    <updatePomFile>true</updatePomFile>
+                    <flattenMode>oss</flattenMode>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>flatten</id>
+                        <goals>
+                            <goal>flatten</goal>
+                        </goals>
+                        <phase>process-resources</phase>
+                    </execution>
+                    <execution>
+                        <id>flatten.clean</id>
+                        <goals>
+                            <goal>clean</goal>
+                        </goals>
+                        <phase>clean</phase>
                     </execution>
                 </executions>
             </plugin>
