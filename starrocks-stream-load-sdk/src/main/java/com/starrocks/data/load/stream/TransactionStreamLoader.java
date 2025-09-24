@@ -237,6 +237,12 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
                     } else {
                         return true;
                     }
+                case StreamLoadConstants.RESULT_STATUS_TRANSACTION_IN_PROCESSING:
+                    String warnMsg = String.format("Transaction in processing, db: %s, table: %s, label: %s, " +
+                                    "\nresponseBody: %s", transaction.getDatabase(), transaction.getTable(),
+                                    transaction.getLabel(), responseBody);
+                    log.warn(warnMsg);
+                    return false;
                 }
             }
 
@@ -291,6 +297,10 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
                                         responseBody));
             }
 
+            if (StreamLoadConstants.RESULT_STATUS_TRANSACTION_IN_PROCESSING.equals(status)) {
+                log.info("Transaction in processing, retry later, lable: {}, body : {}", transaction.getLabel(), responseBody);
+                return false;
+            }
 
             if (StreamLoadConstants.RESULT_STATUS_OK.equals(status)) {
                 manager.callback(streamLoadResponse);
