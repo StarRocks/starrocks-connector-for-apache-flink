@@ -17,10 +17,10 @@ package com.starrocks.connector.flink.it.sink;
 import com.starrocks.connector.flink.StarRocksSink;
 import com.starrocks.connector.flink.StarRocksSinkBaseTest;
 import mockit.Expectations;
-import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.util.RestartStrategyUtils;
 import org.apache.flink.table.api.DataTypes;
-import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.legacy.api.TableSchema;
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -78,7 +78,7 @@ public class StarRocksGenericSinkITTest extends StarRocksSinkBaseTest {
         mockStarRocksVersion(null);
         mockSuccessResponse();
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        env.setRestartStrategy(new RestartStrategies.NoRestartStrategyConfiguration());
+        RestartStrategyUtils.configureNoRestartStrategy(env);
         env.setParallelism(1);
         env.fromElements(TEST_DATA)
             .addSink(StarRocksSink.sink(

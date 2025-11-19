@@ -22,7 +22,7 @@ package com.starrocks.connector.flink.cdc.mysql;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.starrocks.connector.flink.cdc.DatabaseSync;
-import org.apache.flink.configuration.Configuration;
+import org.apache.flink.api.common.functions.OpenContext;
 import org.apache.flink.streaming.api.functions.ProcessFunction;
 import org.apache.flink.util.Collector;
 import org.apache.flink.util.OutputTag;
@@ -40,7 +40,7 @@ public class ParsingProcessFunction extends ProcessFunction<String, Void> {
     }
 
     @Override
-    public void open(Configuration parameters) throws Exception {
+    public void open(OpenContext context) throws Exception {
         recordOutputTags = new HashMap<>();
     }
 

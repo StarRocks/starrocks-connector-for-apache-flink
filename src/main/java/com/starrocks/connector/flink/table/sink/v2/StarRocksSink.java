@@ -21,8 +21,11 @@
 package com.starrocks.connector.flink.table.sink.v2;
 
 import org.apache.flink.api.connector.sink2.Committer;
-import org.apache.flink.api.connector.sink2.StatefulSink;
-import org.apache.flink.api.connector.sink2.TwoPhaseCommittingSink;
+import org.apache.flink.api.connector.sink2.CommitterInitContext;
+import org.apache.flink.api.connector.sink2.Sink;
+import org.apache.flink.api.connector.sink2.SupportsCommitter;
+import org.apache.flink.api.connector.sink2.SupportsWriterState;
+import org.apache.flink.api.connector.sink2.WriterInitContext;
 import org.apache.flink.core.io.SimpleVersionedSerializer;
 
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
@@ -35,7 +38,9 @@ import java.util.Collection;
 import java.util.Collections;
 
 public class StarRocksSink<InputT>
-        implements StatefulSink<InputT, StarRocksWriterState>, TwoPhaseCommittingSink<InputT, StarRocksCommittable> {
+        implements Sink<InputT>,
+        SupportsWriterState<InputT, StarRocksWriterState>,
+        SupportsCommitter<StarRocksCommittable> {
 
     private static final long serialVersionUID = 1L;
 
@@ -55,12 +60,12 @@ public class StarRocksSink<InputT>
     }
 
     @Override
-    public StarRocksWriter<InputT> createWriter(InitContext context) throws IOException {
+    public StarRocksWriter<InputT> createWriter(WriterInitContext context) throws IOException {
         return restoreWriter(context, Collections.emptyList());
     }
 
     @Override
-    public StarRocksWriter<InputT> restoreWriter(InitContext context, Collection<StarRocksWriterState> recoveredState)
+    public StarRocksWriter<InputT> restoreWriter(WriterInitContext context, Collection<StarRocksWriterState> recoveredState)
             throws IOException {
         try {
             return new StarRocksWriter<>(
@@ -81,7 +86,7 @@ public class StarRocksSink<InputT>
     }
 
     @Override
-    public Committer<StarRocksCommittable> createCommitter() throws IOException {
+    public Committer<StarRocksCommittable> createCommitter(CommitterInitContext context) throws IOException {
         return new StarRocksCommitter(sinkOptions, streamLoadProperties);
     }
 

@@ -20,15 +20,14 @@
 
 package com.starrocks.connector.flink.table.sink.v2;
 
-import org.apache.flink.api.connector.sink2.Sink;
-
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
+import org.apache.flink.api.connector.sink2.WriterInitContext;
 
 /** This context provides information for {@link RecordSerializationSchema}. */
 public interface StarRocksSinkContext {
 
     /** Returns the current sink's init context. */
-    Sink.InitContext getInitContext();
+    WriterInitContext getInitContext();
 
     /** Returns the sink options . */
     StarRocksSinkOptions getSinkOptions();

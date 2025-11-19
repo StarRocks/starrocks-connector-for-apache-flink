@@ -21,9 +21,9 @@
 package com.starrocks.connector.flink.table.sink.v2;
 
 import org.apache.flink.api.common.serialization.SerializationSchema;
-import org.apache.flink.api.connector.sink2.Sink;
-import org.apache.flink.api.connector.sink2.StatefulSink;
-import org.apache.flink.api.connector.sink2.TwoPhaseCommittingSink;
+import org.apache.flink.api.connector.sink2.CommittingSinkWriter;
+import org.apache.flink.api.connector.sink2.StatefulSinkWriter;
+import org.apache.flink.api.connector.sink2.WriterInitContext;
 import org.apache.flink.runtime.checkpoint.CheckpointIDCounter;
 
 import com.starrocks.connector.flink.manager.StarRocksStreamLoadListener;
@@ -48,8 +48,8 @@ import java.util.Collections;
 import java.util.List;
 
 public class StarRocksWriter<InputT>
-        implements StatefulSink.StatefulSinkWriter<InputT, StarRocksWriterState>,
-        TwoPhaseCommittingSink.PrecommittingSinkWriter<InputT, StarRocksCommittable> {
+        implements StatefulSinkWriter<InputT, StarRocksWriterState>,
+        CommittingSinkWriter<InputT, StarRocksCommittable> {
 
     private static final Logger LOG = LoggerFactory.getLogger(StarRocksWriter.class);
 
@@ -62,7 +62,7 @@ public class StarRocksWriter<InputT>
 
     public StarRocksWriter(
             StarRocksSinkOptions sinkOptions,
-            Sink.InitContext initContext,
+            WriterInitContext initContext,
             SerializationSchema.InitializationContext schemaContext,
             RecordSerializationSchema<InputT> serializationSchema,
             StreamLoadProperties streamLoadProperties,
@@ -86,8 +86,8 @@ public class StarRocksWriter<InputT>
         } else {
             this.labelGeneratorFactory = new ExactlyOnceLabelGeneratorFactory(
                     labelPrefix,
-                    initContext.getNumberOfParallelSubtasks(),
-                    initContext.getSubtaskId(),
+                    initContext.getTaskInfo().getNumberOfParallelSubtasks(),
+                    initContext.getTaskInfo().getIndexOfThisSubtask(),
                     restoredCheckpointId);
         }
 
@@ -113,7 +113,7 @@ public class StarRocksWriter<InputT>
                 LingeringTransactionAborter aborter = new LingeringTransactionAborter(
                         sinkOptions.getLabelPrefix(),
                         restoredCheckpointId,
-                        initContext.getSubtaskId(),
+                        initContext.getTaskInfo().getIndexOfThisSubtask(),
                         sinkOptions.getAbortCheckNumTxns(),
                         sinkOptions.getDbTables(),
                         restoredGeneratorSnapshots,

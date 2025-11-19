@@ -15,7 +15,7 @@
 package com.starrocks.connector.flink.tools;
 
 import com.google.common.base.Strings;
-import org.apache.flink.api.java.utils.MultipleParameterTool;
+import org.apache.flink.util.MultipleParameterTool;
 import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.TableEnvironment;
 

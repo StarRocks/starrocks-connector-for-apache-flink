@@ -14,14 +14,14 @@
 
 package com.starrocks.connector.flink.table.source;
 
+import org.apache.flink.legacy.table.connector.source.SourceFunctionProvider;
 import org.apache.flink.table.api.DataTypes;
-import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.legacy.api.TableSchema;
 import org.apache.flink.table.connector.ChangelogMode;
 import org.apache.flink.table.connector.source.DynamicTableSource;
 import org.apache.flink.table.connector.source.LookupTableSource;
 import org.apache.flink.table.connector.source.ScanTableSource;
-import org.apache.flink.table.connector.source.SourceFunctionProvider;
-import org.apache.flink.table.connector.source.TableFunctionProvider;
+import org.apache.flink.table.legacy.connector.source.TableFunctionProvider;
 import org.apache.flink.table.connector.source.abilities.SupportsFilterPushDown;
 import org.apache.flink.table.connector.source.abilities.SupportsLimitPushDown;
 import org.apache.flink.table.connector.source.abilities.SupportsProjectionPushDown;
@@ -30,6 +30,7 @@ import org.apache.flink.table.expressions.ResolvedExpression;
 import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
 import com.starrocks.connector.flink.table.source.struct.PushDownHolder;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
+import org.apache.flink.table.types.DataType;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -109,7 +110,7 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
     }
 
     @Override
-    public void applyProjection(int[][] projectedFields) {
+    public void applyProjection(int[][] projectedFields, DataType dataType) {
         // if columns = "*", this func will not be called, so 'selectColumns' will be null
         int[] curProjectedFields = Arrays.stream(projectedFields).mapToInt(value -> value[0]).toArray();
         if (curProjectedFields.length == 0 ) {

@@ -14,13 +14,12 @@
 
 package com.starrocks.connector.flink.table.source;
 
+import org.apache.flink.api.common.functions.OpenContext;
 import org.apache.flink.api.common.typeinfo.TypeHint;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.metrics.Counter;
-import org.apache.flink.streaming.api.functions.source.RichParallelSourceFunction;
-import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.streaming.api.functions.source.legacy.RichParallelSourceFunction;
 import org.apache.flink.table.data.RowData;
 
 import com.google.common.base.Strings;
@@ -29,6 +28,7 @@ import com.starrocks.connector.flink.table.source.struct.QueryBeXTablets;
 import com.starrocks.connector.flink.table.source.struct.QueryInfo;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 import com.starrocks.connector.flink.tools.EnvUtils;
+import org.apache.flink.table.legacy.api.TableSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -136,19 +136,19 @@ public class StarRocksDynamicSourceFunction extends RichParallelSourceFunction<R
     }
 
     @Override
-    public void open(Configuration parameters) throws Exception {
-        super.open(parameters);
+    public void open(OpenContext context) throws Exception {
+        super.open(context);
         this.dataReaderClosed = new AtomicBoolean(false);
         this.counterTotalScannedRows = getRuntimeContext().getMetricGroup().counter(TOTAL_SCANNED_ROWS);
 
-        int subTaskId = getRuntimeContext().getIndexOfThisSubtask();
+        int subTaskId = getRuntimeContext().getTaskInfo().getIndexOfThisSubtask();
         if (this.queryType == StarRocksSourceQueryType.QueryCount) {
             if (subTaskId == 0) {
                 StarRocksSourceTrickReader reader = new StarRocksSourceTrickReader(this.dataCount);
                 this.dataReaderList.add(reader);
             }
         } else {
-            List<List<QueryBeXTablets>> lists = StarRocksSourceCommonFunc.splitQueryBeXTablets(getRuntimeContext().getNumberOfParallelSubtasks(), queryInfo);
+            List<List<QueryBeXTablets>> lists = StarRocksSourceCommonFunc.splitQueryBeXTablets(getRuntimeContext().getTaskInfo().getNumberOfParallelSubtasks(), queryInfo);
             lists.get(subTaskId).forEach(beXTablets -> {
                 StarRocksSourceBeReader beReader = new StarRocksSourceBeReader(beXTablets.getBeNode(), columnRichInfos, selectColumns, sourceOptions);
                 this.dataReaderList.add(beReader);

@@ -32,9 +32,10 @@ if ! ${MVN_CMD} --version; then
 fi
 export MVN_CMD
 
-SUPPORTED_MINOR_VERSION=("1.15" "1.16" "1.17" "1.18" "1.19" "1.20")
-# version formats are different among flink versions
-SUPPORTED_KAFKA_CONNECTOR_VERSION=("1.15.0" "1.16.0" "1.17.0" "3.0.1-1.18" "3.2.0-1.19" "3.4.0-1.20")
+SUPPORTED_MINOR_VERSION=("2.0" "2.1")
+SUPPORTED_KAFKA_CONNECTOR_VERSION=("4.0.1-2.0" "4.0.1-2.0")
+SUPPORTED_FLINK_SHADED_VERSION=("32.1.3-jre-19.0" "33.4.0-jre-20.0")
+
 VERSION_MESSAGE=$(IFS=, ; echo "${SUPPORTED_MINOR_VERSION[*]}")
 
 function check_flink_version_supported() {
@@ -67,6 +68,26 @@ function get_kafka_connector_version() {
     echo $KAFKA_CONNECTOR_VERSION
   else
     echo "Can't find kafka connector version for flink-${FLINK_MINOR_VERSION}"
+    exit 1
+  fi
+}
+
+function get_flink_shaded_guava_version() {
+  local FLINK_MINOR_VERSION=$1
+  local index=-1
+  for ((i=0; i<${#SUPPORTED_MINOR_VERSION[@]}; i++)); do
+      if [ "${SUPPORTED_MINOR_VERSION[i]}" = "$FLINK_MINOR_VERSION" ]; then
+          index=$i
+          break
+      fi
+  done
+
+  if [ "$index" != -1 ];
+  then
+    local FLINK_SHADED_VERSION="${SUPPORTED_FLINK_SHADED_VERSION[index]}"
+    echo $FLINK_SHADED_VERSION
+  else
+    echo "Can't find flink shaded guava version for flink-${FLINK_MINOR_VERSION}"
     exit 1
   fi
 }

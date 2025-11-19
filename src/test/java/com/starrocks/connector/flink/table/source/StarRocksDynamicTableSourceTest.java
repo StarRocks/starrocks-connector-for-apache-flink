@@ -52,7 +52,7 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
 
     @Test
     public void testApplyProjection() {
-        dynamicTableSource.applyProjection(PROJECTION_ARRAY);
+        dynamicTableSource.applyProjection(PROJECTION_ARRAY, null);
 
         for (int i = 0; i < SELECT_COLUMNS.length; i ++) {
             assertEquals(SELECT_COLUMNS[i].getColumnIndexInFlinkTable(), pushDownHolder.getSelectColumns()[i].getColumnIndexInFlinkTable());
@@ -60,7 +60,7 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
         } 
         assertEquals(StarRocksSourceQueryType.QuerySomeColumns, pushDownHolder.getQueryType());
 
-        dynamicTableSource.applyProjection(PROJECTION_ARRAY_NULL);
+        dynamicTableSource.applyProjection(PROJECTION_ARRAY_NULL, null);
         assertEquals(StarRocksSourceQueryType.QueryCount, pushDownHolder.getQueryType());
     }
 
@@ -70,9 +70,9 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
         String filter;
 
         ResolvedExpression c9Ref = new FieldReferenceExpression("c6", DataTypes.STRING(), 0, 2);
-        ResolvedExpression c9CharLength = new CallExpression(BuiltInFunctionDefinitions.CHAR_LENGTH, Collections.singletonList(c9Ref), DataTypes.INT());
+        ResolvedExpression c9CharLength = CallExpression.anonymous(BuiltInFunctionDefinitions.CHAR_LENGTH, Collections.singletonList(c9Ref), DataTypes.INT());
         ResolvedExpression c9Exp =
-                new CallExpression(
+                CallExpression.anonymous(
                         BuiltInFunctionDefinitions.LESS_THAN,
                         Arrays.asList(c9CharLength, valueLiteral(10)),
                         DataTypes.BOOLEAN());
@@ -82,7 +82,7 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
 
         ResolvedExpression c5Ref = new FieldReferenceExpression("c5", DataTypes.TIMESTAMP(), 0, 2);
         ResolvedExpression c5Exp =
-                new CallExpression(
+                CallExpression.anonymous(
                         BuiltInFunctionDefinitions.EQUALS,
                         Arrays.asList(c5Ref, valueLiteral("2022-1-22 00:00:00")),
                         DataTypes.BOOLEAN());
@@ -92,7 +92,7 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
 
         ResolvedExpression c4Ref = new FieldReferenceExpression("c4", DataTypes.DATE(), 0, 2);
         ResolvedExpression c4Exp =
-                new CallExpression(
+                CallExpression.anonymous(
                         BuiltInFunctionDefinitions.EQUALS,
                         Arrays.asList(c4Ref, valueLiteral("2022-1-22")),
                         DataTypes.BOOLEAN());
@@ -102,7 +102,7 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
 
         ResolvedExpression c3Ref = new FieldReferenceExpression("c3", DataTypes.BOOLEAN(), 0, 2);
         ResolvedExpression c3Exp =
-                new CallExpression(
+                CallExpression.anonymous(
                         BuiltInFunctionDefinitions.EQUALS,
                         Arrays.asList(c3Ref, valueLiteral(true)),
                         DataTypes.BOOLEAN());
@@ -112,36 +112,36 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
 
         ResolvedExpression c2Ref = new FieldReferenceExpression("c2", DataTypes.INT(), 0, 2);
         ResolvedExpression c2Exp =
-                new CallExpression(
+                CallExpression.anonymous(
                         BuiltInFunctionDefinitions.EQUALS,
                         Arrays.asList(c2Ref, valueLiteral(2)),
                         DataTypes.BOOLEAN());
 
         ResolvedExpression c1Ref = new FieldReferenceExpression("c1", DataTypes.INT(), 0, 2);
         ResolvedExpression c1Exp =
-                new CallExpression(
+                CallExpression.anonymous(
                         BuiltInFunctionDefinitions.EQUALS,
                         Arrays.asList(c1Ref, valueLiteral(1)),
                         DataTypes.BOOLEAN());
         
         dynamicTableSource.applyFilters(Arrays.asList(c1Exp,
-            new CallExpression(
+                CallExpression.anonymous(
                 BuiltInFunctionDefinitions.NOT_EQUALS,
                 Arrays.asList(c1Ref, valueLiteral(1)),
                 DataTypes.BOOLEAN()),
-            new CallExpression(
+                CallExpression.anonymous(
                 BuiltInFunctionDefinitions.GREATER_THAN,
                 Arrays.asList(c1Ref, valueLiteral(1)),
                 DataTypes.BOOLEAN()),
-            new CallExpression(
+                CallExpression.anonymous(
                 BuiltInFunctionDefinitions.GREATER_THAN_OR_EQUAL,
                 Arrays.asList(c1Ref, valueLiteral(1)),
                 DataTypes.BOOLEAN()),
-            new CallExpression(
+                CallExpression.anonymous(
                 BuiltInFunctionDefinitions.LESS_THAN,
                 Arrays.asList(c1Ref, valueLiteral(1)),
                 DataTypes.BOOLEAN()),
-            new CallExpression(
+                CallExpression.anonymous(
                 BuiltInFunctionDefinitions.LESS_THAN_OR_EQUAL,
                 Arrays.asList(c1Ref, valueLiteral(1)),
                 DataTypes.BOOLEAN())
@@ -154,13 +154,13 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
         assertEquals("(c1 = 1) and (c2 = 2)", filter);
 
 
-        dynamicTableSource.applyFilters(Arrays.asList(new CallExpression(BuiltInFunctionDefinitions.OR, Arrays.asList(c1Exp, c3Exp), DataTypes.BOOLEAN())));
+        dynamicTableSource.applyFilters(Arrays.asList(CallExpression.anonymous(BuiltInFunctionDefinitions.OR, Arrays.asList(c1Exp, c3Exp), DataTypes.BOOLEAN())));
         filter = pushDownHolder.getFilter();
         assertEquals("((c1 = 1) or (c3 = true))", filter);
 
 
         ResolvedExpression c6Exp =
-                new CallExpression(
+                CallExpression.anonymous(
                         BuiltInFunctionDefinitions.LIKE,
                         Arrays.asList(c1Ref, valueLiteral(1)),
                         DataTypes.BOOLEAN());
@@ -172,7 +172,7 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
         }
 
         ResolvedExpression c7Exp =
-                new CallExpression(
+                CallExpression.anonymous(
                         BuiltInFunctionDefinitions.IN,
                         Arrays.asList(c1Ref, valueLiteral(1)),
                         DataTypes.BOOLEAN());
@@ -184,7 +184,7 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
         }
 
         ResolvedExpression c8Exp =
-                new CallExpression(
+                CallExpression.anonymous(
                         BuiltInFunctionDefinitions.BETWEEN,
                         Arrays.asList(c1Ref, valueLiteral(1)),
                         DataTypes.BOOLEAN());
@@ -232,7 +232,7 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
 
         ResolvedExpression c5Ref = new FieldReferenceExpression("c5", DataTypes.TIMESTAMP(), 0, 2);
         ResolvedExpression c5Exp =
-                new CallExpression(
+                CallExpression.anonymous(
                         BuiltInFunctionDefinitions.EQUALS,
                         Arrays.asList(c5Ref, valueLiteral("2022-1-22 00:00:00")),
                         DataTypes.BOOLEAN());

@@ -47,19 +47,20 @@ limitations under the License.
 
     <properties>
         <srfc.version>1.2.13</srfc.version>
-        <maven.compiler.source>1.8</maven.compiler.source>
-        <maven.compiler.target>1.8</maven.compiler.target>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <file_encoding>UTF-8</file_encoding>
         <maven-enforcer-plugin.version>3.0.0-M3</maven-enforcer-plugin.version>
         <maven-surefire-plugin.version>3.0.0-M4</maven-surefire-plugin.version>
-        <flink.minor.version>1.20</flink.minor.version>
-        <flink.version>1.20.0</flink.version>
-        <kafka.connector.version>3.4.0-1.20</kafka.connector.version>
+        <flink.minor.version>2.1</flink.minor.version>
+        <flink.version>2.1.1</flink.version>
+        <kafka.connector.version>4.0.1-2.0</kafka.connector.version>
+        <flink.shaded.guava.version>33.4.0-jre-20.0</flink.shaded.guava.version>
         <arrow.version>5.0.0</arrow.version>
         <kafka.version>2.8.1</kafka.version>
         <scala.binary.version>2.12</scala.binary.version>
-        <guava.version>32.0.1-jre</guava.version>
+        <guava.version>33.4.0-jre</guava.version>
         <shading.prefix>com.starrocks.shade</shading.prefix>
         <alibaba-fastjson.version>1.2.83</alibaba-fastjson.version>
         <jmockit.version>1.49</jmockit.version>
@@ -329,7 +330,7 @@ limitations under the License.
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-shaded-guava</artifactId>
-            <version>31.1-jre-17.0</version>
+            <version>${flink.shaded.guava.version}</version>
             <scope>test</scope>
         </dependency>
 
@@ -368,8 +369,8 @@ limitations under the License.
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
-                    <source>1.8</source>
-                    <target>1.8</target>
+                    <source>11</source>
+                    <target>11</target>
                     <encoding>${file_encoding}</encoding>
                 </configuration>
             </plugin>
@@ -629,7 +630,7 @@ limitations under the License.
                 </property>
             </activation>
             <properties>
-                <target.java.version>1.8</target.java.version>
+                <target.java.version>11</target.java.version>
             </properties>
             <build>
                 <plugins>

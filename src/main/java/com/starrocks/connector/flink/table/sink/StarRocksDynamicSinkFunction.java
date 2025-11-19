@@ -25,15 +25,15 @@ import com.starrocks.connector.flink.row.sink.StarRocksISerializer;
 import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
 import com.starrocks.connector.flink.tools.EnvUtils;
 import com.starrocks.connector.flink.tools.JsonWrapper;
+import org.apache.flink.api.common.functions.OpenContext;
 import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.api.common.typeinfo.TypeHint;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.runtime.state.FunctionInitializationContext;
 import org.apache.flink.runtime.state.FunctionSnapshotContext;
-import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.legacy.api.TableSchema;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.types.RowKind;
 import org.slf4j.Logger;
@@ -79,8 +79,8 @@ public class StarRocksDynamicSinkFunction<T> extends StarRocksDynamicSinkFunctio
     }
 
     @Override
-    public void open(Configuration parameters) throws Exception {
-        super.open(parameters);
+    public void open(OpenContext context) throws Exception {
+        super.open(context);
         this.jsonWrapper = new JsonWrapper();
         if (serializer != null) {
             this.serializer.open(new StarRocksISerializer.SerializerContext(jsonWrapper));

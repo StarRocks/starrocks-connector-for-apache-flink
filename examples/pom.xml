@@ -22,8 +22,8 @@ limitations under the License.
     <version>1.0-SNAPSHOT</version>
 
     <properties>
-        <maven.compiler.source>1.8</maven.compiler.source>
-        <maven.compiler.target>1.8</maven.compiler.target>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
         <file_encoding>UTF-8</file_encoding>
         <flink.minor.version>1.17</flink.minor.version>
         <flink.version>1.17.0</flink.version>

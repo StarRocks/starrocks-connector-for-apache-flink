@@ -25,7 +25,6 @@ import org.apache.flink.connector.kafka.sink.KafkaRecordSerializationSchema;
 import org.apache.flink.connector.kafka.sink.KafkaSink;
 import org.apache.flink.streaming.api.datastream.DataStreamSource;
 import org.apache.flink.streaming.connectors.kafka.partitioner.FlinkFixedPartitioner;
-import org.apache.flink.streaming.connectors.kafka.partitioner.FlinkKafkaPartitioner;
 import org.apache.flink.table.api.TableResult;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.junit.Before;
@@ -166,7 +165,7 @@ public class KafkaToStarRocksITTest extends KafkaTableTestBase {
     private void writeRecordsToKafka(String topic, List<String> lines) throws Exception {
         DataStreamSource<String> stream = env.fromCollection(lines);
         SerializationSchema<String> serSchema = new SimpleStringSchema();
-        FlinkKafkaPartitioner<String> partitioner = new FlinkFixedPartitioner<>();
+        FlinkFixedPartitioner<String> partitioner = new FlinkFixedPartitioner<>();
 
         // the producer must not produce duplicates
         Properties producerProperties = getStandardProps();
@@ -182,7 +181,8 @@ public class KafkaToStarRocksITTest extends KafkaTableTestBase {
                                         .setValueSerializationSchema(serSchema)
                                         .setPartitioner(partitioner)
                                         .build())
-                        .setDeliverGuarantee(DeliveryGuarantee.EXACTLY_ONCE)
+                        .setDeliveryGuarantee(DeliveryGuarantee.EXACTLY_ONCE)
+                        .setTransactionalIdPrefix("tid")
                         .build());
         env.execute("Write sequence");
     }

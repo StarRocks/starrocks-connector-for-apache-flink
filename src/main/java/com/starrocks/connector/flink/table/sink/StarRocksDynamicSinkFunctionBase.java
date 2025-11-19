@@ -20,7 +20,7 @@ package com.starrocks.connector.flink.table.sink;
 
 import org.apache.flink.api.common.state.CheckpointListener;
 import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
-import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
+import org.apache.flink.streaming.api.functions.sink.legacy.RichSinkFunction;
 
 /** Base class for all sink implementations. */
 public abstract class StarRocksDynamicSinkFunctionBase<T> extends RichSinkFunction<T>

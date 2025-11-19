@@ -15,7 +15,6 @@
 package com.starrocks.connector.flink.it.source;
 
 import org.apache.flink.table.api.DataTypes;
-import org.apache.flink.table.api.TableSchema;
 
 import com.alibaba.fastjson.JSONObject;
 import com.starrocks.connector.flink.table.source.StarRocksSourceOptions;
@@ -29,6 +28,7 @@ import com.starrocks.shade.org.apache.thrift.transport.TServerTransport;
 import com.starrocks.shade.org.apache.thrift.transport.TTransportException;
 import com.starrocks.shade.org.apache.thrift.transport.TTransportFactory;
 import com.starrocks.thrift.TStarrocksExternalService;
+import org.apache.flink.table.legacy.api.TableSchema;
 import org.junit.After;
 import org.junit.Before;
 

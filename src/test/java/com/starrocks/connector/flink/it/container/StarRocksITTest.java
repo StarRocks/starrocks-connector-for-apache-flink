@@ -28,10 +28,9 @@ import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 import com.starrocks.connector.flink.table.sink.StarRocksSinkSemantic;
 import com.starrocks.connector.flink.table.source.StarRocksSourceOptions;
 import org.apache.flink.api.common.JobExecutionResult;
+import org.apache.flink.api.common.functions.OpenContext;
 import org.apache.flink.api.common.functions.RichMapFunction;
-import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.api.common.state.CheckpointListener;
-import org.apache.flink.api.common.time.Time;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeinfo.Types;
 import org.apache.flink.api.java.typeutils.RowTypeInfo;
@@ -41,10 +40,11 @@ import org.apache.flink.core.execution.JobListener;
 import org.apache.flink.streaming.api.checkpoint.ListCheckpointed;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.util.RestartStrategyUtils;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.Table;
 import org.apache.flink.table.api.TableResult;
-import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.legacy.api.TableSchema;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.types.Row;
@@ -57,6 +57,7 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.Date;
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -65,6 +66,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
+import static org.apache.flink.configuration.CoreOptions.CHECK_LEAKED_CLASSLOADER;
 import static org.apache.flink.table.api.Expressions.$;
 import static org.junit.Assert.assertNull;
 
@@ -115,7 +117,7 @@ public class StarRocksITTest extends StarRocksITTestBase {
         STARROCKS_CLUSTER.executeMysqlCommand(createTable);
 
         Configuration conf = new Configuration();
-        conf.setBoolean("classloader.check-leaked-classloader", false);
+        conf.set(CHECK_LEAKED_CLASSLOADER, false);
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment(conf);
         env.setParallelism(1);
         StreamTableEnvironment tEnv;
@@ -189,7 +191,7 @@ public class StarRocksITTest extends StarRocksITTestBase {
         STARROCKS_CLUSTER.executeMysqlCommand(inserIntoData);
 
         Configuration conf = new Configuration();
-        conf.setBoolean("classloader.check-leaked-classloader", false);
+        conf.set(CHECK_LEAKED_CLASSLOADER, false);
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment(conf);
         env.setParallelism(1);
         StreamTableEnvironment tEnv;
@@ -268,7 +270,7 @@ public class StarRocksITTest extends StarRocksITTestBase {
         STARROCKS_CLUSTER.executeMysqlCommand(inserIntoData);
 
         Configuration conf = new Configuration();
-        conf.setBoolean("classloader.check-leaked-classloader", false);
+        conf.set(CHECK_LEAKED_CLASSLOADER, false);
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment(conf);
         env.setParallelism(1);
         StreamTableEnvironment tEnv;
@@ -355,7 +357,7 @@ public class StarRocksITTest extends StarRocksITTestBase {
         STARROCKS_CLUSTER.executeMysqlCommand(createTable);
 
         Configuration conf = new Configuration();
-        conf.setBoolean("classloader.check-leaked-classloader", false);
+        conf.set(CHECK_LEAKED_CLASSLOADER, false);
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment(conf);
         env.setParallelism(1);
         StreamTableEnvironment tEnv;
@@ -474,8 +476,8 @@ public class StarRocksITTest extends StarRocksITTestBase {
         }
 
         @Override
-        public void open(Configuration parameters) {
-            failer = getRuntimeContext().getIndexOfThisSubtask() == 0;
+        public void open(OpenContext context) {
+            failer = getRuntimeContext().getTaskInfo().getIndexOfThisSubtask() == 0;
         }
 
         @Override
@@ -588,7 +590,9 @@ public class StarRocksITTest extends StarRocksITTestBase {
         Thread.sleep(10000);
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        env.setRestartStrategy(RestartStrategies.fixedDelayRestart(30, Time.seconds(40)));
+        RestartStrategyUtils.configureFixedDelayRestartStrategy(
+                env, 30, Duration.ofSeconds(40)
+        );
         env.addSource(StarRocksSource.source(tableSchema, sourceOptions)).map(new ClusterKillingMapper(STARROCKS_CLUSTER,2)).addSink(StarRocksSink.sink(tableSchema, sinkOptions, new StarRocksSinkRowBuilder<RowData>() {
             @Override
             public void accept(Object[] objects, RowData rowData) {

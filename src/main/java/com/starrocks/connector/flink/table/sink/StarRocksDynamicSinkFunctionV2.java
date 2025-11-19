@@ -33,16 +33,16 @@ import com.starrocks.connector.flink.tools.JsonWrapper;
 import com.starrocks.data.load.stream.LabelGeneratorFactory;
 import com.starrocks.data.load.stream.StreamLoadSnapshot;
 import com.starrocks.data.load.stream.v2.StreamLoadManagerV2;
+import org.apache.flink.api.common.functions.OpenContext;
 import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.api.common.typeinfo.TypeHint;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.checkpoint.CheckpointIDCounter;
 import org.apache.flink.runtime.state.FunctionInitializationContext;
 import org.apache.flink.runtime.state.FunctionSnapshotContext;
 import org.apache.flink.streaming.api.operators.util.SimpleVersionedListState;
-import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.legacy.api.TableSchema;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.types.RowKind;
 import org.slf4j.Logger;
@@ -175,7 +175,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
     }
 
     @Override
-    public void open(Configuration parameters) throws Exception {
+    public void open(OpenContext context) throws Exception {
         totalReceivedRows = 0;
         if (serializer != null) {
             this.serializer.open(new StarRocksISerializer.SerializerContext(getOrCreateJsonWrapper()));
@@ -193,8 +193,8 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
         } else {
             this.exactlyOnceLabelFactory = new ExactlyOnceLabelGeneratorFactory(
                     labelPrefix,
-                    getRuntimeContext().getNumberOfParallelSubtasks(),
-                    getRuntimeContext().getIndexOfThisSubtask(),
+                    getRuntimeContext().getTaskInfo().getNumberOfParallelSubtasks(),
+                    getRuntimeContext().getTaskInfo().getIndexOfThisSubtask(),
                     restoredCheckpointId);
             exactlyOnceLabelFactory.restore(restoredGeneratorSnapshots);
             labelGeneratorFactory = exactlyOnceLabelFactory;
@@ -219,7 +219,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
             LingeringTransactionAborter aborter = new LingeringTransactionAborter(
                     sinkOptions.getLabelPrefix(),
                     restoredCheckpointId,
-                    getRuntimeContext().getIndexOfThisSubtask(),
+                    getRuntimeContext().getTaskInfo().getIndexOfThisSubtask(),
                     sinkOptions.getAbortCheckNumTxns(),
                     sinkOptions.getDbTables(),
                     restoredGeneratorSnapshots,

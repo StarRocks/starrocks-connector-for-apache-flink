@@ -21,7 +21,7 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.flink.table.api.DataTypes;
-import org.apache.flink.table.api.TableSchema.Builder;
+import org.apache.flink.table.legacy.api.TableSchema;
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -84,7 +84,7 @@ public class StarRocksSinkManagerTest extends StarRocksSinkBaseTest {
         assertTrue(exMsg.length() > 0);
 
 
-        Builder schemaBuilder = createTableSchemaBuilder();
+        TableSchema.Builder schemaBuilder = createTableSchemaBuilder();
         schemaBuilder.field("v6", DataTypes.VARCHAR(20));
         try {
             new StarRocksSinkManager(OPTIONS, schemaBuilder.build());
