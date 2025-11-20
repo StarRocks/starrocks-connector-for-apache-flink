@@ -34,7 +34,7 @@ import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.DataStreamSource;
 import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.functions.sink.SinkFunction;
+import org.apache.flink.streaming.api.functions.sink.legacy.SinkFunction;
 import org.apache.flink.util.OutputTag;
 import org.apache.flink.util.Preconditions;
 import org.slf4j.Logger;
@@ -122,7 +122,7 @@ public abstract class DatabaseSync {
             OutputTag<String> recordOutputTag = ParsingProcessFunction.createRecordOutputTag(table);
             DataStream<String> sideOutput = parsedStream.getSideOutput(recordOutputTag);
 
-            int sinkParallel = sinkConfig.getInteger(StarRocksSinkOptions.SINK_PARALLELISM, sideOutput.getParallelism());
+            int sinkParallel = sinkConfig.get(StarRocksSinkOptions.SINK_PARALLELISM, sideOutput.getParallelism());
 
             StarRocksSinkOptions starRocksSinkOptions = getStarRocksSinkOptions(table);
             SinkFunction<String> starRockSink = StarRocksSink.sink(starRocksSinkOptions);
@@ -137,8 +137,8 @@ public abstract class DatabaseSync {
     }
 
     private DebeziumJsonSerializer getSerializer(String table) {
-        String user = sinkConfig.getString(StarRocksSinkOptions.USERNAME);
-        String passwd = sinkConfig.getString(StarRocksSinkOptions.PASSWORD, "");
+        String user = sinkConfig.get(StarRocksSinkOptions.USERNAME);
+        String passwd = sinkConfig.get(StarRocksSinkOptions.PASSWORD, "");
         String jdbcUrl = sinkConfig.get(StarRocksSinkOptions.JDBC_URL);
 
         StarRocksOptions.Builder starRocksBuilder = StarRocksOptions.builder();
@@ -159,9 +159,9 @@ public abstract class DatabaseSync {
     private StarRocksSinkOptions getStarRocksSinkOptions(String table) {
         String jdbcUrl = sinkConfig.get(StarRocksSinkOptions.JDBC_URL);
         String loadUrl = String.join(";", sinkConfig.get(StarRocksSinkOptions.LOAD_URL));
-        String user = sinkConfig.getString(StarRocksSinkOptions.USERNAME);
-        String passwd = sinkConfig.getString(StarRocksSinkOptions.PASSWORD, "");
-        String labelPrefix = sinkConfig.getString(StarRocksSinkOptions.SINK_LABEL_PREFIX);
+        String user = sinkConfig.get(StarRocksSinkOptions.USERNAME);
+        String passwd = sinkConfig.get(StarRocksSinkOptions.PASSWORD, "");
+        String labelPrefix = sinkConfig.get(StarRocksSinkOptions.SINK_LABEL_PREFIX);
 
         StarRocksSinkOptions options = StarRocksSinkOptions.builder()
                 .withProperty("jdbc-url", jdbcUrl)
@@ -184,9 +184,9 @@ public abstract class DatabaseSync {
     }
 
     private StarRocksJdbcConnectionOptions getStarRocksConnectionOptions() {
-        String user = sinkConfig.getString(StarRocksSinkOptions.USERNAME);
-        String passwd = sinkConfig.getString(StarRocksSinkOptions.PASSWORD, "");
-        String jdbcUrl = sinkConfig.getString(StarRocksSinkOptions.JDBC_URL);
+        String user = sinkConfig.get(StarRocksSinkOptions.USERNAME);
+        String passwd = sinkConfig.get(StarRocksSinkOptions.PASSWORD, "");
+        String jdbcUrl = sinkConfig.get(StarRocksSinkOptions.JDBC_URL);
         Preconditions.checkNotNull(user, "username is empty in sink-conf");
         Preconditions.checkNotNull(jdbcUrl, "jdbcurl is empty in sink-conf");
 

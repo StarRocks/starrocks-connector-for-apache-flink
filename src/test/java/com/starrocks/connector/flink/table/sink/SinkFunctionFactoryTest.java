@@ -27,6 +27,7 @@ import org.apache.flink.configuration.Configuration;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -47,12 +48,12 @@ public class SinkFunctionFactoryTest {
         try (MockFeHttpServer httpServer = new MockFeHttpServer()) {
             httpServer.start();
             Configuration conf = new Configuration();
-            conf.setString(StarRocksSinkOptions.TABLE_NAME, "test");
-            conf.setString(StarRocksSinkOptions.DATABASE_NAME, "test");
-            conf.setString(StarRocksSinkOptions.LOAD_URL.key(), "127.0.0.1:" + httpServer.getListenPort());
-            conf.setString(StarRocksSinkOptions.JDBC_URL, "jdbc://127.0.0.1:1234");
-            conf.setString(StarRocksSinkOptions.USERNAME, "root");
-            conf.setString(StarRocksSinkOptions.PASSWORD, "");
+            conf.set(StarRocksSinkOptions.TABLE_NAME, "test");
+            conf.set(StarRocksSinkOptions.DATABASE_NAME, "test");
+            conf.set(StarRocksSinkOptions.LOAD_URL, Collections.singletonList("127.0.0.1:" + httpServer.getListenPort()));
+            conf.set(StarRocksSinkOptions.JDBC_URL, "jdbc://127.0.0.1:1234");
+            conf.set(StarRocksSinkOptions.USERNAME, "root");
+            conf.set(StarRocksSinkOptions.PASSWORD, "");
             StarRocksSinkOptions sinkOptions = new StarRocksSinkOptions(conf, new HashMap<>());
 
             {
@@ -170,13 +171,13 @@ public class SinkFunctionFactoryTest {
     public void testGetSinkVersion() {
         Configuration conf = new Configuration();
         {
-            conf.setString(StarRocksSinkOptions.SINK_VERSION, "V1");
+            conf.set(StarRocksSinkOptions.SINK_VERSION, "V1");
             StarRocksSinkOptions sinkOptions = new StarRocksSinkOptions(conf, new HashMap<>());
             assertEquals(SinkFunctionFactory.SinkVersion.V1, SinkFunctionFactory.getSinkVersion(sinkOptions));
         }
 
         {
-            conf.setString(StarRocksSinkOptions.SINK_VERSION, "V2");
+            conf.set(StarRocksSinkOptions.SINK_VERSION, "V2");
             StarRocksSinkOptions sinkOptions = new StarRocksSinkOptions(conf, new HashMap<>());
             assertEquals(SinkFunctionFactory.SinkVersion.V2, SinkFunctionFactory.getSinkVersion(sinkOptions));
         }
@@ -189,7 +190,7 @@ public class SinkFunctionFactoryTest {
                     return autoVersion.get();
                 }
             };
-            conf.setString(StarRocksSinkOptions.SINK_VERSION, "AUTO");
+            conf.set(StarRocksSinkOptions.SINK_VERSION, "AUTO");
             StarRocksSinkOptions sinkOptions = new StarRocksSinkOptions(conf, new HashMap<>());
 
             autoVersion.set(SinkFunctionFactory.SinkVersion.V1);
@@ -200,7 +201,7 @@ public class SinkFunctionFactoryTest {
         }
 
         {
-            conf.setString(StarRocksSinkOptions.SINK_VERSION, "UNKNOWN");
+            conf.set(StarRocksSinkOptions.SINK_VERSION, "UNKNOWN");
             StarRocksSinkOptions sinkOptions = new StarRocksSinkOptions(conf, new HashMap<>());
             try {
                 SinkFunctionFactory.getSinkVersion(sinkOptions);

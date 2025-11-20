@@ -17,13 +17,13 @@ package com.starrocks.connector.flink.table.sink;
 import com.starrocks.connector.flink.row.sink.StarRocksTableRowTransformer;
 import com.starrocks.connector.flink.table.sink.v2.StarRocksSink;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
-import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.connector.ChangelogMode;
 import org.apache.flink.table.connector.sink.DynamicTableSink;
-import org.apache.flink.table.connector.sink.SinkFunctionProvider;
 import org.apache.flink.table.connector.sink.SinkV2Provider;
+import org.apache.flink.table.connector.sink.legacy.SinkFunctionProvider;
 import org.apache.flink.table.data.RowData;
- 
+import org.apache.flink.table.legacy.api.TableSchema;
+
 public class StarRocksDynamicTableSink implements DynamicTableSink {
 
     private transient TableSchema flinkSchema;

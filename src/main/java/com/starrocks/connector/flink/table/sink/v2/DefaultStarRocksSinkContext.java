@@ -20,23 +20,22 @@
 
 package com.starrocks.connector.flink.table.sink.v2;
 
-import org.apache.flink.api.connector.sink2.Sink;
-
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
+import org.apache.flink.api.connector.sink2.WriterInitContext;
 
 /** Default implementation for {@link StarRocksSinkContext}. */
 public class DefaultStarRocksSinkContext implements StarRocksSinkContext {
 
-    private final Sink.InitContext initContext;
+    private final WriterInitContext initContext;
     private final StarRocksSinkOptions sinkOptions;
 
-    public DefaultStarRocksSinkContext(Sink.InitContext initContext, StarRocksSinkOptions sinkOptions) {
+    public DefaultStarRocksSinkContext(WriterInitContext initContext, StarRocksSinkOptions sinkOptions) {
         this.initContext = initContext;
         this.sinkOptions = sinkOptions;
     }
 
     @Override
-    public Sink.InitContext getInitContext() {
+    public WriterInitContext getInitContext() {
         return initContext;
     }
 

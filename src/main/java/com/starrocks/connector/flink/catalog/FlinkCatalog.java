@@ -278,7 +278,12 @@ public class FlinkCatalog extends AbstractCatalog {
             properties.putAll(getSourceConfig(tablePath.getDatabaseName(), tablePath.getObjectName()));
             properties.putAll(getSinkConfig(tablePath.getDatabaseName(), tablePath.getObjectName()));
 
-            return CatalogTable.of(flinkSchema, starRocksTable.getComment().orElse(null), new ArrayList<>(), properties);
+            return CatalogTable.newBuilder()
+                    .schema(flinkSchema)
+                    .comment(starRocksTable.getComment().orElse(null))
+                    .partitionKeys(new ArrayList<>())
+                    .options(properties)
+                    .build();
         } catch (StarRocksCatalogException e) {
             throw new CatalogException(
                     String.format("Failed to get table %s in catalog %s", tablePath.getFullName(), getName()), e);

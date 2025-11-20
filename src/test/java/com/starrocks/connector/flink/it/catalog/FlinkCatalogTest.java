@@ -26,17 +26,18 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.Schema;
-import org.apache.flink.table.api.TableColumn;
-import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.catalog.AbstractCatalogTable;
+import org.apache.flink.table.catalog.CatalogTable;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import org.apache.flink.table.catalog.CatalogBaseTable;
 import org.apache.flink.table.catalog.CatalogDatabaseImpl;
-import org.apache.flink.table.catalog.CatalogTableImpl;
 import org.apache.flink.table.catalog.ObjectPath;
 import org.apache.flink.table.catalog.exceptions.DatabaseAlreadyExistException;
 import org.apache.flink.table.catalog.exceptions.DatabaseNotExistException;
 import org.apache.flink.table.catalog.exceptions.TableAlreadyExistException;
 import org.apache.flink.table.catalog.exceptions.TableNotExistException;
+import org.apache.flink.table.legacy.api.TableColumn;
+import org.apache.flink.table.legacy.api.TableSchema;
 import org.apache.flink.types.Row;
 import org.apache.flink.types.RowKind;
 import org.apache.flink.util.CollectionUtil;
@@ -46,7 +47,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 import static com.starrocks.connector.flink.catalog.TypeUtils.MAX_VARCHAR_SIZE;
 import static com.starrocks.connector.flink.catalog.TypeUtils.STRING_SIZE;
@@ -189,7 +193,7 @@ public class FlinkCatalogTest extends StarRocksITTestBase {
         String tbl = "tbl_" + genRandomUuid();
         ObjectPath objectPath = new ObjectPath(db, tbl);
         TableSchema flinkSchema = createAllTypesFlinkSchema();
-        CatalogBaseTable catalogTable = new CatalogTableImpl(flinkSchema, Collections.emptyMap(), null);
+        CatalogBaseTable catalogTable = new MockedCatalogTable(flinkSchema, Collections.emptyMap(), null);
         assertFalse(catalog.tableExists(objectPath));
         catalog.createTable(objectPath, catalogTable, false);
         assertTrue(catalog.tableExists(objectPath));
@@ -382,5 +386,46 @@ public class FlinkCatalogTest extends StarRocksITTestBase {
                         DB_NAME, tableName);
         executeSrSQL(createStarRocksTable);
         return tableName;
+    }
+
+    static class MockedCatalogTable extends AbstractCatalogTable {
+
+        public MockedCatalogTable(
+                TableSchema tableSchema, Map<String, String> properties, String comment) {
+            this(tableSchema, new ArrayList<>(), properties, comment);
+        }
+
+        public MockedCatalogTable(
+                TableSchema tableSchema,
+                List<String> partitionKeys,
+                Map<String, String> properties,
+                String comment) {
+            super(tableSchema, partitionKeys, properties, comment);
+        }
+
+        @Override
+        public CatalogBaseTable copy() {
+            return new MockedCatalogTable(
+                    getSchema().copy(),
+                    new ArrayList<>(getPartitionKeys()),
+                    new HashMap<>(getOptions()),
+                    getComment());
+        }
+
+        @Override
+        public CatalogTable copy(Map<String, String> options) {
+            return new MockedCatalogTable(getSchema(), getPartitionKeys(), options, getComment());
+        }
+
+        @Override
+        public Optional<String> getDescription() {
+            return Optional.of(getComment());
+        }
+
+        @Override
+        public Optional<String> getDetailedDescription() {
+            return Optional.of("This is a catalog table in an im-memory catalog");
+        }
+
     }
 }

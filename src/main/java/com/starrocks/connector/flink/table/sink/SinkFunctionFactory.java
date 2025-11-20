@@ -18,7 +18,7 @@
 
 package com.starrocks.connector.flink.table.sink;
 
-import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.legacy.api.TableSchema;
 import org.apache.flink.table.data.RowData;
 
 import com.starrocks.connector.flink.manager.StarRocksSinkTable;

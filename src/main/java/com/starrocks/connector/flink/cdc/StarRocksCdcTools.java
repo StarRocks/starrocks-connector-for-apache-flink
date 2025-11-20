@@ -20,9 +20,9 @@
 package com.starrocks.connector.flink.cdc;
 
 import com.starrocks.connector.flink.cdc.mysql.MysqlDatabaseSync;
-import org.apache.flink.api.java.utils.MultipleParameterTool;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.util.MultipleParameterTool;
 import org.apache.flink.util.StringUtils;
 
 import java.util.Arrays;
