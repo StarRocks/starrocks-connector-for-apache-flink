@@ -59,7 +59,7 @@ limitations under the License.
         <arrow.version>5.0.0</arrow.version>
         <kafka.version>2.8.1</kafka.version>
         <scala.binary.version>2.12</scala.binary.version>
-        <guava.version>31.1-jre</guava.version>
+        <guava.version>32.0.1-jre</guava.version>
         <shading.prefix>com.starrocks.shade</shading.prefix>
         <alibaba-fastjson.version>1.2.83</alibaba-fastjson.version>
         <jmockit.version>1.49</jmockit.version>
