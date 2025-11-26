@@ -33,7 +33,7 @@ import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.DefaultRedirectStrategy;
+
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.message.BasicHeader;
@@ -101,12 +101,9 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
 
             this.clientBuilder  = HttpClients.custom()
                     .setRequestExecutor(new HttpRequestExecutor(properties.getWaitForContinueTimeoutMs()))
-                    .setRedirectStrategy(new DefaultRedirectStrategy() {
-                        @Override
-                        protected boolean isRedirectable(String method) {
-                            return true;
-                        }
-                    });
+                    .setRedirectStrategy(new ContainerAwareRedirectStrategy(
+                            properties.getLoadUrls().length > 0 ? properties.getLoadUrls()[0] : null,
+                            properties.getLoadUrls()));
             this.executorService = new ScheduledThreadPoolExecutor(
                     properties.getIoThreadCount(),
                     r -> {
