@@ -319,7 +319,7 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
             StreamLoadResponse.StreamLoadResponseBody streamLoadBody =
                     objectMapper.readValue(responseBody, StreamLoadResponse.StreamLoadResponseBody.class);
             streamLoadResponse.setBody(streamLoadBody);
-            String status = streamLoadBody.getStatus();
+            String status = streamLoadBody.getStatus() ;
             if (status == null) {
                 throw new StreamLoadFailException(String.format("Commit transaction status is null. db: %s, table: %s, " +
                                 "label: %s, response body: %s", transaction.getDatabase(), transaction.getTable(), transaction.getLabel(),
