@@ -43,7 +43,7 @@ limitations under the License.
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.starrocks</groupId>
     <artifactId>flink-connector-starrocks</artifactId>
-    <version>${srfc.version}_flink-${flink.minor.version}-SNAPSHOT</version>
+    <version>${srfc.version}_flink-${flink.minor.version}</version>
 
     <properties>
         <srfc.version>1.2.13</srfc.version>
