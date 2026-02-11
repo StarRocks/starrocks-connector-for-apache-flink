@@ -59,6 +59,9 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
 
     private StreamLoadManager manager;
 
+    private int prepareRetryTimes = 6;
+    private int prepareRetryIntervalMs = 1000;
+
     public TransactionStreamLoader(boolean enableAutoCommit) {
         this.enableAutoCommit = enableAutoCommit;
     }
@@ -95,6 +98,25 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
         this.preparedTxnHeader = preparedHeaders.entrySet().stream()
                 .map(entry -> new BasicHeader(entry.getKey(), entry.getValue()))
                 .toArray(Header[]::new);
+
+        String retryTimesStr = properties.getHeaders().get(StreamLoadConstants.PROPERTY_PREPARE_RETRY_TIMES);
+        if (retryTimesStr != null) {
+            try {
+                this.prepareRetryTimes = Integer.parseInt(retryTimesStr);
+            } catch (NumberFormatException e) {
+                log.warn("Invalid {} value: {}, using default 6", StreamLoadConstants.PROPERTY_PREPARE_RETRY_TIMES,
+                        retryTimesStr);
+            }
+        }
+        String retryIntervalStr = properties.getHeaders().get(StreamLoadConstants.PROPERTY_PREPARE_RETRY_INTERVAL_MS);
+        if (retryIntervalStr != null) {
+            try {
+                this.prepareRetryIntervalMs = Integer.parseInt(retryIntervalStr);
+            } catch (NumberFormatException e) {
+                log.warn("Invalid {} value: {}, using default 1000",
+                        StreamLoadConstants.PROPERTY_PREPARE_RETRY_INTERVAL_MS, retryIntervalStr);
+            }
+        }
     }
 
     @Override
@@ -184,73 +206,86 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
 
     @Override
     public boolean prepare(StreamLoadSnapshot.Transaction transaction) {
-        String host = getAvailableHost();
-        String prepareUrl = getPrepareUrl(host);
+        for (int i = 0; i <= prepareRetryTimes; i++) {
+            String host = getAvailableHost();
+            String prepareUrl = getPrepareUrl(host);
 
-        HttpPost httpPost = new HttpPost(prepareUrl);
-        httpPost.setHeaders(preparedTxnHeader);
-        httpPost.addHeader("label", transaction.getLabel());
-        httpPost.addHeader("db", transaction.getDatabase());
-        httpPost.addHeader("table", transaction.getTable());
+            HttpPost httpPost = new HttpPost(prepareUrl);
+            httpPost.setHeaders(preparedTxnHeader);
+            httpPost.addHeader("label", transaction.getLabel());
+            httpPost.addHeader("db", transaction.getDatabase());
+            httpPost.addHeader("table", transaction.getTable());
 
-        httpPost.setConfig(RequestConfig.custom()
-                        .setSocketTimeout(properties.getSocketTimeout())
-                        .setExpectContinueEnabled(true)
-                        .setRedirectsEnabled(true)
-                        .build());
+            httpPost.setConfig(RequestConfig.custom()
+                    .setSocketTimeout(properties.getSocketTimeout())
+                    .setExpectContinueEnabled(true)
+                    .setRedirectsEnabled(true)
+                    .build());
 
-        log.info("Transaction prepare, label : {}, request : {}", transaction.getLabel(), httpPost);
+            log.info("Transaction prepare, label : {}, request : {}", transaction.getLabel(), httpPost);
 
-        try (CloseableHttpClient client = clientBuilder.build()) {
-            String responseBody;
-            try (CloseableHttpResponse response = client.execute(httpPost)) {
-                responseBody = parseHttpResponse("prepare transaction", transaction.getDatabase(), transaction.getTable(),
-                        transaction.getLabel(), response);
-            }
-            log.info("Transaction prepared, label : {}, body : {}", transaction.getLabel(), responseBody);
+            try (CloseableHttpClient client = clientBuilder.build()) {
+                String responseBody;
+                try (CloseableHttpResponse response = client.execute(httpPost)) {
+                    responseBody = parseHttpResponse("prepare transaction", transaction.getDatabase(), transaction.getTable(),
+                            transaction.getLabel(), response);
+                }
+                log.info("Transaction prepared, label : {}, body : {}", transaction.getLabel(), responseBody);
 
-            StreamLoadResponse streamLoadResponse = new StreamLoadResponse();
-            StreamLoadResponse.StreamLoadResponseBody streamLoadBody =
-                    objectMapper.readValue(responseBody, StreamLoadResponse.StreamLoadResponseBody.class);
-            streamLoadResponse.setBody(streamLoadBody);
-            String status = streamLoadBody.getStatus();
-            if (status == null) {
-                throw new StreamLoadFailException(String.format("Prepare transaction status is null. db: %s, table: %s, " +
-                        "label: %s, response body: %s", transaction.getDatabase(), transaction.getTable(), transaction.getLabel(),
-                        responseBody));
-            }
+                StreamLoadResponse streamLoadResponse = new StreamLoadResponse();
+                StreamLoadResponse.StreamLoadResponseBody streamLoadBody =
+                        objectMapper.readValue(responseBody, StreamLoadResponse.StreamLoadResponseBody.class);
+                streamLoadResponse.setBody(streamLoadBody);
+                String status = streamLoadBody.getStatus();
+                if (status == null) {
+                    throw new StreamLoadFailException(String.format("Prepare transaction status is null. db: %s, table: %s, " +
+                                    "label: %s, response body: %s", transaction.getDatabase(), transaction.getTable(), transaction.getLabel(),
+                            responseBody));
+                }
 
-            switch (status) {
-                case StreamLoadConstants.RESULT_STATUS_OK:
-                    manager.callback(streamLoadResponse);
-                    return true;
-                case StreamLoadConstants.RESULT_STATUS_TRANSACTION_NOT_EXISTED: {
-                    // currently this could happen after timeout which is specified in http header,
-                    // but as a protection we check the state again
-                    String labelState = getLabelState(host, transaction.getDatabase(), transaction.getTable(), transaction.getLabel(),
-                            Collections.singleton(TransactionStatus.PREPARE.name()));
-                    if (!TransactionStatus.PREPARED.isSame(labelState)) {
-                       String errMsg = String.format("Transaction prepare failed because of unexpected state, " +
-                                       "label: %s, state: %s", transaction.getLabel(), labelState);
-                       log.error(errMsg);
-                       throw new StreamLoadFailException(errMsg);
-                    } else {
+                switch (status) {
+                    case StreamLoadConstants.RESULT_STATUS_OK:
+                        manager.callback(streamLoadResponse);
                         return true;
+                    case StreamLoadConstants.RESULT_STATUS_TRANSACTION_IN_PROCESSING:
+                        if (i < prepareRetryTimes) {
+                            log.warn(
+                                    "Transaction prepare is in processing, will retry after {}ms, db: {}, table: {}, label: {}",
+                                    prepareRetryIntervalMs, transaction.getDatabase(), transaction.getTable(),
+                                    transaction.getLabel());
+                            Thread.sleep(prepareRetryIntervalMs);
+                            continue;
+                        }
+                        break;
+                    case StreamLoadConstants.RESULT_STATUS_TRANSACTION_NOT_EXISTED: {
+                        // currently this could happen after timeout which is specified in http header,
+                        // but as a protection we check the state again
+                        String labelState = getLabelState(host, transaction.getDatabase(), transaction.getTable(), transaction.getLabel(),
+                                Collections.singleton(TransactionStatus.PREPARE.name()));
+                        if (!TransactionStatus.PREPARED.isSame(labelState)) {
+                            String errMsg = String.format("Transaction prepare failed because of unexpected state, " +
+                                    "label: %s, state: %s", transaction.getLabel(), labelState);
+                            log.error(errMsg);
+                            throw new StreamLoadFailException(errMsg);
+                        } else {
+                            return true;
+                        }
                     }
                 }
-            }
 
-            String errorLog = getErrorLog(streamLoadBody.getErrorURL());
-            String errorMsg = String.format("Transaction prepare failed, db: %s, table: %s, label: %s, " +
-                            "\nresponseBody: %s\nerrorLog: %s", transaction.getDatabase(), transaction.getTable(),
-                            transaction.getLabel(), responseBody, errorLog);
-            log.error(errorMsg);
-            throw new StreamLoadFailException(errorMsg);
-        } catch (StreamLoadFailException se) {
-            throw se;
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+                String errorLog = getErrorLog(streamLoadBody.getErrorURL());
+                String errorMsg = String.format("Transaction prepare failed, db: %s, table: %s, label: %s, " +
+                                "\nresponseBody: %s\nerrorLog: %s", transaction.getDatabase(), transaction.getTable(),
+                        transaction.getLabel(), responseBody, errorLog);
+                log.error(errorMsg);
+                throw new StreamLoadFailException(errorMsg);
+            } catch (StreamLoadFailException se) {
+                throw se;
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
         }
+        return false;
     }
 
     @Override

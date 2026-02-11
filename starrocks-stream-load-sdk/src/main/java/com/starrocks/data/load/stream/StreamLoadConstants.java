@@ -40,8 +40,11 @@ public interface StreamLoadConstants {
     String RESULT_STATUS_TRANSACTION_NOT_EXISTED = "TXN_NOT_EXISTS";
     String RESULT_STATUS_TRANSACTION_COMMIT_TIMEOUT = "Commit Timeout";
     String RESULT_STATUS_TRANSACTION_PUBLISH_TIMEOUT = "Publish Timeout";
+	String RESULT_STATUS_TRANSACTION_IN_PROCESSING = "TXN_IN_PROCESSING";
+	String PROPERTY_PREPARE_RETRY_TIMES = "prepare_retry_times";
+	String PROPERTY_PREPARE_RETRY_INTERVAL_MS = "prepare_retry_interval_ms";
 
-    String EXISTING_JOB_STATUS_FINISHED = "FINISHED";
+	String EXISTING_JOB_STATUS_FINISHED = "FINISHED";
 
     public static String getBeginUrl(String host) {
         if (host == null) {
