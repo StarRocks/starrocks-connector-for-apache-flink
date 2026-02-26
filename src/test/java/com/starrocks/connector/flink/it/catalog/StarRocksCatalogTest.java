@@ -30,6 +30,7 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -135,5 +136,40 @@ public class StarRocksCatalogTest extends StarRocksITTestBase {
                 .filter(column -> !dropColumns.contains(column.getColumnName()))
                 .collect(Collectors.toList());
         assertEquals(expectedColumns, newTable.getColumns());
+    }
+
+    @Test
+    public void testCreateTableWithCurrentTimestampDefault() throws Exception {
+        String testTable = "test_current_timestamp_" + genRandomUuid();
+
+        StarRocksColumn c0 = new StarRocksColumn.Builder()
+                .setColumnName("c0")
+                .setOrdinalPosition(0)
+                .setDataType("INT")
+                .setNullable(false)
+                .build();
+
+        StarRocksColumn c1 = new StarRocksColumn.Builder()
+                .setColumnName("c1")
+                .setOrdinalPosition(1)
+                .setDataType("DATETIME")
+                .setNullable(false)
+                .setDefaultValue("CURRENT_TIMESTAMP")
+                .build();
+
+        StarRocksTable table = new StarRocksTable.Builder()
+                .setDatabaseName(DB_NAME)
+                .setTableName(testTable)
+                .setTableType(StarRocksTable.TableType.PRIMARY_KEY)
+                .setColumns(Arrays.asList(c0, c1))
+                .setTableKeys(Collections.singletonList("c0"))
+                .setDistributionKeys(Collections.singletonList("c0"))
+                .build();
+
+        catalog.createTable(table, false);
+
+        StarRocksTable result = catalog.getTable(DB_NAME, testTable).orElse(null);
+        assertNotNull(result);
+        assertEquals(2, result.getColumns().size());
     }
 }

@@ -618,13 +618,23 @@ public class StarRocksCatalog implements Serializable {
         builder.append(" ");
         builder.append(column.isNullable() ? "NULL" : "NOT NULL");
         if (column.getDefaultValue().isPresent()) {
-            builder.append(String.format(" DEFAULT \"%s\"", column.getDefaultValue().get()));
+            String defaultValue = column.getDefaultValue().get();
+            if (isUnquotedDefault(defaultValue, column.getDataType())) {
+                builder.append(String.format(" DEFAULT %s", defaultValue));
+            } else {
+                builder.append(String.format(" DEFAULT \"%s\"", defaultValue));
+            }
         }
 
         if (column.getColumnComment().isPresent()) {
             builder.append(String.format(" COMMENT \"%s\"", column.getColumnComment().get()));
         }
         return builder.toString();
+    }
+
+    private static boolean isUnquotedDefault(String defaultValue, String dataType) {
+        return "CURRENT_TIMESTAMP".equalsIgnoreCase(defaultValue)
+                && "DATETIME".equalsIgnoreCase(dataType);
     }
 
     private String getFullColumnType(
