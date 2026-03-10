@@ -239,6 +239,20 @@ public class LingeringTransactionAborter {
                     } catch (Exception ce) {
                         LOG.warn("Failed to cancel lingering transaction via FE cancel API, " +
                                 "db: {}, table: {}, label: {}", db, table, label, ce);
+                        try {
+                            TransactionStatus statusAfterCancel = streamLoader.getLoadStatus(db, table, label);
+                            LOG.info("Transaction status after cancel attempt, db: {}, table: {}, label: {}, " +
+                                    "status: {}", db, table, label, statusAfterCancel);
+                            if (statusAfterCancel == TransactionStatus.UNKNOWN
+                                    || statusAfterCancel == TransactionStatus.ABORTED) {
+                                LOG.info("Transaction was aborted despite cancel API exception, " +
+                                        "db: {}, table: {}, label: {}", db, table, label);
+                                return true;
+                            }
+                        } catch (Exception re) {
+                            LOG.error("Fail to re-check transaction status after cancel attempt, " +
+                                    "db: {}, table: {}, label: {}", db, table, label, re);
+                        }
                     }
                 }
 

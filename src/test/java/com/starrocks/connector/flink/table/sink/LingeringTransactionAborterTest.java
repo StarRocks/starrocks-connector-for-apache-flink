@@ -414,6 +414,33 @@ public class LingeringTransactionAborterTest {
     }
 
     @Test
+    public void testRollbackFailCancelExceptionButActuallyAborted() throws Exception {
+        String labelPrefix = "test_label";
+        int subtaskIndex = 1;
+        long restoreCheckpointId = 10;
+
+        List<Tuple2<String, String>> dbTables = new ArrayList<>();
+        List<ExactlyOnceLabelGeneratorSnapshot> snapshots = new ArrayList<>();
+        MockStreamLoader streamLoader = new MockStreamLoader();
+
+        dbTables.add(Tuple2.of("db1", "tbl1"));
+        String label1 = ExactlyOnceLabelGenerator.genLabel(labelPrefix, "tbl1", subtaskIndex,
+                restoreCheckpointId + 1);
+        // rollback fails, cancelLoad throws exception, but status transitions to ABORTED
+        // (simulating FE accepted the cancel but client got a timeout)
+        streamLoader.addLabelStatus("db1", "tbl1", label1, TransactionStatus.PREPARE, true);
+        streamLoader.setCancelBehaviour("db1", "tbl1", label1, true);
+        streamLoader.setStatusTransitionAfterCancel("db1", "tbl1", label1, TransactionStatus.ABORTED);
+
+        LingeringTransactionAborter aborter = new LingeringTransactionAborter(labelPrefix,
+                restoreCheckpointId, subtaskIndex, -1, dbTables, snapshots, streamLoader);
+        aborter.execute();
+
+        assertEquals(TransactionStatus.ABORTED, streamLoader.getLoadStatus("db1", "tbl1", label1));
+        assertEquals(1, streamLoader.getNumCancelLoadCalls());
+    }
+
+    @Test
     public void testRollbackFailCancelSucceedMultipleLabels() throws Exception {
         String labelPrefix = "test_label";
         int subtaskIndex = 1;
@@ -458,6 +485,9 @@ public class LingeringTransactionAborterTest {
         // The behaviour to cancel the transaction via FE cancel API. null=succeed, true=fail with exception, false=return false
         private final Map<Tuple3<String, String, String>, Boolean> labelCancelBehaviours;
 
+        // Status to set after cancelLoad is called (even if cancelLoad throws), simulating FE-side abort despite client error
+        private final Map<Tuple3<String, String, String>, TransactionStatus> statusAfterCancel;
+
         private int numUnknownTxnToAbort = 0;
         private int numCancelLoadCalls = 0;
 
@@ -466,6 +496,7 @@ public class LingeringTransactionAborterTest {
             this.transitStatusMap = new HashMap<>();
             this.labelAbortBehaviours = new HashMap<>();
             this.labelCancelBehaviours = new HashMap<>();
+            this.statusAfterCancel = new HashMap<>();
         }
 
         public Map<Tuple3<String, String, String>, TransactionStatus> getAllStatus() {
@@ -490,6 +521,10 @@ public class LingeringTransactionAborterTest {
 
         public void setCancelBehaviour(String db, String table, String label, Boolean failBehaviour) {
             labelCancelBehaviours.put(Tuple3.of(db, table, label), failBehaviour);
+        }
+
+        public void setStatusTransitionAfterCancel(String db, String table, String label, TransactionStatus status) {
+            statusAfterCancel.put(Tuple3.of(db, table, label), status);
         }
 
         public int getNumCancelLoadCalls() {
@@ -589,6 +624,12 @@ public class LingeringTransactionAborterTest {
         public boolean cancelLoad(String db, String table, String label) throws Exception {
             numCancelLoadCalls++;
             Tuple3<String, String, String> tuple = Tuple3.of(db, table, label);
+
+            TransactionStatus transitionStatus = statusAfterCancel.get(tuple);
+            if (transitionStatus != null) {
+                labelStatus.put(tuple, transitionStatus);
+            }
+
             Boolean failBehaviour = labelCancelBehaviours.get(tuple);
             if (failBehaviour != null && failBehaviour) {
                 throw new RuntimeException("artificial cancel exception");
