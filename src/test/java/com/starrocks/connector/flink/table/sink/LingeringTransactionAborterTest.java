@@ -205,6 +205,7 @@ public class LingeringTransactionAborterTest {
                 restoreCheckpointId, "db1", "tbl2", labelPrefix, numberOfSubtasks, subtaskIndex, 2));
         String label2 = ExactlyOnceLabelGenerator.genLabel(labelPrefix, "tbl2", subtaskIndex, 2);
         streamLoader.addLabelStatus("db1", "tbl2", label2, TransactionStatus.PREPARED, true);
+        streamLoader.setCancelBehaviour("db1", "tbl2", label2, true);
 
         dbTables.add(Tuple2.of("db1", "tbl3"));
         snapshots.add(new ExactlyOnceLabelGeneratorSnapshot(
@@ -245,6 +246,7 @@ public class LingeringTransactionAborterTest {
         String label2 = ExactlyOnceLabelGenerator.genLabel(labelPrefix, "tbl2", subtaskIndex,
                 restoreCheckpointId + 1);
         streamLoader.addLabelStatus("db1", "tbl2", label2, TransactionStatus.PREPARED, true);
+        streamLoader.setCancelBehaviour("db1", "tbl2", label2, true);
 
         dbTables.add(Tuple2.of("db1", "tbl3"));
         String label3 = ExactlyOnceLabelGenerator.genLabel(labelPrefix, "tbl3", subtaskIndex,
@@ -356,6 +358,92 @@ public class LingeringTransactionAborterTest {
         }
     }
 
+    @Test
+    public void testRollbackFailThenCancelSucceed() throws Exception {
+        String labelPrefix = "test_label";
+        int subtaskIndex = 1;
+        long restoreCheckpointId = 10;
+
+        List<Tuple2<String, String>> dbTables = new ArrayList<>();
+        List<ExactlyOnceLabelGeneratorSnapshot> snapshots = new ArrayList<>();
+        MockStreamLoader streamLoader = new MockStreamLoader();
+
+        dbTables.add(Tuple2.of("db1", "tbl1"));
+        String label1 = ExactlyOnceLabelGenerator.genLabel(labelPrefix, "tbl1", subtaskIndex,
+                restoreCheckpointId + 1);
+        // rollback will fail (throw exception), but cancelLoad should succeed
+        streamLoader.addLabelStatus("db1", "tbl1", label1, TransactionStatus.PREPARE, true);
+
+        LingeringTransactionAborter aborter = new LingeringTransactionAborter(labelPrefix,
+                restoreCheckpointId, subtaskIndex, -1, dbTables, snapshots, streamLoader);
+        aborter.execute();
+
+        assertEquals(TransactionStatus.ABORTED, streamLoader.getLoadStatus("db1", "tbl1", label1));
+        assertEquals(1, streamLoader.getNumCancelLoadCalls());
+    }
+
+    @Test
+    public void testRollbackFailThenCancelAlsoFail() throws Exception {
+        String labelPrefix = "test_label";
+        int subtaskIndex = 1;
+        long restoreCheckpointId = 10;
+
+        List<Tuple2<String, String>> dbTables = new ArrayList<>();
+        List<ExactlyOnceLabelGeneratorSnapshot> snapshots = new ArrayList<>();
+        MockStreamLoader streamLoader = new MockStreamLoader();
+
+        dbTables.add(Tuple2.of("db1", "tbl1"));
+        String label1 = ExactlyOnceLabelGenerator.genLabel(labelPrefix, "tbl1", subtaskIndex,
+                restoreCheckpointId + 1);
+        // rollback will fail, and cancelLoad will also fail
+        streamLoader.addLabelStatus("db1", "tbl1", label1, TransactionStatus.PREPARE, true);
+        streamLoader.setCancelBehaviour("db1", "tbl1", label1, true);
+
+        LingeringTransactionAborter aborter = new LingeringTransactionAborter(labelPrefix,
+                restoreCheckpointId, subtaskIndex, -1, dbTables, snapshots, streamLoader);
+        try {
+            aborter.execute();
+            fail();
+        } catch (Exception e) {
+            // should still throw the original abort failure
+            assertEquals("artificial exception", e.getCause().getCause().getMessage());
+        }
+
+        assertEquals(TransactionStatus.PREPARE, streamLoader.getLoadStatus("db1", "tbl1", label1));
+        assertEquals(1, streamLoader.getNumCancelLoadCalls());
+    }
+
+    @Test
+    public void testRollbackFailCancelSucceedMultipleLabels() throws Exception {
+        String labelPrefix = "test_label";
+        int subtaskIndex = 1;
+        long restoreCheckpointId = 10;
+
+        List<Tuple2<String, String>> dbTables = new ArrayList<>();
+        List<ExactlyOnceLabelGeneratorSnapshot> snapshots = new ArrayList<>();
+        MockStreamLoader streamLoader = new MockStreamLoader();
+
+        dbTables.add(Tuple2.of("db1", "tbl1"));
+        String label1 = ExactlyOnceLabelGenerator.genLabel(labelPrefix, "tbl1", subtaskIndex,
+                restoreCheckpointId + 1);
+        // normal rollback succeeds
+        streamLoader.addLabelStatus("db1", "tbl1", label1, TransactionStatus.PREPARED);
+
+        dbTables.add(Tuple2.of("db1", "tbl2"));
+        String label2 = ExactlyOnceLabelGenerator.genLabel(labelPrefix, "tbl2", subtaskIndex,
+                restoreCheckpointId + 1);
+        // rollback fails, cancel should succeed
+        streamLoader.addLabelStatus("db1", "tbl2", label2, TransactionStatus.PREPARE, true);
+
+        LingeringTransactionAborter aborter = new LingeringTransactionAborter(labelPrefix,
+                restoreCheckpointId, subtaskIndex, -1, dbTables, snapshots, streamLoader);
+        aborter.execute();
+
+        assertEquals(TransactionStatus.ABORTED, streamLoader.getLoadStatus("db1", "tbl1", label1));
+        assertEquals(TransactionStatus.ABORTED, streamLoader.getLoadStatus("db1", "tbl2", label2));
+        assertEquals(1, streamLoader.getNumCancelLoadCalls());
+    }
+
     private static class MockStreamLoader implements StreamLoader {
 
         // mapping from tuple<db, table, label> to transaction status
@@ -367,12 +455,17 @@ public class LingeringTransactionAborterTest {
         // The behaviour to abort the transaction. Whether throw exception.
         private final Map<Tuple3<String, String, String>, Boolean> labelAbortBehaviours;
 
+        // The behaviour to cancel the transaction via FE cancel API. null=succeed, true=fail with exception, false=return false
+        private final Map<Tuple3<String, String, String>, Boolean> labelCancelBehaviours;
+
         private int numUnknownTxnToAbort = 0;
+        private int numCancelLoadCalls = 0;
 
         public MockStreamLoader() {
             this.labelStatus = new HashMap<>();
             this.transitStatusMap = new HashMap<>();
             this.labelAbortBehaviours = new HashMap<>();
+            this.labelCancelBehaviours = new HashMap<>();
         }
 
         public Map<Tuple3<String, String, String>, TransactionStatus> getAllStatus() {
@@ -393,6 +486,14 @@ public class LingeringTransactionAborterTest {
         public void addLabelStatus(String db, String table, String label, TransactionStatus initStatus, boolean aborFail) {
             addLabelStatus(db, table, label, initStatus, Collections.emptyList());
             labelAbortBehaviours.put(Tuple3.of(db, table, label), aborFail);
+        }
+
+        public void setCancelBehaviour(String db, String table, String label, Boolean failBehaviour) {
+            labelCancelBehaviours.put(Tuple3.of(db, table, label), failBehaviour);
+        }
+
+        public int getNumCancelLoadCalls() {
+            return numCancelLoadCalls;
         }
 
         @Override
@@ -482,6 +583,29 @@ public class LingeringTransactionAborterTest {
         @Override
         public boolean commit(StreamLoadSnapshot snapshot) {
             throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public boolean cancelLoad(String db, String table, String label) throws Exception {
+            numCancelLoadCalls++;
+            Tuple3<String, String, String> tuple = Tuple3.of(db, table, label);
+            Boolean failBehaviour = labelCancelBehaviours.get(tuple);
+            if (failBehaviour != null && failBehaviour) {
+                throw new RuntimeException("artificial cancel exception");
+            }
+            if (failBehaviour != null && !failBehaviour) {
+                return false;
+            }
+
+            TransactionStatus status = labelStatus.get(tuple);
+            if (status == null) {
+                throw new RuntimeException("Transaction not found");
+            }
+            if (status == TransactionStatus.COMMITTED || status == TransactionStatus.VISIBLE) {
+                throw new RuntimeException("Transaction already committed");
+            }
+            labelStatus.put(tuple, TransactionStatus.ABORTED);
+            return true;
         }
 
         @Override

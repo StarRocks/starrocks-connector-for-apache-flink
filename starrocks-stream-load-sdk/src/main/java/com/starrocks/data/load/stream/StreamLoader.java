@@ -59,6 +59,10 @@ public interface StreamLoader {
     boolean commit(StreamLoadSnapshot snapshot);
     boolean rollback(StreamLoadSnapshot snapshot);
 
+    default boolean cancelLoad(String db, String table, String label) throws Exception {
+        throw new UnsupportedOperationException();
+    }
+
     default ExecutorService getExecutorService() {
         throw new UnsupportedOperationException();
     }

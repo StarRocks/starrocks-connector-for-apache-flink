@@ -79,4 +79,11 @@ public interface StreamLoadConstants {
         }
         return host + StreamLoadConstants.PATH_TRANSACTION_ROLLBACK;
     }
+
+    public static String getCancelLoadUrl(String host, String database, String table) {
+        if (host == null) {
+            throw new IllegalArgumentException("None of the hosts in `load_url` could be connected.");
+        }
+        return host + "/api/" + database + "/" + table + "/_cancel";
+    }
 }

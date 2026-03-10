@@ -226,6 +226,22 @@ public class LingeringTransactionAborter {
             }
 
             if (newStatus != TransactionStatus.UNKNOWN && newStatus != TransactionStatus.ABORTED) {
+                if (newStatus == TransactionStatus.PREPARE || newStatus == TransactionStatus.PREPARED) {
+                    LOG.info("Try to cancel lingering transaction via FE cancel API, db: {}, table: {}, " +
+                            "label: {}, status: {}", db, table, label, newStatus);
+                    try {
+                        boolean cancelResult = streamLoader.cancelLoad(db, table, label);
+                        if (cancelResult) {
+                            LOG.info("Successful to cancel the lingering transaction via FE cancel API, " +
+                                    "db: {}, table: {}, label: {}", db, table, label);
+                            return true;
+                        }
+                    } catch (Exception ce) {
+                        LOG.warn("Failed to cancel lingering transaction via FE cancel API, " +
+                                "db: {}, table: {}, label: {}", db, table, label, ce);
+                    }
+                }
+
                 String errMsg = String.format("Fail to abort lingering transaction, db: %s, table: %s, " +
                         "label: %s, status: %s", db, table, label, newStatus);
                 LOG.error(errMsg, e);
