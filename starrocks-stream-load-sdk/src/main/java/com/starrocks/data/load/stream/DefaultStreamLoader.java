@@ -525,7 +525,8 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
                     statusNode = node.get("Status");
                 }
                 String status = statusNode == null ? null : statusNode.asText();
-                if (StreamLoadConstants.RESULT_STATUS_OK.equals(status)) {
+                if (StreamLoadConstants.RESULT_STATUS_OK.equals(status)
+                        || StreamLoadConstants.RESULT_STATUS_SUCCESS.equals(status)) {
                     return true;
                 }
 
