@@ -538,6 +538,11 @@ public class StarRocksSinkOptions implements Serializable {
                     "Multi-table transaction stream load does not support exactly-once semantics. " +
                     "Please use at-least-once semantics with '" + SINK_MULTI_TABLE_TXN_ENABLED.key() + "'.");
         }
+        if (SinkFunctionFactory.SinkVersion.V1.name().equalsIgnoreCase(tableOptions.get(SINK_VERSION))) {
+            throw new ValidationException(
+                    "Multi-table transaction stream load requires sink.version=V2 or AUTO. " +
+                    "Current sink.version='V1'.");
+        }
     }
 
     private void parseSinkStreamLoadProperties() {

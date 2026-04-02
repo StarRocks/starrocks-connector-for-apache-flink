@@ -111,6 +111,8 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
     private long sharedTxnMaxIdleMs = 480_000L;
 
     private final AtomicBoolean commitInFlight = new AtomicBoolean(false);
+    /** Timestamp (ms) when commitInFlight was set to true, for timeout detection. */
+    private volatile long commitInFlightStartMs;
 
     private final Lock lock = new ReentrantLock();
     private final Condition writable = lock.newCondition();
@@ -388,8 +390,13 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                                 } catch (Exception recycleEx) {
                                     LOG.error("[MultiTxn] Failed to recycle shared transaction", recycleEx);
                                     this.e = recycleEx;
-                                    continue;
                                 }
+                                // Must skip the flush-selection loop below: recycleSharedTransaction()
+                                // clears region labels then re-opens via ensureSharedTransaction().
+                                // If the re-open silently returned (e.g. a region started retrying),
+                                // regions have null labels; falling through would create orphan
+                                // independent-label loads that break atomicity.
+                                continue;
                             }
                         }
 
@@ -507,6 +514,7 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         }
 
         if (partitionTracker.allSwitched() && commitInFlight.compareAndSet(false, true)) {
+            commitInFlightStartMs = System.currentTimeMillis();
             // No flushable.signal() needed — this method already runs on the
             // manager thread.  The caller will see commitInFlight==true and
             // `continue` to the next iteration which enters processMultiTableCommit().
@@ -536,6 +544,26 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
             LOG.error("[MultiTxn] Aborting commit cycle due to prior error: {}", this.e.getMessage());
             commitInFlight.set(false);
             partitionTracker.reset();
+            return;
+        }
+
+        // Timeout detection: if the commit cycle is stuck (e.g. a region's HTTP load
+        // keeps failing and retrying), abort to avoid stalling the pipeline indefinitely.
+        long commitElapsedMs = System.currentTimeMillis() - commitInFlightStartMs;
+        if (commitElapsedMs > flushTimeoutMs) {
+            LOG.error("[MultiTxn] Commit-in-flight timeout: elapsed {}ms, timeout {}ms",
+                    commitElapsedMs, flushTimeoutMs);
+            txnCoordinator.reset();
+            for (TransactionTableRegion region : flushQ) {
+                if (!region.isRetrying()) {
+                    region.setLabel(null);
+                }
+            }
+            commitInFlight.set(false);
+            partitionTracker.reset();
+            this.e = new RuntimeException(String.format(
+                    "[MultiTxn] Commit-in-flight timeout: elapsed %dms, timeout %dms",
+                    commitElapsedMs, flushTimeoutMs));
             return;
         }
 
@@ -657,7 +685,8 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
             return;
         }
 
-        // Ensure no region is retrying — setLabel() throws if numRetries > 0.
+        // Ensure no region is retrying — setLabel() silently skips when numRetries > 0,
+        // which would leave the region with a stale label, breaking atomicity.
         for (TransactionTableRegion region : flushQ) {
             if (region.isFlushing() || region.isRetrying()) {
                 LOG.debug("[MultiTxn] Cannot open shared txn: region {} is flushing/retrying",
@@ -669,16 +698,15 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         txnCoordinator.begin(anyDb, anyTable);
 
         for (TransactionTableRegion region : flushQ) {
-            try {
-                region.setLabel(txnCoordinator.getSharedLabel());
-            } catch (IllegalStateException ex) {
-                // Region started retrying between the check and setLabel (narrow race).
-                // Roll back and let the next scan retry.
-                LOG.warn("[MultiTxn] Region {} started retrying during ensureSharedTransaction; " +
-                        "rolling back: {}", region.getUniqueKey(), ex.getMessage());
+            // Re-check retrying: a region may have entered retry (via fail() on the
+            // executor thread) between the bulk check above and this point.
+            if (region.isRetrying()) {
+                LOG.warn("[MultiTxn] Region {} started retrying during ensureSharedTransaction; "
+                        + "rolling back", region.getUniqueKey());
                 txnCoordinator.reset();
                 return;
             }
+            region.setLabel(txnCoordinator.getSharedLabel());
         }
         LOG.info("[MultiTxn] Eagerly opened shared transaction: label={}",
                 txnCoordinator.getSharedLabel());
@@ -688,6 +716,11 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
      * Recycles (commit-or-rollback + reopen) the current shared transaction to prevent
      * it from hitting the StarRocks server-side timeout. Must only be called from the
      * manager thread when no region is actively flushing.
+     *
+     * <p><b>IMPORTANT:</b> The caller must {@code continue} to the next loop iteration
+     * after calling this method, skipping the flush-selection loop. Between clearing
+     * region labels and re-opening the shared transaction, any autonomous flush would
+     * use a null/stale label and break atomicity.
      */
     private void recycleSharedTransaction() {
         // Do not recycle if a commit cycle is pending — the switched chunks
@@ -938,7 +971,7 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         LOG.info("Stream load manager flush finished - currentCacheBytes: {}, maxCacheBytes: {}, allRegionsCommitted: {}",
                 currentCacheBytes.get(), maxCacheBytes, allRegionsCommitted);
         checkAndThrowException();
-        savepoint = false;
+        // savepoint is cleared by the finally block in flush(), not here.
     }
 
     @Override

@@ -172,16 +172,22 @@ public class TransactionTableRegion implements TableRegion {
 
     @Override
     public synchronized void setLabel(String label) {
-        // Guard against injecting a new shared label while a retry is in progress.
-        // numRetries is mutated under this same monitor (see fail()), so the check
-        // and the assignment are now atomic with respect to concurrent fail() calls.
+        // When a retry is in progress (numRetries > 0), skip setting a new non-null label
+        // to avoid overwriting the label being used by the in-flight retry.
+        //
+        // In the non-multi-table path, TransactionStreamLoader.begin() checks
+        // (label == null) before calling setLabel(), so this branch is normally
+        // unreachable. It serves as a safety net in case of unexpected concurrent
+        // access from the manager thread (e.g. ensureSharedTransaction in multi-table mode).
+        //
+        // We use synchronized (consistent with fail() and isRetrying()) to make the
+        // numRetries check and label assignment atomic, and log a warning for
+        // debuggability, but do NOT throw — throwing would be a behavior change that
+        // could break the non-multi-table retry path if reached under rare timing.
         if (numRetries > 0 && label != null) {
-            LOG.warn("[MultiTxn] setLabel called with label={} while numRetries={}, "
-                    + "existing label={}. Rejecting to preserve retry consistency.",
-                    label, numRetries, this.label);
-            throw new IllegalStateException(
-                    "Cannot set label while region is retrying (numRetries=" + numRetries
-                    + ", existingLabel=" + this.label + ", newLabel=" + label + ")");
+            LOG.warn("setLabel called with label={} while numRetries={}, existing label={}. "
+                    + "Skipping to preserve retry consistency.", label, numRetries, this.label);
+            return;
         }
         this.label = label;
     }
@@ -258,11 +264,17 @@ public class TransactionTableRegion implements TableRegion {
     }
 
     /**
-     * Called by the task thread when a txnEnd marker is received (multi-table mode).
+     * Moves the active chunk to the inactive queue so the manager thread can flush it.
      *
-     * <p>Moves the active chunk to the inactive queue so the manager thread can
-     * flush it.  This runs on the task thread which is single-threaded in Flink,
-     * so there is no concurrent {@link #write(byte[])} call.
+     * <p>Called from two sites:
+     * <ul>
+     *   <li><b>Task thread</b> — on txnEnd marker (multi-table mode)</li>
+     *   <li><b>Manager thread</b> — during savepoint in {@code DefaultStreamLoadManager}.
+     *       At savepoint time the task thread is blocked in {@code flush()},
+     *       so there is no concurrent {@link #write(byte[])} call.</li>
+     * </ul>
+     *
+     * <p>The {@code writeLock} is still acquired for safety.
      */
     public void switchChunkForCommit() {
         int spins = 0;
