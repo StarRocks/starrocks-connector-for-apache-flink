@@ -28,6 +28,8 @@ import org.junit.rules.TemporaryFolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.starrocks.data.load.stream.StarRocksVersion;
+
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -168,6 +170,26 @@ public abstract class StarRocksITTestBase {
 
     protected static String getJdbcUrl() {
         return JDBC_URLS;
+    }
+
+    protected static StarRocksVersion getStarRocksVersion() {
+        try (Statement statement = DB_CONNECTION.createStatement();
+             ResultSet rs = statement.executeQuery("SELECT current_version()")) {
+            if (rs.next()) {
+                return StarRocksVersion.parse(rs.getString(1));
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to query StarRocks version", e);
+        }
+        return null;
+    }
+
+    protected static boolean isStarRocksVersionAtLeast(int major, int minor) {
+        StarRocksVersion v = getStarRocksVersion();
+        if (v == null) {
+            return false;
+        }
+        return v.getMajor() > major || (v.getMajor() == major && v.getMinor() >= minor);
     }
 
     public static class TransactionInfo {

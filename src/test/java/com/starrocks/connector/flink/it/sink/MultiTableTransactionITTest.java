@@ -35,9 +35,12 @@ import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.sink.SinkFunction;
 import org.apache.flink.streaming.api.functions.source.RichParallelSourceFunction;
+import org.junit.Before;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static org.junit.Assume.assumeTrue;
 
 import java.io.File;
 
@@ -92,6 +95,12 @@ import static org.junit.Assert.assertTrue;
 public class MultiTableTransactionITTest extends StarRocksITTestBase {
 
     private static final Logger LOG = LoggerFactory.getLogger(MultiTableTransactionITTest.class);
+
+    @Before
+    public void checkVersion() {
+        assumeTrue("Multi-table transaction requires StarRocks >= 4.0",
+                isStarRocksVersionAtLeast(4, 0));
+    }
 
     /**
      * Flush interval used in timing-sensitive tests (ms).
