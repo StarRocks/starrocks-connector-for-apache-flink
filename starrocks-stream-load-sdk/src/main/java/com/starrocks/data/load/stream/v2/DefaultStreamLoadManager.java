@@ -30,6 +30,7 @@ import com.starrocks.data.load.stream.StreamLoadUtils;
 import com.starrocks.data.load.stream.StreamLoader;
 import com.starrocks.data.load.stream.TableRegion;
 import com.starrocks.data.load.stream.TransactionStreamLoader;
+import com.starrocks.data.load.stream.exception.StreamLoadFailException;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
 import org.slf4j.Logger;
@@ -697,16 +698,22 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
 
         txnCoordinator.begin(anyDb, anyTable);
 
+        List<TransactionTableRegion> injected = new ArrayList<>();
         for (TransactionTableRegion region : flushQ) {
             // Re-check retrying: a region may have entered retry (via fail() on the
             // executor thread) between the bulk check above and this point.
             if (region.isRetrying()) {
                 LOG.warn("[MultiTxn] Region {} started retrying during ensureSharedTransaction; "
-                        + "rolling back", region.getUniqueKey());
+                        + "rolling back and clearing {} already-injected labels",
+                        region.getUniqueKey(), injected.size());
                 txnCoordinator.reset();
+                for (TransactionTableRegion r : injected) {
+                    r.setLabel(null);
+                }
                 return;
             }
             region.setLabel(txnCoordinator.getSharedLabel());
+            injected.add(region);
         }
         LOG.info("[MultiTxn] Eagerly opened shared transaction: label={}",
                 txnCoordinator.getSharedLabel());
@@ -741,6 +748,34 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
 
         LOG.info("[MultiTxn] Recycling shared transaction approaching timeout: label={}, elapsed={}ms",
                 txnCoordinator.getSharedLabel(), txnCoordinator.getElapsedMs());
+
+        // If any partition still has uncommitted transaction data (ACTIVE state),
+        // we must NOT commit — that would break cross-table atomicity by exposing
+        // a partial source transaction. Instead, fail fast so Flink restarts the
+        // job from the last checkpoint, re-consuming all data since that checkpoint.
+        if (partitionTracker != null) {
+            List<Integer> activePartitions = partitionTracker.getActivePartitions();
+            if (!activePartitions.isEmpty()) {
+                LOG.error("[MultiTxn] Shared transaction approaching timeout but partitions {} "
+                        + "still ACTIVE (no txnEnd received). Rolling back and failing fast. "
+                        + "Upstream must complete source transactions within {}ms. "
+                        + "label={}", activePartitions, sharedTxnMaxIdleMs,
+                        txnCoordinator.getSharedLabel());
+                txnCoordinator.reset();
+                for (TransactionTableRegion region : flushQ) {
+                    if (!region.isRetrying()) {
+                        region.setLabel(null);
+                    }
+                }
+                commitInFlight.set(false);
+                partitionTracker.reset();
+                this.e = new StreamLoadFailException(
+                        "[MultiTxn] Multi-table transaction timeout: upstream must complete " +
+                        "source transactions within " + sharedTxnMaxIdleMs + "ms. " +
+                        "Active partitions without txnEnd: " + activePartitions);
+                return;
+            }
+        }
 
         String anyTable = null;
         for (TransactionTableRegion region : flushQ) {
