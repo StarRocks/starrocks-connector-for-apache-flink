@@ -853,6 +853,11 @@ public class StreamLoadManagerMultiTableTest {
             // Write a row so the manager opens a shared transaction
             manager.write(0, "test", "orders", "{\"order_id\":1}");
 
+            // Signal txnEnd so partition 0 is no longer ACTIVE.
+            // Without this, recycling would detect an active partition and fail
+            // (by design, to protect cross-table atomicity).
+            manager.setCommitAllowed(0, true);
+
             // Wait longer than sharedTxnMaxIdleMs (800ms) for recycling to occur.
             // The recycling is checked each scanningFrequency (50ms), so after ~900ms
             // the transaction should have been recycled at least once.
