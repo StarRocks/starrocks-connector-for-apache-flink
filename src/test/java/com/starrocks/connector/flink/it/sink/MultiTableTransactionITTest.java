@@ -59,7 +59,8 @@ import static org.junit.Assert.assertTrue;
 /**
  * Integration tests for multi-table atomic transaction stream load.
  *
- * <p>Requires StarRocks >= 4.0 for multi-table transaction support.
+ * <p>Requires StarRocks &gt;= 4.0 for multi-table transaction support, or a main-branch build
+ * whose {@code current_version()} string contains {@code main}.
  *
  * <p>Run against an external cluster:
  * <pre>
@@ -99,8 +100,9 @@ public class MultiTableTransactionITTest extends StarRocksITTestBase {
 
     @Before
     public void checkVersion() {
-        assumeTrue("Multi-table transaction requires StarRocks >= 4.0",
-                isStarRocksVersionAtLeast(4, 0));
+        assumeTrue(
+                "Multi-table transaction requires StarRocks >= 4.0 or a main-branch build (current_version contains 'main')",
+                isMultiTableTransactionClusterSupported());
     }
 
     /**

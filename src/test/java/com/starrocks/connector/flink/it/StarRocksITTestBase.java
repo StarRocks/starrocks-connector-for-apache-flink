@@ -38,6 +38,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
@@ -210,16 +211,22 @@ public abstract class StarRocksITTestBase {
         return JDBC_URLS;
     }
 
-    protected static StarRocksVersion getStarRocksVersion() {
+    /** Raw string from {@code SELECT current_version()} (may be unparsable for dev builds). */
+    protected static String getStarRocksVersionRaw() {
         try (Statement statement = DB_CONNECTION.createStatement();
              ResultSet rs = statement.executeQuery("SELECT current_version()")) {
             if (rs.next()) {
-                return StarRocksVersion.parse(rs.getString(1));
+                return rs.getString(1);
             }
         } catch (Exception e) {
-            LOG.warn("Failed to query StarRocks version", e);
+            LOG.warn("Failed to query StarRocks version string", e);
         }
         return null;
+    }
+
+    protected static StarRocksVersion getStarRocksVersion() {
+        String raw = getStarRocksVersionRaw();
+        return raw == null ? null : StarRocksVersion.parse(raw);
     }
 
     protected static boolean isStarRocksVersionAtLeast(int major, int minor) {
@@ -228,6 +235,22 @@ public abstract class StarRocksITTestBase {
             return false;
         }
         return v.getMajor() > major || (v.getMajor() == major && v.getMinor() >= minor);
+    }
+
+    /**
+     * Multi-table transaction ITs: require released {@code >= 4.0}, or a development build whose
+     * {@code current_version()} string contains {@code main} (typical for main-branch TSP clusters).
+     */
+    protected static boolean isMultiTableTransactionClusterSupported() {
+        String raw = getStarRocksVersionRaw();
+        if (raw == null) {
+            return false;
+        }
+        if (raw.toLowerCase(Locale.ROOT).contains("main")) {
+            return true;
+        }
+        StarRocksVersion v = StarRocksVersion.parse(raw);
+        return v != null && v.getMajor() >= 4;
     }
 
     public static class TransactionInfo {
