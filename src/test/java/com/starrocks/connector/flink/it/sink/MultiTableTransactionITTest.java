@@ -756,8 +756,9 @@ public class MultiTableTransactionITTest extends StarRocksITTestBase {
      * checkpoint to fire. The checkpoint's {@code snapshotState()} calls
      * {@code flush()}, which detects active partitions and throws:
      * <pre>
-     *   [MultiTxn] Partitions [...] still have uncommitted transaction data
-     *   at checkpoint.
+     *   [MultiTxn] Partitions [...] have written data but never received
+     *   txnEnd at checkpoint. Upstream must ensure all transactions are
+     *   complete before checkpoint barrier.
      * </pre>
      *
      * <p>Timeline:
@@ -805,20 +806,26 @@ public class MultiTableTransactionITTest extends StarRocksITTestBase {
         assertTrue("Job should fail when transaction spans checkpoint, but completed successfully",
                 error != null);
 
-        // Unwrap to find the IllegalStateException about active partitions
+        // Unwrap to find the IllegalStateException about active partitions.
+        // The manager thread reports the violation via one of two messages
+        // (partition-level "never received txnEnd" or region-level "in-progress
+        // transaction data"); either satisfies the contract.
         Throwable cause = error;
         boolean foundExpectedError = false;
         while (cause != null) {
-            if (cause instanceof IllegalStateException
-                    && cause.getMessage() != null
-                    && cause.getMessage().contains("uncommitted transaction data at checkpoint")) {
-                foundExpectedError = true;
-                break;
+            if (cause instanceof IllegalStateException && cause.getMessage() != null) {
+                String msg = cause.getMessage();
+                if (msg.contains("[MultiTxn]") && msg.contains("at checkpoint")
+                        && (msg.contains("never received txnEnd")
+                                || msg.contains("in-progress transaction data"))) {
+                    foundExpectedError = true;
+                    break;
+                }
             }
             cause = cause.getCause();
         }
 
-        assertTrue("Expected IllegalStateException about uncommitted transaction data at checkpoint, "
+        assertTrue("Expected IllegalStateException about [MultiTxn] transaction state at checkpoint, "
                         + "but got: " + error.getMessage(),
                 foundExpectedError);
 
