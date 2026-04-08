@@ -60,21 +60,59 @@ public abstract class StarRocksITTestBase {
     protected static Connection DB_CONNECTION;
     protected static Set<String> DATABASE_SET_TO_CLEAN;
 
+    /**
+     * External TSP / manual cluster: JVM properties first, then env (e.g. CI).
+     * When both HTTP and JDBC are set, Testcontainers is skipped.
+     */
+    private static String resolveFeConfig(String propKey, String envKey, String defaultValue) {
+        String v = System.getProperty(propKey);
+        if (v != null && !v.isEmpty()) {
+            return v;
+        }
+        v = System.getenv(envKey);
+        if (v != null && !v.isEmpty()) {
+            return v;
+        }
+        return defaultValue;
+    }
+
     @BeforeClass
     public static void setUp() throws Exception {
         if (!DEBUG_MODE) {
-            try {
-                StarRocksTestEnvironment env = StarRocksTestEnvironment.getInstance();
-                env.startIfNeeded();
-                HTTP_URLS = env.getHttpAddress();
-                JDBC_URLS = env.getJdbcUrl();
-                USERNAME = env.getUsername();
-                PASSWORD = env.getPassword();
-            } catch (Throwable t) {
-                LOG.warn("Failed to start StarRocks container, ITs may be skipped if no external cluster is provided.", t);
+            String extHttp = resolveFeConfig("it.starrocks.fe.http", "SR_HTTP_URLS", null);
+            String extJdbc = resolveFeConfig("it.starrocks.fe.jdbc", "SR_JDBC_URLS", null);
+            if (extHttp != null && extJdbc != null) {
+                HTTP_URLS = extHttp;
+                JDBC_URLS = extJdbc;
+                USERNAME = resolveFeConfig("it.starrocks.username", "SR_USERNAME", "root");
+                PASSWORD = resolveFeConfig("it.starrocks.password", "SR_PASSWORD", "");
+                LOG.info("Using external StarRocks cluster: http={}, jdbc={}", HTTP_URLS, JDBC_URLS);
+            } else {
+                try {
+                    StarRocksTestEnvironment env = StarRocksTestEnvironment.getInstance();
+                    env.startIfNeeded();
+                    String h = env.getHttpAddress();
+                    String j = env.getJdbcUrl();
+                    if (h != null && j != null) {
+                        HTTP_URLS = h;
+                        JDBC_URLS = j;
+                        USERNAME = env.getUsername();
+                        PASSWORD = env.getPassword();
+                        LOG.info("Using StarRocks Testcontainer: http={}, jdbc={}", HTTP_URLS, JDBC_URLS);
+                    } else {
+                        LOG.warn(
+                                "StarRocks Testcontainer did not expose addresses (start may have failed). "
+                                        + "Set -Dit.starrocks.fe.http / -Dit.starrocks.fe.jdbc or SR_HTTP_URLS / SR_JDBC_URLS for TSP.");
+                    }
+                } catch (Throwable t) {
+                    LOG.warn("Failed to start StarRocks container, ITs may be skipped if no external cluster is provided.", t);
+                }
             }
         }
-        assertTrue(HTTP_URLS != null && JDBC_URLS != null);
+        assertTrue(
+                "HTTP_URLS and JDBC_URLS must be set. For TSP use -Dit.starrocks.fe.http=host:8030 "
+                        + "-Dit.starrocks.fe.jdbc=jdbc:mysql://host:9030 or SR_HTTP_URLS / SR_JDBC_URLS.",
+                HTTP_URLS != null && !HTTP_URLS.isEmpty() && JDBC_URLS != null && !JDBC_URLS.isEmpty());
 
         DB_NAME = "sr_test_" + genRandomUuid();
         try {

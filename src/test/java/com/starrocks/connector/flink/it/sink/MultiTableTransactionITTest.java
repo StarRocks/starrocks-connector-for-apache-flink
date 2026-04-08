@@ -66,6 +66,7 @@ import static org.junit.Assert.assertTrue;
  *   mvn test -Dtest=MultiTableTransactionITTest \
  *     -Dit.starrocks.fe.http=172.26.95.228:8030 \
  *     -Dit.starrocks.fe.jdbc=jdbc:mysql://172.26.95.228:9030
+ *   (or export SR_HTTP_URLS / SR_JDBC_URLS with the same host:port values)
  * </pre>
  *
  * <h2>Test coverage</h2>
