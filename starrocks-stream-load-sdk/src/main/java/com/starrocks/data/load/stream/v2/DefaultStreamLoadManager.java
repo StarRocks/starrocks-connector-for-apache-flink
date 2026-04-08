@@ -112,6 +112,31 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
     private long sharedTxnMaxIdleMs = 480_000L;
 
     private final AtomicBoolean commitInFlight = new AtomicBoolean(false);
+
+    /**
+     * Commit interval (ms) cached from {@code properties.getExpectDelayTime()}
+     * at construction time. Read on every manager scan via
+     * {@link #shouldTriggerCommit()}, so we cache it to avoid repeated property
+     * lookups (and to make the contract immutable — the interval is a fixed
+     * value for the lifetime of a manager instance). Only meaningful in
+     * multi-table transaction mode.
+     */
+    private long commitIntervalMs;
+
+    /**
+     * Minimum interval (ms) between two {@code switchChunkForCommit} calls on the
+     * same region in multi-table mode. Computed as
+     * {@code min(1000, max(100, commitInterval/10))} — small enough to batch
+     * frequent txnEnds but capped at 1s to keep data freshness reasonable.
+     */
+    private long miniSwitchIntervalMs;
+
+    /**
+     * Timestamp (epoch ms) of the last successful commit (or construction time).
+     * Used by the manager thread's time-driven commit decision. Only meaningful
+     * in multi-table transaction mode.
+     */
+    private volatile long lastCommitTimeMs;
     /** Timestamp (ms) when commitInFlight was set to true, for timeout detection. */
     private volatile long commitInFlightStartMs;
 
@@ -176,7 +201,19 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         this.maxWriteBlockCacheBytes = 2 * maxCacheBytes;
         this.scanningFrequency = properties.getScanningFrequency();
         this.multiTableTransactionEnabled = properties.isEnableMultiTableTransaction();
-        this.flushAndCommitStrategy = new FlushAndCommitStrategy(properties, enableAutoCommit);
+        // Pass the (possibly overridden) maxCacheBytes so the strategy's
+        // cache-full flush threshold stays aligned with the manager's
+        // write-block threshold. See review comment P1 on PR #487.
+        this.flushAndCommitStrategy = new FlushAndCommitStrategy(properties, enableAutoCommit, this.maxCacheBytes);
+        // Cache commit interval and compute miniSwitchIntervalMs for multi-table
+        // mode. miniInterval is capped between 100 ms and 1000 ms, targeting
+        // commitInterval / 10 as a sensible default so that a 1 s commit interval
+        // yields 100 ms batching and a 30 s commit interval caps at 1 s batching.
+        // lastCommitTimeMs is initialized in init() (right before the manager
+        // thread starts), so it reflects the start of the scan loop rather than
+        // construction time.
+        this.commitIntervalMs = properties.getExpectDelayTime();
+        this.miniSwitchIntervalMs = Math.min(1000L, Math.max(100L, this.commitIntervalMs / 10L));
         // get timeout from properties's header
         String timeoutStr = properties.getHeaders().get("timeout");
         if (timeoutStr != null) {
@@ -200,7 +237,8 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         this.writeTriggerFlush = new AtomicBoolean(false);
         this.loadMetrics = new LoadMetrics();
         if (multiTableTransactionEnabled) {
-            this.partitionTracker = new PartitionCommitTracker(properties.getExpectDelayTime());
+            this.partitionTracker = new PartitionCommitTracker();
+            this.lastCommitTimeMs = System.currentTimeMillis();
         }
         if (state.compareAndSet(State.INACTIVE, State.ACTIVE)) {
             this.manager = new Thread(() -> {
@@ -231,16 +269,31 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                             LOG.info("[MultiTxn] Savepoint: completing shared transaction");
 
                             // Upstream must ensure all source transactions are complete
-                            // before the checkpoint barrier arrives. If any partition is
-                            // still ACTIVE (no txnEnd received), it means upstream violated
-                            // this contract — fail fast rather than silently committing
-                            // partial transaction data.
-                            List<Integer> activePartitions = partitionTracker.getActivePartitions();
-                            if (!activePartitions.isEmpty()) {
+                            // before the checkpoint barrier arrives. Two conditions must
+                            // hold for every region at savepoint time:
+                            //   (a) The owning partition has received at least one txnEnd
+                            //       (no partitions in the ACTIVE state of the tracker).
+                            //   (b) Every region's activeChunk is at a clean transaction
+                            //       boundary, i.e., no write has occurred since its most
+                            //       recent txnEnd. If activeChunk is dirty, the in-progress
+                            //       source transaction has not yet completed.
+                            // Either violation indicates the upstream broke its contract;
+                            // fail fast rather than silently committing partial data.
+                            List<Integer> partitionsWithoutTxnEnd = partitionTracker.getPartitionsWithoutTxnEnd();
+                            if (!partitionsWithoutTxnEnd.isEmpty()) {
                                 throw new IllegalStateException(
-                                        "[MultiTxn] Partitions " + activePartitions + " still have " +
-                                        "uncommitted transaction data at checkpoint. Upstream must " +
+                                        "[MultiTxn] Partitions " + partitionsWithoutTxnEnd + " have written " +
+                                        "data but never received txnEnd at checkpoint. Upstream must " +
                                         "ensure all transactions are complete before checkpoint barrier.");
+                            }
+                            for (TransactionTableRegion region : flushQ) {
+                                if (!region.isActiveChunkCleanBoundary()) {
+                                    throw new IllegalStateException(
+                                            "[MultiTxn] Region " + region.getUniqueKey() + " has in-progress " +
+                                            "transaction data (writes after latest txnEnd) at checkpoint. " +
+                                            "Upstream must ensure all transactions are complete before " +
+                                            "checkpoint barrier.");
+                                }
                             }
 
                             // Ensure a shared transaction is open (may not be if no data
@@ -261,9 +314,10 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                                 }
                             }
 
-                            // Switch and trigger loads for regions that have been through
-                            // trySwitchAndCommit() (TXN_END_RECEIVED or SWITCHED) but
-                            // may still have inactive chunks not yet sent.
+                            // Force switch remaining activeChunks: since we verified
+                            // above that every region is at a clean boundary, any data
+                            // still in activeChunk belongs to completed source
+                            // transactions and is safe to freeze for commit.
                             for (TransactionTableRegion region : flushQ) {
                                 region.switchChunkForCommit();
                             }
@@ -303,6 +357,14 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                                         LOG.info("[MultiTxn] No data loaded; rolling back empty txn during savepoint");
                                         txnCoordinator.reset();
                                     }
+                                    // Keep lastCommitTimeMs in sync with actual commit
+                                    // activity so the next shouldTriggerCommit() check on
+                                    // the normal path starts its countdown from the
+                                    // savepoint commit, not from the previous regular
+                                    // commit. This is cosmetic (downstream hasDataLoaded
+                                    // / hasInactiveChunks checks prevent spurious commits),
+                                    // but keeps the time accounting accurate.
+                                    lastCommitTimeMs = System.currentTimeMillis();
                                     allRegionsCommitted = true;
                                 } catch (Exception ex) {
                                     LOG.error("[MultiTxn] Failed to commit shared transaction during savepoint", ex);
@@ -401,16 +463,19 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                             }
                         }
 
-                        // In multi-table mode, check if partitions are ready to
-                        // switch and commit.  This runs on the manager thread (not
-                        // the task thread) so that the task thread has had time to
-                        // process subsequent records and register all partitions in
-                        // the tracker before allSwitched() is evaluated.
+                        // In multi-table mode, first give the manager-thread
+                        // fallback a chance to force-switch any region whose
+                        // activeChunk is at a clean transaction boundary and has
+                        // been idle long enough (handles the "source paused
+                        // after txnEnd" case). Then check whether the commit
+                        // interval has elapsed AND there is data to commit.
                         if (multiTableTransactionEnabled && partitionTracker != null) {
-                            trySwitchAndCommit();
+                            managerForceSwitchCleanBoundaryRegions();
+                            tryStartTimerDrivenCommit();
                             if (commitInFlight.get()) {
-                                // All partitions switched; skip autonomous flush and
-                                // enter processMultiTableCommit() on the next iteration.
+                                // Commit interval elapsed with data available; skip
+                                // autonomous flush and enter processMultiTableCommit()
+                                // on the next iteration.
                                 continue;
                             }
                         }
@@ -473,69 +538,137 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
             return;
         }
 
-        // Record the txnEnd and immediately switch chunks on the task thread.
-        // This must happen synchronously before returning, because the very next
-        // record from the source may belong to a new transaction.  If we deferred
-        // the switch to the manager thread, the new transaction's write() would
-        // call onWrite() and reset the partition back to ACTIVE, causing the
-        // previous transaction's commit to be lost.
-        boolean transitioned = partitionTracker.onTxnEnd(partition);
-        if (transitioned) {
-            List<TransactionTableRegion> pRegions = partitionRegions.get(partition);
-            if (pRegions != null) {
-                for (TransactionTableRegion region : pRegions) {
-                    region.switchChunkForCommit();
-                }
+        // For each region owned by this partition, invoke tryMiniIntervalSwitch:
+        // - It marks the region's activeChunk as being at a clean transaction
+        //   boundary (since the most recent task-thread event on the region is
+        //   now a txnEnd).
+        // - It performs switchChunkForCommit only if the miniInterval has
+        //   elapsed since the last switch AND activeChunk has data. Otherwise
+        //   the current source transaction batches into the existing activeChunk
+        //   together with previously-completed source transactions, amortizing
+        //   the HTTP-load overhead across multiple txns (N:1 mapping).
+        //
+        // Both the cleanBoundary mark and the conditional switch MUST run on
+        // the task thread (not deferred to the manager thread) because the task
+        // thread is the sole serializer of write() and setCommitAllowed()
+        // events. Marking cleanBoundary=true here guarantees that the flag
+        // reflects the MOST RECENT task-thread event: if the next event is
+        // another write, write0() will flip it back to false before the manager
+        // thread's scan observes it, preserving the invariant that
+        // "cleanBoundary=true" means "activeChunk contains only data from
+        // completed source transactions". Deferring to the manager thread would
+        // open a window where a write and a manager-thread force-switch could
+        // race, potentially freezing partial transaction data.
+        List<TransactionTableRegion> pRegions = partitionRegions.get(partition);
+        int regionCount = pRegions == null ? 0 : pRegions.size();
+        if (pRegions != null) {
+            for (TransactionTableRegion region : pRegions) {
+                region.tryMiniIntervalSwitch();
             }
-            partitionTracker.markSwitched(partition);
-            LOG.debug("[MultiTxn] txnEnd for partition={}, regions immediately switched", partition);
-        } else {
-            LOG.debug("[MultiTxn] txnEnd for partition={}, deferred (already switched)", partition);
+        }
+        partitionTracker.onTxnEnd(partition);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("[MultiTxn] txnEnd recorded for partition={}, regions={}, miniInterval={}ms",
+                    partition, regionCount, miniSwitchIntervalMs);
         }
     }
 
     /**
-     * Attempts to switch ready partitions and trigger a commit if all are switched.
-     * Called on the manager thread (from the normal timer-driven path) so that the
-     * task thread has had time to process subsequent records and register all
-     * partitions before allSwitched() is evaluated.
+     * Manager-thread fallback: force-switch any region whose activeChunk is at a
+     * clean transaction boundary, has data, and has been idle (no task-thread
+     * switch) for at least {@code miniSwitchIntervalMs}.
+     *
+     * <p>This handles the "source paused after a few txnEnds" case: the task
+     * thread has processed a txnEnd without switching (because the previous
+     * switch was too recent), and then no further task-thread events arrive.
+     * Without this fallback, the completed-but-not-yet-frozen data would sit in
+     * activeChunk until the next source write + txnEnd, which could be an
+     * unbounded delay.
+     *
+     * <p>{@link TransactionTableRegion#tryForceCleanSwitch()} handles all the
+     * write-lock acquisition and double-checking of the clean-boundary flag
+     * under the lock, so this loop is racy-safe.
      */
-    private void trySwitchAndCommit() {
-        List<Integer> readyPartitions = partitionTracker.getReadyToSwitch();
-        for (int p : readyPartitions) {
-            List<TransactionTableRegion> pRegions = partitionRegions.get(p);
-            if (pRegions != null) {
-                for (TransactionTableRegion region : pRegions) {
-                    region.switchChunkForCommit();
-                }
-            }
-            partitionTracker.markSwitched(p);
-            LOG.debug("[MultiTxn] partition {} switched, regions={}", p,
-                    pRegions == null ? 0 : pRegions.size());
+    private void managerForceSwitchCleanBoundaryRegions() {
+        for (TransactionTableRegion region : flushQ) {
+            region.tryForceCleanSwitch();
         }
+    }
 
-        if (partitionTracker.allSwitched() && commitInFlight.compareAndSet(false, true)) {
+    /**
+     * Decide whether the manager thread should trigger a commit. Called on every
+     * scan cycle of the manager's main loop. Returns {@code true} only when:
+     *
+     * <ol>
+     *   <li>The commit interval has elapsed since the last successful commit.</li>
+     *   <li>There is data that could be committed: either the shared transaction
+     *       coordinator has already recorded a load (via autonomous flush) or at
+     *       least one region has inactive chunks pending.</li>
+     * </ol>
+     *
+     * <p>If the interval has elapsed but there is no data, we simply skip the
+     * cycle without consuming the interval — the next time data becomes
+     * available, it will be committed immediately.
+     */
+    private boolean shouldTriggerCommit() {
+        if (commitInFlight.get()) {
+            return false;
+        }
+        if (System.currentTimeMillis() - lastCommitTimeMs < commitIntervalMs) {
+            return false;
+        }
+        if (txnCoordinator != null && txnCoordinator.hasDataLoaded()) {
+            return true;
+        }
+        for (TransactionTableRegion region : flushQ) {
+            if (region.hasInactiveChunks()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Attempts to start a time-driven commit cycle. Called on the manager thread
+     * from the normal scan path. Does NOT do any per-region switching — that is
+     * handled by (a) the task thread's {@code tryMiniIntervalSwitch} on each
+     * txnEnd and (b) {@link #managerForceSwitchCleanBoundaryRegions()} for the
+     * source-idle fallback.
+     *
+     * <p>Sets {@code commitInFlight=true} if {@link #shouldTriggerCommit()}
+     * returns true; the main loop will then enter {@code processMultiTableCommit()}
+     * on the next iteration to drive the actual commit protocol.
+     */
+    private void tryStartTimerDrivenCommit() {
+        if (shouldTriggerCommit() && commitInFlight.compareAndSet(false, true)) {
             commitInFlightStartMs = System.currentTimeMillis();
             // No flushable.signal() needed — this method already runs on the
-            // manager thread.  The caller will see commitInFlight==true and
+            // manager thread. The caller will see commitInFlight==true and
             // `continue` to the next iteration which enters processMultiTableCommit().
-            LOG.info("[MultiTxn] All partitions switched, commitInFlight=true");
+            LOG.info("[MultiTxn] Commit interval elapsed with data available, commitInFlight=true");
         }
     }
 
     /**
      * Processes a multi-table commit cycle using the SharedTransactionCoordinator.
-     * Called on the manager thread when commitInFlight=true.
+     * Called on the manager thread when {@code commitInFlight=true}.
      *
-     * <p>Because the shared transaction is eagerly opened (by {@link #ensureSharedTransaction()})
-     * before any autonomous flush, all in-flight HTTP loads already use the shared label.
-     * This method simply:
+     * <p>Because the shared transaction is eagerly opened (by
+     * {@link #ensureSharedTransaction()}) before any autonomous flush, all
+     * in-flight HTTP loads already use the shared label. This method simply:
      * <ol>
-     *   <li>Waits for all in-flight loads to complete</li>
-     *   <li>Triggers loads for any remaining inactive chunks (from switchChunkForCommit)</li>
-     *   <li>Waits again for those loads</li>
-     *   <li>Executes unified prepare + commit</li>
-     *   <li>Opens a new shared transaction for the next cycle</li>
+     *   <li>Waits for any in-flight loads to complete (defers to the next scan
+     *       cycle if any region is still FLUSHING/retrying)</li>
+     *   <li>Triggers loads for any remaining inactive chunks — those produced by
+     *       {@code switchChunkForCommit} or the manager-thread clean-boundary
+     *       fallback that were not yet drained by autonomous flush</li>
+     *   <li>On the next scan cycle, once those triggered loads complete,
+     *       executes a unified commit via the coordinator (multi-table
+     *       transactions skip the prepare step, which StarRocks does not
+     *       support in multi-table mode)</li>
+     *   <li>Resets state ({@code commitInFlight}, {@code partitionTracker},
+     *       region labels, {@code lastCommitTimeMs}) and opens a new shared
+     *       transaction for the next cycle</li>
      * </ol>
      */
     private void processMultiTableCommit() {
@@ -630,6 +763,9 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
             }
             commitInFlight.set(false);
             partitionTracker.reset();
+            // Record the commit time so shouldTriggerCommit() re-starts its
+            // interval countdown from this point.
+            lastCommitTimeMs = System.currentTimeMillis();
             LOG.info("[MultiTxn] Shared transaction cycle completed; commitInFlight=false");
 
             // Immediately open a new shared transaction for the next cycle,
@@ -749,17 +885,23 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         LOG.info("[MultiTxn] Recycling shared transaction approaching timeout: label={}, elapsed={}ms",
                 txnCoordinator.getSharedLabel(), txnCoordinator.getElapsedMs());
 
-        // If any partition still has uncommitted transaction data (ACTIVE state),
-        // we must NOT commit — that would break cross-table atomicity by exposing
-        // a partial source transaction. Instead, fail fast so Flink restarts the
-        // job from the last checkpoint, re-consuming all data since that checkpoint.
+        // If any region has in-progress source transaction data, we must NOT
+        // commit the recycled transaction — that would expose a partial source
+        // transaction in StarRocks. Two conditions trigger fail-fast:
+        //   (a) Any partition has written data but never received txnEnd
+        //       (ACTIVE in the tracker). This means the source started a
+        //       transaction and never closed it within the timeout window.
+        //   (b) Any region's activeChunk is not at a clean boundary. This
+        //       means a write occurred after the latest txnEnd but before the
+        //       current source transaction completed.
+        // In either case, fail so Flink restarts from the last checkpoint.
         if (partitionTracker != null) {
-            List<Integer> activePartitions = partitionTracker.getActivePartitions();
-            if (!activePartitions.isEmpty()) {
+            List<Integer> partitionsWithoutTxnEnd = partitionTracker.getPartitionsWithoutTxnEnd();
+            if (!partitionsWithoutTxnEnd.isEmpty()) {
                 LOG.error("[MultiTxn] Shared transaction approaching timeout but partitions {} "
-                        + "still ACTIVE (no txnEnd received). Rolling back and failing fast. "
+                        + "have written data without receiving txnEnd. Rolling back and failing fast. "
                         + "Upstream must complete source transactions within {}ms. "
-                        + "label={}", activePartitions, sharedTxnMaxIdleMs,
+                        + "label={}", partitionsWithoutTxnEnd, sharedTxnMaxIdleMs,
                         txnCoordinator.getSharedLabel());
                 txnCoordinator.reset();
                 for (TransactionTableRegion region : flushQ) {
@@ -772,8 +914,103 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                 this.e = new StreamLoadFailException(
                         "[MultiTxn] Multi-table transaction timeout: upstream must complete " +
                         "source transactions within " + sharedTxnMaxIdleMs + "ms. " +
-                        "Active partitions without txnEnd: " + activePartitions);
+                        "Partitions without txnEnd: " + partitionsWithoutTxnEnd);
                 return;
+            }
+        }
+        List<String> dirtyRegions = null;
+        for (TransactionTableRegion region : flushQ) {
+            if (!region.isActiveChunkCleanBoundary()) {
+                if (dirtyRegions == null) {
+                    dirtyRegions = new ArrayList<>();
+                }
+                dirtyRegions.add(region.getUniqueKey());
+            }
+        }
+        if (dirtyRegions != null) {
+            LOG.error("[MultiTxn] Shared transaction approaching timeout but regions {} "
+                    + "have in-progress transaction data (writes after latest txnEnd). "
+                    + "Rolling back and failing fast. label={}",
+                    dirtyRegions, txnCoordinator.getSharedLabel());
+            txnCoordinator.reset();
+            for (TransactionTableRegion region : flushQ) {
+                if (!region.isRetrying()) {
+                    region.setLabel(null);
+                }
+            }
+            commitInFlight.set(false);
+            if (partitionTracker != null) {
+                partitionTracker.reset();
+            }
+            this.e = new StreamLoadFailException(
+                    "[MultiTxn] Multi-table transaction timeout: regions with in-progress " +
+                    "source transactions: " + dirtyRegions);
+            return;
+        }
+
+        // All regions were observed clean in the pre-check above. Now freeze
+        // their activeChunks atomically using tryForceCleanSwitch(), which
+        // re-checks cleanBoundary under the writeLock. This closes a race
+        // window: between the unlocked pre-check and the actual switch, the
+        // task thread could call write() on a region and flip its
+        // cleanBoundary to false. Using switchChunkForCommit() here would
+        // unconditionally freeze that now-dirty activeChunk (containing an
+        // in-progress source transaction), violating the safety invariant.
+        //
+        // If tryForceCleanSwitch() returns false for a region, one of:
+        //   (a) a concurrent write raced and made the region dirty — its
+        //       data stays in activeChunk and will be committed in a future
+        //       cycle (under the new shared label opened after this recycle);
+        //   (b) activeChunk was already empty — nothing to do;
+        //   (c) miniInterval has not yet elapsed — cannot happen here because
+        //       recycle fires only after sharedTxnMaxIdleMs which is far
+        //       larger than any miniInterval.
+        // In all three cases, skipping the region is safe.
+        for (TransactionTableRegion region : flushQ) {
+            boolean switched = region.tryForceCleanSwitch();
+            if (!switched && !region.isActiveChunkCleanBoundary()) {
+                LOG.warn("[MultiTxn] Recycle: region {} became dirty between pre-check and switch; " +
+                        "its data will be committed in a future cycle", region.getUniqueKey());
+            }
+        }
+        // Drain any newly-frozen inactive chunks into the shared transaction
+        // before committing. We wait synchronously for each region's load to
+        // avoid racing with the subsequent label-clear step.
+        for (TransactionTableRegion region : flushQ) {
+            if (region.triggerLoadIfNeeded()) {
+                txnCoordinator.markDataLoaded();
+            }
+        }
+        // Wait for in-flight loads with a bounded timeout. This point is
+        // reached only after sharedTxnMaxIdleMs has elapsed, so we are already
+        // operating on a timeout budget; an unbounded wait could deadlock the
+        // manager thread if a load hangs (e.g., network stall or a region stuck
+        // in a long retry loop). Cap the total wait at flushTimeoutMs and fail
+        // fast on timeout so Flink can restart the job from the last checkpoint.
+        long recycleWaitStartMs = System.currentTimeMillis();
+        for (TransactionTableRegion region : flushQ) {
+            while (region.isFlushing() || region.isRetrying()) {
+                if (System.currentTimeMillis() - recycleWaitStartMs > flushTimeoutMs) {
+                    LOG.error("[MultiTxn] Recycle wait timeout ({}ms) for region {}, " +
+                            "failing fast. label={}",
+                            flushTimeoutMs, region.getUniqueKey(),
+                            txnCoordinator.getSharedLabel());
+                    txnCoordinator.reset();
+                    for (TransactionTableRegion r : flushQ) {
+                        if (!r.isRetrying()) {
+                            r.setLabel(null);
+                        }
+                    }
+                    commitInFlight.set(false);
+                    if (partitionTracker != null) {
+                        partitionTracker.reset();
+                    }
+                    this.e = new StreamLoadFailException(
+                            "[MultiTxn] Recycle wait timeout: region " + region.getUniqueKey() +
+                            " did not complete its in-flight load within " + flushTimeoutMs + "ms");
+                    return;
+                }
+                LockSupport.parkNanos(1_000_000L);
             }
         }
 
@@ -784,17 +1021,30 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
             }
         }
 
+        boolean actuallyCommitted = false;
         if (anyTable != null && txnCoordinator.hasDataLoaded()) {
             txnCoordinator.prepareAndCommit(anyTable);
+            actuallyCommitted = true;
             LOG.info("[MultiTxn] Recycled shared transaction committed");
         } else {
             txnCoordinator.reset();
             LOG.info("[MultiTxn] Recycled empty shared transaction (rolled back)");
         }
 
-        // Clear labels and open a fresh shared transaction.
+        // Clear labels and reset cycle state before opening a fresh shared transaction.
         for (TransactionTableRegion region : flushQ) {
             region.setLabel(null);
+        }
+        if (partitionTracker != null) {
+            partitionTracker.reset();
+        }
+        // Only advance lastCommitTimeMs on a real commit. A rollback-empty
+        // recycle (no data was ever loaded) is not a commit, and we must not
+        // delay the next commit-interval countdown by pretending one happened.
+        // Otherwise a burst of data immediately after an idle recycle would
+        // have to wait an extra commitInterval before becoming visible.
+        if (actuallyCommitted) {
+            lastCommitTimeMs = System.currentTimeMillis();
         }
         ensureSharedTransaction();
     }
@@ -1107,7 +1357,8 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                     LabelGenerator labelGenerator = labelGeneratorFactory.create(database, table);
                     TransactionTableRegion newRegion = new TransactionTableRegion(
                             uniqueKey, database, table, this,
-                            tableProperties, streamLoader, labelGenerator, maxRetries, retryIntervalInMs);
+                            tableProperties, streamLoader, labelGenerator, maxRetries, retryIntervalInMs,
+                            multiTableTransactionEnabled, miniSwitchIntervalMs);
                     if (multiTableTransactionEnabled) {
                         newRegion.getHeaders().put("transaction_type", "multi");
                         // If a shared transaction is already open, inject its label so that

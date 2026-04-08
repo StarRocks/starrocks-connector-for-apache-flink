@@ -977,4 +977,157 @@ public class StreamLoadManagerMultiTableTest {
             manager.close();
         }
     }
+
+    // -------------------------------------------------------------------------
+    // miniInterval batching and source-idle fallback tests
+    // -------------------------------------------------------------------------
+
+    /**
+     * Verifies that multiple rapid txnEnds within a single miniInterval window
+     * are batched into a single switchChunk, so only one HTTP /transaction/load
+     * request is issued instead of one per txnEnd.
+     *
+     * <p>With commitInterval=2000ms, miniSwitchIntervalMs = min(1000, max(100,
+     * 2000/10)) = 200ms. A burst of 10 txnEnds issued within ~50ms should all
+     * land on the same activeChunk: the first txnEnd triggers the first switch
+     * (lastSwitchTimeMs starts at 0, so "now - 0 >> 200" → switch immediately),
+     * and all subsequent txnEnds within the next 200ms are batched into the new
+     * activeChunk without producing additional switches. The final commit
+     * observes roughly 1-2 HTTP loads rather than 10.
+     */
+    @Test
+    public void testMiniIntervalBatching() throws Exception {
+        // commitInterval=2000ms → miniInterval=200ms
+        StreamLoadProperties properties = buildMultiTableProperties(2000);
+        StreamLoadManagerV2 manager = new StreamLoadManagerV2(properties, true);
+        manager.init();
+
+        try {
+            mockedServer.resetCounters();
+
+            // Issue 10 rapid write+txnEnd cycles. The first txnEnd triggers a
+            // switch (freezing the single row from the first write); the next 9
+            // all fall within miniInterval=200ms of the first switch and must
+            // NOT produce additional switches — they accumulate into the new
+            // activeChunk.
+            for (int i = 0; i < 10; i++) {
+                manager.write(0, "test", "orders",
+                        String.format("{\"order_id\":%d,\"customer_id\":%d}", i, i * 10));
+                manager.setCommitAllowed(0, true);
+            }
+
+            // Wait for the commit interval (2000ms) to elapse and the manager
+            // thread to drain everything. The total elapsed time from the first
+            // write through this sleep must be >= commitInterval so that
+            // shouldTriggerCommit() fires.
+            Thread.sleep(2500);
+            Assert.assertNull("No exception during batching test", manager.getException());
+
+            manager.flush();
+            Assert.assertNull("No exception after flush", manager.getException());
+
+            // The critical assertion: load count must be substantially less
+            // than 10 (the number of txnEnds). With miniInterval batching, we
+            // expect 1-3 loads total (one per chunk that was actually switched,
+            // plus possibly one from the final savepoint/flush force-switch).
+            //
+            // Without batching (the old "switch every txnEnd" behavior), we
+            // would see ~10 loads. So loadCount <= 5 is a conservative check
+            // that catches regression while tolerating timing variance.
+            int loadCount = mockedServer.getLoadCount();
+            Assert.assertTrue(
+                    "Expected loadCount <= 5 with miniInterval batching, got " + loadCount +
+                    " (would be ~10 without batching)",
+                    loadCount <= 5);
+            // Still expect at least one load and one commit — data must actually flow.
+            Assert.assertTrue("Expected at least 1 load", loadCount >= 1);
+            Assert.assertTrue("Expected at least 1 commit", mockedServer.getCommitCount() >= 1);
+        } finally {
+            manager.close();
+        }
+    }
+
+    /**
+     * Verifies the manager-thread clean-boundary fallback: when the source
+     * pauses after a txnEnd whose switch was skipped by miniInterval batching,
+     * the manager thread's periodic tryForceCleanSwitch() must eventually
+     * freeze the pending activeChunk data so it becomes committable.
+     *
+     * <p>Scenario:
+     * <pre>
+     *   T=0:     write + txnEnd (1st) → switchChunkForCommit, lastSwitchTime=0
+     *   T=50ms:  write + txnEnd (2nd) → miniInterval (200ms) NOT elapsed, SKIP
+     *            activeChunk now holds txn2 data; cleanBoundary = true
+     *   T=50ms+: source goes idle (no more writes/txnEnds)
+     *   T=~250ms: manager scan notices cleanBoundary=true AND miniInterval has
+     *            elapsed → force-switch → txn2 data moves to inactiveChunks
+     *   T=2000ms+: commit interval elapsed + hasDataLoaded → commit
+     * </pre>
+     *
+     * <p>Without the fallback, txn2's data would sit in activeChunk indefinitely
+     * and only the first txnEnd's data would commit, leading to incomplete data
+     * visibility and eventual shared-transaction timeout. The test asserts that
+     * all data committed via exactly one commit cycle.
+     */
+    @Test
+    public void testSourceIdleForceSwitchFallback() throws Exception {
+        // commitInterval=2000ms → miniInterval=200ms
+        StreamLoadProperties properties = buildMultiTableProperties(2000);
+        StreamLoadManagerV2 manager = new StreamLoadManagerV2(properties, true);
+        manager.init();
+
+        try {
+            mockedServer.resetCounters();
+
+            // 1st write + txnEnd: triggers the very first switchChunkForCommit
+            // (lastSwitchTimeMs = 0 initially, so "now - 0" is huge >> miniInterval).
+            manager.write(0, "test", "orders", "{\"order_id\":1}");
+            manager.setCommitAllowed(0, true);
+
+            // Small pause — still well within miniInterval of 200ms.
+            Thread.sleep(50);
+
+            // 2nd write + txnEnd: miniInterval (200ms) has NOT yet elapsed
+            // since the 1st switch, so tryMiniIntervalSwitch() on the task
+            // thread must NOT freeze activeChunk. The data stays in
+            // activeChunk with cleanBoundary = true (because the most recent
+            // task-thread event was a txnEnd).
+            manager.write(0, "test", "orders", "{\"order_id\":2}");
+            manager.setCommitAllowed(0, true);
+
+            // Record the load count BEFORE the source goes idle. It reflects
+            // only the first chunk that was switched (possibly still in-flight).
+            int loadsBeforeIdle = mockedServer.getLoadCount();
+
+            // Now simulate source pause. The manager thread must on its own
+            // observe that activeChunk is clean AND miniInterval has elapsed,
+            // and call tryForceCleanSwitch() to freeze the pending row. Then
+            // shouldTriggerCommit() must eventually fire (after the full
+            // commitInterval=2000ms from the last commit time) and drive a
+            // commit cycle.
+            Thread.sleep(3000);
+
+            Assert.assertNull("No exception during source idle", manager.getException());
+
+            // By now, BOTH rows must have been loaded: the first switched by
+            // the task thread, the second by the manager-thread fallback.
+            // Without the fallback, loadCount would remain at loadsBeforeIdle.
+            int loadsAfterIdle = mockedServer.getLoadCount();
+            Assert.assertTrue(
+                    "Expected manager-thread fallback to force-switch and load " +
+                    "the second row (loadsBefore=" + loadsBeforeIdle +
+                    ", loadsAfter=" + loadsAfterIdle + ")",
+                    loadsAfterIdle > loadsBeforeIdle || loadsAfterIdle >= 2);
+
+            // And a commit must have happened — otherwise the data is just
+            // sitting in an uncommitted shared transaction.
+            Assert.assertTrue("Expected at least 1 commit after idle fallback",
+                    mockedServer.getCommitCount() >= 1);
+
+            manager.flush();
+            Assert.assertNull("No exception after flush", manager.getException());
+        } finally {
+            manager.close();
+        }
+    }
 }

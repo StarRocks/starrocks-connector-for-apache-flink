@@ -49,12 +49,27 @@ public class FlushAndCommitStrategy implements StreamLoadStrategy {
     private final boolean multiTableTransactionEnabled;
 
     public FlushAndCommitStrategy(StreamLoadProperties properties, boolean enableAutoCommit) {
+        this(properties, enableAutoCommit, properties.getMaxCacheBytes());
+    }
+
+    /**
+     * Constructor that accepts an explicit {@code maxCacheBytes} threshold.
+     *
+     * <p>In multi-table transaction mode, {@code DefaultStreamLoadManager} overrides
+     * its internal {@code maxCacheBytes} to the multi-table buffer size, but the
+     * {@code FlushAndCommitStrategy} was previously still constructed from
+     * {@code properties.getMaxCacheBytes()}, causing the cache-full flush threshold
+     * in {@link #selectFlushRegions(Queue, long)} to be misaligned with the
+     * manager's write-block threshold. This constructor lets the caller pass the
+     * aligned value explicitly.
+     */
+    public FlushAndCommitStrategy(StreamLoadProperties properties, boolean enableAutoCommit, long maxCacheBytes) {
         this.expectDelayTime = properties.getExpectDelayTime();
         this.scanFrequency = properties.getScanningFrequency();
         // Integer division: commit may trigger slightly earlier than expectDelayTime
         // when expectDelayTime is not evenly divisible by scanFrequency
         this.ageThreshold = expectDelayTime / scanFrequency;
-        this.maxCacheBytes = properties.getMaxCacheBytes();
+        this.maxCacheBytes = maxCacheBytes;
         this.enableAutoCommit = enableAutoCommit;
         this.multiTableTransactionEnabled = properties.isEnableMultiTableTransaction();
 
@@ -68,6 +83,29 @@ public class FlushAndCommitStrategy implements StreamLoadStrategy {
 
     public List<SelectFlushResult> selectFlushRegions(Queue<TransactionTableRegion> regions, long currentCacheBytes) {
         List<SelectFlushResult> flushRegions = new ArrayList<>();
+
+        if (multiTableTransactionEnabled) {
+            // Multi-table mode: selectFlushRegions only drains already-frozen
+            // inactiveChunks. The activeChunk is never flushed by this path —
+            // it can only be switched by switchChunkForCommit (on txnEnd or the
+            // manager's clean-boundary fallback). Age-based commit and
+            // row-count-triggered flush are both meaningless here because:
+            //   - commit is driven by commit interval + shouldTriggerCommit
+            //   - activeChunk never moves to inactive via flush()
+            // So the selection rule collapses to "flush any region whose
+            // inactive queue has data".
+            for (TransactionTableRegion region : regions) {
+                if (region.hasInactiveChunks()) {
+                    numTableTriggerFlush.getAndIncrement();
+                    flushRegions.add(new SelectFlushResult(FlushReason.INACTIVE_DRAIN, region));
+                    LOG.debug("[MultiTxn] Choose region {} to drain inactive chunks",
+                            region.getUniqueKey());
+                }
+            }
+            return flushRegions;
+        }
+
+        // Non-multi-table mode: original behavior unchanged.
         for (TransactionTableRegion region : regions) {
             if (shouldCommit(region)) {
                 numAgeTriggerFlush.getAndIncrement();

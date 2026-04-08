@@ -23,185 +23,170 @@ import org.junit.Test;
 
 import java.util.List;
 
+/**
+ * Tests for the simplified {@link PartitionCommitTracker}. In the current design
+ * the tracker is an informational/safety aid only: it tracks which partitions
+ * have written data and which have seen at least one {@code txnEnd} since the
+ * last commit. It no longer drives commit timing or switch decisions.
+ */
 public class PartitionCommitTrackerTest {
 
     /**
-     * Verifies the pending txnEnd promotion path:
-     * 1. Partition 0 writes data → ACTIVE
-     * 2. Partition 0 receives txnEnd → TXN_END_RECEIVED
-     * 3. Partition 0 is marked SWITCHED (commit in flight)
-     * 4. While SWITCHED, another txnEnd arrives → recorded in pendingTxnEnd
-     * 5. After reset(), the partition is promoted to TXN_END_RECEIVED (not removed)
-     */
-    @Test
-    public void testPendingTxnEndPromotedAfterReset() {
-        PartitionCommitTracker tracker = new PartitionCommitTracker(0);
-
-        // Step 1-2: write + txnEnd
-        tracker.onWrite(0);
-        boolean shouldSwitch = tracker.onTxnEnd(0);
-        Assert.assertTrue("Should switch on first txnEnd", shouldSwitch);
-
-        // Step 3: mark switched (simulates commit in flight)
-        tracker.markSwitched(0);
-        Assert.assertTrue("All should be switched", tracker.allSwitched());
-
-        // Step 4: another txnEnd arrives while SWITCHED
-        boolean shouldSwitch2 = tracker.onTxnEnd(0);
-        Assert.assertFalse("Should NOT switch for SWITCHED partition", shouldSwitch2);
-
-        // Step 5: reset after commit completes
-        tracker.reset();
-
-        // The partition should be promoted to TXN_END_RECEIVED, not removed
-        Assert.assertFalse("Tracker should not be empty after pending promotion", tracker.isEmpty());
-
-        // It should be ready to switch immediately (interval=0)
-        List<Integer> readyToSwitch = tracker.getReadyToSwitch();
-        Assert.assertEquals("Promoted partition should be ready to switch", 1, readyToSwitch.size());
-        Assert.assertEquals(Integer.valueOf(0), readyToSwitch.get(0));
-
-        // No active partitions (it's TXN_END_RECEIVED, not ACTIVE)
-        Assert.assertTrue("No ACTIVE partitions expected", tracker.getActivePartitions().isEmpty());
-    }
-
-    /**
-     * Verifies that idle SWITCHED partitions (no pending txnEnd, no new writes)
-     * are removed from tracking during reset().
-     */
-    @Test
-    public void testIdleSwitchedPartitionRemovedOnReset() {
-        PartitionCommitTracker tracker = new PartitionCommitTracker(0);
-
-        tracker.onWrite(0);
-        tracker.onTxnEnd(0);
-        tracker.markSwitched(0);
-
-        // No pending txnEnd, no new writes → idle
-        tracker.reset();
-
-        Assert.assertTrue("Idle SWITCHED partition should be removed", tracker.isEmpty());
-    }
-
-    /**
-     * Verifies that a SWITCHED partition receiving new writes (via onWrite)
-     * stays SWITCHED (not demoted to ACTIVE), because writes go into
-     * the fresh active chunk and must not disrupt the pending commit.
-     */
-    @Test
-    public void testWriteDuringSwitchedDoesNotDemote() {
-        PartitionCommitTracker tracker = new PartitionCommitTracker(0);
-
-        tracker.onWrite(0);
-        tracker.onTxnEnd(0);
-        tracker.markSwitched(0);
-
-        // New write arrives while SWITCHED
-        tracker.onWrite(0);
-
-        // Should still be all-switched (write doesn't change SWITCHED state)
-        Assert.assertTrue("allSwitched should still be true", tracker.allSwitched());
-    }
-
-    /**
-     * Verifies the basic state machine: ACTIVE → TXN_END_RECEIVED → SWITCHED.
+     * Verifies the basic state transitions: a partition starts in ACTIVE after
+     * the first {@code onWrite}, then transitions to TXN_END_SEEN after
+     * {@code onTxnEnd}.
      */
     @Test
     public void testBasicStateTransitions() {
-        PartitionCommitTracker tracker = new PartitionCommitTracker(0);
+        PartitionCommitTracker tracker = new PartitionCommitTracker();
 
         // Initially empty
         Assert.assertTrue(tracker.isEmpty());
-        Assert.assertFalse(tracker.allSwitched());
+        Assert.assertFalse(tracker.hasAnyTxnEndSeen());
 
-        // Write → ACTIVE
+        // Write → ACTIVE (partition not yet seen a txnEnd)
         tracker.onWrite(0);
         Assert.assertFalse(tracker.isEmpty());
-        List<Integer> active = tracker.getActivePartitions();
-        Assert.assertEquals(1, active.size());
-        Assert.assertEquals(Integer.valueOf(0), active.get(0));
+        List<Integer> withoutTxnEnd = tracker.getPartitionsWithoutTxnEnd();
+        Assert.assertEquals(1, withoutTxnEnd.size());
+        Assert.assertEquals(Integer.valueOf(0), withoutTxnEnd.get(0));
+        Assert.assertFalse(tracker.hasAnyTxnEndSeen());
 
-        // txnEnd → TXN_END_RECEIVED
+        // txnEnd → TXN_END_SEEN
         tracker.onTxnEnd(0);
-        Assert.assertTrue("No active after txnEnd", tracker.getActivePartitions().isEmpty());
-        Assert.assertFalse("Not yet switched", tracker.allSwitched());
-
-        // markSwitched → SWITCHED
-        tracker.markSwitched(0);
-        Assert.assertTrue("All switched", tracker.allSwitched());
+        Assert.assertTrue("hasAnyTxnEndSeen should be true after onTxnEnd",
+                tracker.hasAnyTxnEndSeen());
+        Assert.assertTrue("No partitions without txnEnd after onTxnEnd",
+                tracker.getPartitionsWithoutTxnEnd().isEmpty());
     }
 
     /**
-     * Verifies that txnEnd for an unknown/evicted partition re-registers it
-     * as TXN_END_RECEIVED.
+     * Verifies the sticky property: once a partition is TXN_END_SEEN, subsequent
+     * {@code onWrite} calls must not demote it back to ACTIVE. This is important
+     * so {@code getPartitionsWithoutTxnEnd()} correctly distinguishes "partition
+     * that never saw a txnEnd" from "partition that is between source transactions".
      */
     @Test
-    public void testTxnEndForUnknownPartitionReRegisters() {
-        PartitionCommitTracker tracker = new PartitionCommitTracker(0);
-
-        // txnEnd for a never-seen partition
-        boolean shouldSwitch = tracker.onTxnEnd(42);
-        Assert.assertTrue("Unknown partition should be switched", shouldSwitch);
-        Assert.assertFalse("Tracker should not be empty", tracker.isEmpty());
-        Assert.assertTrue("No ACTIVE partitions", tracker.getActivePartitions().isEmpty());
-    }
-
-    /**
-     * Verifies N:1 mapping: multiple txnEnd for the same ACTIVE partition
-     * stays in TXN_END_RECEIVED without error.
-     */
-    @Test
-    public void testMultipleTxnEndForSamePartition() {
-        PartitionCommitTracker tracker = new PartitionCommitTracker(0);
+    public void testTxnEndSeenIsSticky() {
+        PartitionCommitTracker tracker = new PartitionCommitTracker();
 
         tracker.onWrite(0);
-        boolean first = tracker.onTxnEnd(0);
-        Assert.assertTrue("First txnEnd should trigger switch", first);
+        tracker.onTxnEnd(0);
+        Assert.assertTrue(tracker.hasAnyTxnEndSeen());
+        Assert.assertTrue(tracker.getPartitionsWithoutTxnEnd().isEmpty());
 
-        // Second txnEnd while still TXN_END_RECEIVED (N:1 accumulation)
-        boolean second = tracker.onTxnEnd(0);
-        Assert.assertFalse("Second txnEnd should not trigger switch again", second);
+        // Subsequent writes must NOT move the partition back to ACTIVE
+        tracker.onWrite(0);
+        tracker.onWrite(0);
+        tracker.onWrite(0);
+
+        Assert.assertTrue("TXN_END_SEEN state must be sticky across onWrite calls",
+                tracker.hasAnyTxnEndSeen());
+        Assert.assertTrue("Partition must not reappear in without-txnEnd list",
+                tracker.getPartitionsWithoutTxnEnd().isEmpty());
     }
 
     /**
-     * Verifies that allSwitched() blocks when only some partitions are switched.
+     * Verifies that {@code onTxnEnd} registers a previously-unknown partition
+     * directly into TXN_END_SEEN (no prior {@code onWrite} required).
      */
     @Test
-    public void testAllSwitchedBlocksOnPartialSwitch() {
-        PartitionCommitTracker tracker = new PartitionCommitTracker(0);
+    public void testTxnEndForUnknownPartition() {
+        PartitionCommitTracker tracker = new PartitionCommitTracker();
+
+        tracker.onTxnEnd(42);
+        Assert.assertFalse("Tracker should not be empty", tracker.isEmpty());
+        Assert.assertTrue("Partition 42 should be TXN_END_SEEN",
+                tracker.hasAnyTxnEndSeen());
+        Assert.assertTrue("Partition 42 should not appear in without-txnEnd list",
+                tracker.getPartitionsWithoutTxnEnd().isEmpty());
+    }
+
+    /**
+     * Verifies that multiple partitions can be tracked independently and that
+     * {@code getPartitionsWithoutTxnEnd()} returns only those still lacking a txnEnd.
+     */
+    @Test
+    public void testMultiplePartitions() {
+        PartitionCommitTracker tracker = new PartitionCommitTracker();
 
         tracker.onWrite(0);
         tracker.onWrite(1);
+        tracker.onWrite(2);
 
-        tracker.onTxnEnd(0);
-        tracker.markSwitched(0);
+        List<Integer> withoutTxnEnd = tracker.getPartitionsWithoutTxnEnd();
+        Assert.assertEquals("All three partitions start in ACTIVE", 3, withoutTxnEnd.size());
 
-        // Partition 1 is still ACTIVE
-        Assert.assertFalse("allSwitched should be false with one ACTIVE", tracker.allSwitched());
-
+        // Only partition 1 sees a txnEnd
         tracker.onTxnEnd(1);
-        tracker.markSwitched(1);
-        Assert.assertTrue("allSwitched should be true when all switched", tracker.allSwitched());
+
+        withoutTxnEnd = tracker.getPartitionsWithoutTxnEnd();
+        Assert.assertEquals("Partitions 0 and 2 still lack txnEnd", 2, withoutTxnEnd.size());
+        Assert.assertTrue(withoutTxnEnd.contains(0));
+        Assert.assertTrue(withoutTxnEnd.contains(2));
+        Assert.assertFalse(withoutTxnEnd.contains(1));
     }
 
     /**
-     * Verifies that getReadyToSwitch() respects the commit interval.
+     * Verifies that {@code reset()} clears all tracked partitions so the next
+     * commit cycle starts from an empty tracker.
      */
     @Test
-    public void testGetReadyToSwitchRespectsInterval() throws InterruptedException {
-        // 200ms interval
-        PartitionCommitTracker tracker = new PartitionCommitTracker(200);
+    public void testResetClearsAllPartitions() {
+        PartitionCommitTracker tracker = new PartitionCommitTracker();
+
+        tracker.onWrite(0);
+        tracker.onWrite(1);
+        tracker.onTxnEnd(0);
+        tracker.onTxnEnd(1);
+
+        Assert.assertFalse(tracker.isEmpty());
+        Assert.assertTrue(tracker.hasAnyTxnEndSeen());
+
+        tracker.reset();
+
+        Assert.assertTrue("Tracker should be empty after reset", tracker.isEmpty());
+        Assert.assertFalse("hasAnyTxnEndSeen should be false after reset",
+                tracker.hasAnyTxnEndSeen());
+        Assert.assertTrue("No partitions without txnEnd after reset",
+                tracker.getPartitionsWithoutTxnEnd().isEmpty());
+    }
+
+    /**
+     * Verifies that {@code onWrite} on an existing ACTIVE partition is idempotent
+     * (does not accidentally register new entries).
+     */
+    @Test
+    public void testRepeatedWritesOnSamePartition() {
+        PartitionCommitTracker tracker = new PartitionCommitTracker();
+
+        for (int i = 0; i < 100; i++) {
+            tracker.onWrite(5);
+        }
+
+        List<Integer> withoutTxnEnd = tracker.getPartitionsWithoutTxnEnd();
+        Assert.assertEquals("Only one partition should be tracked",
+                1, withoutTxnEnd.size());
+        Assert.assertEquals(Integer.valueOf(5), withoutTxnEnd.get(0));
+    }
+
+    /**
+     * Verifies the "multiple complete source transactions within one commit cycle"
+     * scenario (N:1 mapping). Multiple {@code onTxnEnd} calls on the same partition
+     * should leave it in TXN_END_SEEN and remain consistent.
+     */
+    @Test
+    public void testMultipleTxnEndsSamePartition() {
+        PartitionCommitTracker tracker = new PartitionCommitTracker();
 
         tracker.onWrite(0);
         tracker.onTxnEnd(0);
+        tracker.onWrite(0);
+        tracker.onTxnEnd(0);
+        tracker.onWrite(0);
+        tracker.onTxnEnd(0);
 
-        // Immediately after construction, interval has not elapsed
-        List<Integer> ready = tracker.getReadyToSwitch();
-        Assert.assertTrue("Should not be ready before interval elapses", ready.isEmpty());
-
-        Thread.sleep(250);
-
-        ready = tracker.getReadyToSwitch();
-        Assert.assertEquals("Should be ready after interval elapses", 1, ready.size());
+        Assert.assertTrue(tracker.hasAnyTxnEndSeen());
+        Assert.assertTrue(tracker.getPartitionsWithoutTxnEnd().isEmpty());
     }
 }

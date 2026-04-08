@@ -244,10 +244,12 @@ public class MultiTableTransactionITTest extends StarRocksITTestBase {
      *   t=2×interval+Δ   assert tables have data (Δ ≈ network round-trip)
      * </pre>
      *
-     * <p>This test validates the event-driven {@code setCommitAllowed} path in
-     * {@code DefaultStreamLoadManager}: on txnEnd the task thread immediately calls
-     * {@code switchChunkForCommit()} on all regions and signals the manager thread,
-     * which then drives flush → prepare → commit without waiting for the age timer.
+     * <p>This test validates the {@code setCommitAllowed} path in
+     * {@code DefaultStreamLoadManager}: on txnEnd the task thread calls
+     * {@code tryMiniIntervalSwitch()} on the partition's regions (freezing
+     * activeChunk into inactiveChunks if miniInterval has elapsed), and the
+     * manager thread subsequently runs autonomous flush → prepare → commit
+     * when the commit interval elapses.
      */
     @Test
     public void testNoFlushBeforeTxnEnd() throws Exception {
@@ -522,22 +524,33 @@ public class MultiTableTransactionITTest extends StarRocksITTestBase {
     }
 
     /**
-     * Partial partition blocking test: when two partitions are active but only
-     * one has sent txnEnd, data must NOT be committed.
+     * Per-partition independence test: completed source transactions on one
+     * partition are committed independently of in-progress transactions on
+     * another partition.
      *
-     * <p>This validates that {@code PartitionCommitTracker.allSwitched()} correctly
-     * blocks the commit until ALL active partitions have reached txnEnd.
+     * <p>In the current design, each {@code sourcePartition} represents an
+     * independent source transaction stream. When P0's transaction completes
+     * (txnEnd) but P1's is still in progress, P0's data is committed on the
+     * next commit interval — it is NOT held hostage by P1's incomplete
+     * transaction. P1's data stays in its activeChunk (not yet frozen into
+     * inactiveChunks) and becomes committable only after P1's own txnEnd
+     * arrives.
+     *
+     * <p>This per-partition independence preserves cross-TABLE atomicity
+     * within a single source transaction (all tables written by one partition
+     * within one txnEnd commit together) while avoiding unnecessary commit
+     * latency caused by unrelated laggard partitions.
      *
      * <p>Timeline:
      * <pre>
      *   t=0              P0 emits data + txnEnd; P1 emits data only (no txnEnd)
-     *   t=3×interval     assert BOTH tables EMPTY (P1 blocks the commit)
-     *   t=3×interval     P1 sends txnEnd
-     *   t=3×interval+Δ   assert both tables have data
+     *   t=2×interval+Δ   assert orders has P0's row, order_items is EMPTY
+     *   t=2×interval+Δ   P1 sends txnEnd
+     *   t=3×interval+Δ   assert order_items has P1's row
      * </pre>
      */
     @Test
-    public void testPartialPartitionTxnEndBlocking() throws Exception {
+    public void testPerPartitionIndependentCommit() throws Exception {
         String ordersTable = createOrdersTable();
         String orderItemsTable = createOrderItemsTable();
 
@@ -553,7 +566,7 @@ public class MultiTableTransactionITTest extends StarRocksITTestBase {
 
         Thread jobThread = new Thread(() -> {
             try {
-                env.execute("testPartialPartitionTxnEndBlocking");
+                env.execute("testPerPartitionIndependentCommit");
             } catch (Exception e) {
                 LOG.warn("Job thread finished (may be expected on cancel)", e);
             }
@@ -565,31 +578,33 @@ public class MultiTableTransactionITTest extends StarRocksITTestBase {
             assertTrue("Phase 1 should complete within 10 s",
                     PartialPartitionSource.PHASE1_DONE_LATCH.await(10, TimeUnit.SECONDS));
 
-            // Wait extra flush intervals to ensure the timer fires multiple times
-            Thread.sleep(3L * FLUSH_INTERVAL_MS);
+            // Wait enough flush intervals for the commit interval to elapse and
+            // the manager thread to trigger a time-driven commit of P0's data.
+            Thread.sleep(2L * FLUSH_INTERVAL_MS + COMMIT_PROPAGATION_MS);
 
-            // P1 has NOT sent txnEnd → allSwitched() is false → no commit
-            assertEquals("orders must be empty (P1 blocks commit)",
-                    0, scanTable(DB_CONNECTION, DB_NAME, ordersTable).size());
-            assertEquals("order_items must be empty (P1 blocks commit)",
+            // P0's orders row must be committed (P0 sent txnEnd, its source
+            // transaction is complete). P1's order_items row must NOT yet be
+            // committed because P1's activeChunk is still dirty (no txnEnd).
+            assertEquals("orders must have P0's row committed independently",
+                    1, scanTable(DB_CONNECTION, DB_NAME, ordersTable).size());
+            assertEquals("order_items must be empty (P1 still in-progress)",
                     0, scanTable(DB_CONNECTION, DB_NAME, orderItemsTable).size());
 
-            LOG.info("Confirmed: partial partition txnEnd correctly blocks commit.");
+            LOG.info("Confirmed: P0's completed transaction committed without waiting for P1.");
 
-            // Now let P1 send txnEnd
+            // Now let P1 send txnEnd; its data should become committable.
             PartialPartitionSource.P1_TXN_END_LATCH.countDown();
             assertTrue("P1 txnEnd should be emitted within 10 s",
                     PartialPartitionSource.P1_TXN_END_EMITTED_LATCH.await(10, TimeUnit.SECONDS));
 
-            Thread.sleep(COMMIT_PROPAGATION_MS);
+            Thread.sleep(FLUSH_INTERVAL_MS + COMMIT_PROPAGATION_MS);
 
-            // Now both partitions have txnEnd → data should be committed
+            // P1's order_items row should now be visible
             List<List<Object>> ordersAfter = scanTable(DB_CONNECTION, DB_NAME, ordersTable);
             List<List<Object>> itemsAfter = scanTable(DB_CONNECTION, DB_NAME, orderItemsTable);
 
-            assertEquals("orders must have 1 row after both partitions txnEnd",
-                    1, ordersAfter.size());
-            assertEquals("order_items must have 1 row after both partitions txnEnd",
+            assertEquals("orders must still have 1 row", 1, ordersAfter.size());
+            assertEquals("order_items must have 1 row after P1 txnEnd",
                     1, itemsAfter.size());
 
             verifyResult(
@@ -599,7 +614,7 @@ public class MultiTableTransactionITTest extends StarRocksITTestBase {
                     Arrays.asList(Arrays.asList(1L, 1L, "widget", 2, new BigDecimal("25.00"))),
                     itemsAfter);
 
-            LOG.info("Confirmed: data visible after all partitions sent txnEnd.");
+            LOG.info("Confirmed: P1's data visible after P1 sent txnEnd.");
         } finally {
             jobThread.interrupt();
             jobThread.join(5_000);
@@ -679,8 +694,9 @@ public class MultiTableTransactionITTest extends StarRocksITTestBase {
      *
      * <p>This exercises the happy path of the checkpoint + multi-table transaction
      * interaction: by the time {@code flush()} is called during {@code snapshotState()},
-     * all partitions have already received txnEnd, so {@code getActivePartitions()}
-     * returns an empty list and the shared transaction commits successfully.
+     * all partitions have already received txnEnd, so
+     * {@code getPartitionsWithoutTxnEnd()} returns an empty list and the shared
+     * transaction commits successfully.
      *
      * <p>Timeline:
      * <pre>

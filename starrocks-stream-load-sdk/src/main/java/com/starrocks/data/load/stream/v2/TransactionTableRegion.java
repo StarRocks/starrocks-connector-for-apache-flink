@@ -85,6 +85,30 @@ public class TransactionTableRegion implements TableRegion {
     // First exception if retry many times
     private volatile Throwable firstException;
 
+    // Multi-table transaction mode flag
+    private final boolean multiTableTransactionEnabled;
+
+    // Minimum interval (ms) between two switchChunkForCommit calls on this region.
+    // Only meaningful when multiTableTransactionEnabled. Used to batch multiple
+    // source transactions into a single inactive chunk, reducing HTTP request
+    // overhead and chunk metadata fragmentation.
+    private final long miniSwitchIntervalMs;
+
+    // Timestamp (epoch ms) of the last switchChunkForCommit on this region.
+    // Initial value 0 ensures the first txnEnd always triggers a switch.
+    // Only meaningful when multiTableTransactionEnabled.
+    private volatile long lastSwitchTimeMs = 0L;
+
+    // Whether activeChunk is currently at a "clean transaction boundary".
+    // - true: the most recent task-thread event on this region was either
+    //   a txnEnd (setCommitAllowed) or a switch; all data in activeChunk
+    //   belongs to fully-committed source transactions and is safe to freeze.
+    // - false: a write occurred after the most recent txnEnd; activeChunk may
+    //   contain data from an in-progress source transaction and must NOT be
+    //   switched until the next txnEnd arrives.
+    // Only meaningful when multiTableTransactionEnabled.
+    private volatile boolean activeChunkCleanBoundary = true;
+
     public TransactionTableRegion(String uniqueKey,
                             String database,
                             String table,
@@ -94,6 +118,21 @@ public class TransactionTableRegion implements TableRegion {
                             LabelGenerator labelGenerator,
                             int maxRetries,
                             int retryIntervalInMs) {
+        this(uniqueKey, database, table, manager, properties, streamLoader,
+                labelGenerator, maxRetries, retryIntervalInMs, false, 0L);
+    }
+
+    public TransactionTableRegion(String uniqueKey,
+                            String database,
+                            String table,
+                            StreamLoadManager manager,
+                            StreamLoadTableProperties properties,
+                            StreamLoader streamLoader,
+                            LabelGenerator labelGenerator,
+                            int maxRetries,
+                            int retryIntervalInMs,
+                            boolean multiTableTransactionEnabled,
+                            long miniSwitchIntervalMs) {
         this.uniqueKey = uniqueKey;
         this.database = database;
         this.table = table;
@@ -111,6 +150,8 @@ public class TransactionTableRegion implements TableRegion {
         this.activeChunk = new Chunk(properties.getDataFormat(), chunkIdGenerator.getAndIncrement());
         this.maxRetries = maxRetries;
         this.retryIntervalInMs = retryIntervalInMs;
+        this.multiTableTransactionEnabled = multiTableTransactionEnabled;
+        this.miniSwitchIntervalMs = miniSwitchIntervalMs;
     }
 
     private void initHeaders(StreamLoadTableProperties properties) {
@@ -282,6 +323,13 @@ public class TransactionTableRegion implements TableRegion {
             if (writeLock.compareAndSet(false, true)) {
                 try {
                     switchChunk();
+                    if (multiTableTransactionEnabled) {
+                        // Record the switch time for miniInterval bookkeeping.
+                        // The new activeChunk (created by switchChunk) is empty,
+                        // so it is trivially at a clean transaction boundary.
+                        lastSwitchTimeMs = System.currentTimeMillis();
+                        activeChunkCleanBoundary = true;
+                    }
                 } finally {
                     writeLock.set(false);
                 }
@@ -324,15 +372,163 @@ public class TransactionTableRegion implements TableRegion {
         return false;
     }
 
-    protected int write0(byte[] row) {
-        if (activeChunk.estimateChunkSize(row) > properties.getChunkLimit()
-                || activeChunk.numRows() >= properties.getMaxBufferRows()) {
-            switchChunk();
+    /**
+     * Called on the task thread when a source txnEnd is received for the
+     * partition owning this region. Performs three bookkeeping steps:
+     *
+     * <ol>
+     *   <li>Mark the activeChunk as being at a "clean transaction boundary":
+     *       regardless of whether a switch actually happens, the most recent
+     *       event on this region is now a txnEnd, which means all data in
+     *       the current activeChunk belongs to fully-committed source
+     *       transactions.</li>
+     *   <li>If the miniInterval has elapsed since the last switch AND there
+     *       is data to freeze, call {@link #switchChunkForCommit()} to move
+     *       the activeChunk into the inactive queue where it can be drained
+     *       by autonomous flush.</li>
+     *   <li>Otherwise, leave activeChunk untouched — additional source
+     *       transactions can still accumulate into it, batching multiple
+     *       complete transactions into a single HTTP request when the next
+     *       switch does happen.</li>
+     * </ol>
+     *
+     * <p>Only meaningful in multi-table transaction mode. Callers must not
+     * invoke this method when {@code multiTableTransactionEnabled} is false.
+     */
+    public void tryMiniIntervalSwitch() {
+        // Step 1: The task thread has just observed a txnEnd for this region.
+        // Mark the current activeChunk as clean so that the manager-thread
+        // fallback can force-switch it later if the source goes idle.
+        // This must happen BEFORE the switch decision because switchChunkForCommit
+        // itself sets cleanBoundary=true on the new activeChunk, but if we skip
+        // the switch we still want the old activeChunk flagged as clean.
+        activeChunkCleanBoundary = true;
+
+        // Step 2: Only switch if miniInterval has elapsed AND the activeChunk
+        // has data. An empty activeChunk would produce an empty inactive chunk
+        // which wastes a chunk slot and an HTTP request.
+        long now = System.currentTimeMillis();
+        if (now - lastSwitchTimeMs >= miniSwitchIntervalMs
+                && activeChunk != null && activeChunk.numRows() > 0) {
+            switchChunkForCommit();
         }
+    }
+
+    /**
+     * Called by the manager thread during its normal scan loop. If the
+     * activeChunk is at a clean transaction boundary, has data, and the
+     * miniInterval has elapsed since the last switch, force-switch it so
+     * the data can be drained by autonomous flush and committed on the
+     * next commit cycle.
+     *
+     * <p>This is the "source idle" fallback: when the upstream source pauses
+     * after a few txnEnds and no further task-thread events arrive, the
+     * manager thread takes over the responsibility of freezing completed
+     * transaction data into inactiveChunks.
+     *
+     * <p><b>Safety:</b> The method acquires writeLock and re-checks the
+     * clean-boundary flag under the lock. This guarantees that if a task
+     * thread write is concurrently in progress, either (a) the task thread
+     * runs first and the re-check sees {@code false} (we abort), or (b) the
+     * force-switch runs first and the task thread's subsequent write targets
+     * a fresh activeChunk.
+     *
+     * <p>Only meaningful in multi-table transaction mode.
+     *
+     * @return {@code true} if a switch was performed, {@code false} otherwise
+     */
+    public boolean tryForceCleanSwitch() {
+        // Fast path checks without acquiring the lock.
+        // Note: cacheRows covers both activeChunk and inactiveChunks, so it is
+        // a coarser filter than we need here. Check activeChunk.numRows()
+        // directly so a region whose inactiveChunks still have pending data but
+        // whose activeChunk is empty doesn't force us to acquire the lock just
+        // to bail out inside it.
+        if (!activeChunkCleanBoundary) {
+            return false;
+        }
+        Chunk snapshot = activeChunk;  // volatile load
+        if (snapshot == null || snapshot.numRows() == 0) {
+            return false;
+        }
+        long now = System.currentTimeMillis();
+        if (now - lastSwitchTimeMs < miniSwitchIntervalMs) {
+            return false;
+        }
+
+        // Slow path: acquire writeLock and re-check under the lock
+        if (!writeLock.compareAndSet(false, true)) {
+            // Task thread holds the lock, retry on next scan
+            return false;
+        }
+        try {
+            // Re-check clean boundary under the lock: if a task thread write
+            // happened between the fast-path check and now, cleanBoundary will
+            // be false and we must abort to avoid freezing partial transaction
+            // data.
+            if (!activeChunkCleanBoundary) {
+                return false;
+            }
+            if (activeChunk == null || activeChunk.numRows() == 0) {
+                return false;
+            }
+            switchChunk();
+            lastSwitchTimeMs = System.currentTimeMillis();
+            activeChunkCleanBoundary = true;
+            LOG.debug("[MultiTxn] tryForceCleanSwitch: db={}, table={}, inactiveChunks={}",
+                    database, table, inactiveChunks.size());
+            return true;
+        } finally {
+            writeLock.set(false);
+        }
+    }
+
+    /**
+     * Returns {@code true} if the activeChunk is currently at a clean
+     * transaction boundary (all data belongs to completed source transactions).
+     */
+    public boolean isActiveChunkCleanBoundary() {
+        return activeChunkCleanBoundary;
+    }
+
+    /** Returns {@code true} if {@code inactiveChunks} is non-empty. */
+    public boolean hasInactiveChunks() {
+        return !inactiveChunks.isEmpty();
+    }
+
+    /** Returns the timestamp (epoch ms) of the last switchChunkForCommit. */
+    public long getLastSwitchTimeMs() {
+        return lastSwitchTimeMs;
+    }
+
+    protected int write0(byte[] row) {
+        if (!multiTableTransactionEnabled) {
+            // Non-multi-table: original behavior — switch when a single row would
+            // exceed chunk size or row limits, so individual HTTP requests stay
+            // bounded.
+            if (activeChunk.estimateChunkSize(row) > properties.getChunkLimit()
+                    || activeChunk.numRows() >= properties.getMaxBufferRows()) {
+                switchChunk();
+            }
+        }
+        // Multi-table mode: do NOT switch mid-transaction. A switch at this point
+        // would move partial source-transaction data into inactiveChunks, which
+        // the manager's commit path may then load under the shared label before
+        // the source transaction has reached its txnEnd. Instead, activeChunk
+        // grows until the next setCommitAllowed (txnEnd) triggers a clean switch.
+        // Memory is bounded by blockIfCacheFull via maxWriteBlockCacheBytes.
 
         activeChunk.addRow(row);
         cacheBytes.addAndGet(row.length);
         cacheRows.incrementAndGet();
+
+        if (multiTableTransactionEnabled) {
+            // A write after a clean boundary transitions the region to "dirty":
+            // activeChunk now holds at least one row from a source transaction
+            // whose txnEnd has not yet arrived. The manager thread must not
+            // force-switch in this state.
+            activeChunkCleanBoundary = false;
+        }
         return row.length;
     }
 
@@ -352,27 +548,38 @@ public class TransactionTableRegion implements TableRegion {
         LOG.debug("Try to flush db: {}, table: {}, label: {}, cacheBytes: {}, cacheRows: {}, reason: {}",
                 database, table, label, cacheBytes, cacheRows, reason);
         if (state.compareAndSet(State.ACTIVE, State.FLUSHING)) {
-            int spins = 0;
-            for (;;) {
-                if (writeLock.compareAndSet(false, true)) {
-                    try {
-                        if (reason != FlushReason.BUFFER_ROWS_REACH_LIMIT ||
-                                activeChunk.numRows() >= properties.getMaxBufferRows()) {
-                            switchChunk();
+            if (!multiTableTransactionEnabled) {
+                // Non-multi-table: original behavior — acquire writeLock and
+                // optionally switch activeChunk into the inactive queue before
+                // streaming.
+                int spins = 0;
+                for (;;) {
+                    if (writeLock.compareAndSet(false, true)) {
+                        try {
+                            if (reason != FlushReason.BUFFER_ROWS_REACH_LIMIT ||
+                                    activeChunk.numRows() >= properties.getMaxBufferRows()) {
+                                switchChunk();
+                            }
+                        } finally {
+                            writeLock.set(false);
                         }
-                    } finally {
-                        writeLock.set(false);
+                        break;
                     }
-                    break;
-                }
-                if (spins < MAX_SPIN_ATTEMPTS) {
-                    Thread.yield();
-                    spins++;
-                } else {
-                    LockSupport.parkNanos(SPIN_BACKOFF_NANOS * (spins - MAX_SPIN_ATTEMPTS + 1));
-                    spins++;
+                    if (spins < MAX_SPIN_ATTEMPTS) {
+                        Thread.yield();
+                        spins++;
+                    } else {
+                        LockSupport.parkNanos(SPIN_BACKOFF_NANOS * (spins - MAX_SPIN_ATTEMPTS + 1));
+                        spins++;
+                    }
                 }
             }
+            // Multi-table mode: never touch activeChunk here. Autonomous flush
+            // only drains already-frozen inactiveChunks (produced by
+            // switchChunkForCommit at txnEnd or manager-thread clean-boundary
+            // fallback). This preserves the invariant that every chunk reaching
+            // StarRocks under the shared label comes from a completed source
+            // transaction.
             if (!inactiveChunks.isEmpty()) {
                 LOG.debug("Flush db: {}, table: {}, label: {}, cacheBytes: {}, cacheRows: {}, reason: {}",
                         database, table, label, cacheBytes.get(), cacheRows.get(), reason);
