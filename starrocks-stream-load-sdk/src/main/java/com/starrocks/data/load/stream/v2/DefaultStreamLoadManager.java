@@ -1355,10 +1355,19 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                     String tableKey = StreamLoadUtils.getTableUniqueKey(database, table);
                     StreamLoadTableProperties tableProperties = properties.getTableProperties(tableKey, database, table);
                     LabelGenerator labelGenerator = labelGeneratorFactory.create(database, table);
+                    // In multi-table mode, pass maxWriteBlockCacheBytes (= 2 * multi-table
+                    // buffer size) as the per-region hard cap for an in-progress source
+                    // transaction. This is the exact threshold at which blockIfCacheFull
+                    // would start blocking the task thread; if a single region's activeChunk
+                    // alone exceeds it, deadlock is inevitable because the manager has no
+                    // inactiveChunks to flush (multi-table mode cannot switch activeChunk
+                    // until the next txnEnd arrives). Failing fast here gives a clear error
+                    // instead of a silent hang.
+                    long singleTxnMaxBytes = multiTableTransactionEnabled ? maxWriteBlockCacheBytes : 0L;
                     TransactionTableRegion newRegion = new TransactionTableRegion(
                             uniqueKey, database, table, this,
                             tableProperties, streamLoader, labelGenerator, maxRetries, retryIntervalInMs,
-                            multiTableTransactionEnabled, miniSwitchIntervalMs);
+                            multiTableTransactionEnabled, miniSwitchIntervalMs, singleTxnMaxBytes);
                     if (multiTableTransactionEnabled) {
                         newRegion.getHeaders().put("transaction_type", "multi");
                         // If a shared transaction is already open, inject its label so that

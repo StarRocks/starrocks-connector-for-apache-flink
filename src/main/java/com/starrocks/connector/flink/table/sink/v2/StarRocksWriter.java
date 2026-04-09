@@ -151,6 +151,22 @@ public class StarRocksWriter<InputT>
             sinkManager.write(partition, rowData.getDatabase(), rowData.getTable(), rowData.getRow());
             sinkManager.setCommitAllowed(partition, rowData.isTransactionEnd());
         } else {
+            // Fail fast: in multi-table transaction mode a negative partition would
+            // route the row to the legacy write(uniqueKey, ...) path, which does not
+            // participate in partition-scoped setCommitAllowed tracking. The region
+            // it targets still runs with multiTableTransactionEnabled=true, so its
+            // activeChunk is never switched (size/row-based switching is disabled
+            // and no txnEnd will ever arrive for it), which ultimately stalls the
+            // task thread on blockIfCacheFull. Require callers/serializers to set
+            // a non-negative source partition instead of silently downgrading.
+            if (sinkOptions.isMultiTableTransactionEnabled()) {
+                throw new IllegalStateException(
+                        "Multi-table transaction mode requires a non-negative source "
+                                + "partition on every StarRocksRowData, but received partition="
+                                + partition + " for database=" + rowData.getDatabase()
+                                + ", table=" + rowData.getTable() + ". Update the serializer "
+                                + "to override StarRocksRowData#getSourcePartition().");
+            }
             sinkManager.write(rowData.getUniqueKey(), rowData.getDatabase(), rowData.getTable(), rowData.getRow());
         }
         totalReceivedRows += 1;

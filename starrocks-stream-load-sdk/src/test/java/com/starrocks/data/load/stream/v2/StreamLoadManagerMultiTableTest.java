@@ -1130,4 +1130,205 @@ public class StreamLoadManagerMultiTableTest {
             manager.close();
         }
     }
+
+    // -------------------------------------------------------------------------
+    // Item 11: Multi-table single-txn fail-fast / clean-boundary safe switch
+    // -------------------------------------------------------------------------
+
+    /**
+     * Builds multi-table properties with an explicit {@code buffer-size} so
+     * tests can drive the fail-fast / safe-switch thresholds with small,
+     * easy-to-reason-about values.
+     */
+    private StreamLoadProperties buildMultiTableProperties(int flushIntervalMs, long bufferSize) {
+        StreamLoadTableProperties tableProps = StreamLoadTableProperties.builder()
+                .database("test")
+                .table("orders")
+                .streamLoadDataFormat(StreamLoadDataFormat.JSON)
+                .maxBufferRows(100000)
+                .build();
+
+        return StreamLoadProperties.builder()
+                .loadUrls(mockedServer.getBaseUrl())
+                .username(USERNAME)
+                .password(PASSWORD)
+                .version("4.0.0")
+                .enableMultiTableTransaction()
+                .multiTableTransactionBufferSize(bufferSize)
+                .labelPrefix("test-mtxn-")
+                .defaultTableProperties(tableProps)
+                .expectDelayTime(flushIntervalMs)
+                .scanningFrequency(50)
+                .ioThreadCount(2)
+                .build();
+    }
+
+    /**
+     * Verifies the fail-fast on a single oversized in-progress transaction.
+     *
+     * <p>In multi-table mode, {@code TransactionTableRegion.write0} cannot
+     * switch activeChunk mid-transaction (doing so would split a source
+     * transaction across chunks and break atomicity under the shared label).
+     * If one source transaction alone grows past the write-block hard cap
+     * (2 &times; buffer size), {@code blockIfCacheFull} would deadlock the task
+     * thread because the manager has no inactiveChunks to drain. The region
+     * should instead throw {@link IllegalStateException} before the deadlock
+     * state is reachable.
+     *
+     * <p>This test uses a very small buffer (1KB &rarr; hard cap 2KB) and writes
+     * fixed-width 68-byte rows to a single partition without ever calling
+     * {@code setCommitAllowed}, simulating one huge source transaction. It
+     * expects an {@link IllegalStateException} with a clear remediation hint.
+     * A very large commit interval is used so the manager thread cannot
+     * independently drive a commit cycle.
+     */
+    @Test(timeout = 10000)
+    public void testFailFastOnOversizedSingleTransaction() throws Exception {
+        // 1 KB buffer → hard cap = 2 KB → safe switch threshold = 1 KB.
+        StreamLoadProperties properties = buildMultiTableProperties(60000, 1024L);
+        StreamLoadManagerV2 manager = new StreamLoadManagerV2(properties, true);
+        manager.init();
+
+        try {
+            IllegalStateException caught = null;
+            int rowsWritten = 0;
+            // Each row is a fixed 68-byte JSON document. Writing one row at a
+            // time to ONE partition without setCommitAllowed drives activeChunk
+            // past the 2 KB hard cap. The fail-fast in write0 fires on the row
+            // whose addition would push activeChunk past the cap: after 29
+            // rows chunkBytes = 69*29 + 1 = 2002, so the 30th row's estimate
+            // 2002 + 68 + 1 = 2071 > 2048 triggers the throw. This happens
+            // BEFORE blockIfCacheFull could block the task thread, because
+            // raw bytes after 29 rows = 29 * 68 = 1972 < 2048 hard cap.
+            try {
+                for (int i = 0; i < 200; i++) {
+                    manager.write(0, "test", "orders",
+                            String.format(
+                                    "{\"order_id\":%05d,\"customer_id\":%06d,\"notes\":\"padding-block-%04d\"}",
+                                    i, i, i));
+                    rowsWritten++;
+                }
+                Assert.fail("Expected IllegalStateException for oversized single txn, "
+                        + "but write() succeeded after " + rowsWritten + " rows");
+            } catch (IllegalStateException e) {
+                caught = e;
+            }
+
+            Assert.assertNotNull("Expected IllegalStateException for oversized single txn", caught);
+            Assert.assertTrue(
+                    "Error message should identify the region: " + caught.getMessage(),
+                    caught.getMessage().contains("db=test")
+                            && caught.getMessage().contains("table=orders"));
+            Assert.assertTrue(
+                    "Error message should mention the write-block threshold: " + caught.getMessage(),
+                    caught.getMessage().contains("write-block threshold"));
+            Assert.assertTrue(
+                    "Error message should suggest a remediation: " + caught.getMessage(),
+                    caught.getMessage().contains("buffer-size")
+                            || caught.getMessage().contains("buffer size"));
+            // Sanity: the fail-fast must fire reasonably close to the hard
+            // cap. At 68 bytes/row the cap is reached near row 30, so we
+            // shouldn't have written more than ~40 rows before the throw.
+            Assert.assertTrue(
+                    "Fail-fast should trigger near the hard-cap boundary, "
+                            + "but rowsWritten=" + rowsWritten,
+                    rowsWritten < 50);
+        } finally {
+            try {
+                manager.close();
+            } catch (Exception ignore) {
+                // close() after an exception is best-effort; underlying state
+                // is not guaranteed to be clean.
+            }
+        }
+    }
+
+    /**
+     * Verifies that the fail-fast on oversized single transaction does NOT
+     * misfire when multiple small source transactions are batched into one
+     * activeChunk because {@code miniInterval} has not yet elapsed.
+     *
+     * <p>Without the clean-boundary safe switch in {@code write0}, a sequence
+     * of modest-sized back-to-back source transactions — each individually
+     * well within the buffer — could accumulate in activeChunk past half the
+     * write-block hard cap, leaving no headroom for the next transaction.
+     * The next transaction's mid-stream writes would then wrongly trip the
+     * fail-fast even though neither of the involved source transactions is
+     * oversized.
+     *
+     * <p>With the safe switch, when a new source transaction's first write
+     * arrives and activeChunk is already at or above the soft threshold
+     * (half the hard cap), the region force-switches the accumulated
+     * completed transactions into inactiveChunks (overriding the miniInterval
+     * batching) so the new transaction gets a fresh activeChunk with full
+     * headroom.
+     *
+     * <p>Parameters (buffer=512B, commitInterval=10s → miniInterval=1000ms)
+     * ensure the tight write loop stays inside one miniInterval window. With
+     * 55-byte rows and 5 rows per txn, activeChunk reaches ~281B after Txn1,
+     * ~561B after Txn2, etc. Without the safe switch, Txn4 row 4's estimate
+     * (1065 B) would exceed the 1024 B hard cap and trip the fail-fast. With
+     * the safe switch, Txn3's first row (chunkBytes=561 ≥ 512) force-switches
+     * the accumulated Txn1+Txn2 data into inactiveChunks, giving Txn3+Txn4
+     * a fresh activeChunk and allowing all 5 txns to complete.
+     */
+    @Test(timeout = 15000)
+    public void testBatchedTransactionsDoNotFalseFailFast() throws Exception {
+        // 512 B buffer → hard cap = 1024 B → safe switch threshold = 512 B.
+        // 10 s commit interval → miniInterval = 1000 ms (commitInterval / 10,
+        // clamped to [100, 1000]). The tight write loop stays well within
+        // one miniInterval window so tryMiniIntervalSwitch MUST skip its
+        // switch — the clean-boundary safe switch in write0 is the only
+        // mechanism that can prevent activeChunk from growing past the cap.
+        StreamLoadProperties properties = buildMultiTableProperties(10000, 512L);
+        StreamLoadManagerV2 manager = new StreamLoadManagerV2(properties, true);
+        manager.init();
+
+        try {
+            mockedServer.resetCounters();
+
+            // 5 back-to-back source transactions on the same partition. Each
+            // writes 5 fixed-width 55-byte rows (chunkBytes grows by ~280 B
+            // per txn due to delimiters).
+            // - Txn #0 triggers the first switch unconditionally (initial
+            //   lastSwitchTimeMs = 0, so miniInterval is considered elapsed).
+            //   After Txn #0's switch, activeChunk is empty.
+            // - Txn #1..#4 fall inside the miniInterval window, so
+            //   tryMiniIntervalSwitch skips its switch, keeping activeChunk
+            //   growing across txn boundaries.
+            // - After Txn #2, activeChunk is ~561 B (> safe switch threshold
+            //   512), so write0's clean-boundary safe switch must fire on
+            //   the first row of Txn #3, draining Txn #1+#2 into
+            //   inactiveChunks. Without the safe switch, Txn #4's mid-stream
+            //   writes would push activeChunk past the 1024 B hard cap and
+            //   trip the fail-fast.
+            for (int txn = 0; txn < 5; txn++) {
+                for (int r = 0; r < 5; r++) {
+                    manager.write(0, "test", "orders",
+                            String.format(
+                                    "{\"order_id\":%05d,\"customer_id\":%05d,\"notes\":\"t%d-r%02d\"}",
+                                    txn * 100 + r, r * 10, txn, r));
+                }
+                manager.setCommitAllowed(0, true);
+            }
+
+            Assert.assertNull(
+                    "No exception expected — the clean-boundary safe switch should drain "
+                            + "batched completed transactions before the fail-fast would misfire",
+                    manager.getException());
+
+            manager.flush();
+            Assert.assertNull("No exception after flush", manager.getException());
+
+            // At least one HTTP load and commit must have happened — proves
+            // the batched transactions were actually drained rather than
+            // accumulating indefinitely in activeChunk.
+            Assert.assertTrue("Expected at least 1 load call for batched txns",
+                    mockedServer.getLoadCount() >= 1);
+            Assert.assertTrue("Expected at least 1 commit for batched txns",
+                    mockedServer.getCommitCount() >= 1);
+        } finally {
+            manager.close();
+        }
+    }
 }
