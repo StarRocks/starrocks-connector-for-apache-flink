@@ -137,6 +137,25 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
             } else if (value instanceof StarRocksRowData) {
                 StarRocksRowData data = (StarRocksRowData) value;
                 int partition = data.getSourcePartition();
+                // Fail fast: in multi-table transaction mode every StarRocksRowData
+                // (including control-only txnEnd markers) must carry a non-negative
+                // source partition. A data row with partition=-1 would otherwise fall
+                // through to the legacy write(uniqueKey, ...) path, whose activeChunk
+                // is never switched mid-transaction and never receives a txnEnd signal,
+                // eventually stalling the task thread on blockIfCacheFull. A control-
+                // only txnEnd row with partition=-1 would invoke setCommitAllowed(-1,
+                // true), which silently targets a non-existent partition: the real
+                // regions where data was written never receive their txnEnd signal
+                // and their chunks remain stuck until backpressure or timeout. Gating
+                // both branches here closes both holes.
+                if (partition < 0 && sinkOptions.isMultiTableTransactionEnabled()) {
+                    throw new IllegalStateException(
+                            "Multi-table transaction mode requires a non-negative source "
+                                    + "partition on every StarRocksRowData, but received partition="
+                                    + partition + " for database=" + data.getDatabase()
+                                    + ", table=" + data.getTable() + ". Update the serializer "
+                                    + "to override StarRocksRowData#getSourcePartition().");
+                }
                 if (Strings.isNullOrEmpty(data.getDatabase())
                         || Strings.isNullOrEmpty(data.getTable())
                         || data.getRow() == null) {
@@ -150,22 +169,6 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
                     sinkManager.write(partition, data.getDatabase(), data.getTable(), data.getRow());
                     sinkManager.setCommitAllowed(partition, data.isTransactionEnd());
                 } else {
-                    // Fail fast: in multi-table transaction mode a negative partition would
-                    // route the row to the legacy write(uniqueKey, ...) path, which does not
-                    // participate in partition-scoped setCommitAllowed tracking. The region
-                    // it targets still runs with multiTableTransactionEnabled=true, so its
-                    // activeChunk is never switched (size/row-based switching is disabled
-                    // and no txnEnd will ever arrive for it), which ultimately stalls the
-                    // task thread on blockIfCacheFull. Require callers/serializers to set
-                    // a non-negative source partition instead of silently downgrading.
-                    if (sinkOptions.isMultiTableTransactionEnabled()) {
-                        throw new IllegalStateException(
-                                "Multi-table transaction mode requires a non-negative source "
-                                        + "partition on every StarRocksRowData, but received partition="
-                                        + partition + " for database=" + data.getDatabase()
-                                        + ", table=" + data.getTable() + ". Update the serializer "
-                                        + "to override StarRocksRowData#getSourcePartition().");
-                    }
                     sinkManager.write(data.getUniqueKey(), data.getDatabase(), data.getTable(), data.getRow());
                 }
                 return;

@@ -193,6 +193,17 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                     "Multi-table transaction mode requires TransactionStreamLoader. " +
                     "Retry (maxRetries > 0) is not supported with multi-table transactions.");
         }
+        // Multi-table mode is incompatible with SDK manual-commit mode. The manager's
+        // timer-driven path (tryStartTimerDrivenCommit -> processMultiTableCommit) autonomously
+        // commits the shared transaction once commitIntervalMs has elapsed and data is present,
+        // so an external 2PC caller would see data published before its explicit snapshot/commit
+        // step. Reject the combination at construction time rather than silently auto-publishing.
+        if (properties.isEnableMultiTableTransaction() && !enableAutoCommit) {
+            throw new IllegalArgumentException(
+                    "Multi-table transaction mode requires enableAutoCommit=true. " +
+                    "The manager autonomously drives shared-transaction commits on a timer, " +
+                    "which is incompatible with external manual-commit (2PC) control.");
+        }
         if (properties.isEnableMultiTableTransaction() && properties.getMultiTableTransactionBufferSize() > 0) {
             this.maxCacheBytes = properties.getMultiTableTransactionBufferSize();
         } else {

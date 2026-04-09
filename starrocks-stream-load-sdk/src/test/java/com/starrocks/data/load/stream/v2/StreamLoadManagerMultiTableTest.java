@@ -73,6 +73,28 @@ public class StreamLoadManagerMultiTableTest {
     }
 
     /**
+     * Multi-table mode is fundamentally incompatible with SDK manual-commit
+     * mode (enableAutoCommit=false). The manager's timer-driven path
+     * autonomously drives shared-transaction commits once commitIntervalMs
+     * has elapsed, which would publish data before an external 2PC caller's
+     * explicit snapshot/commit step. The constructor must reject this
+     * combination up front instead of silently auto-publishing.
+     */
+    @Test
+    public void testConstructorRejectsMultiTableWithManualCommit() {
+        StreamLoadProperties properties = buildMultiTableProperties(100);
+        try {
+            new DefaultStreamLoadManager(properties, false);
+            Assert.fail("Expected IllegalArgumentException for multi-table + manual commit");
+        } catch (IllegalArgumentException e) {
+            Assert.assertTrue(
+                    "Error should mention multi-table and enableAutoCommit: " + e.getMessage(),
+                    e.getMessage().contains("Multi-table transaction mode")
+                            && e.getMessage().contains("enableAutoCommit"));
+        }
+    }
+
+    /**
      * Single partition: write data to two tables, send txnEnd, verify commit.
      * Verifies that the shared transaction coordinator is used (1 begin, 1 prepare, 1 commit).
      */

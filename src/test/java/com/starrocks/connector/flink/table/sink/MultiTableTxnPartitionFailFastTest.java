@@ -126,6 +126,19 @@ public class MultiTableTxnPartitionFailFastTest {
         return row;
     }
 
+    /**
+     * Builds a control-only txnEnd marker with {@code row==null} and the given
+     * partition. This models the signal a Kafka transaction assembler emits at
+     * the end of a source transaction when there is no data row to attach the
+     * txnEnd flag to.
+     */
+    private static DefaultStarRocksRowData txnEndControlRowWithPartition(int partition) {
+        DefaultStarRocksRowData row = new DefaultStarRocksRowData("test_db", "test_table");
+        row.setTransactionEnd(true);
+        row.setSourcePartition(partition);
+        return row;
+    }
+
     // -------------------------------------------------------------------------
     // Sink v1 (StarRocksDynamicSinkFunctionV2) tests
     // -------------------------------------------------------------------------
@@ -158,6 +171,39 @@ public class MultiTableTxnPartitionFailFastTest {
                 caught.getMessage().contains("partition=-1"));
         assertTrue("Error should identify the target table: " + caught.getMessage(),
                 caught.getMessage().contains("test_db") && caught.getMessage().contains("test_table"));
+    }
+
+    @Test
+    public void testSinkV1ThrowsOnControlRowWhenMultiTableEnabledAndPartitionNegative() throws Exception {
+        // Control-only txnEnd row (row==null, transactionEnd=true, partition=-1)
+        // must also fail fast in multi-table mode. Without the fail-fast,
+        // setCommitAllowed(-1, true) would silently target a non-existent
+        // partition: the real partitions where prior data rows were written
+        // never receive their txnEnd signal, their activeChunks stay open
+        // (mid-transaction switching is disabled in multi-table mode), and
+        // the task thread eventually stalls on blockIfCacheFull.
+        StarRocksSinkOptions sinkOptions = buildMultiTableEnabledSinkOptions();
+        assertTrue("Test setup: multi-table should be enabled",
+                sinkOptions.isMultiTableTransactionEnabled());
+
+        StarRocksDynamicSinkFunctionV2<Object> sink =
+                allocateWithoutConstructor(StarRocksDynamicSinkFunctionV2.class);
+        setField(sink, StarRocksDynamicSinkFunctionV2.class, "sinkOptions", sinkOptions);
+
+        IllegalStateException caught = null;
+        try {
+            sink.invoke(txnEndControlRowWithPartition(-1), null);
+            fail("Expected IllegalStateException for control-only txnEnd row "
+                    + "with partition<0 in multi-table mode");
+        } catch (IllegalStateException e) {
+            caught = e;
+        }
+
+        assertNotNull(caught);
+        assertTrue("Error should mention multi-table transaction: " + caught.getMessage(),
+                caught.getMessage().contains("Multi-table transaction mode"));
+        assertTrue("Error should mention partition: " + caught.getMessage(),
+                caught.getMessage().contains("partition=-1"));
     }
 
     @Test
@@ -215,6 +261,36 @@ public class MultiTableTxnPartitionFailFastTest {
         try {
             writer.write(new Object(), null);
             fail("Expected IllegalStateException for partition<0 in multi-table mode");
+        } catch (IllegalStateException e) {
+            caught = e;
+        }
+
+        assertNotNull(caught);
+        assertTrue("Error should mention multi-table transaction: " + caught.getMessage(),
+                caught.getMessage().contains("Multi-table transaction mode"));
+        assertTrue("Error should mention partition: " + caught.getMessage(),
+                caught.getMessage().contains("partition=-1"));
+    }
+
+    @Test
+    public void testSinkV2ThrowsOnControlRowWhenMultiTableEnabledAndPartitionNegative() throws Exception {
+        // Same rationale as the sink-v1 control-row test above: partition<0
+        // on a control-only txnEnd row must trip the fail-fast in multi-table
+        // mode, not slip past into setCommitAllowed(-1, true).
+        StarRocksSinkOptions sinkOptions = buildMultiTableEnabledSinkOptions();
+        assertTrue("Test setup: multi-table should be enabled",
+                sinkOptions.isMultiTableTransactionEnabled());
+
+        StarRocksWriter<Object> writer = allocateWithoutConstructor(StarRocksWriter.class);
+        setField(writer, StarRocksWriter.class, "sinkOptions", sinkOptions);
+        setField(writer, StarRocksWriter.class, "serializationSchema",
+                new TestRecordSerializationSchema(txnEndControlRowWithPartition(-1)));
+
+        IllegalStateException caught = null;
+        try {
+            writer.write(new Object(), null);
+            fail("Expected IllegalStateException for control-only txnEnd row "
+                    + "with partition<0 in multi-table mode");
         } catch (IllegalStateException e) {
             caught = e;
         }
