@@ -78,21 +78,42 @@ public class SharedTransactionCoordinator {
      */
     public synchronized void begin(String database, String anyTable) {
         LabelGenerator generator = labelGeneratorFactory.create(database, anyTable);
-        this.sharedLabel = generator.next();
-        this.database = database;
-        this.table = anyTable;
+        String newLabel = generator.next();
 
-        LOG.info("[MultiTxn] SharedTransaction begin: label={}, db={}", sharedLabel, database);
+        LOG.info("[MultiTxn] SharedTransaction begin: label={}, db={}", newLabel, database);
 
-        this.dataLoaded = false;
-        this.beginTimeMs = System.currentTimeMillis();
-
-        boolean ok = streamLoader.beginTransaction(sharedLabel, database);
+        // Invariant: coordinator state (sharedLabel/database/table) must reflect a
+        // transaction that was actually opened on the FE. We therefore only publish
+        // the new label after beginTransaction() succeeds. If the RPC fails — either
+        // by returning false or by throwing — isActive() continues to report false,
+        // so the next manager cycle will cleanly re-drive ensureSharedTransaction
+        // instead of reusing a ghost label that was never created server-side.
+        boolean ok;
+        try {
+            ok = streamLoader.beginTransaction(newLabel, database);
+        } catch (RuntimeException ex) {
+            clearState();
+            throw ex;
+        }
         if (!ok) {
+            clearState();
             throw new StreamLoadFailException(
-                    "Failed to begin shared transaction, label: " + sharedLabel +
+                    "Failed to begin shared transaction, label: " + newLabel +
                     ", db: " + database);
         }
+
+        this.sharedLabel = newLabel;
+        this.database = database;
+        this.table = anyTable;
+        this.dataLoaded = false;
+        this.beginTimeMs = System.currentTimeMillis();
+    }
+
+    private void clearState() {
+        this.sharedLabel = null;
+        this.database = null;
+        this.table = null;
+        this.dataLoaded = false;
     }
 
     /**

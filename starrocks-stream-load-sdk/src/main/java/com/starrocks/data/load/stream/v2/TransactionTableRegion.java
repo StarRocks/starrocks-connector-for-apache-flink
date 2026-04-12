@@ -242,12 +242,37 @@ public class TransactionTableRegion implements TableRegion {
         // numRetries check and label assignment atomic, and log a warning for
         // debuggability, but do NOT throw — throwing would be a behavior change that
         // could break the non-multi-table retry path if reached under rare timing.
+        // Multi-table callers that need to detect the skip must use
+        // {@link #trySetLabel(String)} instead.
+        trySetLabel(label);
+    }
+
+    /**
+     * Atomically sets the label iff no retry is in progress, returning whether
+     * the label was applied.
+     *
+     * <p>Unlike {@link #setLabel(String)}, the outcome is surfaced to the caller
+     * rather than silently swallowed. This is used by multi-table mode's
+     * {@code ensureSharedTransaction()} so that a retry starting between the
+     * bulk {@code isRetrying()} check and label injection is detected and the
+     * shared-transaction setup is rolled back — preventing the manager from
+     * treating a region as "joined the shared transaction" when the region
+     * actually still holds its previous (stale or null) label.
+     *
+     * @param label the label to set (may be {@code null} to clear)
+     * @return {@code true} if the label was applied; {@code false} if a retry
+     *         is in progress and the non-null label assignment was skipped.
+     *         Clearing the label ({@code label == null}) always returns
+     *         {@code true}.
+     */
+    public synchronized boolean trySetLabel(String label) {
         if (numRetries > 0 && label != null) {
             LOG.warn("setLabel called with label={} while numRetries={}, existing label={}. "
                     + "Skipping to preserve retry consistency.", label, numRetries, this.label);
-            return;
+            return false;
         }
         this.label = label;
+        return true;
     }
 
     @Override

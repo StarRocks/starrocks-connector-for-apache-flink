@@ -849,7 +849,18 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         for (TransactionTableRegion region : flushQ) {
             // Re-check retrying: a region may have entered retry (via fail() on the
             // executor thread) between the bulk check above and this point.
-            if (region.isRetrying()) {
+            //
+            // The isRetrying() check below is still a useful fast-path, but it does
+            // NOT close the race by itself because the monitor is released between
+            // isRetrying() and trySetLabel(). trySetLabel() re-checks numRetries
+            // under the same synchronized block that fail() uses to increment it,
+            // so if a retry starts in that window it returns false and we treat
+            // the region exactly like the isRetrying() branch: roll back the
+            // already-injected labels and re-drive ensureSharedTransaction on the
+            // next scan. This preserves the invariant that every region in
+            // `injected` has actually received the shared label.
+            if (region.isRetrying()
+                    || !region.trySetLabel(txnCoordinator.getSharedLabel())) {
                 LOG.warn("[MultiTxn] Region {} started retrying during ensureSharedTransaction; "
                         + "rolling back and clearing {} already-injected labels",
                         region.getUniqueKey(), injected.size());
@@ -859,7 +870,6 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                 }
                 return;
             }
-            region.setLabel(txnCoordinator.getSharedLabel());
             injected.add(region);
         }
         LOG.info("[MultiTxn] Eagerly opened shared transaction: label={}",
