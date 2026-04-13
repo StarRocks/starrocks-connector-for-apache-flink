@@ -124,6 +124,27 @@ public class TransactionTableRegion implements TableRegion {
     // Only meaningful when multiTableTransactionEnabled.
     private volatile boolean activeChunkCleanBoundary = true;
 
+    // Bytes written into activeChunk since the most recent clean-boundary
+    // transition (true -> false), i.e. bytes that belong to the currently
+    // in-progress source transaction on this region. Updated under writeLock in
+    // write0() and in the boundary-restoring code paths.
+    //
+    // Every increment here is mirrored (+delta) onto the manager's aggregate
+    // in-progress counter, and every time this region transitions back to a
+    // clean boundary the accumulated value is mirrored (-delta) back to that
+    // counter before being reset to 0. See DefaultStreamLoadManager.
+    //   aggregateInProgressTxnBytes for the deadlock-avoidance motivation.
+    //
+    // Only meaningful when multiTableTransactionEnabled.
+    private long inProgressTxnBytes = 0L;
+
+    // Non-null when {@link #manager} is a DefaultStreamLoadManager. Resolved
+    // once in the constructor so the aggregate-tracking hot path does not need
+    // an instanceof check per row. When null (production builds never hit this
+    // — all regions are created by DefaultStreamLoadManager), aggregate tracking
+    // degrades gracefully and the deadlock guard is skipped.
+    private final DefaultStreamLoadManager aggregateTracker;
+
     public TransactionTableRegion(String uniqueKey,
                             String database,
                             String table,
@@ -153,6 +174,9 @@ public class TransactionTableRegion implements TableRegion {
         this.database = database;
         this.table = table;
         this.manager = manager;
+        this.aggregateTracker = manager instanceof DefaultStreamLoadManager
+                ? (DefaultStreamLoadManager) manager
+                : null;
         this.properties = properties;
         this.streamLoader = streamLoader;
         this.labelGenerator = labelGenerator;
@@ -347,6 +371,27 @@ public class TransactionTableRegion implements TableRegion {
     }
 
     /**
+     * Flushes the in-progress-byte accounting back to the manager's aggregate
+     * counter. Called at every transition of {@code activeChunkCleanBoundary}
+     * from {@code false} to {@code true} (a txnEnd completing an in-progress
+     * source transaction on this region), so that the bytes that were tracked
+     * as "in-progress" stop inflating the global guard. Must be called under
+     * the same serialization context that mutates the boundary flag (either
+     * under {@code writeLock} or on the task thread while no concurrent write
+     * is in flight).
+     */
+    private void releaseInProgressBytes() {
+        if (!multiTableTransactionEnabled || inProgressTxnBytes == 0L) {
+            return;
+        }
+        long delta = inProgressTxnBytes;
+        inProgressTxnBytes = 0L;
+        if (aggregateTracker != null) {
+            aggregateTracker.addAggregateInProgressTxnBytes(-delta);
+        }
+    }
+
+    /**
      * Moves the active chunk to the inactive queue so the manager thread can flush it.
      *
      * <p>Called from two sites:
@@ -371,6 +416,11 @@ public class TransactionTableRegion implements TableRegion {
                         // so it is trivially at a clean transaction boundary.
                         lastSwitchTimeMs = System.currentTimeMillis();
                         activeChunkCleanBoundary = true;
+                        // If this call freezes in-progress bytes (e.g. savepoint
+                        // path switches an unfinished chunk), release them from
+                        // the manager's aggregate guard now that the bytes have
+                        // moved to inactiveChunks and can be flushed.
+                        releaseInProgressBytes();
                     }
                 } finally {
                     writeLock.set(false);
@@ -445,6 +495,12 @@ public class TransactionTableRegion implements TableRegion {
         // itself sets cleanBoundary=true on the new activeChunk, but if we skip
         // the switch we still want the old activeChunk flagged as clean.
         activeChunkCleanBoundary = true;
+        // The txnEnd for this region ends the in-progress source transaction:
+        // rows previously tagged as in-progress are now committed, regardless of
+        // whether the chunk switch below actually happens. Drain the per-region
+        // counter back to the manager's aggregate guard so other regions regain
+        // headroom even when miniInterval batching defers the physical switch.
+        releaseInProgressBytes();
 
         // Step 2: Only switch if miniInterval has elapsed AND the activeChunk
         // has data. An empty activeChunk would produce an empty inactive chunk
@@ -594,6 +650,31 @@ public class TransactionTableRegion implements TableRegion {
                                 + "must fit within 2 * sink.transaction.multi-table.buffer-size. "
                                 + "Reduce the source transaction size or increase the buffer size.");
             }
+            // (3) Aggregate fail-fast across regions. Even when each region
+            //     stays under multiTableSingleTxnMaxBytes, a single source
+            //     transaction spanning many tables can collectively push the
+            //     manager-level cache past maxWriteBlockCacheBytes. Because no
+            //     region has reached a clean boundary yet, no chunk can be
+            //     switched/flushed and blockIfCacheFull would park the task
+            //     thread indefinitely. Guard against that aggregate deadlock
+            //     here by checking the manager's in-progress byte counter
+            //     before we extend activeChunk.
+            if (aggregateTracker != null) {
+                long projected = aggregateTracker.getAggregateInProgressTxnBytes() + row.length;
+                long writeBlockLimit = aggregateTracker.getMaxWriteBlockCacheBytes();
+                if (projected > writeBlockLimit) {
+                    throw new IllegalStateException(
+                            "Aggregate in-progress source-transaction bytes across all tables ("
+                                    + projected + " bytes) would exceed the multi-table write-block "
+                                    + "threshold (" + writeBlockLimit + " bytes). Multi-table mode "
+                                    + "cannot switch activeChunks mid-transaction, so the combined "
+                                    + "payload of a single source transaction across all tables "
+                                    + "must fit within 2 * sink.transaction.multi-table.buffer-size. "
+                                    + "Reduce the source transaction size or increase the buffer "
+                                    + "size. Offending region: db=" + database + ", table=" + table
+                                    + ".");
+                }
+            }
         }
         // Multi-table mode: outside the two branches above we do NOT switch
         // mid-transaction. A switch inside an in-progress source transaction
@@ -616,6 +697,12 @@ public class TransactionTableRegion implements TableRegion {
             // whose txnEnd has not yet arrived. The manager thread must not
             // force-switch in this state.
             activeChunkCleanBoundary = false;
+            // Track this row as in-progress and mirror to the manager's
+            // aggregate counter so cross-region accumulation can be bounded.
+            inProgressTxnBytes += row.length;
+            if (aggregateTracker != null) {
+                aggregateTracker.addAggregateInProgressTxnBytes(row.length);
+            }
         }
         return row.length;
     }

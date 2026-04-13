@@ -95,6 +95,24 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
     private final AtomicLong currentCacheBytes = new AtomicLong(0L);
     private final AtomicLong totalFlushRows = new AtomicLong(0L);
 
+    // Multi-table mode only. Aggregate bytes currently held in activeChunks that
+    // belong to in-progress (not-yet-ended) source transactions across all
+    // regions. A single source transaction can span several tables; the task
+    // thread accumulates rows into each region's activeChunk until the per-table
+    // txnEnd arrives, at which point the corresponding region transitions to a
+    // clean boundary and its in-progress contribution is subtracted from this
+    // counter.
+    //
+    // The per-region fail-fast in TransactionTableRegion only catches the case
+    // where a single region's in-progress chunk exceeds maxWriteBlockCacheBytes.
+    // When a single source transaction splits its payload across many regions,
+    // each region can stay under the per-region cap while the aggregate pushes
+    // currentCacheBytes past the write-block threshold — blockIfCacheFull then
+    // parks the task thread, which in turn cannot deliver the txnEnd marker,
+    // resulting in a silent deadlock. This aggregate counter lets us fail fast
+    // in write() before the deadlock window opens.
+    private final AtomicLong aggregateInProgressTxnBytes = new AtomicLong(0L);
+
     private final AtomicLong numberTotalRows = new AtomicLong(0L);
     private final AtomicLong numberLoadRows = new AtomicLong(0L);
 
@@ -1093,6 +1111,39 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
     }
 
     /**
+     * Applies {@code delta} to the multi-table aggregate in-progress txn byte
+     * counter and returns the resulting value.
+     *
+     * <p>Called from {@link TransactionTableRegion} when:
+     * <ul>
+     *   <li>a write extends an in-progress source transaction ({@code delta > 0});</li>
+     *   <li>a region transitions back to a clean transaction boundary,
+     *       freezing previously in-progress bytes as committed ({@code delta < 0}).</li>
+     * </ul>
+     *
+     * <p>Meaningful only when multi-table transaction mode is enabled.
+     */
+    long addAggregateInProgressTxnBytes(long delta) {
+        return aggregateInProgressTxnBytes.addAndGet(delta);
+    }
+
+    /** Returns the current value of the aggregate in-progress txn byte counter. */
+    long getAggregateInProgressTxnBytes() {
+        return aggregateInProgressTxnBytes.get();
+    }
+
+    /**
+     * Returns the effective write-block threshold. When the multi-table aggregate
+     * in-progress bytes plus an incoming row would exceed this threshold, the
+     * task thread would be blocked by {@link #blockIfCacheFull} with no way for
+     * any region to flush (no region has reached a clean boundary yet) — a
+     * silent deadlock. Regions call this to know when to fail fast.
+     */
+    long getMaxWriteBlockCacheBytes() {
+        return maxWriteBlockCacheBytes;
+    }
+
+    /**
      * Blocks the calling (task) thread if the write-side cache is full, and signals
      * the manager thread to flush when the soft threshold is reached.
      *
@@ -1321,8 +1372,19 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                     LOG.warn("Failed to rollback shared transaction during close", ex);
                 }
             }
-            manager.interrupt();
-            streamLoader.close();
+            try {
+                manager.interrupt();
+                streamLoader.close();
+            } finally {
+                // Defensive: drop any residual in-progress byte accounting so a
+                // later reuse of this instance (or a snapshot taken post-close)
+                // cannot observe a stale non-zero aggregate that would produce
+                // false-positive fail-fasts in write0's aggregate guard. The
+                // reset must run even if streamLoader.close() throws — otherwise
+                // the "defensive" framing in the comment above would only hold
+                // on the happy path.
+                aggregateInProgressTxnBytes.set(0L);
+            }
         }
     }
 

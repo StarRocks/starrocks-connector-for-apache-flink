@@ -1353,4 +1353,172 @@ public class StreamLoadManagerMultiTableTest {
             manager.close();
         }
     }
+
+    /**
+     * Verifies the aggregate fail-fast guard across multiple regions within a
+     * single source transaction.
+     *
+     * <p>The per-region {@code multiTableSingleTxnMaxBytes} check in
+     * {@code TransactionTableRegion.write0} only sees one region's activeChunk
+     * at a time. A single source transaction that splits its payload across
+     * several tables can keep each region's chunk comfortably under the
+     * per-region hard cap while the combined payload pushes the manager-level
+     * {@code currentCacheBytes} past {@code maxWriteBlockCacheBytes}. At that
+     * point the task thread would be parked in {@code blockIfCacheFull} with
+     * no region at a clean boundary, and the txnEnd marker needed to unblock
+     * any region can never be delivered — a silent deadlock.
+     *
+     * <p>This test writes rows alternately to three tables without calling
+     * {@code setCommitAllowed}, simulating one source transaction that spans
+     * all three. No single region exceeds the per-region cap; the deadlock
+     * is only avoidable via the aggregate in-progress byte guard in the
+     * manager. We expect an {@link IllegalStateException} with a clear
+     * "aggregate" remediation hint, raised before {@code blockIfCacheFull}
+     * could park the task thread.
+     */
+    @Test(timeout = 10000)
+    public void testFailFastOnAggregateInProgressBytesAcrossRegions() throws Exception {
+        // 1 KB buffer → hard cap (maxWriteBlockCacheBytes) = 2 KB.
+        // Per-region fail-fast threshold is also 2 KB, so each individual
+        // region can grow almost to 2 KB without tripping the per-region
+        // check. Spreading writes across three tables keeps each region well
+        // under that limit while the aggregate grows past 2 KB.
+        StreamLoadProperties properties = buildMultiTableProperties(60000, 1024L);
+        StreamLoadManagerV2 manager = new StreamLoadManagerV2(properties, true);
+        manager.init();
+
+        try {
+            IllegalStateException caught = null;
+            int rowsWritten = 0;
+            String[] tables = {"orders", "items", "customers"};
+            try {
+                // Round-robin across three tables on one partition without any
+                // setCommitAllowed call. Each row is ~68 bytes; each region's
+                // activeChunk grows by one row per three iterations, so after
+                // ~90 iterations each region holds ~30 rows (~2 KB each, well
+                // under the per-region 2 KB cap when viewed individually) but
+                // the aggregate is ~6 KB (3× hard cap). The aggregate guard
+                // should fire long before any region approaches its own cap.
+                for (int i = 0; i < 300; i++) {
+                    String table = tables[i % tables.length];
+                    manager.write(0, "test", table,
+                            String.format(
+                                    "{\"id\":%06d,\"customer_id\":%06d,\"notes\":\"pad-block-%04d\"}",
+                                    i, i, i));
+                    rowsWritten++;
+                }
+                Assert.fail("Expected IllegalStateException for aggregate in-progress overflow, "
+                        + "but write() succeeded after " + rowsWritten + " rows");
+            } catch (IllegalStateException e) {
+                caught = e;
+            }
+
+            Assert.assertNotNull(
+                    "Expected IllegalStateException for aggregate in-progress overflow", caught);
+            Assert.assertTrue(
+                    "Error message should identify it as the aggregate guard: " + caught.getMessage(),
+                    caught.getMessage().toLowerCase().contains("aggregate"));
+            Assert.assertTrue(
+                    "Error message should mention the write-block threshold: " + caught.getMessage(),
+                    caught.getMessage().contains("write-block"));
+            Assert.assertTrue(
+                    "Error message should suggest a remediation: " + caught.getMessage(),
+                    caught.getMessage().contains("buffer-size")
+                            || caught.getMessage().contains("buffer size"));
+            // Sanity: the aggregate guard must fire before blockIfCacheFull
+            // parks the task thread. currentCacheBytes crosses the 2 KB hard
+            // cap at ~30 rows (30 × 68 ≈ 2040 B), so the guard should fire
+            // near that point, not after hundreds of rows.
+            Assert.assertTrue(
+                    "Aggregate guard should trigger near the hard-cap boundary, "
+                            + "but rowsWritten=" + rowsWritten,
+                    rowsWritten < 60);
+        } finally {
+            try {
+                manager.close();
+            } catch (Exception ignore) {
+                // close() after an exception is best-effort.
+            }
+        }
+    }
+
+    /**
+     * Positive counterpart to {@link #testFailFastOnAggregateInProgressBytesAcrossRegions}:
+     * verifies that a {@code setCommitAllowed} actually drains the manager's
+     * aggregate in-progress byte counter, so a second multi-region source
+     * transaction of the same size proceeds without tripping the aggregate
+     * fail-fast.
+     *
+     * <p>This pins down the release path (
+     * {@code TransactionTableRegion.releaseInProgressBytes} invoked from
+     * {@code tryMiniIntervalSwitch} on txnEnd). A regression that forgets to
+     * subtract the per-region in-progress bytes back to the manager aggregate
+     * would leave stale bytes in the counter: the second sweep's writes plus
+     * the stale 1st-sweep bytes would cross the write-block threshold and
+     * wrongly throw {@link IllegalStateException}.
+     *
+     * <p>The two sweeps are each sized so that, <em>individually</em>, they
+     * stay well below the 2 KB hard cap, but <em>together without the
+     * drain</em> they would cross it. Exact sizing: each sweep writes ~25
+     * rows (≈ 68 B/row) across three tables → ~1.7 KB of in-progress bytes.
+     * With drain: second sweep peaks at ~1.7 KB &lt; 2 KB → no exception.
+     * Without drain: combined ≈ 3.4 KB &gt; 2 KB → fail-fast fires on the
+     * second sweep.
+     */
+    @Test(timeout = 15000)
+    public void testCommitDrainsAggregateInProgressBytes() throws Exception {
+        StreamLoadProperties properties = buildMultiTableProperties(60000, 1024L);
+        StreamLoadManagerV2 manager = new StreamLoadManagerV2(properties, true);
+        manager.init();
+
+        try {
+            mockedServer.resetCounters();
+
+            String[] tables = {"orders", "items", "customers"};
+            final int rowsPerSweep = 25; // ~1.7 KB aggregate per sweep
+
+            // Sweep #1: round-robin three tables, then txnEnd. The txnEnd on
+            // partition 0 fans out to all regions and must drain their
+            // per-region inProgressTxnBytes back to the manager aggregate.
+            for (int i = 0; i < rowsPerSweep; i++) {
+                String table = tables[i % tables.length];
+                manager.write(0, "test", table,
+                        String.format(
+                                "{\"id\":%06d,\"customer_id\":%06d,\"notes\":\"pad-block-%04d\"}",
+                                i, i, i));
+            }
+            manager.setCommitAllowed(0, true);
+            Assert.assertNull("No exception after sweep #1 txnEnd",
+                    manager.getException());
+
+            // Sweep #2: same size and shape. If the drain worked, the
+            // aggregate counter started this sweep at (near) 0 and peaks at
+            // ~1.7 KB, comfortably under the 2 KB cap. If the drain silently
+            // regresses, the aggregate still carries sweep #1's ~1.7 KB, and
+            // sweep #2 would cross 2 KB partway through and throw.
+            for (int i = 0; i < rowsPerSweep; i++) {
+                String table = tables[i % tables.length];
+                manager.write(0, "test", table,
+                        String.format(
+                                "{\"id\":%06d,\"customer_id\":%06d,\"notes\":\"pad-block-%04d\"}",
+                                100 + i, 100 + i, 100 + i));
+            }
+            manager.setCommitAllowed(0, true);
+            Assert.assertNull("No exception after sweep #2 txnEnd — the "
+                            + "aggregate guard should not misfire after a clean txnEnd drain",
+                    manager.getException());
+
+            manager.flush();
+            Assert.assertNull("No exception after flush", manager.getException());
+
+            // Both sweeps must have produced at least one commit against the
+            // mocked server — otherwise we haven't actually exercised the
+            // drain path.
+            Assert.assertTrue(
+                    "Expected at least 1 commit after sweeps: " + mockedServer.getCommitCount(),
+                    mockedServer.getCommitCount() >= 1);
+        } finally {
+            manager.close();
+        }
+    }
 }
