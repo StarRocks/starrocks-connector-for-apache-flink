@@ -543,6 +543,12 @@ public class StarRocksSinkOptions implements Serializable {
                     "Multi-table transaction stream load requires sink.version=V2 or AUTO. " +
                     "Current sink.version='V1'.");
         }
+        if ("true".equalsIgnoreCase(streamLoadProps.get(LoadParameters.ENABLE_MERGE_COMMIT))) {
+            throw new ValidationException(
+                    "Multi-table transaction stream load is incompatible with merge commit. " +
+                    "Please disable '" + SINK_PROPERTIES_PREFIX + LoadParameters.ENABLE_MERGE_COMMIT +
+                    "' when '" + SINK_MULTI_TABLE_TXN_ENABLED.key() + "' is enabled.");
+        }
     }
 
     private void parseSinkStreamLoadProperties() {
