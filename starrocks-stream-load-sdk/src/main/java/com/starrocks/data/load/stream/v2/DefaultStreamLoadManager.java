@@ -325,21 +325,58 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                                 }
                             }
 
-                            // Ensure a shared transaction is open (may not be if no data
-                            // was written yet, or if we just finished a commit cycle).
-                            if (!txnCoordinator.isActive() && !flushQ.isEmpty()) {
-                                ensureSharedTransaction();
+                            // Wait for all regions to quiesce (neither flushing nor
+                            // retrying) before opening the shared transaction. Without
+                            // this wait, ensureSharedTransaction() would return false on
+                            // any transient in-flight load and force the checkpoint to
+                            // fail — a common race under load. The check mirrors the
+                            // allLoadsDone loop below, extended with isRetrying() (so
+                            // we don't race trySetLabel() against a region currently
+                            // between retry attempts), and capped by flushTimeoutMs so
+                            // a non-converging retry cannot block the savepoint forever.
+                            long waitDeadline = System.currentTimeMillis() + flushTimeoutMs;
+                            while (true) {
+                                if (this.e != null) {
+                                    // Some callback failed the manager while we were
+                                    // waiting. Preserve the original root cause rather
+                                    // than letting ensureSharedTransaction() below throw
+                                    // a secondary exception that the outer catch would
+                                    // assign to this.e, masking the real error.
+                                    throw new IllegalStateException(
+                                            "[MultiTxn] Manager errored while waiting for "
+                                            + "regions to quiesce during savepoint", this.e);
+                                }
+                                boolean anyBusy = false;
+                                for (TransactionTableRegion region : flushQ) {
+                                    if (region.isFlushing() || region.isRetrying()) {
+                                        anyBusy = true;
+                                        break;
+                                    }
+                                }
+                                if (!anyBusy) {
+                                    break;
+                                }
+                                if (System.currentTimeMillis() > waitDeadline) {
+                                    throw new IllegalStateException(
+                                            "[MultiTxn] Savepoint timed out after " + flushTimeoutMs
+                                            + "ms waiting for regions to quiesce before opening "
+                                            + "shared transaction");
+                                }
+                                LockSupport.parkNanos(1_000_000L);
                             }
 
-                            // Wait for any in-flight loads to complete
-                            for (TransactionTableRegion region : flushQ) {
-                                Future<?> result = region.getResult();
-                                if (result != null) {
-                                    try {
-                                        result.get();
-                                    } catch (Exception ignored) {
-                                        // errors will be handled by the callback
-                                    }
+                            // Ensure a shared transaction is open (may not be if no data
+                            // was written yet, or if we just finished a commit cycle).
+                            // After the quiesce wait above this will almost always
+                            // succeed; the throw covers the microsecond-window race
+                            // where trySetLabel() loses to a late-arriving retry.
+                            if (!txnCoordinator.isActive() && !flushQ.isEmpty()) {
+                                if (!ensureSharedTransaction()) {
+                                    throw new IllegalStateException(
+                                            "[MultiTxn] Could not open shared transaction during "
+                                            + "savepoint even after quiesce wait (likely trySetLabel "
+                                            + "lost a race with a late retry). Failing the checkpoint "
+                                            + "to preserve atomicity; Flink will retry.");
                                 }
                             }
 
@@ -467,12 +504,21 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                         // could be orphaned when a shared transaction later overwrites the label.
                         if (multiTableTransactionEnabled && txnCoordinator != null && !flushQ.isEmpty()) {
                             if (!txnCoordinator.isActive()) {
+                                boolean opened;
                                 try {
-                                    ensureSharedTransaction();
+                                    opened = ensureSharedTransaction();
                                 } catch (Exception beginEx) {
                                     LOG.error("[MultiTxn] Failed to eagerly open shared transaction", beginEx);
                                     this.e = beginEx;
                                     // Skip flush/commit to avoid creating orphan independent transactions.
+                                    continue;
+                                }
+                                if (!opened) {
+                                    // ensureSharedTransaction() silently skipped (e.g. a region is
+                                    // flushing/retrying, or trySetLabel lost a race with a concurrent
+                                    // retry). Regions may hold null/stale labels, so an autonomous
+                                    // flush here would create an orphan independent transaction and
+                                    // break multi-table atomicity. Retry on the next scan.
                                     continue;
                                 }
                             } else if (txnCoordinator.getElapsedMs() >= sharedTxnMaxIdleMs) {
@@ -737,7 +783,13 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                 // Edge case: commitInFlight was set but no shared txn is open yet
                 // (e.g. first write + immediate txnEnd before manager thread ran).
                 // Ensure the shared transaction exists before proceeding.
-                ensureSharedTransaction();
+                if (!ensureSharedTransaction()) {
+                    // A region is flushing/retrying, or label injection lost a race.
+                    // Bail out and retry on the next scan; triggerLoadIfNeeded() below
+                    // would otherwise generate independent labels and break atomicity.
+                    LOG.debug("[MultiTxn] Could not open shared txn in commit path; retrying next scan");
+                    return;
+                }
             }
 
             // Wait for any in-flight autonomous flushes to complete.
@@ -799,10 +851,16 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
 
             // Immediately open a new shared transaction for the next cycle,
             // so any subsequent autonomous flushes are under the new shared label.
-            // This is best-effort: if it fails, the normal path will retry on the next scan.
+            // This is best-effort: if it cannot be opened now (exception, or a region
+            // is flushing/retrying), the normal manager-thread path guards against
+            // autonomous flushes by checking isActive() + ensureSharedTransaction()
+            // again before selecting regions to flush.
             if (!flushQ.isEmpty()) {
                 try {
-                    ensureSharedTransaction();
+                    if (!ensureSharedTransaction()) {
+                        LOG.debug("[MultiTxn] Could not eagerly open next shared transaction after commit; "
+                                + "will retry on next scan");
+                    }
                 } catch (Exception beginEx) {
                     LOG.warn("[MultiTxn] Failed to eagerly open next shared transaction after commit; " +
                             "will retry on next scan: {}", beginEx.getMessage());
@@ -833,8 +891,17 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
      * Called on the manager thread to ensure autonomous flushes always use the shared label.
      *
      * <p>This must only be called when no shared transaction is currently active.
+     *
+     * @return {@code true} if a shared transaction was opened and every region in
+     *         {@code flushQ} received the shared label; {@code false} if the attempt
+     *         was skipped or rolled back due to a transient condition (empty flushQ,
+     *         a region was flushing/retrying, or label injection lost a race with a
+     *         concurrent retry). Callers MUST skip flush/commit work when this
+     *         returns {@code false}, since regions may hold null/stale labels and
+     *         an autonomous flush would create an orphan independent transaction
+     *         that breaks multi-table atomicity. The next manager scan will retry.
      */
-    private void ensureSharedTransaction() {
+    private boolean ensureSharedTransaction() {
         String anyDb = null;
         String anyTable = null;
         for (TransactionTableRegion region : flushQ) {
@@ -848,7 +915,7 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
             }
         }
         if (anyDb == null) {
-            return;
+            return false;
         }
 
         // Ensure no region is retrying — setLabel() silently skips when numRetries > 0,
@@ -857,7 +924,7 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
             if (region.isFlushing() || region.isRetrying()) {
                 LOG.debug("[MultiTxn] Cannot open shared txn: region {} is flushing/retrying",
                         region.getUniqueKey());
-                return;
+                return false;
             }
         }
 
@@ -886,12 +953,13 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                 for (TransactionTableRegion r : injected) {
                     r.setLabel(null);
                 }
-                return;
+                return false;
             }
             injected.add(region);
         }
         LOG.info("[MultiTxn] Eagerly opened shared transaction: label={}",
                 txnCoordinator.getSharedLabel());
+        return true;
     }
 
     /**
@@ -1085,7 +1153,15 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         if (actuallyCommitted) {
             lastCommitTimeMs = System.currentTimeMillis();
         }
-        ensureSharedTransaction();
+        // Best-effort: re-open a fresh shared transaction so the next autonomous
+        // flush uses the new shared label. If a region is flushing/retrying now
+        // we'll skip silently — the normal manager-thread path re-checks
+        // isActive() and retries ensureSharedTransaction() before any flush,
+        // so no orphan independent transaction can slip through.
+        if (!ensureSharedTransaction()) {
+            LOG.debug("[MultiTxn] Could not open fresh shared transaction after recycle; "
+                    + "will retry on next scan");
+        }
     }
 
     public void setStreamLoadListener(StreamLoadListener streamLoadListener) {
