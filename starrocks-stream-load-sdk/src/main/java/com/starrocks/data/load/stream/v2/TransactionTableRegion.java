@@ -857,12 +857,21 @@ public class TransactionTableRegion implements TableRegion {
             if (numRetries >= maxRetries || !isRetryable(e)) {
                 LOG.error("Failed to flush data for db: {}, table: {} after {} times retry, the last exception is",
                         database, table, numRetries, e);
+                // Terminal failure: no further retry will re-drive the state
+                // machine back to ACTIVE via complete(). Release FLUSHING now
+                // so the manager's final drain / rollback paths observe a
+                // non-busy region. The manager will see this.e from
+                // callback() below and stop scheduling new work.
+                state.compareAndSet(State.FLUSHING, State.ACTIVE);
                 manager.callback(firstException);
                 return;
             }
             responseFuture = null;
             numRetries += 1;
         }
+        // Retry path: keep state=FLUSHING so the manager cannot CAS(ACTIVE ->
+        // FLUSHING) on the same region while this retry is pending, which
+        // would cause a duplicate send of the same inactive chunk.
         LOG.warn("Failed to flush data for db: {}, table: {}, and will retry for {} times after {} ms",
                 database, table, numRetries, retryIntervalInMs, e);
         streamLoad(retryIntervalInMs);
@@ -910,7 +919,12 @@ public class TransactionTableRegion implements TableRegion {
                     database, table, chunk.numRows(), chunk.rowBytes(), chunk.chunkBytes());
             responseFuture = streamLoader.send(this, delayMs);
         } catch (Exception e) {
-            state.compareAndSet(State.FLUSHING, State.ACTIVE);
+            // Do NOT reset state to ACTIVE here. fail() may schedule a retry
+            // via streamLoad(retryIntervalInMs); while that retry is pending
+            // the region must remain FLUSHING so the manager thread cannot
+            // CAS(ACTIVE -> FLUSHING) and trigger a second concurrent flush
+            // on the same inactive chunk. fail() itself resets to ACTIVE only
+            // when retries are exhausted or the exception is non-retryable.
             fail(e);
         }
     }

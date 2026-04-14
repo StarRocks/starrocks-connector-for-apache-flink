@@ -176,6 +176,19 @@ public class SharedTransactionCoordinator {
         return sharedLabel;
     }
 
+    /**
+     * Returns the database of the currently active shared transaction, or
+     * {@code null} when no transaction is active. Callers injecting the shared
+     * label into newly-created regions must reject any region whose database
+     * does not match this value: shared transactions are single-database by
+     * construction (see {@code ensureSharedTransaction}) and a cross-database
+     * label injection would cause the region's first flush to POST to StarRocks
+     * with a label that belongs to a different database.
+     */
+    public synchronized String getDatabase() {
+        return database;
+    }
+
     public synchronized boolean isActive() {
         return sharedLabel != null;
     }

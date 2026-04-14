@@ -1531,7 +1531,25 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                         newRegion.getHeaders().put("transaction_type", "multi");
                         // If a shared transaction is already open, inject its label so that
                         // the first flush of this region uses the shared label.
+                        //
+                        // Shared transactions are single-database by construction
+                        // (see ensureSharedTransaction()), so a region whose database
+                        // does not match the active shared txn must never receive that
+                        // label — otherwise its first flush would POST to its own
+                        // database with a label that belongs to a different one, which
+                        // StarRocks rejects and which would abort the sink task with
+                        // an opaque HTTP error. Fail fast at routing time instead, so
+                        // the exception points directly at the mixed-database write.
                         if (txnCoordinator != null && txnCoordinator.isActive()) {
+                            String txnDb = txnCoordinator.getDatabase();
+                            if (txnDb != null && !txnDb.equals(database)) {
+                                throw new IllegalStateException(
+                                        "[MultiTxn] Cannot route write for database '" + database
+                                        + "' while a shared transaction is active for database '"
+                                        + txnDb + "'. Multi-table shared transactions require all "
+                                        + "regions to share the same database; configure a separate "
+                                        + "sink for each database.");
+                            }
                             newRegion.setLabel(txnCoordinator.getSharedLabel());
                         }
                     }
