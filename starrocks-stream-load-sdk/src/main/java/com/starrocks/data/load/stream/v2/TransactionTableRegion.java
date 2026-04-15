@@ -813,6 +813,7 @@ public class TransactionTableRegion implements TableRegion {
             streamLoader.getExecutorService().submit(this::doCommit);
         } catch (Exception e) {
             LOG.error("Failed to submit commit task, db: {}, table: {}, label: {}", database, table, label, e);
+            state.compareAndSet(State.COMMITTING, State.ACTIVE);
             throw e;
         }
 
@@ -834,7 +835,16 @@ public class TransactionTableRegion implements TableRegion {
             }
         } catch (Throwable e) {
             LOG.error("TransactionTableRegion commit failed, db: {}, table: {}, label: {}", database, table, label, e);
-            fail(e);
+            // Handle commit errors directly instead of routing through fail(),
+            // which is designed for the flush state machine. fail()'s retry
+            // path calls streamLoad() — wrong for a commit failure — and would
+            // leave the region stuck in COMMITTING. Commit failures are always
+            // terminal: release COMMITTING and propagate to the manager.
+            if (firstException == null) {
+                firstException = e;
+            }
+            state.compareAndSet(State.COMMITTING, State.ACTIVE);
+            manager.callback(firstException);
             return;
         }
 
