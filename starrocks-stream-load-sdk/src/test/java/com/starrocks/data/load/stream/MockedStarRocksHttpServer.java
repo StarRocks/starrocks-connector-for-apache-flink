@@ -41,6 +41,7 @@ import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Minimal mock of StarRocks FE HTTP APIs for tests.
@@ -141,6 +142,11 @@ public class MockedStarRocksHttpServer {
 
     private final Random random = new Random(1234);
 
+    private final AtomicInteger beginCount = new AtomicInteger(0);
+    private final AtomicInteger loadCount = new AtomicInteger(0);
+    private final AtomicInteger prepareCount = new AtomicInteger(0);
+    private final AtomicInteger commitCount = new AtomicInteger(0);
+
     private MockedStarRocksHttpServer(int port, boolean enforceAuth, String username, String password) throws IOException {
         this.bindAddress = new InetSocketAddress("127.0.0.1", port);
         this.server = HttpServer.create(this.bindAddress, 0);
@@ -194,6 +200,18 @@ public class MockedStarRocksHttpServer {
     public void setRollbackOverride(ResponseOverride override) { this.rollbackOverride = override; }
 
     public void setStreamLoadOverride(ResponseOverride override) { this.streamLoadOverride = override; }
+
+    public int getBeginCount() { return beginCount.get(); }
+    public int getLoadCount() { return loadCount.get(); }
+    public int getPrepareCount() { return prepareCount.get(); }
+    public int getCommitCount() { return commitCount.get(); }
+
+    public void resetCounters() {
+        beginCount.set(0);
+        loadCount.set(0);
+        prepareCount.set(0);
+        commitCount.set(0);
+    }
 
     public void putErrorLog(String label, String content) {
         errorLogs.put(label, content);
@@ -347,11 +365,17 @@ public class MockedStarRocksHttpServer {
             String label = h.getFirst("label");
             String db = h.getFirst("db");
             String table = h.getFirst("table");
-            if (label == null || db == null || table == null) {
+            String txnType = h.getFirst("transaction_type");
+            boolean isMultiTable = "multi".equals(txnType);
+            if (label == null || db == null || (table == null && !isMultiTable)) {
                 sendJson(exchange, 400, toJson(mapOf("Status", StreamLoadConstants.RESULT_STATUS_FAILED, "Message", "Missing label/db/table")));
                 return;
             }
+            if (table == null) {
+                table = "__multi_table__";
+            }
 
+            beginCount.incrementAndGet();
             ResponseOverride override = beginOverride;
             LabelKey key = new LabelKey(db, table, label);
             LabelInfo info = getOrCreateLabel(key);
@@ -400,6 +424,7 @@ public class MockedStarRocksHttpServer {
 
             // consume body
             readBody(exchange);
+            loadCount.incrementAndGet();
 
             ResponseOverride override = txnLoadOverride;
             if (override != null) {
@@ -451,11 +476,17 @@ public class MockedStarRocksHttpServer {
             String label = h.getFirst("label");
             String db = h.getFirst("db");
             String table = h.getFirst("table");
-            if (label == null || db == null || table == null) {
+            String txnType = h.getFirst("transaction_type");
+            boolean isMultiTable = "multi".equals(txnType);
+            if (label == null || db == null || (table == null && !isMultiTable)) {
                 sendJson(exchange, 400, toJson(mapOf("Status", StreamLoadConstants.RESULT_STATUS_FAILED, "Message", "Missing label/db/table")));
                 return;
             }
+            if (table == null) {
+                table = "__multi_table__";
+            }
 
+            prepareCount.incrementAndGet();
             ResponseOverride override = prepareOverride;
             if (override != null) {
                 if (override.includeErrorURL && override.errorLogContent != null) {
@@ -495,11 +526,17 @@ public class MockedStarRocksHttpServer {
             String label = h.getFirst("label");
             String db = h.getFirst("db");
             String table = h.getFirst("table");
-            if (label == null || db == null || table == null) {
+            String txnType = h.getFirst("transaction_type");
+            boolean isMultiTable = "multi".equals(txnType);
+            if (label == null || db == null || (table == null && !isMultiTable)) {
                 sendJson(exchange, 400, toJson(mapOf("Status", StreamLoadConstants.RESULT_STATUS_FAILED, "Message", "Missing label/db/table")));
                 return;
             }
+            if (table == null) {
+                table = "__multi_table__";
+            }
 
+            commitCount.incrementAndGet();
             ResponseOverride override = commitOverride;
             if (override != null) {
                 if (override.includeErrorURL && override.errorLogContent != null) {
@@ -537,9 +574,14 @@ public class MockedStarRocksHttpServer {
             String label = h.getFirst("label");
             String db = h.getFirst("db");
             String table = h.getFirst("table");
-            if (label == null || db == null || table == null) {
+            String txnType = h.getFirst("transaction_type");
+            boolean isMultiTable = "multi".equals(txnType);
+            if (label == null || db == null || (table == null && !isMultiTable)) {
                 sendJson(exchange, 400, toJson(mapOf("Status", StreamLoadConstants.RESULT_STATUS_FAILED, "Message", "Missing label/db/table")));
                 return;
+            }
+            if (table == null) {
+                table = "__multi_table__";
             }
 
             ResponseOverride override = rollbackOverride;

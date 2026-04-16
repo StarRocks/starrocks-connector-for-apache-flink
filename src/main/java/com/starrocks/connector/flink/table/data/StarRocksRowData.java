@@ -27,4 +27,23 @@ public interface StarRocksRowData {
     String getTable();
     String getRow();
 
+    /**
+     * Indicates this is the last row of a source transaction batch.
+     * Used by multi-table transaction mode to determine safe commit points:
+     * the connector only commits when the most recent write had this flag set,
+     * ensuring no partial source transaction is committed.
+     */
+    default boolean isTransactionEnd() {
+        return false;
+    }
+
+    /**
+     * Returns the source partition ID for this row.
+     * Used by multi-table transaction mode to track per-partition transaction
+     * boundaries. Returns {@code -1} when partition tracking is not applicable.
+     */
+    default int getSourcePartition() {
+        return -1;
+    }
+
 }

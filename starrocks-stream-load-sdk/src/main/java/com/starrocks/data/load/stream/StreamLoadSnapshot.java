@@ -70,12 +70,18 @@ public class StreamLoadSnapshot implements Serializable {
         private String table;
         private String label;
         private boolean finish;
+        private boolean multiTable;
 
         public Transaction(String database, String table, String label) {
+            this(database, table, label, false);
+        }
+
+        public Transaction(String database, String table, String label, boolean multiTable) {
             this.database = database;
             this.table = table;
             this.label = label;
             this.finish = false;
+            this.multiTable = multiTable;
         }
 
         public String getDatabase() {
@@ -108,6 +114,14 @@ public class StreamLoadSnapshot implements Serializable {
 
         public void setFinish(boolean finish) {
             this.finish = finish;
+        }
+
+        public boolean isMultiTable() {
+            return multiTable;
+        }
+
+        public void setMultiTable(boolean multiTable) {
+            this.multiTable = multiTable;
         }
 
         @Override

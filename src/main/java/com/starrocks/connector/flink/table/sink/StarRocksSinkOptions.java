@@ -117,6 +117,20 @@ public class StarRocksSinkOptions implements Serializable {
     public static final ConfigOption<Boolean> SINK_AT_LEAST_ONCE_USE_TRANSACTION_LOAD = ConfigOptions.key("sink.at-least-once.use-transaction-stream-load")
             .booleanType().defaultValue(true).withDescription("Whether to use transaction stream load for at-least-once when it's available.");
 
+    public static final ConfigOption<Boolean> SINK_MULTI_TABLE_TXN_ENABLED = ConfigOptions.key("sink.transaction.multi-table.enabled")
+            .booleanType().defaultValue(false).withDescription("Whether to enable multi-table atomic transaction. " +
+                    "When enabled, all tables written within the same flush cycle share one StarRocks transaction label, " +
+                    "and are atomically committed together. Requires StarRocks >= 4.0 and sink.version=V2. " +
+                    "Only at-least-once semantics is supported; exactly-once is not compatible with multi-table transactions.");
+
+    public static final ConfigOption<Long> SINK_MULTI_TABLE_TXN_BUFFER_SIZE =
+            ConfigOptions.key("sink.transaction.multi-table.buffer-size")
+                    .longType()
+                    .defaultValue(128L * MEGA_BYTES_SCALE)
+                    .withDescription("Global buffer size in bytes for multi-table transaction mode. " +
+                            "When the total buffered data across all tables reaches this threshold, " +
+                            "a flush is triggered. Default is 128MB.");
+
     public static final ConfigOption<Integer> SINK_MAX_RETRIES = ConfigOptions.key("sink.max-retries")
             .intType().defaultValue(3).withDescription("Max flushing retry times of the row batch.");
 
@@ -214,7 +228,7 @@ public class StarRocksSinkOptions implements Serializable {
         }
 
         for (StreamLoadTableProperties properties : tablePropertiesList) {
-            dbTables.add(Tuple2.of(properties.getDatabase(), getTableName()));
+            dbTables.add(Tuple2.of(properties.getDatabase(), properties.getTable()));
         }
 
         return new ArrayList<>(dbTables);
@@ -226,6 +240,7 @@ public class StarRocksSinkOptions implements Serializable {
         validateSinkSemantic();
         validateParamsRange();
         validateMergeCommit();
+        validateMultiTableTransaction();
     }
 
     public void setTableSchemaFieldNames(String[] fieldNames) {
@@ -347,6 +362,14 @@ public class StarRocksSinkOptions implements Serializable {
 
     public boolean getSinkAtLeastOnceUseTransactionStreamLoad() {
         return tableOptions.get(SINK_AT_LEAST_ONCE_USE_TRANSACTION_LOAD);
+    }
+
+    public boolean isMultiTableTransactionEnabled() {
+        return tableOptions.get(SINK_MULTI_TABLE_TXN_ENABLED);
+    }
+
+    public long getMultiTableTransactionBufferSize() {
+        return tableOptions.get(SINK_MULTI_TABLE_TXN_BUFFER_SIZE);
     }
 
     public Map<String, String> getSinkStreamLoadProperties() {
@@ -506,6 +529,28 @@ public class StarRocksSinkOptions implements Serializable {
         }
     }
 
+    private void validateMultiTableTransaction() {
+        if (!tableOptions.get(SINK_MULTI_TABLE_TXN_ENABLED)) {
+            return;
+        }
+        if (sinkSemantic == StarRocksSinkSemantic.EXACTLY_ONCE) {
+            throw new ValidationException(
+                    "Multi-table transaction stream load does not support exactly-once semantics. " +
+                    "Please use at-least-once semantics with '" + SINK_MULTI_TABLE_TXN_ENABLED.key() + "'.");
+        }
+        if (SinkFunctionFactory.SinkVersion.V1.name().equalsIgnoreCase(tableOptions.get(SINK_VERSION))) {
+            throw new ValidationException(
+                    "Multi-table transaction stream load requires sink.version=V2 or AUTO. " +
+                    "Current sink.version='V1'.");
+        }
+        if ("true".equalsIgnoreCase(streamLoadProps.get(LoadParameters.ENABLE_MERGE_COMMIT))) {
+            throw new ValidationException(
+                    "Multi-table transaction stream load is incompatible with merge commit. " +
+                    "Please disable '" + SINK_PROPERTIES_PREFIX + LoadParameters.ENABLE_MERGE_COMMIT +
+                    "' when '" + SINK_MULTI_TABLE_TXN_ENABLED.key() + "' is enabled.");
+        }
+    }
+
     private void parseSinkStreamLoadProperties() {
         tableOptionsMap.keySet().stream()
                 .filter(key -> key.startsWith(SINK_PROPERTIES_PREFIX))
@@ -638,6 +683,12 @@ public class StarRocksSinkOptions implements Serializable {
                         || getSinkAtLeastOnceUseTransactionStreamLoad())) {
             builder.enableTransaction();
             log.info("Enable transaction stream load");
+        }
+        if (isMultiTableTransactionEnabled()) {
+            builder.enableTransaction();
+            builder.enableMultiTableTransaction();
+            builder.multiTableTransactionBufferSize(getMultiTableTransactionBufferSize());
+            log.info("Enable multi-table transaction stream load");
         }
         return builder.build();
     }

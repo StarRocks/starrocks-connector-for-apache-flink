@@ -34,5 +34,10 @@ public enum FlushReason {
     // The number of buffered rows reaches the limit
     BUFFER_ROWS_REACH_LIMIT,
     // Force flush, such as DefaultStreamLoadManager.flush
-    FORCE
+    FORCE,
+    // Multi-table transaction mode: drain already-frozen inactive chunks
+    // (produced by switchChunkForCommit) to StarRocks. Autonomous flush in
+    // multi-table mode never switches activeChunk; it only streams out the
+    // pending inactive queue. This reason is purely informational.
+    INACTIVE_DRAIN
 }

@@ -23,6 +23,9 @@ package com.starrocks.data.load.stream.properties;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.starrocks.data.load.stream.StarRocksVersion;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Collections;
@@ -33,6 +36,9 @@ import java.util.Objects;
 import static org.apache.http.protocol.HttpRequestExecutor.DEFAULT_WAIT_FOR_CONTINUE;
 
 public class StreamLoadProperties implements Serializable {
+
+    private static final Logger LOG = LoggerFactory.getLogger(StreamLoadProperties.class);
+
     private final String jdbcUrl;
     private final String[] loadUrls;
     private final String username;
@@ -48,6 +54,8 @@ public class StreamLoadProperties implements Serializable {
     private final Map<String, StreamLoadTableProperties> tablePropertiesMap;
 
     private final boolean enableTransaction;
+    private final boolean enableMultiTableTransaction;
+    private final long multiTableTransactionBufferSize;
 
     // manager settings
     /**
@@ -116,6 +124,8 @@ public class StreamLoadProperties implements Serializable {
         this.starRocksVersion = StarRocksVersion.parse(version);
 
         this.enableTransaction = builder.enableTransaction;
+        this.enableMultiTableTransaction = builder.enableMultiTableTransaction;
+        this.multiTableTransactionBufferSize = builder.multiTableTransactionBufferSize;
 
         this.labelPrefix = builder.labelPrefix;
 
@@ -157,6 +167,14 @@ public class StreamLoadProperties implements Serializable {
 
     public boolean isEnableTransaction() {
         return enableTransaction;
+    }
+
+    public boolean isEnableMultiTableTransaction() {
+        return enableMultiTableTransaction;
+    }
+
+    public long getMultiTableTransactionBufferSize() {
+        return multiTableTransactionBufferSize;
     }
 
     public String getJdbcUrl() {
@@ -330,6 +348,8 @@ public class StreamLoadProperties implements Serializable {
         private String version;
 
         private boolean enableTransaction;
+        private boolean enableMultiTableTransaction;
+        private long multiTableTransactionBufferSize = 128 * 1024 * 1024; // 128MB default
 
         private String labelPrefix = "";
 
@@ -405,6 +425,20 @@ public class StreamLoadProperties implements Serializable {
 
         public Builder enableTransaction() {
             this.enableTransaction = true;
+            return this;
+        }
+
+        public Builder enableMultiTableTransaction() {
+            this.enableMultiTableTransaction = true;
+            this.enableTransaction = true;
+            return this;
+        }
+
+        public Builder multiTableTransactionBufferSize(long bufferSize) {
+            if (bufferSize <= 0) {
+                throw new IllegalArgumentException("multiTableTransactionBufferSize must be greater than 0, got: " + bufferSize);
+            }
+            this.multiTableTransactionBufferSize = bufferSize;
             return this;
         }
 
@@ -506,7 +540,7 @@ public class StreamLoadProperties implements Serializable {
 
         public Builder oldThreshold(float oldThreshold) {
             if (oldThreshold <= 0 || oldThreshold > 1) {
-                throw new IllegalArgumentException("youngThreshold `" + oldThreshold + "` set failed, must range in (0, 1]");
+                throw new IllegalArgumentException("oldThreshold `" + oldThreshold + "` set failed, must range in (0, 1]");
             }
             this.oldThreshold = oldThreshold;
             return this;
@@ -598,7 +632,23 @@ public class StreamLoadProperties implements Serializable {
         }
 
         public StreamLoadProperties build() {
+            if (enableMultiTableTransaction && !enableTransaction) {
+                throw new IllegalArgumentException(
+                        "Multi-table transaction mode requires transaction stream load to be enabled");
+            }
             StreamLoadProperties streamLoadProperties = new StreamLoadProperties(this);
+
+            if (enableMultiTableTransaction) {
+                StarRocksVersion v = streamLoadProperties.getStarRocksVersion();
+                if (v != null && v.getMajor() < 4) {
+                    throw new IllegalArgumentException(String.format(
+                            "Multi-table transaction mode requires StarRocks >= 4.0, but current version is %d.%d.%d",
+                            v.getMajor(), v.getMinor(), v.getPatch()));
+                }
+                if (v == null) {
+                    LOG.warn("StarRocks version is unknown; multi-table transaction mode requires >= 4.0");
+                }
+            }
 
             if (streamLoadProperties.getYoungThreshold() >= streamLoadProperties.getOldThreshold()) {
                 throw new IllegalArgumentException(String.format("oldThreshold(`%s`) must greater to youngThreshold(`%s`)",

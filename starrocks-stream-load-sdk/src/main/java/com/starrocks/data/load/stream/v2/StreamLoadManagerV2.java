@@ -49,8 +49,23 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
     }
 
     @Override
+    public void setCommitAllowed(boolean allowed) {
+        delegateManager.setCommitAllowed(allowed);
+    }
+
+    @Override
+    public void setCommitAllowed(int partition, boolean allowed) {
+        delegateManager.setCommitAllowed(partition, allowed);
+    }
+
+    @Override
     public void write(String uniqueKey, String database, String table, String... rows) {
         delegateManager.write(uniqueKey, database, table, rows);
+    }
+
+    @Override
+    public void write(int partition, String database, String table, String... rows) {
+        delegateManager.write(partition, database, table, rows);
     }
 
     @Override
@@ -111,5 +126,10 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
     @Override
     public void setMetricListener(MetricListener metricListener) {
         delegateManager.setMetricListener(metricListener);
+    }
+
+    @Override
+    public Throwable getException() {
+        return delegateManager.getException();
     }
 }

@@ -28,6 +28,8 @@ import org.junit.rules.TemporaryFolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.starrocks.data.load.stream.StarRocksVersion;
+
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -36,6 +38,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
@@ -58,21 +61,59 @@ public abstract class StarRocksITTestBase {
     protected static Connection DB_CONNECTION;
     protected static Set<String> DATABASE_SET_TO_CLEAN;
 
+    /**
+     * External TSP / manual cluster: JVM properties first, then env (e.g. CI).
+     * When both HTTP and JDBC are set, Testcontainers is skipped.
+     */
+    private static String resolveFeConfig(String propKey, String envKey, String defaultValue) {
+        String v = System.getProperty(propKey);
+        if (v != null && !v.isEmpty()) {
+            return v;
+        }
+        v = System.getenv(envKey);
+        if (v != null && !v.isEmpty()) {
+            return v;
+        }
+        return defaultValue;
+    }
+
     @BeforeClass
     public static void setUp() throws Exception {
         if (!DEBUG_MODE) {
-            try {
-                StarRocksTestEnvironment env = StarRocksTestEnvironment.getInstance();
-                env.startIfNeeded();
-                HTTP_URLS = env.getHttpAddress();
-                JDBC_URLS = env.getJdbcUrl();
-                USERNAME = env.getUsername();
-                PASSWORD = env.getPassword();
-            } catch (Throwable t) {
-                LOG.warn("Failed to start StarRocks container, ITs may be skipped if no external cluster is provided.", t);
+            String extHttp = resolveFeConfig("it.starrocks.fe.http", "SR_HTTP_URLS", null);
+            String extJdbc = resolveFeConfig("it.starrocks.fe.jdbc", "SR_JDBC_URLS", null);
+            if (extHttp != null && extJdbc != null) {
+                HTTP_URLS = extHttp;
+                JDBC_URLS = extJdbc;
+                USERNAME = resolveFeConfig("it.starrocks.username", "SR_USERNAME", "root");
+                PASSWORD = resolveFeConfig("it.starrocks.password", "SR_PASSWORD", "");
+                LOG.info("Using external StarRocks cluster: http={}, jdbc={}", HTTP_URLS, JDBC_URLS);
+            } else {
+                try {
+                    StarRocksTestEnvironment env = StarRocksTestEnvironment.getInstance();
+                    env.startIfNeeded();
+                    String h = env.getHttpAddress();
+                    String j = env.getJdbcUrl();
+                    if (h != null && j != null) {
+                        HTTP_URLS = h;
+                        JDBC_URLS = j;
+                        USERNAME = env.getUsername();
+                        PASSWORD = env.getPassword();
+                        LOG.info("Using StarRocks Testcontainer: http={}, jdbc={}", HTTP_URLS, JDBC_URLS);
+                    } else {
+                        LOG.warn(
+                                "StarRocks Testcontainer did not expose addresses (start may have failed). "
+                                        + "Set -Dit.starrocks.fe.http / -Dit.starrocks.fe.jdbc or SR_HTTP_URLS / SR_JDBC_URLS for TSP.");
+                    }
+                } catch (Throwable t) {
+                    LOG.warn("Failed to start StarRocks container, ITs may be skipped if no external cluster is provided.", t);
+                }
             }
         }
-        assertTrue(HTTP_URLS != null && JDBC_URLS != null);
+        assertTrue(
+                "HTTP_URLS and JDBC_URLS must be set. For TSP use -Dit.starrocks.fe.http=host:8030 "
+                        + "-Dit.starrocks.fe.jdbc=jdbc:mysql://host:9030 or SR_HTTP_URLS / SR_JDBC_URLS.",
+                HTTP_URLS != null && !HTTP_URLS.isEmpty() && JDBC_URLS != null && !JDBC_URLS.isEmpty());
 
         DB_NAME = "sr_test_" + genRandomUuid();
         try {
@@ -168,6 +209,48 @@ public abstract class StarRocksITTestBase {
 
     protected static String getJdbcUrl() {
         return JDBC_URLS;
+    }
+
+    /** Raw string from {@code SELECT current_version()} (may be unparsable for dev builds). */
+    protected static String getStarRocksVersionRaw() {
+        try (Statement statement = DB_CONNECTION.createStatement();
+             ResultSet rs = statement.executeQuery("SELECT current_version()")) {
+            if (rs.next()) {
+                return rs.getString(1);
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to query StarRocks version string", e);
+        }
+        return null;
+    }
+
+    protected static StarRocksVersion getStarRocksVersion() {
+        String raw = getStarRocksVersionRaw();
+        return raw == null ? null : StarRocksVersion.parse(raw);
+    }
+
+    protected static boolean isStarRocksVersionAtLeast(int major, int minor) {
+        StarRocksVersion v = getStarRocksVersion();
+        if (v == null) {
+            return false;
+        }
+        return v.getMajor() > major || (v.getMajor() == major && v.getMinor() >= minor);
+    }
+
+    /**
+     * Multi-table transaction ITs: require released {@code >= 4.0}, or a development build whose
+     * {@code current_version()} string contains {@code main} (typical for main-branch TSP clusters).
+     */
+    protected static boolean isMultiTableTransactionClusterSupported() {
+        String raw = getStarRocksVersionRaw();
+        if (raw == null) {
+            return false;
+        }
+        if (raw.toLowerCase(Locale.ROOT).contains("main")) {
+            return true;
+        }
+        StarRocksVersion v = StarRocksVersion.parse(raw);
+        return v != null && v.getMajor() >= 4;
     }
 
     public static class TransactionInfo {

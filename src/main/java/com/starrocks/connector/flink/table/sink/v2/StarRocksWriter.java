@@ -140,7 +140,37 @@ public class StarRocksWriter<InputT>
         if (rowData == null) {
             return;
         }
-        sinkManager.write(rowData.getUniqueKey(), rowData.getDatabase(), rowData.getTable(), rowData.getRow());
+        int partition = rowData.getSourcePartition();
+        // Fail fast: in multi-table transaction mode every StarRocksRowData (including
+        // control-only txnEnd markers) must carry a non-negative source partition.
+        // A data row with partition=-1 would otherwise fall through to the legacy
+        // write(uniqueKey, ...) path, whose activeChunk is never switched mid-
+        // transaction and never receives a txnEnd signal, eventually stalling the
+        // task thread on blockIfCacheFull. A control-only txnEnd row with partition=-1
+        // would invoke setCommitAllowed(-1, true), which silently targets a non-
+        // existent partition: the real regions where data was written never receive
+        // their txnEnd signal and their chunks remain stuck until backpressure or
+        // timeout. Gating both branches here closes both holes.
+        if (partition < 0 && sinkOptions.isMultiTableTransactionEnabled()) {
+            throw new IllegalStateException(
+                    "Multi-table transaction mode requires a non-negative source "
+                            + "partition on every StarRocksRowData, but received partition="
+                            + partition + " for database=" + rowData.getDatabase()
+                            + ", table=" + rowData.getTable() + ". Update the serializer "
+                            + "to override StarRocksRowData#getSourcePartition().");
+        }
+        if (rowData.getRow() == null) {
+            if (rowData.isTransactionEnd()) {
+                sinkManager.setCommitAllowed(partition, true);
+            }
+            return;
+        }
+        if (partition >= 0) {
+            sinkManager.write(partition, rowData.getDatabase(), rowData.getTable(), rowData.getRow());
+            sinkManager.setCommitAllowed(partition, rowData.isTransactionEnd());
+        } else {
+            sinkManager.write(rowData.getUniqueKey(), rowData.getDatabase(), rowData.getTable(), rowData.getRow());
+        }
         totalReceivedRows += 1;
         if (totalReceivedRows % 100 == 1) {
             LOG.debug("Received raw record: {}", element);

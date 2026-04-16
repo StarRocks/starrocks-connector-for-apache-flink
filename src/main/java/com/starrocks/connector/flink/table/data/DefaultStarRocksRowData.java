@@ -25,6 +25,8 @@ public class DefaultStarRocksRowData implements StarRocksRowData {
     private String database;
     private String table;
     private String row;
+    private boolean transactionEnd;
+    private int sourcePartition = -1;
 
     public DefaultStarRocksRowData() {
 
@@ -79,5 +81,23 @@ public class DefaultStarRocksRowData implements StarRocksRowData {
     @Override
     public String getRow() {
         return row;
+    }
+
+    public void setTransactionEnd(boolean transactionEnd) {
+        this.transactionEnd = transactionEnd;
+    }
+
+    @Override
+    public boolean isTransactionEnd() {
+        return transactionEnd;
+    }
+
+    public void setSourcePartition(int sourcePartition) {
+        this.sourcePartition = sourcePartition;
+    }
+
+    @Override
+    public int getSourcePartition() {
+        return sourcePartition;
     }
 }

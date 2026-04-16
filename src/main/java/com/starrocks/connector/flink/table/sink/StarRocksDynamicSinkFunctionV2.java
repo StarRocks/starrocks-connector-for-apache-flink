@@ -136,14 +136,41 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
                 return;
             } else if (value instanceof StarRocksRowData) {
                 StarRocksRowData data = (StarRocksRowData) value;
+                int partition = data.getSourcePartition();
+                // Fail fast: in multi-table transaction mode every StarRocksRowData
+                // (including control-only txnEnd markers) must carry a non-negative
+                // source partition. A data row with partition=-1 would otherwise fall
+                // through to the legacy write(uniqueKey, ...) path, whose activeChunk
+                // is never switched mid-transaction and never receives a txnEnd signal,
+                // eventually stalling the task thread on blockIfCacheFull. A control-
+                // only txnEnd row with partition=-1 would invoke setCommitAllowed(-1,
+                // true), which silently targets a non-existent partition: the real
+                // regions where data was written never receive their txnEnd signal
+                // and their chunks remain stuck until backpressure or timeout. Gating
+                // both branches here closes both holes.
+                if (partition < 0 && sinkOptions.isMultiTableTransactionEnabled()) {
+                    throw new IllegalStateException(
+                            "Multi-table transaction mode requires a non-negative source "
+                                    + "partition on every StarRocksRowData, but received partition="
+                                    + partition + " for database=" + data.getDatabase()
+                                    + ", table=" + data.getTable() + ". Update the serializer "
+                                    + "to override StarRocksRowData#getSourcePartition().");
+                }
                 if (Strings.isNullOrEmpty(data.getDatabase())
                         || Strings.isNullOrEmpty(data.getTable())
                         || data.getRow() == null) {
-                    log.warn(String.format("json row data not fulfilled. {database: %s, table: %s, dataRows: %s}",
-                            data.getDatabase(), data.getTable(), data.getRow() == null ? "null" : "Redacted"));
+                    if (data.isTransactionEnd()) {
+                        log.debug("[MultiTxn] invoke: control-only txnEnd row, partition={}", partition);
+                        sinkManager.setCommitAllowed(partition, true);
+                    }
                     return;
                 }
-                sinkManager.write(data.getUniqueKey(), data.getDatabase(), data.getTable(), data.getRow());
+                if (partition >= 0) {
+                    sinkManager.write(partition, data.getDatabase(), data.getTable(), data.getRow());
+                    sinkManager.setCommitAllowed(partition, data.isTransactionEnd());
+                } else {
+                    sinkManager.write(data.getUniqueKey(), data.getDatabase(), data.getTable(), data.getRow());
+                }
                 return;
             }
             // raw data sink
