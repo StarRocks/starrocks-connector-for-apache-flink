@@ -441,6 +441,33 @@ public class LingeringTransactionAborterTest {
     }
 
     @Test
+    public void testRollbackFailCancelReturnsFalseButActuallyAborted() throws Exception {
+        String labelPrefix = "test_label";
+        int subtaskIndex = 1;
+        long restoreCheckpointId = 10;
+
+        List<Tuple2<String, String>> dbTables = new ArrayList<>();
+        List<ExactlyOnceLabelGeneratorSnapshot> snapshots = new ArrayList<>();
+        MockStreamLoader streamLoader = new MockStreamLoader();
+
+        dbTables.add(Tuple2.of("db1", "tbl1"));
+        String label1 = ExactlyOnceLabelGenerator.genLabel(labelPrefix, "tbl1", subtaskIndex,
+                restoreCheckpointId + 1);
+        // rollback fails, cancelLoad returns false (HTTP 200 but non-OK payload),
+        // but FE actually aborted the transaction
+        streamLoader.addLabelStatus("db1", "tbl1", label1, TransactionStatus.PREPARE, true);
+        streamLoader.setCancelBehaviour("db1", "tbl1", label1, false);
+        streamLoader.setStatusTransitionAfterCancel("db1", "tbl1", label1, TransactionStatus.ABORTED);
+
+        LingeringTransactionAborter aborter = new LingeringTransactionAborter(labelPrefix,
+                restoreCheckpointId, subtaskIndex, -1, dbTables, snapshots, streamLoader);
+        aborter.execute();
+
+        assertEquals(TransactionStatus.ABORTED, streamLoader.getLoadStatus("db1", "tbl1", label1));
+        assertEquals(1, streamLoader.getNumCancelLoadCalls());
+    }
+
+    @Test
     public void testRollbackFailCancelSucceedMultipleLabels() throws Exception {
         String labelPrefix = "test_label";
         int subtaskIndex = 1;

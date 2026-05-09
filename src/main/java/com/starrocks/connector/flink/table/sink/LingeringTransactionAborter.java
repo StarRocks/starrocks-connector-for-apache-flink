@@ -230,29 +230,34 @@ public class LingeringTransactionAborter {
                     LOG.info("Try to cancel lingering transaction via FE cancel API, db: {}, table: {}, " +
                             "label: {}, status: {}", db, table, label, newStatus);
                     try {
-                        boolean cancelResult = streamLoader.cancelLoad(db, table, label);
-                        if (cancelResult) {
+                        if (streamLoader.cancelLoad(db, table, label)) {
                             LOG.info("Successful to cancel the lingering transaction via FE cancel API, " +
                                     "db: {}, table: {}, label: {}", db, table, label);
                             return true;
                         }
+                        LOG.warn("FE cancel API returned non-success for lingering transaction, " +
+                                "db: {}, table: {}, label: {}", db, table, label);
                     } catch (Exception ce) {
                         LOG.warn("Failed to cancel lingering transaction via FE cancel API, " +
                                 "db: {}, table: {}, label: {}", db, table, label, ce);
-                        try {
-                            TransactionStatus statusAfterCancel = streamLoader.getLoadStatus(db, table, label);
-                            LOG.info("Transaction status after cancel attempt, db: {}, table: {}, label: {}, " +
-                                    "status: {}", db, table, label, statusAfterCancel);
-                            if (statusAfterCancel == TransactionStatus.UNKNOWN
-                                    || statusAfterCancel == TransactionStatus.ABORTED) {
-                                LOG.info("Transaction was aborted despite cancel API exception, " +
-                                        "db: {}, table: {}, label: {}", db, table, label);
-                                return true;
-                            }
-                        } catch (Exception re) {
-                            LOG.error("Fail to re-check transaction status after cancel attempt, " +
-                                    "db: {}, table: {}, label: {}", db, table, label, re);
+                    }
+
+                    // Re-check status whether cancelLoad returned false or threw — FE may have
+                    // aborted the transaction even when the client saw a non-success response
+                    // (timeout, parse error, or non-OK payload).
+                    try {
+                        TransactionStatus statusAfterCancel = streamLoader.getLoadStatus(db, table, label);
+                        LOG.info("Transaction status after cancel attempt, db: {}, table: {}, label: {}, " +
+                                "status: {}", db, table, label, statusAfterCancel);
+                        if (statusAfterCancel == TransactionStatus.UNKNOWN
+                                || statusAfterCancel == TransactionStatus.ABORTED) {
+                            LOG.info("Transaction was aborted despite cancel API not reporting success, " +
+                                    "db: {}, table: {}, label: {}", db, table, label);
+                            return true;
                         }
+                    } catch (Exception re) {
+                        LOG.error("Fail to re-check transaction status after cancel attempt, " +
+                                "db: {}, table: {}, label: {}", db, table, label, re);
                     }
                 }
 
