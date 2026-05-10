@@ -31,6 +31,7 @@ import org.apache.http.HttpHeaders;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.DefaultRedirectStrategy;
@@ -485,6 +486,58 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
 
                     return state;
                 }
+            }
+        }
+    }
+
+    @Override
+    public boolean cancelLoad(String db, String table, String label) throws Exception {
+        String host = getAvailableHost();
+        String url = StreamLoadConstants.getCancelLoadUrl(host, db, table) + "?label=" + label;
+        log.info("Cancel load via FE, db: {}, table: {}, label: {}, url: {}", db, table, label, url);
+
+        HttpPost httpPost = new HttpPost(url);
+        httpPost.addHeader("Authorization",
+                StreamLoadUtils.getBasicAuthHeader(properties.getUsername(), properties.getPassword()));
+        httpPost.setHeader("Connection", "close");
+
+        try (CloseableHttpClient client = HttpClients.custom()
+                .setRedirectStrategy(new DefaultRedirectStrategy() {
+                    @Override
+                    protected boolean isRedirectable(String method) {
+                        return true;
+                    }
+                }).build()) {
+            try (CloseableHttpResponse response = client.execute(httpPost)) {
+                int code = response.getStatusLine().getStatusCode();
+                String entityContent = EntityUtils.toString(response.getEntity());
+                log.info("Cancel load response, db: {}, table: {}, label: {}, code: {}, body: {}",
+                        db, table, label, code, entityContent);
+                if (code != 200) {
+                    throw new StreamLoadFailException(String.format(
+                            "Cancel load failed, db: %s, table: %s, label: %s, http code: %d, body: %s",
+                            db, table, label, code, entityContent));
+                }
+
+                com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(entityContent);
+                com.fasterxml.jackson.databind.JsonNode statusNode = node.get("status");
+                if (statusNode == null) {
+                    statusNode = node.get("Status");
+                }
+                String status = statusNode == null ? null : statusNode.asText();
+                if (StreamLoadConstants.RESULT_STATUS_OK.equals(status)
+                        || StreamLoadConstants.RESULT_STATUS_SUCCESS.equals(status)) {
+                    return true;
+                }
+
+                com.fasterxml.jackson.databind.JsonNode msgNode = node.get("msg");
+                if (msgNode == null) {
+                    msgNode = node.get("Message");
+                }
+                String msg = msgNode == null ? "" : msgNode.asText();
+                log.error("Cancel load failed, db: {}, table: {}, label: {}, status: {}, msg: {}",
+                        db, table, label, status, msg);
+                return false;
             }
         }
     }
