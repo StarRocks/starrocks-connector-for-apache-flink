@@ -49,4 +49,22 @@ public class ErrorUtilsTest {
         body3.setMessage("too many filtered rows");
         assertFalse(ErrorUtils.isRetryable(new StreamLoadFailException("test", body3)));
     }
+
+    @Test
+    public void testTxnInProcessingRetryable() {
+        // TXN_IN_PROCESSING is a transient channel-busy response and must be retryable
+        StreamLoadResponse.StreamLoadResponseBody body = new StreamLoadResponse.StreamLoadResponseBody();
+        body.setStatus(StreamLoadConstants.RESULT_STATUS_TRANSACTION_IN_PROCESSING);
+        body.setMessage("Transaction is in processing");
+        StreamLoadFailException e = new StreamLoadFailException("test", body);
+        assertTrue(ErrorUtils.isRetryable(e));
+        assertTrue(ErrorUtils.isTxnInProcessing(e));
+
+        // other statuses / exceptions are not TXN_IN_PROCESSING
+        assertFalse(ErrorUtils.isTxnInProcessing(new Exception()));
+        assertFalse(ErrorUtils.isTxnInProcessing(new StreamLoadFailException("no body")));
+        StreamLoadResponse.StreamLoadResponseBody failedBody = new StreamLoadResponse.StreamLoadResponseBody();
+        failedBody.setStatus(RESULT_STATUS_FAILED);
+        assertFalse(ErrorUtils.isTxnInProcessing(new StreamLoadFailException("test", failedBody)));
+    }
 }

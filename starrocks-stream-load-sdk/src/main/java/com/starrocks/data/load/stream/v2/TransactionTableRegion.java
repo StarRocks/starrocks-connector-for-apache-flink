@@ -46,6 +46,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
 
+import com.starrocks.data.load.stream.exception.ErrorUtils;
+
 import static com.starrocks.data.load.stream.exception.ErrorUtils.isRetryable;
 
 public class TransactionTableRegion implements TableRegion {
@@ -144,6 +146,28 @@ public class TransactionTableRegion implements TableRegion {
     // — all regions are created by DefaultStreamLoadManager), aggregate tracking
     // degrades gracefully and the deadlock guard is skipped.
     private final DefaultStreamLoadManager aggregateTracker;
+
+    // Per-(db,table) load serialization gate shared across all partition-regions
+    // of the same table (multi-table transaction mode). The server serves one
+    // in-flight /api/transaction/load per (label, table) channel — the FE
+    // multi-statement task holds a single-channel sub-task per table, and the
+    // BE guards the txn context with a per-label try_lock — so concurrent sends
+    // from sibling partition-regions are rejected with the transient
+    // TXN_IN_PROCESSING status. Acquired when this region enters FLUSHING,
+    // released when it returns to ACTIVE. Null disables serialization
+    // (non-multi-table mode).
+    private volatile AtomicBoolean tableLoadGate;
+
+    // Highest chunkId ever moved into inactiveChunks on this region. Used as the
+    // source value for the commit watermark. Only meaningful when
+    // multiTableTransactionEnabled.
+    private volatile long lastSwitchedChunkId = -1L;
+
+    // Commit watermark: while a multi-table commit cycle is in flight, only
+    // inactive chunks with chunkId <= watermark may be loaded — chunks switched
+    // after the commit cut belong to the NEXT shared transaction. Long.MAX_VALUE
+    // means "no restriction" (no commit in flight, or savepoint drain).
+    private volatile long commitWatermarkChunkId = Long.MAX_VALUE;
 
     public TransactionTableRegion(String uniqueKey,
                             String database,
@@ -366,6 +390,7 @@ public class TransactionTableRegion implements TableRegion {
         if (activeChunk == null || activeChunk.numRows() == 0) {
             return;
         }
+        lastSwitchedChunkId = activeChunk.getChunkId();
         inactiveChunks.add(activeChunk);
         activeChunk = new Chunk(properties.getDataFormat(), chunkIdGenerator.getAndIncrement());
     }
@@ -450,17 +475,20 @@ public class TransactionTableRegion implements TableRegion {
      * @return {@code true} if a load was triggered, {@code false} otherwise
      */
     public boolean triggerLoadIfNeeded() {
-        if (inactiveChunks.isEmpty()) {
-            // No data to load (region had no data when txnEnd arrived)
+        if (!headChunkEligible()) {
+            // No data to load: either the queue is empty (region had no data
+            // when txnEnd arrived) or the head chunk was switched after the
+            // commit cut and belongs to the next shared transaction.
             return false;
         }
-        if (state.compareAndSet(State.ACTIVE, State.FLUSHING)) {
+        if (tryEnterFlushing()) {
             LOG.info("[MultiTxn] triggerLoadIfNeeded: db={}, table={}, label={}, inactiveChunks={}, cacheBytes={}",
                     database, table, label, inactiveChunks.size(), cacheBytes.get());
             streamLoad(0);
             return true;
         }
-        // Already FLUSHING or COMMITTING — load is in progress
+        // Already FLUSHING/COMMITTING, or a sibling region of the same table
+        // holds the table gate — the load will be retried on the next scan.
         return false;
     }
 
@@ -599,6 +627,148 @@ public class TransactionTableRegion implements TableRegion {
         return lastSwitchTimeMs;
     }
 
+    // -----------------------------------------------------------------------
+    // Per-(db,table) load serialization (multi-table transaction mode)
+    // -----------------------------------------------------------------------
+
+    /** Injects the shared per-(db,table) gate. Called once at region creation. */
+    public void setTableLoadGate(AtomicBoolean gate) {
+        this.tableLoadGate = gate;
+    }
+
+    /**
+     * Atomically acquires the table gate (if enabled) and transitions
+     * ACTIVE -> FLUSHING. All load-starting paths must go through this so that
+     * at most one region per (db, table) has an in-flight load at any time.
+     */
+    private boolean tryEnterFlushing() {
+        AtomicBoolean gate = tableLoadGate;
+        if (gate != null && !gate.compareAndSet(false, true)) {
+            // A sibling region of the same table is loading; retry next scan.
+            return false;
+        }
+        if (state.compareAndSet(State.ACTIVE, State.FLUSHING)) {
+            return true;
+        }
+        if (gate != null) {
+            gate.set(false);
+        }
+        return false;
+    }
+
+    /** Transitions FLUSHING -> ACTIVE and releases the table gate (if held). */
+    private void exitFlushing() {
+        state.compareAndSet(State.FLUSHING, State.ACTIVE);
+        AtomicBoolean gate = tableLoadGate;
+        if (gate != null) {
+            gate.set(false);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Commit watermark (multi-table transaction mode)
+    // -----------------------------------------------------------------------
+
+    /**
+     * Freezes the set of chunks eligible for the in-flight commit cycle to
+     * everything switched so far. Chunks switched after this call belong to
+     * the next shared transaction. Called by the manager thread right after
+     * the commit cut (lockstep switch of all clean-boundary partitions).
+     */
+    public void setCommitWatermark() {
+        commitWatermarkChunkId = lastSwitchedChunkId;
+    }
+
+    /** Lifts the commit watermark. Called when the commit cycle ends. */
+    public void clearCommitWatermark() {
+        commitWatermarkChunkId = Long.MAX_VALUE;
+    }
+
+    /** Whether the head inactive chunk is eligible under the current watermark. */
+    private boolean headChunkEligible() {
+        Chunk head = inactiveChunks.peek();
+        return head != null && head.getChunkId() <= commitWatermarkChunkId;
+    }
+
+    /**
+     * Whether this region still has watermark-eligible chunks that have not
+     * been loaded. Used by the manager to decide when the commit cut has been
+     * fully drained.
+     */
+    public boolean hasEligiblePendingChunks() {
+        return headChunkEligible();
+    }
+
+    // -----------------------------------------------------------------------
+    // Lockstep switching primitives (multi-table transaction mode)
+    //
+    // The commit cut and the manager-thread idle fallback must freeze the
+    // activeChunks of ALL regions of a partition at the SAME source-transaction
+    // boundary. The manager first try-locks every region of the partition,
+    // re-checks the clean-boundary flag under the locks, then switches all of
+    // them before releasing — so the task thread cannot advance the boundary
+    // between two sibling switches.
+    // -----------------------------------------------------------------------
+
+    /** Try-acquire this region's write lock. Pair with {@link #unlockWrite()}. */
+    public boolean tryLockWrite() {
+        return writeLock.compareAndSet(false, true);
+    }
+
+    /** Releases the write lock acquired via {@link #tryLockWrite()}. */
+    public void unlockWrite() {
+        writeLock.set(false);
+    }
+
+    /** Must be called while holding the write lock. */
+    public boolean isCleanBoundaryUnderLock() {
+        return activeChunkCleanBoundary;
+    }
+
+    /** Must be called while holding the write lock. */
+    public boolean hasActiveDataUnderLock() {
+        Chunk snapshot = activeChunk;
+        return snapshot != null && snapshot.numRows() > 0;
+    }
+
+    /**
+     * Switches the activeChunk for commit. Must be called while holding the
+     * write lock and only when {@link #isCleanBoundaryUnderLock()} is true.
+     */
+    public void switchForCommitUnderLock() {
+        switchChunk();
+        lastSwitchTimeMs = System.currentTimeMillis();
+        activeChunkCleanBoundary = true;
+        releaseInProgressBytes();
+    }
+
+    /**
+     * Marks the activeChunk as being at a clean transaction boundary and
+     * releases the in-progress byte accounting. Called on the task thread for
+     * every txnEnd, regardless of whether a switch happens (the switch decision
+     * is made at partition level by the manager). Replaces step 1 of the legacy
+     * {@link #tryMiniIntervalSwitch()}.
+     */
+    public void markCleanBoundary() {
+        activeChunkCleanBoundary = true;
+        releaseInProgressBytes();
+    }
+
+    /**
+     * Whether the activeChunk has accumulated at least half of the write-block
+     * threshold. Used by the partition-level switch decision to override
+     * miniInterval batching before headroom runs out (replaces the legacy
+     * per-region protective switch in write0).
+     */
+    public boolean isActiveChunkHalfFull() {
+        if (multiTableSingleTxnMaxBytes <= 0) {
+            return false;
+        }
+        Chunk snapshot = activeChunk;
+        return snapshot != null && snapshot.numRows() > 0
+                && snapshot.chunkBytes() >= multiTableSingleTxnMaxBytes / 2;
+    }
+
     protected int write0(byte[] row) {
         if (!multiTableTransactionEnabled) {
             // Non-multi-table: original behavior — switch when a single row would
@@ -609,30 +779,17 @@ public class TransactionTableRegion implements TableRegion {
                 switchChunk();
             }
         } else if (multiTableSingleTxnMaxBytes > 0) {
-            // Multi-table mode — two separate concerns are handled here:
+            // Multi-table mode.
             //
-            // (1) Clean-boundary safe switch. tryMiniIntervalSwitch batches
-            //     multiple back-to-back source transactions into one activeChunk
-            //     to amortize HTTP-load overhead. When miniInterval has not yet
-            //     elapsed, it leaves previously-completed transactions sitting
-            //     in activeChunk without switching. If the accumulated batch
-            //     grows past half the write-block hard cap, the next in-progress
-            //     transaction would start with too little headroom and the
-            //     fail-fast below could wrongly reject a normal-sized new
-            //     transaction. Override the miniInterval batching here by
-            //     force-switching when we are still AT a clean transaction
-            //     boundary (most recent event was a txnEnd) and activeChunk
-            //     is already half-full. The switch is safe because it does
-            //     not split an in-progress source transaction — activeChunk
-            //     currently holds only completed transactions.
-            if (activeChunkCleanBoundary
-                    && activeChunk.numRows() > 0
-                    && activeChunk.chunkBytes() >= multiTableSingleTxnMaxBytes / 2) {
-                switchChunk();
-                lastSwitchTimeMs = System.currentTimeMillis();
-                // activeChunkCleanBoundary stays true — the new empty chunk
-                // is trivially at a clean transaction boundary.
-            }
+            // NOTE: the legacy per-region "clean-boundary safe switch" that used
+            // to live here was removed: a single region switching on its own
+            // breaks the cross-table alignment of the commit cut (sibling
+            // regions of the same partition must freeze at the same source
+            // transaction boundary). Headroom protection is now handled at
+            // partition level: the txnEnd path overrides miniInterval batching
+            // and lockstep-switches ALL regions of the partition when any of
+            // them reports isActiveChunkHalfFull().
+            //
             // (2) Fail-fast on a single oversized in-progress transaction.
             //     After any clean-boundary safe switch above, if adding this
             //     row would still push activeChunk past the write-block hard
@@ -722,7 +879,13 @@ public class TransactionTableRegion implements TableRegion {
     public boolean flush(FlushReason reason) {
         LOG.debug("Try to flush db: {}, table: {}, label: {}, cacheBytes: {}, cacheRows: {}, reason: {}",
                 database, table, label, cacheBytes, cacheRows, reason);
-        if (state.compareAndSet(State.ACTIVE, State.FLUSHING)) {
+        if (multiTableTransactionEnabled && !headChunkEligible()) {
+            // Nothing eligible to drain (empty queue, or all pending chunks are
+            // beyond the commit watermark and belong to the next transaction).
+            // Check before acquiring the table gate to avoid churning it.
+            return false;
+        }
+        if (tryEnterFlushing()) {
             if (!multiTableTransactionEnabled) {
                 // Non-multi-table: original behavior — acquire writeLock and
                 // optionally switch activeChunk into the inactive queue before
@@ -761,7 +924,7 @@ public class TransactionTableRegion implements TableRegion {
                 streamLoad(0);
                 return true;
             } else {
-                state.compareAndSet(State.FLUSHING, State.ACTIVE);
+                exitFlushing();
                 return false;
             }
         }
@@ -861,18 +1024,26 @@ public class TransactionTableRegion implements TableRegion {
             firstException = e;
         }
 
+        // In multi-table transaction mode, only the transient TXN_IN_PROCESSING
+        // rejection is safe to retry: the FE rejects it at channel-acquisition
+        // time before ingesting any data, so a re-send cannot duplicate rows in
+        // the shared transaction. Generic failures may have partially ingested
+        // data into the transaction and must stay terminal.
+        boolean retryableError = multiTableTransactionEnabled
+                ? ErrorUtils.isTxnInProcessing(e)
+                : isRetryable(e);
         // Synchronize on 'this' so that the numRetries increment is atomic with
         // respect to the check in setLabel(), preventing label injection mid-retry.
         synchronized (this) {
-            if (numRetries >= maxRetries || !isRetryable(e)) {
+            if (numRetries >= maxRetries || !retryableError) {
                 LOG.error("Failed to flush data for db: {}, table: {} after {} times retry, the last exception is",
                         database, table, numRetries, e);
                 // Terminal failure: no further retry will re-drive the state
-                // machine back to ACTIVE via complete(). Release FLUSHING now
-                // so the manager's final drain / rollback paths observe a
-                // non-busy region. The manager will see this.e from
-                // callback() below and stop scheduling new work.
-                state.compareAndSet(State.FLUSHING, State.ACTIVE);
+                // machine back to ACTIVE via complete(). Release FLUSHING (and
+                // the table gate) now so the manager's final drain / rollback
+                // paths observe a non-busy region. The manager will see this.e
+                // from callback() below and stop scheduling new work.
+                exitFlushing();
                 manager.callback(firstException);
                 return;
             }
@@ -882,9 +1053,16 @@ public class TransactionTableRegion implements TableRegion {
         // Retry path: keep state=FLUSHING so the manager cannot CAS(ACTIVE ->
         // FLUSHING) on the same region while this retry is pending, which
         // would cause a duplicate send of the same inactive chunk.
+        // TXN_IN_PROCESSING is a sub-second transient (the shared transaction
+        // channel is busy with another in-flight load), so use a short bounded
+        // backoff instead of the full retry interval to avoid stalling the
+        // commit cycle.
+        int delayMs = ErrorUtils.isTxnInProcessing(e)
+                ? Math.min(retryIntervalInMs, 500 * numRetries)
+                : retryIntervalInMs;
         LOG.warn("Failed to flush data for db: {}, table: {}, and will retry for {} times after {} ms",
-                database, table, numRetries, retryIntervalInMs, e);
-        streamLoad(retryIntervalInMs);
+                database, table, numRetries, delayMs, e);
+        streamLoad(delayMs);
     }
 
     @Override
@@ -900,16 +1078,18 @@ public class TransactionTableRegion implements TableRegion {
             firstException = null;
         }
 
-        if (!inactiveChunks.isEmpty()) {
+        if (multiTableTransactionEnabled ? headChunkEligible() : !inactiveChunks.isEmpty()) {
             LOG.debug("Stream load continue, db: {}, table: {}, label: {}, cacheBytes: {}, cacheRows: {}",
                     database, table, label, cacheBytes, cacheRows);
             streamLoad(0);
             return;
         }
-        if (state.compareAndSet(State.FLUSHING, State.ACTIVE)) {
-            LOG.debug("Stream load completed, db: {}, table: {}, label: {}, cacheBytes: {}, cacheRows: {}",
-                    database, table, label, cacheBytes, cacheRows);
-        }
+        // Queue drained, or the next chunk is beyond the commit watermark and
+        // belongs to the next shared transaction. Return to ACTIVE and release
+        // the table gate so sibling regions of the same table can load.
+        exitFlushing();
+        LOG.debug("Stream load completed, db: {}, table: {}, label: {}, cacheBytes: {}, cacheRows: {}",
+                database, table, label, cacheBytes, cacheRows);
     }
 
     @Override
@@ -922,7 +1102,7 @@ public class TransactionTableRegion implements TableRegion {
             Chunk chunk = inactiveChunks.peek();
             if (chunk == null) {
                 LOG.warn("No inactive chunk available for stream load, db: {}, table: {}", database, table);
-                state.compareAndSet(State.FLUSHING, State.ACTIVE);
+                exitFlushing();
                 return;
             }
             LOG.debug("Stream load chunk, db: {}, table: {}, numRows: {}, rowBytes: {}, chunkBytes: {}",

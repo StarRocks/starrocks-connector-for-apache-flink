@@ -27,6 +27,7 @@ import java.util.List;
 
 import static com.starrocks.data.load.stream.StreamLoadConstants.RESULT_STATUS_FAILED;
 import static com.starrocks.data.load.stream.StreamLoadConstants.RESULT_STATUS_INTERNAL_ERROR;
+import static com.starrocks.data.load.stream.StreamLoadConstants.RESULT_STATUS_TRANSACTION_IN_PROCESSING;
 
 public class ErrorUtils {
 
@@ -49,6 +50,14 @@ public class ErrorUtils {
             return true;
         }
 
+        // TXN_IN_PROCESSING is a transient FE state: a load arrived while the
+        // transaction channel was busy with another in-flight operation (e.g.
+        // concurrent loads on the shared label in multi-table transaction mode).
+        // The rejected request did not ingest any data, so retrying is safe.
+        if (RESULT_STATUS_TRANSACTION_IN_PROCESSING.equalsIgnoreCase(responseBody.getStatus())) {
+            return true;
+        }
+
         if (!RESULT_STATUS_FAILED.equalsIgnoreCase(responseBody.getStatus())
             && !RESULT_STATUS_INTERNAL_ERROR.equalsIgnoreCase(responseBody.getStatus())) {
             return false;
@@ -66,5 +75,16 @@ public class ErrorUtils {
             }
         }
         return true;
+    }
+
+    /** Whether the failure is the transient TXN_IN_PROCESSING response. */
+    public static boolean isTxnInProcessing(Throwable e) {
+        if (!(e instanceof StreamLoadFailException)) {
+            return false;
+        }
+        StreamLoadResponse.StreamLoadResponseBody responseBody =
+                ((StreamLoadFailException) e).getResponseBody();
+        return responseBody != null
+                && RESULT_STATUS_TRANSACTION_IN_PROCESSING.equalsIgnoreCase(responseBody.getStatus());
     }
 }

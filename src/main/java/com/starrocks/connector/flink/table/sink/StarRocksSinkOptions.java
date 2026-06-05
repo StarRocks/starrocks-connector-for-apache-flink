@@ -664,8 +664,11 @@ public class StarRocksSinkOptions implements Serializable {
                 .password(getPassword())
                 .version(sinkTable.getVersion())
                 .expectDelayTime(getSinkMaxFlushInterval())
-                // TODO not support retry currently
-                .maxRetries(0)
+                // Retries are enabled only in multi-table transaction mode, where the
+                // transient TXN_IN_PROCESSING response (concurrent loads on the shared
+                // label) must be retried with backoff instead of failing the job.
+                // Other paths keep the legacy no-retry behavior.
+                .maxRetries(isMultiTableTransactionEnabled() ? getSinkMaxRetries() : 0)
                 .retryIntervalInMs(getRetryIntervalMs())
                 .sanitizeErrorLog(isSanitizeErrorLog())
                 .setPublishTimeoutMs(getPublishTimeoutMs())

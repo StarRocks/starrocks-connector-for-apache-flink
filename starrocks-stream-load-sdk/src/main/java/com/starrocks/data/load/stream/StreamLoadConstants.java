@@ -40,6 +40,10 @@ public interface StreamLoadConstants {
     String RESULT_STATUS_TRANSACTION_NOT_EXISTED = "TXN_NOT_EXISTS";
     String RESULT_STATUS_TRANSACTION_COMMIT_TIMEOUT = "Commit Timeout";
     String RESULT_STATUS_TRANSACTION_PUBLISH_TIMEOUT = "Publish Timeout";
+    // Transient FE response when a load arrives on a transaction whose channel is
+    // busy with another in-flight operation (e.g. concurrent loads on the shared
+    // label in multi-table transaction mode). Safe to retry after a short backoff.
+    String RESULT_STATUS_TRANSACTION_IN_PROCESSING = "TXN_IN_PROCESSING";
 
     String EXISTING_JOB_STATUS_FINISHED = "FINISHED";
 

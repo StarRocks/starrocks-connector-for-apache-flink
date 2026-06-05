@@ -473,16 +473,13 @@ public class StreamLoadManagerMultiTableTest {
     // -------------------------------------------------------------------------
 
     /**
-     * Multi-table transaction mode requires TransactionStreamLoader (i.e. transaction
-     * must be enabled). Enabling multi-table without transaction should throw.
-     *
-     * <p>Note: {@code enableMultiTableTransaction()} in the builder already sets
-     * {@code enableTransaction = true}, so we test the indirect path: multi-table
-     * with maxRetries > 0, which forces DefaultStreamLoader instead of
-     * TransactionStreamLoader.
+     * Multi-table transaction mode always uses TransactionStreamLoader, and since the
+     * TXN_IN_PROCESSING retry fallback, maxRetries > 0 is allowed in this mode (retries
+     * are restricted to the transient TXN_IN_PROCESSING rejection inside
+     * TransactionTableRegion). Construction must succeed instead of throwing.
      */
     @Test
-    public void testConstructorRejectsMultiTableWithRetries() {
+    public void testConstructorAllowsMultiTableWithRetries() {
         StreamLoadTableProperties tableProps = StreamLoadTableProperties.builder()
                 .database("test")
                 .table("orders")
@@ -503,13 +500,8 @@ public class StreamLoadManagerMultiTableTest {
                 .ioThreadCount(2)
                 .build();
 
-        try {
-            new StreamLoadManagerV2(properties, true);
-            Assert.fail("Expected IllegalArgumentException for multi-table with retries");
-        } catch (IllegalArgumentException e) {
-            Assert.assertTrue("Should mention TransactionStreamLoader",
-                    e.getMessage().contains("TransactionStreamLoader"));
-        }
+        StreamLoadManagerV2 manager = new StreamLoadManagerV2(properties, true);
+        Assert.assertNotNull(manager);
     }
 
     /**
