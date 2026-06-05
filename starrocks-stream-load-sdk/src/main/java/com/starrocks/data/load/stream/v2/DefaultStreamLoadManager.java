@@ -917,12 +917,23 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         // retried load would keep absorbing newly-switched chunks, and the two
         // tables of a source transaction could land in different transactions
         // (cross-table visibility misalignment).
+        //
+        // The switch AND the watermark freeze of a partition happen under the
+        // SAME region write locks (cutPartitionWithWatermark): a task-thread
+        // txnEnd lockstep switch sneaking in between the two would give the
+        // partition's tables watermarks one transaction apart. If any partition
+        // cannot be cut this scan (its locks are briefly held by the task
+        // thread), retry on the next scan — re-setting a watermark is
+        // idempotent.
         if (!commitCutDone) {
+            boolean allCut = true;
             for (Map.Entry<Integer, List<TransactionTableRegion>> entry : partitionRegions.entrySet()) {
-                lockstepSwitchPartition(entry.getKey(), entry.getValue(), true);
+                if (!cutPartitionWithWatermark(entry.getKey(), entry.getValue())) {
+                    allCut = false;
+                }
             }
-            for (TransactionTableRegion region : flushQ) {
-                region.setCommitWatermark();
+            if (!allCut) {
+                return;
             }
             commitCutDone = true;
         }
@@ -999,8 +1010,12 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                 txnCoordinator.reset();
             }
 
-            // Clear labels and reset state
-            for (TransactionTableRegion region : regionSnapshot) {
+            // Clear labels and reset state. Iterate flushQ (not the snapshot):
+            // a region created mid-commit (first write to a new table) may have
+            // been injected with the just-committed shared label at creation
+            // time; leaving it stale would make its first load target an
+            // already-committed transaction.
+            for (TransactionTableRegion region : flushQ) {
                 region.setLabel(null);
                 region.resetAge();
             }
@@ -1060,6 +1075,80 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
             region.clearCommitWatermark();
         }
         commitCutDone = false;
+    }
+
+    /**
+     * Commit-cut primitive: under the partition guard and ALL of the
+     * partition's region write locks, lockstep-switch the regions (when every
+     * region is at a clean boundary and at least one has data) and then freeze
+     * each region's commit watermark — atomically with respect to the
+     * task-thread txnEnd switch path. Setting the watermark inside the same
+     * critical section is essential: doing it after releasing the locks would
+     * let a task-thread lockstep switch land between the switch and the freeze,
+     * giving sibling tables watermarks one source transaction apart.
+     *
+     * <p>Partitions that are mid-transaction (not at a clean boundary) are not
+     * switched, but their watermarks ARE frozen: their already-switched chunks
+     * are aligned (all regular switches are lockstep), and their in-progress
+     * activeChunk data must wait for the next cycle anyway.
+     *
+     * <p>The region locks are only ever held for microseconds (single-row
+     * writes or O(1) chunk switches), so a short spin is enough; if the locks
+     * cannot be acquired this scan, the caller retries on the next one.
+     *
+     * @return {@code true} if the partition was cut (watermarks frozen)
+     */
+    private boolean cutPartitionWithWatermark(int partition, List<TransactionTableRegion> pRegions) {
+        if (pRegions == null || pRegions.isEmpty()) {
+            return true;
+        }
+        AtomicBoolean guard = partitionSwitchGuards.computeIfAbsent(partition, k -> new AtomicBoolean(false));
+        if (!guard.compareAndSet(false, true)) {
+            return false;
+        }
+        int locked = 0;
+        try {
+            for (; locked < pRegions.size(); locked++) {
+                TransactionTableRegion region = pRegions.get(locked);
+                boolean acquired = false;
+                for (int spin = 0; spin < 1000; spin++) {
+                    if (region.tryLockWrite()) {
+                        acquired = true;
+                        break;
+                    }
+                    Thread.yield();
+                }
+                if (!acquired) {
+                    return false;
+                }
+            }
+            boolean allClean = true;
+            boolean anyData = false;
+            for (TransactionTableRegion region : pRegions) {
+                if (!region.isCleanBoundaryUnderLock()) {
+                    allClean = false;
+                }
+                if (region.hasActiveDataUnderLock()) {
+                    anyData = true;
+                }
+            }
+            if (allClean && anyData) {
+                for (TransactionTableRegion region : pRegions) {
+                    region.switchForCommitUnderLock();
+                }
+                partitionLastSwitchMs.computeIfAbsent(partition, k -> new AtomicLong(0L))
+                        .set(System.currentTimeMillis());
+            }
+            for (TransactionTableRegion region : pRegions) {
+                region.setCommitWatermark();
+            }
+            return true;
+        } finally {
+            for (int i = locked - 1; i >= 0; i--) {
+                pRegions.get(i).unlockWrite();
+            }
+            guard.set(false);
+        }
     }
 
     /**
