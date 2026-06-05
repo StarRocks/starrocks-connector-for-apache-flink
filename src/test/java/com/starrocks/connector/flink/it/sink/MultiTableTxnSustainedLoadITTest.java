@@ -21,6 +21,7 @@ import com.starrocks.connector.flink.table.data.DefaultStarRocksRowData;
 import com.starrocks.connector.flink.table.sink.SinkFunctionFactory;
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 import org.apache.flink.api.common.RuntimeExecutionMode;
+import org.apache.flink.core.execution.JobClient;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.sink.SinkFunction;
 import org.apache.flink.streaming.api.functions.source.RichParallelSourceFunction;
@@ -33,7 +34,6 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -165,22 +165,24 @@ public class MultiTableTxnSustainedLoadITTest extends StarRocksITTestBase {
                 .addSink(sink)
                 .setParallelism(PARTITIONS);
 
-        // Run the job on a worker thread while this thread polls the
-        // cross-table atomic-visibility invariant.
-        AtomicReference<Throwable> executionError = new AtomicReference<>();
-        Thread jobThread = new Thread(() -> {
-            try {
-                env.execute("multi-table-txn-sustained-load");
-            } catch (Throwable t) {
-                executionError.set(t);
-            }
-        }, "flink-job-sustained-load");
-        jobThread.start();
+        // Run the job asynchronously while this thread polls the cross-table
+        // atomic-visibility invariant. executeAsync gives us a JobClient so a
+        // timed-out job can be cancelled instead of leaking a running job that
+        // would interfere with subsequent ITs.
+        JobClient jobClient = env.executeAsync("multi-table-txn-sustained-load");
+
+        // Poll on the execution-result future, NOT on getJobStatus(): in
+        // MiniCluster mode the cluster shuts down as soon as the job reaches a
+        // terminal state, after which getJobStatus() throws IllegalStateException
+        // ("MiniCluster is not yet running or has already been shut down") — a
+        // race that surfaces when the suite runs under load. The result future
+        // stays usable after shutdown and doubles as the failure-cause carrier.
+        java.util.concurrent.CompletableFuture<?> resultFuture = jobClient.getJobExecutionResult();
 
         List<String> violations = new ArrayList<>();
         int samples = 0;
         long deadline = System.currentTimeMillis() + JOB_TIMEOUT_MS;
-        while (jobThread.isAlive() && System.currentTimeMillis() < deadline) {
+        while (!resultFuture.isDone() && System.currentTimeMillis() < deadline) {
             long[] counts = countBoth(ordersTable, itemsTable);
             samples++;
             if (counts[1] != counts[0] * ITEMS_PER_ORDER) {
@@ -188,13 +190,21 @@ public class MultiTableTxnSustainedLoadITTest extends StarRocksITTestBase {
             }
             Thread.sleep(100);
         }
-        jobThread.join(10_000L);
-        assertTrue("Flink job did not finish in time", !jobThread.isAlive());
-        if (executionError.get() != null) {
+        if (!resultFuture.isDone()) {
+            try {
+                jobClient.cancel().get(30, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (Exception cancelEx) {
+                LOG.warn("Best-effort cancel of timed-out job failed", cancelEx);
+            }
+            throw new AssertionError("Flink job did not finish within " + JOB_TIMEOUT_MS
+                    + " ms; job was cancelled to avoid interfering with subsequent tests");
+        }
+        try {
+            resultFuture.get(10, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (Exception e) {
             throw new AssertionError("Sustained multi-partition job failed — multi-table "
                     + "transactions must survive workloads spanning many commit cycles "
-                    + "(historical defect: TXN_IN_PROCESSING channel collisions)",
-                    executionError.get());
+                    + "(historical defect: TXN_IN_PROCESSING channel collisions)", e);
         }
 
         LOG.info("Sustained load finished; {} invariant samples, {} violations", samples, violations.size());

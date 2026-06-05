@@ -152,6 +152,7 @@ public class MockedStarRocksHttpServer {
     // single-channel sub-task per table and the BE guards the txn context with
     // a per-label try_lock, so concurrent /api/transaction/load calls on the
     // same (label, table) channel are rejected with TXN_IN_PROCESSING.
+    private static final int MAX_RECORDED_BODY_BYTES_PER_CHANNEL = 8 * 1024 * 1024;
     private volatile boolean simulateChannelBusy = false;
     private volatile long txnLoadDelayMs = 0L;
     private final ConcurrentMap<String, AtomicInteger> channelInflight = new ConcurrentHashMap<>();
@@ -501,9 +502,14 @@ public class MockedStarRocksHttpServer {
 
         private void handleTxnLoadAccepted(HttpExchange exchange, String db, String table,
                                            String label, String channelKey) throws IOException {
-            // consume and record body
+            // consume and record body (capped per channel: tests only need the
+            // marker counts, and an unbounded buffer would bloat memory in
+            // larger/longer-running suites)
             String body = readBody(exchange);
-            txnLoadBodies.computeIfAbsent(channelKey, k -> new StringBuffer()).append(body);
+            StringBuffer recorded = txnLoadBodies.computeIfAbsent(channelKey, k -> new StringBuffer());
+            if (recorded.length() < MAX_RECORDED_BODY_BYTES_PER_CHANNEL) {
+                recorded.append(body);
+            }
             loadCount.incrementAndGet();
 
             ResponseOverride override = txnLoadOverride;

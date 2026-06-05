@@ -181,6 +181,90 @@ public class MultiTableTxnSerializationAlignmentTest {
         }
     }
 
+    /**
+     * Regression for the mid-cut region race (PR #491 review, Codex P2): a region
+     * created while a commit cycle is in flight (first write to a new table) must
+     * not contribute chunks to the already-cut shared transaction — its
+     * transactions wait for the next label. With slow loads stretching every
+     * commit cycle, the first write to the late table lands inside a commit
+     * window with high probability. The invariant asserted here is stronger and
+     * fully deterministic: for every committed label, the per-table sets of
+     * source-transaction sequence numbers must be identical for all tables
+     * participating in those transactions — a source transaction never splits
+     * across labels.
+     */
+    @Test
+    public void testLateTableTransactionsNeverSplitAcrossLabels() throws Exception {
+        mockedServer.setSimulateChannelBusy(true);
+        mockedServer.setTxnLoadDelayMs(250); // stretch commit cycles past several txnEnds
+        mockedServer.resetCounters();
+
+        StreamLoadManagerV2 manager = new StreamLoadManagerV2(buildProperties(200), true);
+        manager.init();
+        try {
+            int lateTableFromSeq = 30;
+            for (long seq = 0; seq < 90; seq++) {
+                manager.write(0, DB, ORDERS,
+                        "{\"order_id\":" + seq + ", \"seqo\":" + seq + "}");
+                manager.write(0, DB, ITEMS,
+                        "{\"item_id\":" + (seq * 10) + ", \"seqi\":" + seq + "}");
+                if (seq >= lateTableFromSeq) {
+                    // first write at seq==30 creates the region mid-stream,
+                    // very likely inside an in-flight commit cycle
+                    manager.write(0, DB, "audit_log",
+                            "{\"order_id\":" + seq + ", \"seqa\":" + seq + "}");
+                }
+                manager.setCommitAllowed(0, true);
+                Thread.sleep(20);
+            }
+            manager.flush();
+            Assert.assertNull("manager must not fail: " + manager.getException(),
+                    manager.getException());
+
+            // Per-label transaction-sequence sets per table
+            Map<String, Map<String, java.util.Set<Long>>> labelToTableSeqs = new HashMap<>();
+            java.util.regex.Pattern p = java.util.regex.Pattern.compile("\"seq[oia]\":(\\d+)");
+            for (Map.Entry<String, String> entry : mockedServer.getTxnLoadBodies().entrySet()) {
+                // mock channel key format: db|table|label
+                String[] parts = entry.getKey().split("\\|", 3);
+                String table = parts[1];
+                String label = parts[2];
+                java.util.Set<Long> seqs = labelToTableSeqs
+                        .computeIfAbsent(label, k -> new HashMap<>())
+                        .computeIfAbsent(table, k -> new java.util.HashSet<>());
+                java.util.regex.Matcher m = p.matcher(entry.getValue());
+                while (m.find()) {
+                    seqs.add(Long.parseLong(m.group(1)));
+                }
+            }
+            Assert.assertFalse("expected committed labels", labelToTableSeqs.isEmpty());
+
+            java.util.Set<Long> allOrders = new java.util.HashSet<>();
+            java.util.Set<Long> allAudit = new java.util.HashSet<>();
+            for (Map.Entry<String, Map<String, java.util.Set<Long>>> e : labelToTableSeqs.entrySet()) {
+                java.util.Set<Long> o = e.getValue().getOrDefault(ORDERS, java.util.Collections.emptySet());
+                java.util.Set<Long> i = e.getValue().getOrDefault(ITEMS, java.util.Collections.emptySet());
+                java.util.Set<Long> a = e.getValue().getOrDefault("audit_log", java.util.Collections.emptySet());
+                Assert.assertEquals("label " + e.getKey() + ": orders/items of the same source "
+                        + "transactions must commit under the same label", o, i);
+                for (Long seq : a) {
+                    Assert.assertTrue("label " + e.getKey() + ": audit_log row of txn " + seq
+                                    + " committed under a label that does not contain the txn's "
+                                    + "orders row — source transaction split across labels "
+                                    + "(mid-cut region race)",
+                            o.contains(seq));
+                }
+                allOrders.addAll(o);
+                allAudit.addAll(a);
+            }
+            Assert.assertEquals("every transaction must be delivered", 90, allOrders.size());
+            Assert.assertEquals("every late-table transaction must be delivered",
+                    60, allAudit.size());
+        } finally {
+            manager.close();
+        }
+    }
+
     @Test
     public void testCrossTableCommitAlignmentAndCompleteness() throws Exception {
         mockedServer.setSimulateChannelBusy(true);

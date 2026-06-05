@@ -684,6 +684,11 @@ public class TransactionTableRegion implements TableRegion {
         commitWatermarkChunkId = Long.MAX_VALUE;
     }
 
+    /** Whether a commit watermark is currently frozen on this region. */
+    public boolean hasCommitWatermark() {
+        return commitWatermarkChunkId != Long.MAX_VALUE;
+    }
+
     /** Whether the head inactive chunk is eligible under the current watermark. */
     private boolean headChunkEligible() {
         Chunk head = inactiveChunks.peek();

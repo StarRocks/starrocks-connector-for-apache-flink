@@ -198,6 +198,14 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
      */
     private boolean commitCutDone = false;
 
+    /**
+     * The frozen set of regions participating in the in-flight commit cycle,
+     * taken right after the cut. Regions created later (mid-commit) are
+     * excluded — their data belongs to the next shared transaction.
+     * Manager-thread private.
+     */
+    private List<TransactionTableRegion> committingRegions = Collections.emptyList();
+
     /** Tracks per-partition transaction boundaries (multi-table mode only). */
     private transient PartitionCommitTracker partitionTracker;
 
@@ -935,11 +943,27 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
             if (!allCut) {
                 return;
             }
+            // Freeze the region set participating in THIS commit cycle. A region
+            // created concurrently with the cut loop (first write to a new table)
+            // may be missed by the weakly-consistent partitionRegions iteration
+            // while still being visible in flushQ; with its default unlimited
+            // watermark, triggering it below would load post-cut transactions
+            // into the already-cut shared transaction and reintroduce the
+            // cross-table commit-boundary drift. Only regions whose watermark
+            // was frozen by the cut participate; late-created regions (also
+            // watermark-frozen defensively at creation while a commit is in
+            // flight) wait for the next cycle.
+            List<TransactionTableRegion> cutRegions = new ArrayList<>();
+            for (TransactionTableRegion region : flushQ) {
+                if (region.hasCommitWatermark()) {
+                    cutRegions.add(region);
+                }
+            }
+            committingRegions = Collections.unmodifiableList(cutRegions);
             commitCutDone = true;
         }
 
-        final List<TransactionTableRegion> regionSnapshot =
-                Collections.unmodifiableList(new ArrayList<>(flushQ));
+        final List<TransactionTableRegion> regionSnapshot = committingRegions;
         try {
             if (!txnCoordinator.isActive()) {
                 // Edge case: commitInFlight was set but no shared txn is open yet
@@ -1075,6 +1099,7 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
             region.clearCommitWatermark();
         }
         commitCutDone = false;
+        committingRegions = Collections.emptyList();
     }
 
     /**
@@ -1111,12 +1136,21 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
             for (; locked < pRegions.size(); locked++) {
                 TransactionTableRegion region = pRegions.get(locked);
                 boolean acquired = false;
-                for (int spin = 0; spin < 1000; spin++) {
+                // The region write lock is only held for single-row writes or
+                // O(1) chunk switches (microseconds). Spin briefly with yield,
+                // then back off with short parks to avoid burning CPU under
+                // contention; if still busy, give up — the cut retries on the
+                // next manager scan.
+                for (int spin = 0; spin < 200; spin++) {
                     if (region.tryLockWrite()) {
                         acquired = true;
                         break;
                     }
-                    Thread.yield();
+                    if (spin < 50) {
+                        Thread.yield();
+                    } else {
+                        LockSupport.parkNanos(10_000L);
+                    }
                 }
                 if (!acquired) {
                     return false;
@@ -1799,8 +1833,20 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                         // /api/transaction/load per (label, table) channel, so
                         // sibling regions must take turns instead of colliding
                         // into transient TXN_IN_PROCESSING rejections.
+                        // U+0001 cannot appear in identifiers, so the key is
+                        // unambiguous even for exotic db/table names.
                         newRegion.setTableLoadGate(tableLoadGates.computeIfAbsent(
-                                database + "." + table, k -> new AtomicBoolean(false)));
+                                database + "\u0001" + table, k -> new AtomicBoolean(false)));
+                        // A region born while a commit cycle is in flight must not
+                        // contribute to that cycle: it is not in the frozen
+                        // committingRegions snapshot, and freezing an empty
+                        // watermark here (lastSwitchedChunkId is still -1, so no
+                        // chunk is eligible) defensively blocks any load path from
+                        // pulling its post-cut transactions into the already-cut
+                        // shared transaction. finishCommitCut() lifts it.
+                        if (commitInFlight.get()) {
+                            newRegion.setCommitWatermark();
+                        }
                         // If a shared transaction is already open, inject its label so that
                         // the first flush of this region uses the shared label.
                         //
