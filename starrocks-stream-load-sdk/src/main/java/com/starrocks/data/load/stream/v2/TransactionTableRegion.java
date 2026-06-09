@@ -493,123 +493,6 @@ public class TransactionTableRegion implements TableRegion {
     }
 
     /**
-     * Called on the task thread when a source txnEnd is received for the
-     * partition owning this region. Performs three bookkeeping steps:
-     *
-     * <ol>
-     *   <li>Mark the activeChunk as being at a "clean transaction boundary":
-     *       regardless of whether a switch actually happens, the most recent
-     *       event on this region is now a txnEnd, which means all data in
-     *       the current activeChunk belongs to fully-committed source
-     *       transactions.</li>
-     *   <li>If the miniInterval has elapsed since the last switch AND there
-     *       is data to freeze, call {@link #switchChunkForCommit()} to move
-     *       the activeChunk into the inactive queue where it can be drained
-     *       by autonomous flush.</li>
-     *   <li>Otherwise, leave activeChunk untouched — additional source
-     *       transactions can still accumulate into it, batching multiple
-     *       complete transactions into a single HTTP request when the next
-     *       switch does happen.</li>
-     * </ol>
-     *
-     * <p>Only meaningful in multi-table transaction mode. Callers must not
-     * invoke this method when {@code multiTableTransactionEnabled} is false.
-     */
-    public void tryMiniIntervalSwitch() {
-        // Step 1: The task thread has just observed a txnEnd for this region.
-        // Mark the current activeChunk as clean so that the manager-thread
-        // fallback can force-switch it later if the source goes idle.
-        // This must happen BEFORE the switch decision because switchChunkForCommit
-        // itself sets cleanBoundary=true on the new activeChunk, but if we skip
-        // the switch we still want the old activeChunk flagged as clean.
-        activeChunkCleanBoundary = true;
-        // The txnEnd for this region ends the in-progress source transaction:
-        // rows previously tagged as in-progress are now committed, regardless of
-        // whether the chunk switch below actually happens. Drain the per-region
-        // counter back to the manager's aggregate guard so other regions regain
-        // headroom even when miniInterval batching defers the physical switch.
-        releaseInProgressBytes();
-
-        // Step 2: Only switch if miniInterval has elapsed AND the activeChunk
-        // has data. An empty activeChunk would produce an empty inactive chunk
-        // which wastes a chunk slot and an HTTP request.
-        long now = System.currentTimeMillis();
-        if (now - lastSwitchTimeMs >= miniSwitchIntervalMs
-                && activeChunk != null && activeChunk.numRows() > 0) {
-            switchChunkForCommit();
-        }
-    }
-
-    /**
-     * Called by the manager thread during its normal scan loop. If the
-     * activeChunk is at a clean transaction boundary, has data, and the
-     * miniInterval has elapsed since the last switch, force-switch it so
-     * the data can be drained by autonomous flush and committed on the
-     * next commit cycle.
-     *
-     * <p>This is the "source idle" fallback: when the upstream source pauses
-     * after a few txnEnds and no further task-thread events arrive, the
-     * manager thread takes over the responsibility of freezing completed
-     * transaction data into inactiveChunks.
-     *
-     * <p><b>Safety:</b> The method acquires writeLock and re-checks the
-     * clean-boundary flag under the lock. This guarantees that if a task
-     * thread write is concurrently in progress, either (a) the task thread
-     * runs first and the re-check sees {@code false} (we abort), or (b) the
-     * force-switch runs first and the task thread's subsequent write targets
-     * a fresh activeChunk.
-     *
-     * <p>Only meaningful in multi-table transaction mode.
-     *
-     * @return {@code true} if a switch was performed, {@code false} otherwise
-     */
-    public boolean tryForceCleanSwitch() {
-        // Fast path checks without acquiring the lock.
-        // Note: cacheRows covers both activeChunk and inactiveChunks, so it is
-        // a coarser filter than we need here. Check activeChunk.numRows()
-        // directly so a region whose inactiveChunks still have pending data but
-        // whose activeChunk is empty doesn't force us to acquire the lock just
-        // to bail out inside it.
-        if (!activeChunkCleanBoundary) {
-            return false;
-        }
-        Chunk snapshot = activeChunk;  // volatile load
-        if (snapshot == null || snapshot.numRows() == 0) {
-            return false;
-        }
-        long now = System.currentTimeMillis();
-        if (now - lastSwitchTimeMs < miniSwitchIntervalMs) {
-            return false;
-        }
-
-        // Slow path: acquire writeLock and re-check under the lock
-        if (!writeLock.compareAndSet(false, true)) {
-            // Task thread holds the lock, retry on next scan
-            return false;
-        }
-        try {
-            // Re-check clean boundary under the lock: if a task thread write
-            // happened between the fast-path check and now, cleanBoundary will
-            // be false and we must abort to avoid freezing partial transaction
-            // data.
-            if (!activeChunkCleanBoundary) {
-                return false;
-            }
-            if (activeChunk == null || activeChunk.numRows() == 0) {
-                return false;
-            }
-            switchChunk();
-            lastSwitchTimeMs = System.currentTimeMillis();
-            activeChunkCleanBoundary = true;
-            LOG.debug("[MultiTxn] tryForceCleanSwitch: db={}, table={}, inactiveChunks={}",
-                    database, table, inactiveChunks.size());
-            return true;
-        } finally {
-            writeLock.set(false);
-        }
-    }
-
-    /**
      * Returns {@code true} if the activeChunk is currently at a clean
      * transaction boundary (all data belongs to completed source transactions).
      */
@@ -750,9 +633,9 @@ public class TransactionTableRegion implements TableRegion {
     /**
      * Marks the activeChunk as being at a clean transaction boundary and
      * releases the in-progress byte accounting. Called on the task thread for
-     * every txnEnd, regardless of whether a switch happens (the switch decision
-     * is made at partition level by the manager). Replaces step 1 of the legacy
-     * {@link #tryMiniIntervalSwitch()}.
+     * every txnEnd, regardless of whether a switch happens — the switch
+     * decision is made at partition level by the manager via
+     * {@code lockstepSwitchPartition()}.
      */
     public void markCleanBoundary() {
         activeChunkCleanBoundary = true;

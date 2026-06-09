@@ -845,10 +845,12 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
 
     /**
      * Attempts to start a time-driven commit cycle. Called on the manager thread
-     * from the normal scan path. Does NOT do any per-region switching — that is
-     * handled by (a) the task thread's {@code tryMiniIntervalSwitch} on each
-     * txnEnd and (b) {@link #managerForceSwitchCleanBoundaryRegions()} for the
-     * source-idle fallback.
+     * from the normal scan path. Does NOT do any chunk switching — that is
+     * handled by (a) the task thread marking clean boundaries on txnEnd
+     * ({@code markCleanBoundary}) plus the partition-level
+     * {@code lockstepSwitchPartition()}, and (b)
+     * {@link #managerForceSwitchCleanBoundaryRegions()} for the source-idle
+     * fallback.
      *
      * <p>Sets {@code commitInFlight=true} if {@link #shouldTriggerCommit()}
      * returns true; the main loop will then enter {@code processMultiTableCommit()}
@@ -1324,60 +1326,33 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                 return;
             }
         }
-        List<String> dirtyRegions = null;
-        for (TransactionTableRegion region : flushQ) {
-            if (!region.isActiveChunkCleanBoundary()) {
-                if (dirtyRegions == null) {
-                    dirtyRegions = new ArrayList<>();
-                }
-                dirtyRegions.add(region.getUniqueKey());
-            }
-        }
-        if (dirtyRegions != null) {
-            LOG.error("[MultiTxn] Shared transaction approaching timeout but regions {} "
-                    + "have in-progress transaction data (writes after latest txnEnd). "
-                    + "Rolling back and failing fast. label={}",
-                    dirtyRegions, txnCoordinator.getSharedLabel());
-            txnCoordinator.reset();
-            for (TransactionTableRegion region : flushQ) {
-                if (!region.isRetrying()) {
-                    region.setLabel(null);
-                }
-            }
-            commitInFlight.set(false);
-            if (partitionTracker != null) {
-                partitionTracker.reset();
-            }
-            this.e = new StreamLoadFailException(
-                    "[MultiTxn] Multi-table transaction timeout: regions with in-progress " +
-                    "source transactions: " + dirtyRegions);
-            return;
-        }
-
-        // All regions were observed clean in the pre-check above. Now freeze
-        // their activeChunks atomically using tryForceCleanSwitch(), which
-        // re-checks cleanBoundary under the writeLock. This closes a race
-        // window: between the unlocked pre-check and the actual switch, the
-        // task thread could call write() on a region and flip its
-        // cleanBoundary to false. Using switchChunkForCommit() here would
-        // unconditionally freeze that now-dirty activeChunk (containing an
-        // in-progress source transaction), violating the safety invariant.
+        // Freeze each partition's activeChunks ATOMICALLY via the same
+        // per-partition lockstep primitive as the commit cut.
         //
-        // If tryForceCleanSwitch() returns false for a region, one of:
-        //   (a) a concurrent write raced and made the region dirty — its
-        //       data stays in activeChunk and will be committed in a future
-        //       cycle (under the new shared label opened after this recycle);
-        //   (b) activeChunk was already empty — nothing to do;
-        //   (c) miniInterval has not yet elapsed — cannot happen here because
-        //       recycle fires only after sharedTxnMaxIdleMs which is far
-        //       larger than any miniInterval.
-        // In all three cases, skipping the region is safe.
-        for (TransactionTableRegion region : flushQ) {
-            boolean switched = region.tryForceCleanSwitch();
-            if (!switched && !region.isActiveChunkCleanBoundary()) {
-                LOG.warn("[MultiTxn] Recycle: region {} became dirty between pre-check and switch; " +
-                        "its data will be committed in a future cycle", region.getUniqueKey());
-            }
+        // Recycle runs WITHOUT writer quiescence (it fires from the normal scan
+        // branch on the sharedTxnMaxIdleMs timer), so the task thread may be
+        // mid-writing a new source transaction here. Because
+        // activeChunkCleanBoundary flips ROW-BY-ROW, a normal two-table
+        // transaction passes through an intermediate state (order row written ->
+        // orders dirty; item rows not yet -> items still clean). A per-region
+        // freeze loop interleaving there would freeze one table while skipping
+        // its sibling, publishing one table's rows of a transaction without the
+        // other's — the exact cross-table skew this PR exists to kill.
+        //
+        // lockstepSwitchPartition() takes ALL of a partition's write locks,
+        // re-checks every region's clean boundary under those locks, and freezes
+        // them together-or-not-at-all, so the recycled commit always publishes a
+        // cross-table-aligned cut. A partition that is mid-transaction (any
+        // region dirty) is skipped wholesale and committed in the next cycle
+        // under the freshly opened shared label — a momentarily dirty partition
+        // is normal here and must NOT fail the job. A partition genuinely stuck
+        // (data written but no txnEnd for longer than sharedTxnMaxIdleMs) is
+        // already caught by the partitionsWithoutTxnEnd fail-fast above.
+        //
+        // ignoreInterval=true: recycle fires on the sharedTxnMaxIdleMs timer,
+        // far larger than any miniInterval, so the interval gate is moot.
+        for (Map.Entry<Integer, List<TransactionTableRegion>> entry : partitionRegions.entrySet()) {
+            lockstepSwitchPartition(entry.getKey(), entry.getValue(), true);
         }
         // Drain any newly-frozen inactive chunks into the shared transaction
         // before committing. We wait synchronously for each region's load to

@@ -265,6 +265,122 @@ public class MultiTableTxnSerializationAlignmentTest {
         }
     }
 
+    /**
+     * Regression for the recycle-path cross-table skew (PR #491 review, banmoy):
+     * {@code recycleSharedTransaction()} fires from the normal scan branch on the
+     * {@code sharedTxnMaxIdleMs} timer WITHOUT writer quiescence. Before the fix
+     * it froze each region independently (per-region {@code tryForceCleanSwitch})
+     * — so if the freeze loop interleaved with a task-thread write mid source
+     * transaction (order row written -> orders dirty; item row not yet -> items
+     * still clean), one table would freeze while its sibling was skipped, and the
+     * recycled commit would publish one table's rows of a transaction without the
+     * other's.
+     *
+     * <p>This test forces recycle to fire repeatedly mid-stream by setting a tiny
+     * server timeout ({@code timeout=1} header -> sharedTxnMaxIdleMs = 800ms) and
+     * driving paced two-table transactions for several seconds. The invariant is
+     * the same deterministic one as the mid-cut test: for every committed label,
+     * the set of source-transaction seqs in {@code orders} must EQUAL the set in
+     * {@code order_items} — a source transaction never splits across labels. On
+     * the buggy per-region recycle this fails; on the lockstep recycle it holds.
+     */
+    @Test(timeout = 60000)
+    public void testRecycleKeepsCrossTableAlignment() throws Exception {
+        // No channel-busy / load delay here: recycle's internal wait is bounded
+        // by flushTimeoutMs (= timeout*1100 = 1100ms), so loads must settle fast.
+        mockedServer.resetCounters();
+
+        StreamLoadTableProperties tableProps = StreamLoadTableProperties.builder()
+                .database(DB)
+                .table(ORDERS)
+                .streamLoadDataFormat(StreamLoadDataFormat.JSON)
+                .maxBufferRows(100000)
+                .build();
+        StreamLoadProperties props = StreamLoadProperties.builder()
+                .loadUrls(mockedServer.getBaseUrl())
+                .username(USERNAME)
+                .password(PASSWORD)
+                .version("4.0.0")
+                .enableMultiTableTransaction()
+                .maxRetries(3)
+                .retryIntervalInMs(500)
+                .labelPrefix("test-recycle-")
+                .defaultTableProperties(tableProps)
+                // Commit interval (5s) LARGER than sharedTxnMaxIdleMs (800ms) so the
+                // timer-driven lockstep-cut commit never fires during the run —
+                // recycle becomes the SOLE commit driver, exercising exactly the
+                // path under test.
+                .expectDelayTime(5000)
+                .scanningFrequency(50)
+                .ioThreadCount(4)
+                .addHeader("timeout", "1")       // -> sharedTxnMaxIdleMs = 800ms, flushTimeoutMs = 1100ms
+                .build();
+
+        StreamLoadManagerV2 manager = new StreamLoadManagerV2(props, true);
+        manager.init();
+        try {
+            // ~4s of traffic at ~15ms/txn spans ~5 recycle cycles (800ms each),
+            // so recycle is virtually guaranteed to interleave with writes.
+            int total = 200;
+            for (long seq = 0; seq < total; seq++) {
+                manager.write(0, DB, ORDERS,
+                        "{\"order_id\":" + seq + ", \"seqo\":" + seq + "}");
+                // Widen the intermediate "orders dirty, order_items still clean"
+                // window so a non-lockstep recycle freeze landing here would
+                // freeze order_items (holding completed prior txns) while
+                // skipping the dirty orders region — exactly banmoy's TOCTOU.
+                // A per-partition lockstep freeze takes both write locks and
+                // freezes neither (orders dirty) or both, so alignment holds.
+                Thread.sleep(20);
+                manager.write(0, DB, ITEMS,
+                        "{\"item_id\":" + (seq * 10) + ", \"seqi\":" + seq + "}");
+                manager.setCommitAllowed(0, true);
+                Thread.sleep(10);
+                Assert.assertNull("manager must not fail mid-run: " + manager.getException(),
+                        manager.getException());
+            }
+            manager.flush();
+            Assert.assertNull("manager must not fail: " + manager.getException(),
+                    manager.getException());
+
+            Map<String, Map<String, java.util.Set<Long>>> labelToTableSeqs = new HashMap<>();
+            java.util.regex.Pattern p = java.util.regex.Pattern.compile("\"seq[oi]\":(\\d+)");
+            for (Map.Entry<String, String> entry : mockedServer.getTxnLoadBodies().entrySet()) {
+                String[] parts = entry.getKey().split("\\|", 3);
+                String table = parts[1];
+                String label = parts[2];
+                java.util.Set<Long> seqs = labelToTableSeqs
+                        .computeIfAbsent(label, k -> new HashMap<>())
+                        .computeIfAbsent(table, k -> new java.util.HashSet<>());
+                java.util.regex.Matcher m = p.matcher(entry.getValue());
+                while (m.find()) {
+                    seqs.add(Long.parseLong(m.group(1)));
+                }
+            }
+            Assert.assertFalse("expected committed labels", labelToTableSeqs.isEmpty());
+            // Recycle must actually have fired (else the test proves nothing):
+            // begins > commits would mean only timer-driven commits ran. With an
+            // 800ms idle cap over ~4s, several recycle-driven begins are expected.
+            Assert.assertTrue("expected multiple shared-transaction labels (recycle + "
+                            + "timer commits) over the run, got " + labelToTableSeqs.size(),
+                    labelToTableSeqs.size() >= 3);
+
+            java.util.Set<Long> allOrders = new java.util.HashSet<>();
+            for (Map.Entry<String, Map<String, java.util.Set<Long>>> e : labelToTableSeqs.entrySet()) {
+                java.util.Set<Long> o = e.getValue().getOrDefault(ORDERS, java.util.Collections.emptySet());
+                java.util.Set<Long> i = e.getValue().getOrDefault(ITEMS, java.util.Collections.emptySet());
+                Assert.assertEquals("label " + e.getKey() + ": a source transaction's orders "
+                        + "and order_items rows must commit under the SAME label — recycle froze "
+                        + "one table without its sibling (cross-table skew)", o, i);
+                allOrders.addAll(o);
+            }
+            Assert.assertEquals("every transaction must be delivered exactly once",
+                    total, allOrders.size());
+        } finally {
+            manager.close();
+        }
+    }
+
     @Test
     public void testCrossTableCommitAlignmentAndCompleteness() throws Exception {
         mockedServer.setSimulateChannelBusy(true);
