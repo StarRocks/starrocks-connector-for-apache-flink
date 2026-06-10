@@ -248,11 +248,11 @@ public class MultiTableTransactionITTest extends StarRocksITTestBase {
      * </pre>
      *
      * <p>This test validates the {@code setCommitAllowed} path in
-     * {@code DefaultStreamLoadManager}: on txnEnd the task thread calls
-     * {@code tryMiniIntervalSwitch()} on the partition's regions (freezing
-     * activeChunk into inactiveChunks if miniInterval has elapsed), and the
-     * manager thread subsequently runs autonomous flush → prepare → commit
-     * when the commit interval elapses.
+     * {@code DefaultStreamLoadManager}: on txnEnd the task thread marks the
+     * partition's regions at a clean boundary ({@code markCleanBoundary}) and
+     * the partition-level {@code lockstepSwitchPartition} freezes activeChunks
+     * into inactiveChunks, and the manager thread subsequently runs autonomous
+     * flush → prepare → commit when the commit interval elapses.
      */
     @Test
     public void testNoFlushBeforeTxnEnd() throws Exception {

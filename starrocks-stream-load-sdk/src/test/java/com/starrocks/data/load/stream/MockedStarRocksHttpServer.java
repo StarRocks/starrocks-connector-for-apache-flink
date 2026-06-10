@@ -147,6 +147,20 @@ public class MockedStarRocksHttpServer {
     private final AtomicInteger prepareCount = new AtomicInteger(0);
     private final AtomicInteger commitCount = new AtomicInteger(0);
 
+    // ---- per-(label, table) channel concurrency simulation & recording ----
+    // Mirrors the server-side constraint: the FE multi-statement task serves a
+    // single-channel sub-task per table and the BE guards the txn context with
+    // a per-label try_lock, so concurrent /api/transaction/load calls on the
+    // same (label, table) channel are rejected with TXN_IN_PROCESSING.
+    private static final int MAX_RECORDED_BODY_BYTES_PER_CHANNEL = 8 * 1024 * 1024;
+    private volatile boolean simulateChannelBusy = false;
+    private volatile long txnLoadDelayMs = 0L;
+    /** Per-table /api/transaction/load latency overrides (falls back to txnLoadDelayMs). */
+    private final ConcurrentMap<String, Long> perTableTxnLoadDelayMs = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, AtomicInteger> channelInflight = new ConcurrentHashMap<>();
+    private final AtomicInteger maxChannelConcurrency = new AtomicInteger(0);
+    private final ConcurrentMap<String, StringBuffer> txnLoadBodies = new ConcurrentHashMap<>();
+
     private MockedStarRocksHttpServer(int port, boolean enforceAuth, String username, String password) throws IOException {
         this.bindAddress = new InetSocketAddress("127.0.0.1", port);
         this.server = HttpServer.create(this.bindAddress, 0);
@@ -211,6 +225,50 @@ public class MockedStarRocksHttpServer {
         loadCount.set(0);
         prepareCount.set(0);
         commitCount.set(0);
+        maxChannelConcurrency.set(0);
+        channelInflight.clear();
+        txnLoadBodies.clear();
+    }
+
+    /**
+     * When enabled, a /api/transaction/load arriving while another load is in
+     * flight on the same (label, table) channel is rejected with the transient
+     * TXN_IN_PROCESSING status — mimicking the FE/BE channel model.
+     */
+    public void setSimulateChannelBusy(boolean simulateChannelBusy) {
+        this.simulateChannelBusy = simulateChannelBusy;
+    }
+
+    /** Artificial per-request latency for /api/transaction/load, to widen concurrency windows. */
+    public void setTxnLoadDelayMs(long txnLoadDelayMs) {
+        this.txnLoadDelayMs = txnLoadDelayMs;
+    }
+
+    /**
+     * Per-table latency override for /api/transaction/load. Lets a test give
+     * sibling tables asymmetric drain times (one table's region returns to
+     * ACTIVE while the other is still FLUSHING) — the precondition of the
+     * recycle drain-race regression.
+     */
+    public void setTxnLoadDelayMsForTable(String table, long delayMs) {
+        perTableTxnLoadDelayMs.put(table, delayMs);
+    }
+
+    /** Peak number of concurrent loads observed on any single (label, table) channel. */
+    public int getMaxChannelConcurrency() {
+        return maxChannelConcurrency.get();
+    }
+
+    /**
+     * Accepted (non-rejected) /api/transaction/load request bodies, concatenated
+     * per "db|table|label" key.
+     */
+    public Map<String, String> getTxnLoadBodies() {
+        Map<String, String> copy = new HashMap<>();
+        for (Map.Entry<String, StringBuffer> entry : txnLoadBodies.entrySet()) {
+            copy.put(entry.getKey(), entry.getValue().toString());
+        }
+        return copy;
     }
 
     public void putErrorLog(String label, String content) {
@@ -421,9 +479,50 @@ public class MockedStarRocksHttpServer {
                 sendJson(exchange, 400, toJson(mapOf("Status", StreamLoadConstants.RESULT_STATUS_FAILED, "Message", "Missing label")));
                 return;
             }
+            if (db == null) db = "";
+            if (table == null) table = "";
 
-            // consume body
-            readBody(exchange);
+            // Per-(label, table) channel tracking: record the concurrency peak and,
+            // when simulateChannelBusy is on, reject overlapping loads with the
+            // transient TXN_IN_PROCESSING status like the real FE/BE would.
+            String channelKey = db + "|" + table + "|" + label;
+            AtomicInteger inflight = channelInflight.computeIfAbsent(channelKey, k -> new AtomicInteger());
+            int concurrent = inflight.incrementAndGet();
+            try {
+                maxChannelConcurrency.accumulateAndGet(concurrent, Math::max);
+                if (concurrent > 1 && simulateChannelBusy) {
+                    readBody(exchange);
+                    sendJson(exchange, 200, toJson(mapOf(
+                            "Status", StreamLoadConstants.RESULT_STATUS_TRANSACTION_IN_PROCESSING,
+                            "Message", "Transaction is in processing",
+                            "Label", label)));
+                    return;
+                }
+                Long tableDelay = perTableTxnLoadDelayMs.get(table);
+                long delay = tableDelay != null ? tableDelay : txnLoadDelayMs;
+                if (delay > 0) {
+                    try {
+                        Thread.sleep(delay);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+                handleTxnLoadAccepted(exchange, db, table, label, channelKey);
+            } finally {
+                inflight.decrementAndGet();
+            }
+        }
+
+        private void handleTxnLoadAccepted(HttpExchange exchange, String db, String table,
+                                           String label, String channelKey) throws IOException {
+            // consume and record body (capped per channel: tests only need the
+            // marker counts, and an unbounded buffer would bloat memory in
+            // larger/longer-running suites)
+            String body = readBody(exchange);
+            StringBuffer recorded = txnLoadBodies.computeIfAbsent(channelKey, k -> new StringBuffer());
+            if (recorded.length() < MAX_RECORDED_BODY_BYTES_PER_CHANNEL) {
+                recorded.append(body);
+            }
             loadCount.incrementAndGet();
 
             ResponseOverride override = txnLoadOverride;

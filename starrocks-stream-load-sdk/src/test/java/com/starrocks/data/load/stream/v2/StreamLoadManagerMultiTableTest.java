@@ -473,16 +473,13 @@ public class StreamLoadManagerMultiTableTest {
     // -------------------------------------------------------------------------
 
     /**
-     * Multi-table transaction mode requires TransactionStreamLoader (i.e. transaction
-     * must be enabled). Enabling multi-table without transaction should throw.
-     *
-     * <p>Note: {@code enableMultiTableTransaction()} in the builder already sets
-     * {@code enableTransaction = true}, so we test the indirect path: multi-table
-     * with maxRetries > 0, which forces DefaultStreamLoader instead of
-     * TransactionStreamLoader.
+     * Multi-table transaction mode always uses TransactionStreamLoader, and since the
+     * TXN_IN_PROCESSING retry fallback, maxRetries > 0 is allowed in this mode (retries
+     * are restricted to the transient TXN_IN_PROCESSING rejection inside
+     * TransactionTableRegion). Construction must succeed instead of throwing.
      */
     @Test
-    public void testConstructorRejectsMultiTableWithRetries() {
+    public void testConstructorAllowsMultiTableWithRetries() throws Exception {
         StreamLoadTableProperties tableProps = StreamLoadTableProperties.builder()
                 .database("test")
                 .table("orders")
@@ -503,12 +500,27 @@ public class StreamLoadManagerMultiTableTest {
                 .ioThreadCount(2)
                 .build();
 
+        mockedServer.resetCounters();
+        StreamLoadManagerV2 manager = new StreamLoadManagerV2(properties, true);
+        manager.init();
         try {
-            new StreamLoadManagerV2(properties, true);
-            Assert.fail("Expected IllegalArgumentException for multi-table with retries");
-        } catch (IllegalArgumentException e) {
-            Assert.assertTrue("Should mention TransactionStreamLoader",
-                    e.getMessage().contains("TransactionStreamLoader"));
+            // Exercise a minimal write/commit lifecycle: the transactional path is
+            // observable as /api/transaction/begin calls, which only
+            // TransactionStreamLoader issues — the non-transactional
+            // DefaultStreamLoader (the legacy maxRetries > 0 fallback) never
+            // begins a transaction.
+            manager.write(0, "test", "orders", "{\"order_id\":1, \"customer_id\":7}");
+            manager.write(0, "test", "order_items", "{\"item_id\":1, \"order_id\":1}");
+            manager.setCommitAllowed(0, true);
+            manager.flush();
+            Assert.assertNull("manager must stay healthy with retries enabled: "
+                    + manager.getException(), manager.getException());
+            Assert.assertTrue("multi-table mode with maxRetries > 0 must still use "
+                            + "TransactionStreamLoader (expected /api/transaction/begin calls)",
+                    mockedServer.getBeginCount() > 0);
+            Assert.assertTrue("data must be loaded", mockedServer.getLoadCount() > 0);
+        } finally {
+            manager.close();
         }
     }
 
