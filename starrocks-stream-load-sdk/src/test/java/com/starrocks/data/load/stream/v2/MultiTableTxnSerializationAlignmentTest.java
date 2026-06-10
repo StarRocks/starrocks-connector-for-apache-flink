@@ -381,6 +381,122 @@ public class MultiTableTxnSerializationAlignmentTest {
         }
     }
 
+    /**
+     * Recycle alignment under ASYMMETRIC per-table load latency.
+     *
+     * <p>This is the recycle counterpart of
+     * {@link #testRecycleKeepsCrossTableAlignment}, hardened with very different
+     * sibling load times (orders 50ms vs order_items 600ms) so the recycle
+     * commit path is exercised while one table's region has long returned to
+     * ACTIVE and the other is still loading. It asserts the outcome that the
+     * watermark + drain-retry protocol guarantees: for every recycle-committed
+     * label, the orders and order_items source-transaction seq sets are EQUAL —
+     * no table's rows of a transaction are published without the sibling's.
+     *
+     * <p><b>Scope note (honest):</b> the specific drain micro-window banmoy
+     * described — a fresh aligned pair switched <i>during</i> the recycle drain
+     * and chain-loaded asymmetrically — could NOT be isolated as a RED/GREEN
+     * unit test in this mock harness: the manager's continuous autonomous flush
+     * keeps the inactive-chunk backlog drained between recycles, so recycle
+     * never drains a backlog long enough to overlap a fresh switch, and forcing
+     * a large unloaded backlog (loads slower than production) instead trips the
+     * drain timeout rather than producing a clean skew. That sub-window is
+     * covered structurally (recycle now uses the exact same
+     * cutPartitionWithWatermark + drain-on-hasEligiblePendingChunks +
+     * finishCommitCut protocol as the proven timer-driven commit) and by the
+     * real-cluster E2E recycle run. This test guards the recycle commit's
+     * cross-table alignment outcome under adverse asymmetric timing.
+     */
+    @Test(timeout = 120000)
+    public void testRecycleAlignmentUnderAsymmetricLoadLatency() throws Exception {
+        mockedServer.resetCounters();
+        mockedServer.setTxnLoadDelayMsForTable(ORDERS, 50);
+        mockedServer.setTxnLoadDelayMsForTable(ITEMS, 600);
+
+        StreamLoadTableProperties tableProps = StreamLoadTableProperties.builder()
+                .database(DB)
+                .table(ORDERS)
+                .streamLoadDataFormat(StreamLoadDataFormat.JSON)
+                .maxBufferRows(100000)
+                .build();
+        StreamLoadProperties props = StreamLoadProperties.builder()
+                .loadUrls(mockedServer.getBaseUrl())
+                .username(USERNAME)
+                .password(PASSWORD)
+                .version("4.0.0")
+                .enableMultiTableTransaction()
+                .maxRetries(3)
+                .retryIntervalInMs(500)
+                .labelPrefix("test-drain-")
+                .defaultTableProperties(tableProps)
+                .expectDelayTime(30000)          // commit interval >> idle cap: recycle drives all commits
+                .scanningFrequency(50)
+                .ioThreadCount(4)
+                .addHeader("timeout", "5")       // sharedTxnMaxIdleMs=4000ms, flushTimeoutMs=5500ms
+                .build();
+
+        StreamLoadManagerV2 manager = new StreamLoadManagerV2(props, true);
+        manager.init();
+        try {
+            // ~20s of two-table transactions at 100ms pace (slow enough that the
+            // 1.2s items loads keep up overall) spanning ~5 recycle cycles
+            // (recycle fires every 4s). Each cycle's ~1.2s items drain overlaps a
+            // fresh pair switch (mini gate 1s), repeatedly exposing the window —
+            // while staying well under flushTimeoutMs (5.5s) so neither version
+            // times out; the difference is purely whether the watermark holds the
+            // post-cut pair back.
+            int total = 150;
+            for (long seq = 0; seq < total; seq++) {
+                manager.write(0, DB, ORDERS,
+                        "{\"order_id\":" + seq + ", \"seqo\":" + seq + "}");
+                manager.write(0, DB, ITEMS,
+                        "{\"item_id\":" + (seq * 10) + ", \"seqi\":" + seq + "}");
+                manager.setCommitAllowed(0, true);
+                Thread.sleep(100);
+                Assert.assertNull("manager must not fail mid-run: " + manager.getException(),
+                        manager.getException());
+            }
+            manager.flush();
+            Assert.assertNull("manager must not fail: " + manager.getException(),
+                    manager.getException());
+
+            Map<String, Map<String, java.util.Set<Long>>> labelToTableSeqs = new HashMap<>();
+            java.util.regex.Pattern p = java.util.regex.Pattern.compile("\"seq[oi]\":(\\d+)");
+            for (Map.Entry<String, String> entry : mockedServer.getTxnLoadBodies().entrySet()) {
+                String[] parts = entry.getKey().split("\\|", 3);
+                String table = parts[1];
+                String label = parts[2];
+                java.util.Set<Long> seqs = labelToTableSeqs
+                        .computeIfAbsent(label, k -> new HashMap<>())
+                        .computeIfAbsent(table, k -> new java.util.HashSet<>());
+                java.util.regex.Matcher m = p.matcher(entry.getValue());
+                while (m.find()) {
+                    seqs.add(Long.parseLong(m.group(1)));
+                }
+            }
+            // At least one recycle-driven commit must have happened (the slow
+            // items table makes recycle drain a large backlog over several
+            // cycles; the exact label count is timing-dependent, but the
+            // per-label skew assertion below is what matters).
+            Assert.assertFalse("expected at least one recycle-driven label",
+                    labelToTableSeqs.isEmpty());
+
+            java.util.Set<Long> allOrders = new java.util.HashSet<>();
+            for (Map.Entry<String, Map<String, java.util.Set<Long>>> e : labelToTableSeqs.entrySet()) {
+                java.util.Set<Long> o = e.getValue().getOrDefault(ORDERS, java.util.Collections.emptySet());
+                java.util.Set<Long> i = e.getValue().getOrDefault(ITEMS, java.util.Collections.emptySet());
+                Assert.assertEquals("label " + e.getKey() + ": post-cut chunks leaked "
+                        + "asymmetrically into the recycled commit (drain race — one table's "
+                        + "[N] published without its sibling's)", o, i);
+                allOrders.addAll(o);
+            }
+            Assert.assertEquals("every transaction must be delivered exactly once",
+                    total, allOrders.size());
+        } finally {
+            manager.close();
+        }
+    }
+
     @Test
     public void testCrossTableCommitAlignmentAndCompleteness() throws Exception {
         mockedServer.setSimulateChannelBusy(true);

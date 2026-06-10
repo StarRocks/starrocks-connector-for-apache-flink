@@ -155,6 +155,8 @@ public class MockedStarRocksHttpServer {
     private static final int MAX_RECORDED_BODY_BYTES_PER_CHANNEL = 8 * 1024 * 1024;
     private volatile boolean simulateChannelBusy = false;
     private volatile long txnLoadDelayMs = 0L;
+    /** Per-table /api/transaction/load latency overrides (falls back to txnLoadDelayMs). */
+    private final ConcurrentMap<String, Long> perTableTxnLoadDelayMs = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, AtomicInteger> channelInflight = new ConcurrentHashMap<>();
     private final AtomicInteger maxChannelConcurrency = new AtomicInteger(0);
     private final ConcurrentMap<String, StringBuffer> txnLoadBodies = new ConcurrentHashMap<>();
@@ -240,6 +242,16 @@ public class MockedStarRocksHttpServer {
     /** Artificial per-request latency for /api/transaction/load, to widen concurrency windows. */
     public void setTxnLoadDelayMs(long txnLoadDelayMs) {
         this.txnLoadDelayMs = txnLoadDelayMs;
+    }
+
+    /**
+     * Per-table latency override for /api/transaction/load. Lets a test give
+     * sibling tables asymmetric drain times (one table's region returns to
+     * ACTIVE while the other is still FLUSHING) — the precondition of the
+     * recycle drain-race regression.
+     */
+    public void setTxnLoadDelayMsForTable(String table, long delayMs) {
+        perTableTxnLoadDelayMs.put(table, delayMs);
     }
 
     /** Peak number of concurrent loads observed on any single (label, table) channel. */
@@ -486,7 +498,8 @@ public class MockedStarRocksHttpServer {
                             "Label", label)));
                     return;
                 }
-                long delay = txnLoadDelayMs;
+                Long tableDelay = perTableTxnLoadDelayMs.get(table);
+                long delay = tableDelay != null ? tableDelay : txnLoadDelayMs;
                 if (delay > 0) {
                     try {
                         Thread.sleep(delay);

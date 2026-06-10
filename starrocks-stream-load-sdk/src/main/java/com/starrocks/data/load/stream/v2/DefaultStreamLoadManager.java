@@ -1326,73 +1326,105 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                 return;
             }
         }
-        // Freeze each partition's activeChunks ATOMICALLY via the same
-        // per-partition lockstep primitive as the commit cut.
+        // Cut each partition with the SAME primitive as the timer-driven commit:
+        // lockstep freeze + commit-watermark, atomically under the partition's
+        // write locks (cutPartitionWithWatermark).
         //
         // Recycle runs WITHOUT writer quiescence (it fires from the normal scan
-        // branch on the sharedTxnMaxIdleMs timer), so the task thread may be
-        // mid-writing a new source transaction here. Because
-        // activeChunkCleanBoundary flips ROW-BY-ROW, a normal two-table
-        // transaction passes through an intermediate state (order row written ->
-        // orders dirty; item rows not yet -> items still clean). A per-region
-        // freeze loop interleaving there would freeze one table while skipping
-        // its sibling, publishing one table's rows of a transaction without the
-        // other's — the exact cross-table skew this PR exists to kill.
+        // branch on the sharedTxnMaxIdleMs timer), so the task thread keeps
+        // writing and lockstep-switching new aligned chunk pairs while we drain
+        // below. The watermark is what keeps the recycled commit's content a
+        // FIXED, cross-table-aligned set:
+        //   - without it, a sibling still FLUSHING chain-loads a post-cut chunk
+        //     via the complete() continuation (headChunkEligible() is
+        //     unbounded), while a sibling that already drained leaves its half
+        //     of the same source transactions unloaded — the recycled commit
+        //     would publish one table's rows without the other's, the exact
+        //     cross-table skew this PR exists to kill.
+        //   - with it, chunks switched after the cut are beyond the watermark
+        //     on every region and uniformly wait for the next shared label.
         //
-        // lockstepSwitchPartition() takes ALL of a partition's write locks,
-        // re-checks every region's clean boundary under those locks, and freezes
-        // them together-or-not-at-all, so the recycled commit always publishes a
-        // cross-table-aligned cut. A partition that is mid-transaction (any
-        // region dirty) is skipped wholesale and committed in the next cycle
-        // under the freshly opened shared label — a momentarily dirty partition
-        // is normal here and must NOT fail the job. A partition genuinely stuck
-        // (data written but no txnEnd for longer than sharedTxnMaxIdleMs) is
-        // already caught by the partitionsWithoutTxnEnd fail-fast above.
-        //
-        // ignoreInterval=true: recycle fires on the sharedTxnMaxIdleMs timer,
-        // far larger than any miniInterval, so the interval gate is moot.
+        // A partition that is mid-transaction (any region dirty) is skipped
+        // wholesale and committed in the next cycle — a momentarily dirty
+        // partition is normal here and must NOT fail the job; the genuinely
+        // stuck case is caught by the partitionsWithoutTxnEnd fail-fast above.
+        // If any partition's locks cannot be taken this scan, lift the
+        // watermarks and retry on the next scan (the idle-elapsed condition
+        // still holds, so recycle re-enters immediately).
+        boolean allCut = true;
         for (Map.Entry<Integer, List<TransactionTableRegion>> entry : partitionRegions.entrySet()) {
-            lockstepSwitchPartition(entry.getKey(), entry.getValue(), true);
-        }
-        // Drain any newly-frozen inactive chunks into the shared transaction
-        // before committing. We wait synchronously for each region's load to
-        // avoid racing with the subsequent label-clear step.
-        for (TransactionTableRegion region : flushQ) {
-            if (region.triggerLoadIfNeeded()) {
-                txnCoordinator.markDataLoaded();
+            if (!cutPartitionWithWatermark(entry.getKey(), entry.getValue())) {
+                allCut = false;
             }
         }
-        // Wait for in-flight loads with a bounded timeout. This point is
-        // reached only after sharedTxnMaxIdleMs has elapsed, so we are already
-        // operating on a timeout budget; an unbounded wait could deadlock the
-        // manager thread if a load hangs (e.g., network stall or a region stuck
-        // in a long retry loop). Cap the total wait at flushTimeoutMs and fail
-        // fast on timeout so Flink can restart the job from the last checkpoint.
+        if (!allCut) {
+            finishCommitCut();
+            LOG.debug("[MultiTxn] Recycle: could not cut all partitions this scan; retrying next scan");
+            return;
+        }
+        // Freeze the participating region set, exactly like the timer-driven
+        // commit's committingRegions snapshot: only regions whose watermark was
+        // frozen by the cut take part. A region created mid-recycle (first
+        // write to a new table) is excluded — nothing triggers it here, the
+        // manager thread is busy in this method (no autonomous flush), and it
+        // is never FLUSHING (no chain) — so its data waits for the next label.
+        List<TransactionTableRegion> recycleRegions = new ArrayList<>();
+        for (TransactionTableRegion region : flushQ) {
+            if (region.hasCommitWatermark()) {
+                recycleRegions.add(region);
+            }
+        }
+        // Drain the watermark-bounded set with trigger-retry, mirroring
+        // processMultiTableCommit: a single trigger pass is NOT enough — a
+        // region whose (db, table) load gate is momentarily held by a sibling
+        // partition's region returns false from triggerLoadIfNeeded() and would
+        // otherwise be silently left out of the recycled commit while its
+        // sibling tables got in. Re-trigger until every region has neither an
+        // in-flight load nor an eligible pending chunk. Bounded by
+        // flushTimeoutMs: we are already on a timeout budget here, and an
+        // unbounded wait could deadlock the manager thread if a load hangs.
         long recycleWaitStartMs = System.currentTimeMillis();
-        for (TransactionTableRegion region : flushQ) {
-            while (region.isFlushing() || region.isRetrying()) {
-                if (System.currentTimeMillis() - recycleWaitStartMs > flushTimeoutMs) {
-                    LOG.error("[MultiTxn] Recycle wait timeout ({}ms) for region {}, " +
-                            "failing fast. label={}",
-                            flushTimeoutMs, region.getUniqueKey(),
-                            txnCoordinator.getSharedLabel());
-                    txnCoordinator.reset();
-                    for (TransactionTableRegion r : flushQ) {
-                        if (!r.isRetrying()) {
-                            r.setLabel(null);
-                        }
-                    }
-                    commitInFlight.set(false);
-                    if (partitionTracker != null) {
-                        partitionTracker.reset();
-                    }
-                    this.e = new StreamLoadFailException(
-                            "[MultiTxn] Recycle wait timeout: region " + region.getUniqueKey() +
-                            " did not complete its in-flight load within " + flushTimeoutMs + "ms");
-                    return;
+        while (true) {
+            for (TransactionTableRegion region : recycleRegions) {
+                if (region.triggerLoadIfNeeded()) {
+                    txnCoordinator.markDataLoaded();
                 }
-                LockSupport.parkNanos(1_000_000L);
             }
+            boolean drained = true;
+            for (TransactionTableRegion region : recycleRegions) {
+                if (region.isFlushing() || region.isRetrying() || region.hasEligiblePendingChunks()) {
+                    drained = false;
+                    break;
+                }
+            }
+            if (drained) {
+                break;
+            }
+            if (this.e != null) {
+                // A load failed terminally while we were draining; surface it.
+                finishCommitCut();
+                return;
+            }
+            if (System.currentTimeMillis() - recycleWaitStartMs > flushTimeoutMs) {
+                LOG.error("[MultiTxn] Recycle drain timeout ({}ms), failing fast. label={}",
+                        flushTimeoutMs, txnCoordinator.getSharedLabel());
+                txnCoordinator.reset();
+                for (TransactionTableRegion r : flushQ) {
+                    if (!r.isRetrying()) {
+                        r.setLabel(null);
+                    }
+                }
+                finishCommitCut();
+                commitInFlight.set(false);
+                if (partitionTracker != null) {
+                    partitionTracker.reset();
+                }
+                this.e = new StreamLoadFailException(
+                        "[MultiTxn] Recycle drain timeout: eligible chunks did not finish " +
+                        "loading within " + flushTimeoutMs + "ms");
+                return;
+            }
+            LockSupport.parkNanos(1_000_000L);
         }
 
         String anyTable = null;
@@ -1403,13 +1435,21 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         }
 
         boolean actuallyCommitted = false;
-        if (anyTable != null && txnCoordinator.hasDataLoaded()) {
-            txnCoordinator.prepareAndCommit(anyTable);
-            actuallyCommitted = true;
-            LOG.info("[MultiTxn] Recycled shared transaction committed");
-        } else {
-            txnCoordinator.reset();
-            LOG.info("[MultiTxn] Recycled empty shared transaction (rolled back)");
+        try {
+            if (anyTable != null && txnCoordinator.hasDataLoaded()) {
+                txnCoordinator.prepareAndCommit(anyTable);
+                actuallyCommitted = true;
+                LOG.info("[MultiTxn] Recycled shared transaction committed");
+            } else {
+                txnCoordinator.reset();
+                LOG.info("[MultiTxn] Recycled empty shared transaction (rolled back)");
+            }
+        } finally {
+            // Lift the recycle cut's watermarks on every exit (success or a
+            // prepareAndCommit throw propagating to the caller): a stale
+            // watermark would wrongly exclude the newest chunks from the NEXT
+            // commit cycle's drain.
+            finishCommitCut();
         }
 
         // Clear labels and reset cycle state before opening a fresh shared transaction.
