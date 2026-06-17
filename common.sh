@@ -21,6 +21,24 @@
 
 set -eo pipefail
 
+SUPPORTED_MINOR_VERSION=("1.16" "1.17" "1.18" "1.19" "1.20")
+# version formats are different among flink versions
+SUPPORTED_KAFKA_CONNECTOR_VERSION=("1.16.0" "1.17.0" "3.0.1-1.18" "3.2.0-1.19" "3.4.0-1.20")
+VERSION_MESSAGE=$(IFS=, ; echo "${SUPPORTED_MINOR_VERSION[*]}")
+
+function print_supported_minor_versions() {
+  echo "${SUPPORTED_MINOR_VERSION[*]}"
+}
+
+# Allow tooling to query metadata without requiring maven, e.g.:
+#   bash common.sh supported-minor-versions
+# (kept above the maven check so it stays usable on machines without maven)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    case "${1:-}" in
+        supported-minor-versions) print_supported_minor_versions; exit 0 ;;
+    esac
+fi
+
 # check maven
 MVN_CMD=mvn
 if [[ ! -z ${CUSTOM_MVN} ]]; then
@@ -31,11 +49,6 @@ if ! ${MVN_CMD} --version; then
     exit 1
 fi
 export MVN_CMD
-
-SUPPORTED_MINOR_VERSION=("1.16" "1.17" "1.18" "1.19" "1.20")
-# version formats are different among flink versions
-SUPPORTED_KAFKA_CONNECTOR_VERSION=("1.16.0" "1.17.0" "3.0.1-1.18" "3.2.0-1.19" "3.4.0-1.20")
-VERSION_MESSAGE=$(IFS=, ; echo "${SUPPORTED_MINOR_VERSION[*]}")
 
 function check_flink_version_supported() {
   local FLINK_MINOR_VERSION=$1
