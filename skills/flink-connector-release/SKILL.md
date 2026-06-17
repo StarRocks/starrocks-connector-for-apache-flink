@@ -67,7 +67,7 @@ Why this order matters:
 - **03 before push and before 04**: 03 builds every version (via `build.sh`) and asserts on the
   real bytes — release version (no `SNAPSHOT`), connector **and** bundled-SDK git commit both
   equal the tag, SDK classes present. It verifies *all* versions before writing a marker, so you
-  never publish 1.15 and then find 1.20 is broken. Pushing the tag only after 03 passes means a
+  never publish 1.16 and then find 1.20 is broken. Pushing the tag only after 03 passes means a
   broken build never leaves a dangling tag on origin. 04 then re-builds via `deploy.sh` rather than
   reusing 03's jars — safe, because the same tag + locally-installed SDK + HEAD reproduce the bytes
   03 verified, and 05 re-checks the published jar. (GPG signing happens in 04 via `deploy.sh`;

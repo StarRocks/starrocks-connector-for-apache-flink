@@ -35,7 +35,7 @@ mapfile -t VERSIONS < <(resolve_versions "$REPO_ROOT" "$@")
 # Gate 1b: every version we are about to deploy must have passed 03 — the marker records exactly
 # which versions were verified (its "versions:" line). 03 may have run on a subset, so checking the
 # commit alone is not enough; otherwise `03_build_verify.sh 1.20` then `04_deploy.sh` would publish
-# 1.15–1.19 unverified.
+# 1.16–1.19 unverified.
 verified="$(sed -n 's/^versions: //p' "$MARKER")"
 for m in "${VERSIONS[@]}"; do
   case " $verified " in

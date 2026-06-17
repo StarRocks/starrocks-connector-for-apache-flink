@@ -7,7 +7,7 @@
 # real bytes via verify_jar.sh: release version (no SNAPSHOT), connector AND
 # bundled-SDK git commit both equal the tag, SDK actually bundled. We verify ALL
 # requested versions; only if every one passes do we write the marker that
-# 04_deploy.sh requires — so we never publish 1.15 and then find 1.20 is broken.
+# 04_deploy.sh requires — so we never publish 1.16 and then find 1.20 is broken.
 #
 # Note: build.sh stops at the `package` phase, so these jars are unsigned. GPG
 # signing is exercised by deploy.sh in stage 04 (it uses -Prelease), and
