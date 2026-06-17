@@ -27,6 +27,19 @@ pass "verification marker matches current commit"
 mapfile -t VERSIONS < <(resolve_versions "$REPO_ROOT" "$@")
 [ "${#VERSIONS[@]}" -gt 0 ] || die "no Flink versions resolved — is common.sh updated to support 'supported-minor-versions'?"
 
+# Gate 1b: every version we are about to deploy must have passed 03 — the marker records exactly
+# which versions were verified (its "versions:" line). 03 may have run on a subset, so checking the
+# commit alone is not enough; otherwise `03_build_verify.sh 1.20` then `04_deploy.sh` would publish
+# 1.15–1.19 unverified.
+verified="$(sed -n 's/^versions: //p' "$MARKER")"
+for m in "${VERSIONS[@]}"; do
+  case " $verified " in
+    *" $m "*) : ;;
+    *) die "flink $m was not verified by 03 (verified: ${verified:-none}) — run 03_build_verify.sh $m first";;
+  esac
+done
+pass "all requested versions ($(IFS=,; echo "${VERSIONS[*]}")) were verified by 03"
+
 # Gate 2: explicit human confirmation, because this cannot be undone.
 echo
 warn "About to PUBLISH to Maven Central (cannot be undone):"
