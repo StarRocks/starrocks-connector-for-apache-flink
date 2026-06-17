@@ -14,8 +14,12 @@ VERSION="${1:-}"
 shift || true
 REPO_ROOT="$(resolve_repo)"
 TAG="v$VERSION"
-EXPECTED_COMMIT="$(git -C "$REPO_ROOT" rev-parse "${TAG}^{commit}" 2>/dev/null || true)"
-[ -n "$EXPECTED_COMMIT" ] || die "cannot resolve commit for tag $TAG — is the tag present locally?"
+# Use -q --verify so a missing tag yields an EMPTY string: plain `rev-parse "$TAG^{commit}"` echoes
+# the unresolved token to stdout (and only fails via exit code), which `|| true` would preserve — the
+# non-empty guard would then pass and every Central jar would be compared against the literal string
+# "v$VERSION^{commit}", failing late as a bogus mismatch instead of telling the operator to fetch.
+EXPECTED_COMMIT="$(git -C "$REPO_ROOT" rev-parse -q --verify "refs/tags/${TAG}^{commit}" 2>/dev/null || true)"
+[ -n "$EXPECTED_COMMIT" ] || die "cannot resolve commit for tag $TAG — fetch it first (git fetch origin tag $TAG) or run the earlier stages"
 
 BASE="https://repo1.maven.org/maven2/com/starrocks/flink-connector-starrocks"
 WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
