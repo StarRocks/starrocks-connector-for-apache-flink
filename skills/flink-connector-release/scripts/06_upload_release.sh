@@ -15,11 +15,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 REPO_ROOT="$(resolve_repo)"
-cd "$REPO_ROOT"
 
 REPO="${RELEASE_REPO:-StarRocks/starrocks-connector-for-apache-flink}"
 BASE="https://repo1.maven.org/maven2/com/starrocks/flink-connector-starrocks"
 
+# Parse args and resolve the notes file BEFORE we cd into the repo root: the documented flow runs
+# this from the skill dir with a relative path (e.g. RELEASE_NOTES.md), so checking/resolving it
+# after the cd would look in the wrong directory — aborting, or worse, picking a same-named file in
+# the repo root. Resolve to an absolute path here so it survives the cd below.
 NOTES=""; YES="${CONFIRM:-}"
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -30,6 +33,9 @@ while [ "$#" -gt 0 ]; do
 done
 [ -n "$NOTES" ] || die "usage: 06_upload_release.sh <notes-file> [--yes]   (write the notes first, following assets/release-note-template.md)"
 [ -f "$NOTES" ] || die "notes file not found: $NOTES"
+NOTES="$(cd "$(dirname "$NOTES")" && pwd)/$(basename "$NOTES")"
+
+cd "$REPO_ROOT"
 
 command -v gh >/dev/null 2>&1 || die "gh (GitHub CLI) not found"
 gh auth status >/dev/null 2>&1 || die "gh is not authenticated — run 'gh auth login'"
