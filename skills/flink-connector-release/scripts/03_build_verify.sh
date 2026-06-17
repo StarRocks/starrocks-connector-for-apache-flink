@@ -23,6 +23,10 @@ cd "$REPO_ROOT"
 pom_is_snapshot "$REPO_ROOT" && die "pom is still a -SNAPSHOT — checkout the release tag first (run 02_install_sdk.sh)"
 SRFC="$(pom_srfc_version "$REPO_ROOT")"
 EXPECTED_COMMIT="$(git rev-parse HEAD)"
+# The build must come from the clean tagged tree: git-commit-id stamps HEAD, so a dirty worktree
+# would ship uncommitted bytes while the fingerprints still read the tag commit (undetectable later).
+[ -z "$(git status --porcelain --untracked-files=no)" ] \
+  || die "working tree has uncommitted changes to tracked files — 03 must verify the clean tagged build; commit/stash/reset first"
 info "Building & verifying ${SRFC} at commit $EXPECTED_COMMIT"
 
 mapfile -t VERSIONS < <(resolve_versions "$REPO_ROOT" "$@")
@@ -32,7 +36,7 @@ overall=0
 
 for m in "${VERSIONS[@]}"; do
   info "──────── build flink $m (via build.sh) ────────"
-  if ! sh build.sh "$m"; then
+  if ! bash build.sh "$m"; then
     fail "build.sh failed for flink $m"; RESULT+=("$m FAIL(build)"); overall=1; continue
   fi
 

@@ -79,7 +79,7 @@ scripts that carry out each step, see `SKILL.md` next to this guide.
    is strictly validated first):
 
    ```bash
-   sh deploy.sh 1.20      # run once for each supported Flink minor version (1.15 … 1.20)
+   bash deploy.sh 1.20    # run once for each supported Flink minor version (1.15 … 1.20)
    ```
 4. **Verify on Maven Central.** Download each published jar and confirm both embedded commit
    fingerprints (connector and bundled SDK) equal the tag commit, and the version is not a snapshot.

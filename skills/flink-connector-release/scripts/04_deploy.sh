@@ -22,7 +22,12 @@ MARKER="$REPO_ROOT/.release/verified-$SRFC.commit"
 [ -f "$MARKER" ] || die "no verification marker — run 03_build_verify.sh first (it must pass)"
 marked="$(head -1 "$MARKER")"
 [ "$marked" = "$EXPECTED_COMMIT" ] || die "marker commit $marked != current $EXPECTED_COMMIT — re-run 03_build_verify.sh for this exact commit"
-pass "verification marker matches current commit"
+# The commit alone isn't enough: deploy.sh rebuilds from the worktree, and git-commit-id stamps
+# HEAD, so a dirty tree would publish uncommitted bytes that still report the tag commit (05 can't
+# catch it). Require a clean tree so the published bytes equal what 03 verified.
+[ -z "$(git status --porcelain --untracked-files=no)" ] \
+  || die "working tree has uncommitted changes to tracked files — deploy must build the exact verified bytes; commit/stash/reset and re-run 03"
+pass "verification marker matches current commit, and the working tree is clean"
 
 mapfile -t VERSIONS < <(resolve_versions "$REPO_ROOT" "$@")
 [ "${#VERSIONS[@]}" -gt 0 ] || die "no Flink versions resolved — is common.sh updated to support 'supported-minor-versions'?"
@@ -54,7 +59,7 @@ fi
 declare -a RESULT; overall=0
 for m in "${VERSIONS[@]}"; do
   info "──────── deploy flink $m (via deploy.sh) ────────"
-  if sh deploy.sh "$m"; then
+  if bash deploy.sh "$m"; then
     pass "published flink $m"; RESULT+=("$m PUBLISHED")
   else
     fail "deploy.sh FAILED for flink $m"; RESULT+=("$m FAILED"); overall=1
