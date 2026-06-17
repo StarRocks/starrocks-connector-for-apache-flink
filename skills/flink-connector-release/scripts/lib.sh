@@ -66,6 +66,22 @@ verify_head_is_tag() {
     || die "HEAD ($head) is not the release tag $tag ($tagc) — checkout the tag (run 02_install_sdk.sh) before continuing"
 }
 
+# Assert origin already has the release tag v<version> AND it resolves to <expected> commit. Maven
+# Central artifacts are immutable, so publishing before the public tag is pushed (push skipped or
+# failed), or when origin's tag points at a different commit, would leave Central artifacts with no
+# matching — or a mismatched — GitHub tag. ls-remote is read-only; for an annotated tag the ^{} line
+# is the peeled commit, so prefer it and fall back to the direct line for a lightweight tag.
+verify_tag_on_origin() {
+  local root="$1" version="$2" expected="$3" tag remote rc
+  tag="v$version"
+  remote="$(git -C "$root" ls-remote origin "refs/tags/$tag" "refs/tags/$tag^{}" 2>/dev/null || true)"
+  rc="$(awk -v t="refs/tags/$tag^{}" '$2==t{print $1}' <<<"$remote")"
+  [ -n "$rc" ] || rc="$(awk -v t="refs/tags/$tag" '$2==t{print $1}' <<<"$remote")"
+  [ -n "$rc" ] || die "tag $tag is not on origin — push it before deploying: git push origin $tag"
+  [ "$rc" = "$expected" ] \
+    || die "origin's $tag ($rc) != the commit being deployed ($expected) — origin has a different tag; reconcile (re-push or fix the tag) before publishing"
+}
+
 # Supported Flink minor versions — ask common.sh to print them (the repo's source
 # of truth). `bash common.sh supported-minor-versions` returns a space-separated
 # list and needs no maven. Empty output => caller's count guard will abort.

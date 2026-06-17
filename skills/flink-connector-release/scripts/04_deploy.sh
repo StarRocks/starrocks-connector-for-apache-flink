@@ -24,6 +24,13 @@ EXPECTED_COMMIT="$(git rev-parse HEAD)"
 verify_head_is_tag "$REPO_ROOT" "$SRFC"
 pass "HEAD is the release tag v$SRFC"
 
+# Gate 0b: the tag must already be on origin and point at this commit. Gate 0 only proves HEAD matches
+# the LOCAL tag — but Central artifacts are immutable, so deploying when v$SRFC was never pushed (or
+# origin's tag points elsewhere) would publish artifacts with no matching, or a mismatched, public
+# GitHub tag. Push the tag BEFORE this irreversible step. (see lib.sh)
+verify_tag_on_origin "$REPO_ROOT" "$SRFC" "$EXPECTED_COMMIT"
+pass "origin has tag v$SRFC pointing at this commit"
+
 # Gate 1: stage 03 must have verified THIS commit.
 MARKER="$REPO_ROOT/.release/verified-$SRFC.commit"
 [ -f "$MARKER" ] || die "no verification marker — run 03_build_verify.sh first (it must pass)"
@@ -89,7 +96,7 @@ echo
 info "── deploy summary ──"; for r in "${RESULT[@]}"; do printf '   %s\n' "$r"; done
 if [ "$overall" -eq 0 ]; then
   info "${C_GRN}DEPLOY COMPLETE${C_RST}"
-  echo  "Next:  git push origin v$SRFC   (if not pushed)   then   scripts/05_verify_central.sh $SRFC"
+  echo  "Next:  scripts/05_verify_central.sh $SRFC   (the tag is already on origin — Gate 0b)"
 else
   die "deploy incomplete — see summary above"
 fi
