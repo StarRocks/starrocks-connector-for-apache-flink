@@ -108,10 +108,18 @@ verify_installed_sdk() {
 # otherwise a verified-then-published jar could shade a different SDK. Points CUSTOM_MVN at a tiny
 # wrapper that appends -nsu. Call before invoking build.sh / deploy.sh.
 pin_local_snapshots() {
-  local base wrap
-  base="${CUSTOM_MVN:-mvn}"
+  local wrap
+  local -a base
+  # CUSTOM_MVN may carry args (the repo's CI uses `mvn -B -ntp`); split into command+args so the
+  # wrapper re-emits each token instead of treating the whole string as one executable name. Each
+  # token is %q-quoted; "$@" and -nsu stay literal so they apply at call time.
+  base=(${CUSTOM_MVN:-mvn})
   wrap="$(mktemp -d)/mvn"
-  { printf '#!/usr/bin/env bash\n'; printf 'exec %q "$@" -nsu\n' "$base"; } > "$wrap"
+  { printf '#!/usr/bin/env bash\n'
+    printf 'exec'
+    printf ' %q' "${base[@]}"
+    printf ' "$@" -nsu\n'
+  } > "$wrap"
   chmod +x "$wrap"
   export CUSTOM_MVN="$wrap"
   info "Pinned SNAPSHOT resolution to the local repo (-nsu) for build/deploy"

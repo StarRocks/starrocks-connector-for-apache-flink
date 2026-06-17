@@ -15,7 +15,9 @@ VERSION="${1:-}"
 [ -n "$VERSION" ] || die "usage: 02_install_sdk.sh <version>   e.g. 02_install_sdk.sh 1.2.15"
 REPO_ROOT="$(resolve_repo)"
 TAG="v$VERSION"
-MVN="${CUSTOM_MVN:-mvn}"
+# CUSTOM_MVN may carry args (the repo's CI uses `mvn -B -ntp`); split into command+args like common.sh
+# does, so invoking "${MVN[@]}" doesn't try to exec a binary literally named "mvn -B -ntp".
+MVN=(${CUSTOM_MVN:-mvn})
 MAVEN_REPO="${MAVEN_REPO:-$HOME/.m2/repository}"
 cd "$REPO_ROOT"
 
@@ -27,7 +29,7 @@ git checkout --quiet "$TAG"
 EXPECTED_COMMIT="$(git rev-parse HEAD)"
 
 info "Installing the stream-load SDK from the tag into $MAVEN_REPO"
-( cd starrocks-stream-load-sdk && "$MVN" clean install -DskipTests )
+( cd starrocks-stream-load-sdk && "${MVN[@]}" clean install -DskipTests )
 
 # Verify the artifact the connector build will actually shade in.
 verify_installed_sdk "$REPO_ROOT" "$EXPECTED_COMMIT"

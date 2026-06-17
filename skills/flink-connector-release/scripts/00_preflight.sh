@@ -11,21 +11,23 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 
 REPO_ROOT="$(resolve_repo)"
-MVN="${CUSTOM_MVN:-mvn}"
+# CUSTOM_MVN may carry args (the repo's CI uses `mvn -B -ntp`), so treat it as command+args the way
+# common.sh does: split into an array whose first element is the executable and the rest are flags.
+MVN=(${CUSTOM_MVN:-mvn})
 
 hard=0
 
 info "Preflight (environment readiness) for flink-connector-starrocks  (repo: $REPO_ROOT)"
 
-# 1. maven
-if command -v "$MVN" >/dev/null 2>&1; then pass "maven found: $(command -v "$MVN")"
-else fail "maven ($MVN) not found"; hard=$((hard+1)); fi
+# 1. maven (check the executable — the first word — exists)
+if command -v "${MVN[0]}" >/dev/null 2>&1; then pass "maven found: $(command -v "${MVN[0]}")"
+else fail "maven (${MVN[0]}) not found"; hard=$((hard+1)); fi
 
 # 2. java 8 (connector targets 1.8; building on a much newer JDK can surprise you)
-jline="$("$MVN" -v 2>/dev/null | grep -i 'Java version' || true)"
+jline="$("${MVN[@]}" -v 2>/dev/null | grep -i 'Java version' || true)"
 case "$jline" in
   *1.8*) pass "Java 8 ($jline)";;
-  "")    warn "could not determine Java version from '$MVN -v'";;
+  "")    warn "could not determine Java version from '${MVN[*]} -v'";;
   *)     warn "Java is not 1.8 — connector targets 1.8: $jline";;
 esac
 
