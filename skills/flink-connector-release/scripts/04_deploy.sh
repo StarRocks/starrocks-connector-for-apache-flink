@@ -17,6 +17,13 @@ pom_is_snapshot "$REPO_ROOT" && die "pom is still a -SNAPSHOT — you are not on
 SRFC="$(pom_srfc_version "$REPO_ROOT")"
 EXPECTED_COMMIT="$(git rev-parse HEAD)"
 
+# Gate 0: HEAD must BE the release tag v$SRFC, not merely a clean de-SNAPSHOT checkout. git-commit-id
+# stamps HEAD into the jars and 03's marker is written from HEAD too, so without this a commit that
+# isn't the tag (e.g. a branch advanced past v$SRFC) could deploy artifacts whose embedded commit !=
+# the tag — undetectable until 05, after the bytes are immutable on Central. (see lib.sh)
+verify_head_is_tag "$REPO_ROOT" "$SRFC"
+pass "HEAD is the release tag v$SRFC"
+
 # Gate 1: stage 03 must have verified THIS commit.
 MARKER="$REPO_ROOT/.release/verified-$SRFC.commit"
 [ -f "$MARKER" ] || die "no verification marker — run 03_build_verify.sh first (it must pass)"

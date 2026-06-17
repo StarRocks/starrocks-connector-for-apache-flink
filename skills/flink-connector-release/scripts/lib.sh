@@ -50,6 +50,22 @@ pom_is_snapshot() {
   grep -qE '<version>\$\{srfc.version\}_flink-\$\{flink.minor.version\}-SNAPSHOT</version>' "$1/pom.xml"
 }
 
+# Assert HEAD is exactly the release tag v<version> — not merely some clean, de-SNAPSHOTed checkout.
+# git-commit-id stamps HEAD into every jar, and 03's marker is written from HEAD too; so without this
+# a branch that advanced past v<version> (or any other de-SNAPSHOT commit) could pass 03/04 and
+# publish artifacts whose embedded commit != the tag — which 05 only catches after the bytes are
+# already immutable on Central. Dies unless HEAD == the tag's commit. (^{commit} peels annotated tags;
+# `|| true` keeps a missing tag from tripping set -e before we can emit a clear message.)
+verify_head_is_tag() {
+  local root="$1" version="$2" tag head tagc
+  tag="v$version"
+  head="$(git -C "$root" rev-parse HEAD)"
+  tagc="$(git -C "$root" rev-parse -q --verify "refs/tags/$tag^{commit}" 2>/dev/null || true)"
+  [ -n "$tagc" ] || die "release tag $tag not found — run 01_tag.sh first"
+  [ "$head" = "$tagc" ] \
+    || die "HEAD ($head) is not the release tag $tag ($tagc) — checkout the tag (run 02_install_sdk.sh) before continuing"
+}
+
 # Supported Flink minor versions — ask common.sh to print them (the repo's source
 # of truth). `bash common.sh supported-minor-versions` returns a space-separated
 # list and needs no maven. Empty output => caller's count guard will abort.

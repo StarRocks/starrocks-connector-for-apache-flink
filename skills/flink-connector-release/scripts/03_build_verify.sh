@@ -23,6 +23,9 @@ cd "$REPO_ROOT"
 pom_is_snapshot "$REPO_ROOT" && die "pom is still a -SNAPSHOT — checkout the release tag first (run 02_install_sdk.sh)"
 SRFC="$(pom_srfc_version "$REPO_ROOT")"
 EXPECTED_COMMIT="$(git rev-parse HEAD)"
+# Anchor verification to the tag: HEAD must BE v$SRFC, not just any clean de-SNAPSHOT checkout, so the
+# marker we write (and 04 trusts) can only ever describe the tagged commit. (see lib.sh)
+verify_head_is_tag "$REPO_ROOT" "$SRFC"
 # The build must come from the clean tagged tree: git-commit-id stamps HEAD, so a dirty worktree
 # would ship uncommitted bytes while the fingerprints still read the tag commit (undetectable later).
 [ -z "$(git status --porcelain)" ] \
