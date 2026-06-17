@@ -71,13 +71,13 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
       sh build.sh <flink_version>
       ```
 
-   For example, if the Flink version in your environment is 1.15, you need to execute the following command:
+   For example, if the Flink version in your environment is 1.16, you need to execute the following command:
 
       ```bash
-      sh build.sh 1.15
+      sh build.sh 1.16
       ```
 
-3. Go to the `target/` directory to find the Flink connector JAR file, such as `flink-connector-starrocks-1.2.7_flink-1.15-SNAPSHOT.jar`, generated upon compilation.
+3. Go to the `target/` directory to find the Flink connector JAR file, such as `flink-connector-starrocks-1.2.7_flink-1.16-SNAPSHOT.jar`, generated upon compilation.
 
 > **NOTE**
 >
