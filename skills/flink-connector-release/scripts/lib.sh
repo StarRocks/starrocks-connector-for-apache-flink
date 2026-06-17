@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# Shared helpers for the flink-connector release scripts.
+# Source from each stage script:  source "$(dirname "$0")/lib.sh"
+#
+# Why a shared lib: every stage needs the same notion of "where is the repo",
+# "what is the connector version", and "which Flink versions are supported".
+# Reading those from one place keeps every stage consistent with the others
+# and with the repo's own build.sh / deploy.sh / common.sh.
+
+set -euo pipefail
+
+# ---- pretty output ---------------------------------------------------------
+if [ -t 1 ]; then
+  C_RED=$'\033[31m'; C_GRN=$'\033[32m'; C_YEL=$'\033[33m'; C_BLU=$'\033[34m'; C_RST=$'\033[0m'
+else
+  C_RED=; C_GRN=; C_YEL=; C_BLU=; C_RST=
+fi
+info()  { printf '%s==>%s %s\n' "$C_BLU" "$C_RST" "$*"; }
+warn()  { printf '%sWARN%s  %s\n' "$C_YEL" "$C_RST" "$*" >&2; }
+pass()  { printf '  %sPASS%s %s\n' "$C_GRN" "$C_RST" "$*"; }
+fail()  { printf '  %sFAIL%s %s\n' "$C_RED" "$C_RST" "$*" >&2; }
+die()   { printf '%sABORT%s %s\n' "$C_RED" "$C_RST" "$*" >&2; exit 1; }
+
+# ---- repo location ---------------------------------------------------------
+# The connector repo. Override with CONNECTOR_REPO=/path; otherwise use the git
+# toplevel of the current directory. We validate it really is the connector so a
+# stray CWD can never make us tag/build/deploy the wrong project.
+resolve_repo() {
+  local root
+  if [ -n "${CONNECTOR_REPO:-}" ]; then
+    root="$CONNECTOR_REPO"
+  else
+    root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  fi
+  [ -n "$root" ] && [ -f "$root/pom.xml" ] \
+    || die "Cannot find the connector repo. Run from inside it, or set CONNECTOR_REPO=/path/to/starrocks-connector-for-apache-flink"
+  grep -q "<artifactId>flink-connector-starrocks</artifactId>" "$root/pom.xml" \
+    || die "$root/pom.xml is not flink-connector-starrocks — set CONNECTOR_REPO to the right repo"
+  printf '%s' "$root"
+}
+
+# ---- version helpers (parse the repo, do not hardcode) ---------------------
+# srfc.version declared in the root pom — the connector version, e.g. 1.2.15
+pom_srfc_version() {
+  grep -m1 -oE '<srfc.version>[^<]+' "$1/pom.xml" | sed 's/.*>//'
+}
+
+# Is the root pom's project <version> still a -SNAPSHOT? 0 = yes (snapshot), 1 = no (release)
+pom_is_snapshot() {
+  grep -qE '<version>\$\{srfc.version\}_flink-\$\{flink.minor.version\}-SNAPSHOT</version>' "$1/pom.xml"
+}
+
+# Supported Flink minor versions — ask common.sh to print them (the repo's source
+# of truth). `bash common.sh supported-minor-versions` returns a space-separated
+# list and needs no maven. Empty output => caller's count guard will abort.
+supported_minor_versions() {
+  bash "$1/common.sh" supported-minor-versions 2>/dev/null
+}
+
+# Resolve the version list to operate on: explicit args if given, else all supported.
+# Usage: resolve_versions "$REPO_ROOT" "$@"
+resolve_versions() {
+  local root="$1"; shift
+  if [ "$#" -gt 0 ]; then printf '%s\n' "$@"; else supported_minor_versions "$root" | tr ' ' '\n' | grep -v '^$'; fi
+}
+
+# Read git.commit.id from a properties stream on stdin. ".abbrev" is a different
+# key (text after "id" is "." not "="), so this matches exactly one line.
+prop_commit_id()    { sed -n 's/^git\.commit\.id=\(.*\)$/\1/p'; }
+prop_build_version(){ sed -n 's/^git\.build\.version=\(.*\)$/\1/p'; }
