@@ -20,7 +20,7 @@ MAVEN_REPO="${MAVEN_REPO:-$HOME/.m2/repository}"
 cd "$REPO_ROOT"
 
 git rev-parse -q --verify "refs/tags/$TAG" >/dev/null || die "tag $TAG not found — run 01_tag.sh first"
-[ -z "$(git status --porcelain --untracked-files=no)" ] || die "working tree dirty — commit/stash before checking out the tag"
+[ -z "$(git status --porcelain)" ] || die "working tree dirty — commit/stash before checking out the tag"
 
 info "Checking out $TAG (detached HEAD) so all builds carry the tag's commit"
 git checkout --quiet "$TAG"

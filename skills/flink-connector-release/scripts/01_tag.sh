@@ -18,7 +18,7 @@ TAG="v$VERSION"
 cd "$REPO_ROOT"
 
 # --- repo / version / tag-state checks (these live here, not in preflight) ---
-[ -z "$(git status --porcelain --untracked-files=no)" ] || die "working tree has uncommitted changes — commit or stash them first"
+[ -z "$(git status --porcelain)" ] || die "working tree has uncommitted changes — commit or stash them first"
 pass "no uncommitted changes to tracked files"
 git rev-parse -q --verify "refs/tags/$TAG" >/dev/null && die "tag $TAG already exists — delete it (git tag -d $TAG) or pick another version"
 pass "tag $TAG does not exist yet"

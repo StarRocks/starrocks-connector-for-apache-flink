@@ -25,8 +25,8 @@ marked="$(head -1 "$MARKER")"
 # The commit alone isn't enough: deploy.sh rebuilds from the worktree, and git-commit-id stamps
 # HEAD, so a dirty tree would publish uncommitted bytes that still report the tag commit (05 can't
 # catch it). Require a clean tree so the published bytes equal what 03 verified.
-[ -z "$(git status --porcelain --untracked-files=no)" ] \
-  || die "working tree has uncommitted changes to tracked files — deploy must build the exact verified bytes; commit/stash/reset and re-run 03"
+[ -z "$(git status --porcelain)" ] \
+  || die "working tree not clean (uncommitted or untracked files) — deploy must build the exact verified bytes; commit/stash/clean and re-run 03"
 pass "verification marker matches current commit, and the working tree is clean"
 
 mapfile -t VERSIONS < <(resolve_versions "$REPO_ROOT" "$@")
@@ -62,6 +62,9 @@ if [ -t 0 ]; then
 else
   [ "${CONFIRM_DEPLOY:-}" = "$SRFC" ] || die "non-interactive: set CONFIRM_DEPLOY=$SRFC to proceed"
 fi
+
+# Suppress SNAPSHOT updates so deploy.sh shades the locally-verified SDK, not a refreshed remote one.
+pin_local_snapshots
 
 declare -a RESULT; overall=0
 for m in "${VERSIONS[@]}"; do

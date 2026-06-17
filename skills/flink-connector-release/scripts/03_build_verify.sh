@@ -25,14 +25,18 @@ SRFC="$(pom_srfc_version "$REPO_ROOT")"
 EXPECTED_COMMIT="$(git rev-parse HEAD)"
 # The build must come from the clean tagged tree: git-commit-id stamps HEAD, so a dirty worktree
 # would ship uncommitted bytes while the fingerprints still read the tag commit (undetectable later).
-[ -z "$(git status --porcelain --untracked-files=no)" ] \
-  || die "working tree has uncommitted changes to tracked files — 03 must verify the clean tagged build; commit/stash/reset first"
+[ -z "$(git status --porcelain)" ] \
+  || die "working tree not clean (uncommitted or untracked files) — 03 must verify the clean tagged build; commit/stash/clean first"
 info "Building & verifying ${SRFC} at commit $EXPECTED_COMMIT"
 
 mapfile -t VERSIONS < <(resolve_versions "$REPO_ROOT" "$@")
 [ "${#VERSIONS[@]}" -gt 0 ] || die "no Flink versions resolved — is common.sh updated to support 'supported-minor-versions'?"
 declare -a RESULT
 overall=0
+
+# Build against the locally-installed SDK; don't let Maven refresh 1.1-SNAPSHOT from a remote repo,
+# so what 03 verifies is what 04 will publish.
+pin_local_snapshots
 
 for m in "${VERSIONS[@]}"; do
   info "──────── build flink $m (via build.sh) ────────"

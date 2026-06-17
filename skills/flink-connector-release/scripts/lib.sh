@@ -86,3 +86,17 @@ verify_installed_sdk() {
   id="$(unzip -p "$jar" stream-load-sdk-git.properties 2>/dev/null | prop_commit_id)"
   [ "$id" = "$expected" ] || die "installed SDK commit=${id:-none} != tag $expected — the local 1.1-SNAPSHOT changed; re-run 02_install_sdk.sh on the tag"
 }
+
+# Make `bash build.sh` / `bash deploy.sh` (which honor CUSTOM_MVN) suppress SNAPSHOT updates, so the
+# build resolves the locally-installed SDK instead of refreshing 1.1-SNAPSHOT from a remote repo —
+# otherwise a verified-then-published jar could shade a different SDK. Points CUSTOM_MVN at a tiny
+# wrapper that appends -nsu. Call before invoking build.sh / deploy.sh.
+pin_local_snapshots() {
+  local base wrap
+  base="${CUSTOM_MVN:-mvn}"
+  wrap="$(mktemp -d)/mvn"
+  { printf '#!/usr/bin/env bash\n'; printf 'exec %q "$@" -nsu\n' "$base"; } > "$wrap"
+  chmod +x "$wrap"
+  export CUSTOM_MVN="$wrap"
+  info "Pinned SNAPSHOT resolution to the local repo (-nsu) for build/deploy"
+}
