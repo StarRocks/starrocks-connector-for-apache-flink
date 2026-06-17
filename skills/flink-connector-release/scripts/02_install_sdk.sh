@@ -26,19 +26,12 @@ info "Checking out $TAG (detached HEAD) so all builds carry the tag's commit"
 git checkout --quiet "$TAG"
 EXPECTED_COMMIT="$(git rev-parse HEAD)"
 
-SDK_VER="$(grep -m1 -oE '<version>[^<]+' starrocks-stream-load-sdk/pom.xml | sed 's/.*>//')"
-info "Installing starrocks-stream-load-sdk:$SDK_VER from the tag into $MAVEN_REPO"
+info "Installing the stream-load SDK from the tag into $MAVEN_REPO"
 ( cd starrocks-stream-load-sdk && "$MVN" clean install -DskipTests )
 
-# Verify the artifact that the connector build will actually shade in.
-SDK_JAR="$MAVEN_REPO/com/starrocks/starrocks-stream-load-sdk/$SDK_VER/starrocks-stream-load-sdk-$SDK_VER-jar-with-dependencies.jar"
-[ -f "$SDK_JAR" ] || die "installed SDK jar-with-dependencies not found at $SDK_JAR"
-sdk_id="$(unzip -p "$SDK_JAR" stream-load-sdk-git.properties 2>/dev/null | prop_commit_id)"
-if [ "$sdk_id" = "$EXPECTED_COMMIT" ]; then
-  pass "installed SDK commit matches the tag ($EXPECTED_COMMIT)"
-else
-  die "installed SDK commit=$sdk_id != tag $EXPECTED_COMMIT — installation did not pick up the tag's code"
-fi
+# Verify the artifact the connector build will actually shade in.
+verify_installed_sdk "$REPO_ROOT" "$EXPECTED_COMMIT"
+pass "installed SDK commit matches the tag ($EXPECTED_COMMIT)"
 
 echo
 info "${C_GRN}SDK installed and pinned to $TAG${C_RST}. Next: scripts/03_build_verify.sh"

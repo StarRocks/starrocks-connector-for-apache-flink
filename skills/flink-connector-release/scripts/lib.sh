@@ -68,3 +68,21 @@ resolve_versions() {
 # key (text after "id" is "." not "="), so this matches exactly one line.
 prop_commit_id()    { sed -n 's/^git\.commit\.id=\(.*\)$/\1/p'; }
 prop_build_version(){ sed -n 's/^git\.build\.version=\(.*\)$/\1/p'; }
+
+# Path to the locally-installed stream-load SDK jar-with-dependencies that the connector shades in.
+installed_sdk_jar() {
+  local root="$1" repo ver
+  repo="${MAVEN_REPO:-$HOME/.m2/repository}"
+  ver="$(grep -m1 -oE '<version>[^<]+' "$root/starrocks-stream-load-sdk/pom.xml" | sed 's/.*>//')"
+  printf '%s' "$repo/com/starrocks/starrocks-stream-load-sdk/$ver/starrocks-stream-load-sdk-$ver-jar-with-dependencies.jar"
+}
+
+# Assert the locally-installed SDK (the exact jar the connector build will shade) was built from
+# <expected> commit. Dies otherwise. Used by 02 (after install) and 04 (right before deploy).
+verify_installed_sdk() {
+  local root="$1" expected="$2" jar id
+  jar="$(installed_sdk_jar "$root")"
+  [ -f "$jar" ] || die "installed SDK not found at $jar — run 02_install_sdk.sh"
+  id="$(unzip -p "$jar" stream-load-sdk-git.properties 2>/dev/null | prop_commit_id)"
+  [ "$id" = "$expected" ] || die "installed SDK commit=${id:-none} != tag $expected — the local 1.1-SNAPSHOT changed; re-run 02_install_sdk.sh on the tag"
+}

@@ -45,6 +45,13 @@ for m in "${VERSIONS[@]}"; do
 done
 pass "all requested versions ($(IFS=,; echo "${VERSIONS[*]}")) were verified by 03"
 
+# Gate 1c: deploy.sh rebuilds and shades whatever stream-load SDK is in the local repo. That SDK
+# could have changed since 03 (another checkout reinstalled it, or Maven refreshed the snapshot) —
+# the commit/marker wouldn't catch it. Re-check the installed SDK still matches the tag before the
+# irreversible deploy.
+verify_installed_sdk "$REPO_ROOT" "$EXPECTED_COMMIT"
+pass "the locally-installed SDK still matches the tag"
+
 # Gate 2: explicit human confirmation, because this cannot be undone.
 echo
 warn "About to PUBLISH to Maven Central (cannot be undone):"
