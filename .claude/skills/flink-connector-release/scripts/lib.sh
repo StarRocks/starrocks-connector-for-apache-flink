@@ -50,6 +50,57 @@ pom_is_snapshot() {
   grep -qE '<version>\$\{srfc.version\}_flink-\$\{flink.minor.version\}-SNAPSHOT</version>' "$1/pom.xml"
 }
 
+# The user docs that carry a per-release "Version requirements" table row.
+DOCS_VERSION_FILES=(docs/content/connector-sink.md docs/content/connector-source.md)
+
+# Assert the user docs' "Version requirements" table lists <version>. Each connector release adds a
+# row to these tables; forgetting it ships a release the docs never mention. 01_tag.sh runs this
+# against the release branch's tree (== origin/main at that point), while everything is still
+# reversible. A missing row is NOT a hard error — a maintainer may intentionally skip the doc bump —
+# so we require explicit confirmation (interactive y/N, or CONFIRM_DOCS_VERSION=<version> when
+# non-interactive) and otherwise continue. The match field-splits each table row on "|" and compares
+# the trimmed first data cell to <version> exactly (so a version mentioned in prose, or a longer
+# version sharing the prefix, does not count), and only inside the "## Version requirements" section.
+check_docs_version() {
+  local root="$1" version="$2" f path ans
+  local -a missing=()
+  for f in "${DOCS_VERSION_FILES[@]}"; do
+    path="$root/$f"
+    if [ ! -f "$path" ]; then
+      warn "doc not found: $f — skipping its Version requirements check"; continue
+    fi
+    if awk -v v="$version" -F'|' '
+        /^##[[:space:]]+Version requirements/ { inblk=1; next }
+        inblk && /^##[[:space:]]/            { inblk=0 }
+        inblk && $1=="" && NF>=2 {
+          cell=$2; gsub(/^[[:space:]]+|[[:space:]]+$/, "", cell)
+          if (cell==v) found=1
+        }
+        END { exit found ? 0 : 1 }
+      ' "$path"; then
+      pass "docs: $f Version requirements lists $version"
+    else
+      missing+=("$f")
+    fi
+  done
+
+  [ "${#missing[@]}" -eq 0 ] && return 0
+
+  warn "Version requirements table does NOT list $version in: ${missing[*]}"
+  warn "Usually you add a '$version' row to these tables on main first (e.g. a '[Doc] Add doc for $version' PR) before releasing."
+  if [ -t 0 ]; then
+    printf 'Release %s anyway, without the docs version row? [y/N] ' "$version"; read -r ans
+    case "$ans" in
+      y|Y) warn "proceeding without the docs version row for $version (confirmed)";;
+      *)   die "aborted — add the $version row to the Version requirements table on main, then re-run";;
+    esac
+  else
+    [ "${CONFIRM_DOCS_VERSION:-}" = "$version" ] \
+      || die "non-interactive: docs missing the $version row — add it on main, or set CONFIRM_DOCS_VERSION=$version to release anyway"
+    warn "proceeding without the docs version row for $version (CONFIRM_DOCS_VERSION set)"
+  fi
+}
+
 # Assert HEAD is exactly the release tag v<version> — not merely some clean, de-SNAPSHOTed checkout.
 # git-commit-id stamps HEAD into every jar, and 03's marker is written from HEAD too; so without this
 # a branch that advanced past v<version> (or any other de-SNAPSHOT commit) could pass 03/04 and

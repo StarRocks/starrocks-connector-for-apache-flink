@@ -68,7 +68,9 @@ scripts that carry out each step, see `SKILL.md` next to this guide.
 ## The release process
 
 1. **Tag.** Create a release tag, based on the latest `main`, pointing at a commit that has the
-   `-SNAPSHOT` removed from the project version.
+   `-SNAPSHOT` removed from the project version. Before tagging, make sure `main`'s user docs
+   (`docs/content/connector-sink.md` and `connector-source.md`) already list this release in their
+   **Version requirements** table; if not, add the row (or consciously decide to skip it) first.
 2. **Install the SDK from the tag.** Check out the tag, then install the stream-load SDK locally from
    it, so the connector bundles this release's SDK rather than a stale remote one:
 
