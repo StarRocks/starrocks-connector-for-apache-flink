@@ -42,12 +42,12 @@ user-facing release guide.
 ## The flow (run in order, do not skip a gate)
 
 Each stage is a script under this skill's `scripts/`. From the repo root,
-`cd skills/flink-connector-release/` first — the commands below are relative to it (the scripts
+`cd .claude/skills/flink-connector-release/` first — the commands below are relative to it (the scripts
 locate the repo automatically, so the working directory doesn't otherwise matter). Stop
 immediately if any stage fails — later stages depend on earlier ones having passed.
 
 ```
-cd skills/flink-connector-release          # from the repo root
+cd .claude/skills/flink-connector-release          # from the repo root
 scripts/00_preflight.sh               # environment readiness check (read-only, changes nothing)
 scripts/01_tag.sh         1.2.15      # checks repo/tag state, sets srfc.version=1.2.15, commits the de-SNAPSHOT + tags v1.2.15 (no push)
 scripts/02_install_sdk.sh 1.2.15      # checkout the tag; install the stream-load SDK FROM the tag

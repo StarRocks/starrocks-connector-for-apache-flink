@@ -38,7 +38,7 @@ thrift/
 # other
 #
 
-# local scratch marker written by the release skill (skills/flink-connector-release)
+# local scratch marker written by the release skill (.claude/skills/flink-connector-release)
 .release/
 
 src/test/java/com/starrocks/connector/flink/tmp

@@ -431,7 +431,7 @@ limitations under the License.
                         <exclude>SECURITY.md</exclude>
                         <exclude>.cursor/**</exclude>
                         <exclude>starrocks-stream-load-sdk/**</exclude>
-                        <exclude>skills/**</exclude>
+                        <exclude>.claude/**</exclude>
                     </excludes>
                 </configuration>
             </plugin>
