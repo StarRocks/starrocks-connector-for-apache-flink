@@ -57,8 +57,10 @@ DOCS_VERSION_FILES=(docs/content/connector-sink.md docs/content/connector-source
 # row to these tables; forgetting it ships a release the docs never mention. 01_tag.sh runs this
 # against the release branch's tree (== origin/main at that point), while everything is still
 # reversible. A missing row is NOT a hard error — a maintainer may intentionally skip the doc bump —
-# so we require explicit confirmation (interactive y/N, or CONFIRM_DOCS_VERSION=<version> when
-# non-interactive) and otherwise continue. The match field-splits each table row on "|" and compares
+# but it ALWAYS requires the user's explicit confirmation, for every version (RC included): interactive
+# y/N, or CONFIRM_DOCS_VERSION=<version> when non-interactive. That env var is a channel for relaying a
+# confirmation the *user* gave; the agent must not set it on its own judgment (see SKILL.md). Otherwise
+# the script aborts. The match field-splits each table row on "|" and compares
 # the trimmed first data cell to <version> exactly (so a version mentioned in prose, or a longer
 # version sharing the prefix, does not count), and only inside the "## Version requirements" section.
 check_docs_version() {
@@ -96,7 +98,7 @@ check_docs_version() {
     esac
   else
     [ "${CONFIRM_DOCS_VERSION:-}" = "$version" ] \
-      || die "non-interactive: docs missing the $version row — add it on main, or set CONFIRM_DOCS_VERSION=$version to release anyway"
+      || die "non-interactive: docs missing the $version row — ASK THE USER whether to release without it. Only if they say yes, set CONFIRM_DOCS_VERSION=$version (it relays THEIR decision; do not set it on your own judgment). Otherwise add the row on main first."
     warn "proceeding without the docs version row for $version (CONFIRM_DOCS_VERSION set)"
   fi
 }

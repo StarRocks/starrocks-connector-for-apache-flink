@@ -64,8 +64,9 @@ Why this order matters:
   numbers and embedded git fingerprints reflect the release commit. 01 also checks that `main`'s
   user docs (`docs/content/connector-sink.md` and `connector-source.md`) already list this release
   in their **Version requirements** table — a forgotten doc bump is caught here, while it is still
-  cheap to fix. A missing row is not fatal: confirm interactively (or set `CONFIRM_DOCS_VERSION=<version>`
-  non-interactively) to release anyway.
+  cheap to fix. A missing row is not fatal, but it **always requires the user's explicit
+  confirmation before you continue** — for every version, RC / pre-release included. Stop and ask
+  the user; never self-confirm it. See "Notes for the agent running this" for exactly how.
 - **02 before 03**: the connector shades the SDK into its jar. Installing the SDK from the tag
   (stage 02) plus re-checking the bundled SDK's commit in every built jar (stage 03) guarantees
   the *tag's* SDK is what ships, not a stale remote `1.1-SNAPSHOT` with a different commit.
@@ -134,9 +135,17 @@ Any failure makes it exit non-zero with a clear `DO NOT DEPLOY` message.
 - Treat every script's non-zero exit as a hard stop; surface its output to the user.
 - Never edit a published artifact or suggest "re-deploying to fix" — explain that Central is
   immutable and the fix is a new version.
-- `scripts/01_tag.sh` warns (and stops) if `main`'s docs do not list the release in their
-  **Version requirements** table. Surface this to the user; only continue if they confirm the doc
-  bump is intentionally skipped — interactively, or by setting `CONFIRM_DOCS_VERSION=<version>`.
+- **A missing docs Version-requirements row ALWAYS requires the user's explicit confirmation — no
+  exceptions.** `scripts/01_tag.sh` stops when `main`'s docs (`connector-sink.md` /
+  `connector-source.md`) do not list the release. When that happens you MUST stop and ask the
+  *user* (use AskUserQuestion) whether to release without the docs row, then wait for their answer.
+  Only set `CONFIRM_DOCS_VERSION=<version>` to relay a "yes" the user actually gave — it is a
+  channel for *their* decision, not a switch you flip yourself. This holds for **every** version,
+  RC / pre-release included: "RCs skip the docs row by convention", "it's obviously intentional",
+  and "the user already said 发版 / release" are NOT substitutes for asking. Deciding it on your own
+  judgment — or telling the user about the skip only after the fact — is a violation. (The user
+  may, of course, pre-authorize skipping it in the same breath as the release request; a clear
+  "release X even though the docs row is missing" counts as the confirmation.)
 - `scripts/04_deploy.sh` is outward-facing and irreversible. Do not bypass its confirmation;
   if running non-interactively, the user must explicitly set `CONFIRM_DEPLOY=<version>`.
 - `scripts/06_upload_release.sh` only creates a **draft** GitHub release — never publish it; a
