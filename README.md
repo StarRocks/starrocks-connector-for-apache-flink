@@ -14,6 +14,14 @@ For the new features in the snapshot version of the Flink connector, please see 
 * [Read from StarRocks](docs/content/connector-source.md)
 * [Write to StarRocks](docs/content/connector-sink.md)
 
+## Release
+
+Maintainers cut releases to Maven Central with the `flink-connector-release` skill in
+[`.claude/skills/flink-connector-release`](.claude/skills/flink-connector-release/SKILL.md). It wraps
+the repo's `build.sh`/`deploy.sh` with strict per-step verification before the irreversible publish.
+See [`references/release-guide.md`](.claude/skills/flink-connector-release/references/release-guide.md)
+for the full procedure and background.
+
 ## LICENSE
 
 The connector is under the [Apache License 2.0](LICENSE.txt).

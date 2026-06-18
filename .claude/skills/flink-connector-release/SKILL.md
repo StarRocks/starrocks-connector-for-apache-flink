@@ -49,7 +49,7 @@ immediately if any stage fails — later stages depend on earlier ones having pa
 ```
 cd .claude/skills/flink-connector-release          # from the repo root
 scripts/00_preflight.sh               # environment readiness check (read-only, changes nothing)
-scripts/01_tag.sh         1.2.15      # checks repo/tag state, sets srfc.version=1.2.15, commits the de-SNAPSHOT + tags v1.2.15 (no push)
+scripts/01_tag.sh         1.2.15      # checks repo/tag state + docs Version-requirements row, sets srfc.version=1.2.15, commits the de-SNAPSHOT + tags v1.2.15 (no push)
 scripts/02_install_sdk.sh 1.2.15      # checkout the tag; install the stream-load SDK FROM the tag
 scripts/03_build_verify.sh            # build each version via build.sh + STRICTLY verify; NO deploy
 git push origin v1.2.15               # push the tag ONLY after 03 passes
@@ -61,7 +61,11 @@ scripts/06_upload_release.sh RELEASE_NOTES.md   # upload your notes + jars as a 
 Why this order matters:
 
 - **01 before 02/03**: the tag must point at the de-SNAPSHOT commit so the jars' version
-  numbers and embedded git fingerprints reflect the release commit.
+  numbers and embedded git fingerprints reflect the release commit. 01 also checks that `main`'s
+  user docs (`docs/content/connector-sink.md` and `connector-source.md`) already list this release
+  in their **Version requirements** table — a forgotten doc bump is caught here, while it is still
+  cheap to fix. A missing row is not fatal: confirm interactively (or set `CONFIRM_DOCS_VERSION=<version>`
+  non-interactively) to release anyway.
 - **02 before 03**: the connector shades the SDK into its jar. Installing the SDK from the tag
   (stage 02) plus re-checking the bundled SDK's commit in every built jar (stage 03) guarantees
   the *tag's* SDK is what ships, not a stale remote `1.1-SNAPSHOT` with a different commit.
@@ -82,11 +86,15 @@ Why this order matters:
 **Writing the notes is not scripted** — you (the agent running this) compose them from the template;
 stage 06 only uploads them. Copy [`assets/release-note-template.md`](assets/release-note-template.md)
 to a file (e.g. `RELEASE_NOTES.md`) and fill it in: `## What's Changed` grouped into **Features** /
-**Enhancements** / **BugFix** — one line per PR, `- <desc> [#NNN](pr-url)`; the repo's
-`[Feature]` / `[Enhancement]` / `[BugFix]` commit-subject prefixes map straight to these groups —
-then **## Contributors** (PR authors as `[handle](profile-url)`). Use the previous release as a
-reference, e.g. [v1.2.14](https://github.com/StarRocks/starrocks-connector-for-apache-flink/releases/tag/v1.2.14).
-List the merged PRs with `git log --first-parent --pretty='%s' <prev-tag>..v<version>`.
+**Enhancements** / **BugFix** / **Doc** / **Tool** / **Other** — one line per PR, `- <desc> [#NNN](pr-url)`;
+the repo's commit-subject prefixes map to these groups as `[Feature]`→Features, `[Enhancement]`→Enhancements,
+`[BugFix]`→BugFix, `[Doc]`→Doc, `[Tool]` / `[Chore]` (build/CI/release/skill tooling)→Tool, and anything
+else (or no recognizable prefix)→Other — then **## Contributors** (PR authors as `[handle](profile-url)`). Cover
+**every** merged PR; only the version-bump and the `[Release]` commit itself are dropped. Omit any group
+that ends up empty. List the merged PRs with `git log --first-parent --pretty='%s' <prev-tag>..v<version>`,
+then **show the full PR list with its included/excluded group mapping and confirm the grouping with the
+user before creating the draft.** Use the previous release as a reference, e.g.
+[v1.2.15](https://github.com/StarRocks/starrocks-connector-for-apache-flink/releases/tag/v1.2.15).
 
 Then **upload** with `scripts/06_upload_release.sh`, which only does the upload: it downloads the
 published per-version jars (versions read from the repo) and creates a **draft** release with your
@@ -126,6 +134,9 @@ Any failure makes it exit non-zero with a clear `DO NOT DEPLOY` message.
 - Treat every script's non-zero exit as a hard stop; surface its output to the user.
 - Never edit a published artifact or suggest "re-deploying to fix" — explain that Central is
   immutable and the fix is a new version.
+- `scripts/01_tag.sh` warns (and stops) if `main`'s docs do not list the release in their
+  **Version requirements** table. Surface this to the user; only continue if they confirm the doc
+  bump is intentionally skipped — interactively, or by setting `CONFIRM_DOCS_VERSION=<version>`.
 - `scripts/04_deploy.sh` is outward-facing and irreversible. Do not bypass its confirmation;
   if running non-interactively, the user must explicitly set `CONFIRM_DEPLOY=<version>`.
 - `scripts/06_upload_release.sh` only creates a **draft** GitHub release — never publish it; a

@@ -37,6 +37,11 @@ srfc="$(pom_srfc_version "$REPO_ROOT")"
 [ -n "$srfc" ] || die "could not read <srfc.version> from pom.xml on origin/main"
 info "pom srfc.version on origin/main is '$srfc'; releasing as '$VERSION'"
 
+# The user docs on main should already list this release in their "Version requirements" table.
+# Check it now (the tree here == origin/main), while a missing row is still cheap to fix. Not a hard
+# error: confirm to proceed, or set CONFIRM_DOCS_VERSION=$VERSION when running non-interactively.
+check_docs_version "$REPO_ROOT" "$VERSION"
+
 # The pom must currently be a -SNAPSHOT; if not, something is off.
 pom_is_snapshot "$REPO_ROOT" \
   || die "the project <version> in pom.xml is not a -SNAPSHOT on origin/main — unexpected; inspect the <version>\${srfc.version}_flink-... line"
