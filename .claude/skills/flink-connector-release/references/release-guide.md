@@ -62,7 +62,8 @@ scripts that carry out each step, see `SKILL.md` next to this guide.
     </profile>
   </profiles>
   ```
-- The connector version (`srfc.version`) already set to the version you intend to release.
+- You choose the version when you tag: the release sets `srfc.version` to it on the release tag,
+  so it need not already match on `main`, and RC versions (e.g. `1.2.15-RC0`) are supported.
 
 ## The release process
 
@@ -97,4 +98,3 @@ scripts that carry out each step, see `SKILL.md` next to this guide.
 | Publish rejected (auth error) | Wrong/missing Central credentials, or no publish rights on `com.starrocks`. |
 | One Flink version failed mid-publish | Already-published versions can't be overwritten — fix the cause and redo only the failed version. |
 | A jar 404s right after publishing | The Central mirror can lag a few minutes — wait and retry. |
-| `srfc.version` ≠ the version being released | Update it on `main` first, then start over. |
