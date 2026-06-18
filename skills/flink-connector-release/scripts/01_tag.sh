@@ -30,14 +30,30 @@ git fetch origin
 info "Creating branch release-$VERSION from origin/main"
 git checkout -B "release-$VERSION" origin/main
 
-# srfc.version must match the version we are tagging — checked against origin/main
+# Read srfc.version from origin/main for reference. We do NOT require it to equal $VERSION:
+# stage 01 sets it to $VERSION on the release branch below, so cutting an RC (or any version
+# that differs from main) needs no prior bump+merge on main. main is never modified here.
 srfc="$(pom_srfc_version "$REPO_ROOT")"
-[ "$srfc" = "$VERSION" ] || die "pom srfc.version is '$srfc', not '$VERSION' on origin/main — bump srfc.version on main and merge first"
-pass "pom srfc.version == $VERSION"
+[ -n "$srfc" ] || die "could not read <srfc.version> from pom.xml on origin/main"
+info "pom srfc.version on origin/main is '$srfc'; releasing as '$VERSION'"
 
 # The pom must currently be a -SNAPSHOT; if not, something is off.
 pom_is_snapshot "$REPO_ROOT" \
   || die "the project <version> in pom.xml is not a -SNAPSHOT on origin/main — unexpected; inspect the <version>\${srfc.version}_flink-... line"
+
+# Set srfc.version to the release version (the property value only; the project <version>
+# derives from it). This lives only on the release branch — main keeps its own version. A no-op
+# when it already equals $VERSION. Replaces the old "must already equal $VERSION or die" gate,
+# so RC / off-main versions can be cut without first bumping main.
+if [ "$srfc" != "$VERSION" ]; then
+  info "Setting srfc.version: '$srfc' -> '$VERSION' (release branch only; main untouched)"
+  sed -i "s#<srfc.version>${srfc}</srfc.version>#<srfc.version>${VERSION}</srfc.version>#" pom.xml
+  [ "$(pom_srfc_version "$REPO_ROOT")" = "$VERSION" ] \
+    || die "failed to set srfc.version to '$VERSION' — inspect the <srfc.version> line in pom.xml"
+  pass "pom srfc.version set to $VERSION"
+else
+  pass "pom srfc.version already == $VERSION"
+fi
 
 info "Removing -SNAPSHOT from the project <version>"
 # Operate only on the single project-version line; remove its -SNAPSHOT suffix.

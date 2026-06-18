@@ -34,8 +34,9 @@ user-facing release guide.
 - Run from inside the connector repo (or set `CONNECTOR_REPO=/path/to/repo`).
 - The release machine needs: JDK 8, Maven, a GPG signing key, and a `<server><id>central</id>`
   entry in `~/.m2/settings.xml` (Central Portal user token). Stage 00 checks all of this.
-- `srfc.version` in the root `pom.xml` must already equal the version you intend to release.
-  If not, bump it on `main` and merge first.
+- You don't need to pre-set `srfc.version` on `main`: stage 01 sets it to the version you pass
+  (on the release branch only), so you can cut an RC or any version that differs from `main`
+  without a prior bump+merge. `main` is never modified by the release.
 - Decide the version. Example throughout: **1.2.15** → tag **v1.2.15**. Replace as needed.
 
 ## The flow (run in order, do not skip a gate)
@@ -48,7 +49,7 @@ immediately if any stage fails — later stages depend on earlier ones having pa
 ```
 cd skills/flink-connector-release          # from the repo root
 scripts/00_preflight.sh               # environment readiness check (read-only, changes nothing)
-scripts/01_tag.sh         1.2.15      # checks repo/version/tag state, then commits the de-SNAPSHOT + tags v1.2.15 (no push)
+scripts/01_tag.sh         1.2.15      # checks repo/tag state, sets srfc.version=1.2.15, commits the de-SNAPSHOT + tags v1.2.15 (no push)
 scripts/02_install_sdk.sh 1.2.15      # checkout the tag; install the stream-load SDK FROM the tag
 scripts/03_build_verify.sh            # build each version via build.sh + STRICTLY verify; NO deploy
 git push origin v1.2.15               # push the tag ONLY after 03 passes
