@@ -88,8 +88,8 @@ stage 06 only uploads them. Copy [`assets/release-note-template.md`](assets/rele
 to a file (e.g. `RELEASE_NOTES.md`) and fill it in: `## What's Changed` grouped into **Features** /
 **Enhancements** / **BugFix** / **Doc** / **Tool** / **Other** — one line per PR, `- <desc> [#NNN](pr-url)`;
 the repo's commit-subject prefixes map to these groups as `[Feature]`→Features, `[Enhancement]`→Enhancements,
-`[BugFix]`→BugFix, `[Doc]`→Doc, `[Chore]` (release/CI/skill tooling)→Tool, and anything else (or no
-recognizable prefix)→Other — then **## Contributors** (PR authors as `[handle](profile-url)`). Cover
+`[BugFix]`→BugFix, `[Doc]`→Doc, `[Tool]` / `[Chore]` (build/CI/release/skill tooling)→Tool, and anything
+else (or no recognizable prefix)→Other — then **## Contributors** (PR authors as `[handle](profile-url)`). Cover
 **every** merged PR; only the version-bump and the `[Release]` commit itself are dropped. Omit any group
 that ends up empty. List the merged PRs with `git log --first-parent --pretty='%s' <prev-tag>..v<version>`,
 then **show the full PR list with its included/excluded group mapping and confirm the grouping with the

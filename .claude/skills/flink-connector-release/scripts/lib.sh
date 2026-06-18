@@ -67,7 +67,7 @@ check_docs_version() {
   for f in "${DOCS_VERSION_FILES[@]}"; do
     path="$root/$f"
     if [ ! -f "$path" ]; then
-      warn "doc not found: $f — skipping its Version requirements check"; continue
+      warn "doc not found: $f — treating as a missing version row"; missing+=("$f"); continue
     fi
     if awk -v v="$version" -F'|' '
         /^##[[:space:]]+Version requirements/ { inblk=1; next }
