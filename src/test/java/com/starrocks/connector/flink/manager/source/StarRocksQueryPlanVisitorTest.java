@@ -36,6 +36,7 @@ import java.util.Map;
 import com.alibaba.fastjson.JSONObject;
 import com.starrocks.connector.flink.it.source.StarRocksSourceBaseTest;
 import com.starrocks.connector.flink.manager.StarRocksQueryPlanVisitor;
+import com.starrocks.connector.flink.manager.StarRocksQueryVisitor;
 import com.starrocks.connector.flink.table.source.StarRocksSourceCommonFunc;
 import com.starrocks.connector.flink.table.source.struct.QueryInfo;
 
@@ -65,11 +66,16 @@ public class StarRocksQueryPlanVisitorTest extends StarRocksSourceBaseTest {
     }
 
     @Test
-    public void testQueryPlanVisitorDoesNotShareMutableSourceOptions() throws NoSuchFieldException {
+    public void testSourceCommonFuncDoesNotShareVisitors() throws NoSuchFieldException {
         boolean hasSharedQueryPlanVisitor = Arrays.stream(StarRocksSourceCommonFunc.class.getDeclaredFields())
                 .anyMatch(field -> Modifier.isStatic(field.getModifiers())
                         && field.getType().equals(StarRocksQueryPlanVisitor.class));
         assertFalse(hasSharedQueryPlanVisitor);
+
+        boolean hasSharedQueryVisitor = Arrays.stream(StarRocksSourceCommonFunc.class.getDeclaredFields())
+                .anyMatch(field -> Modifier.isStatic(field.getModifiers())
+                        && field.getType().equals(StarRocksQueryVisitor.class));
+        assertFalse(hasSharedQueryVisitor);
 
         Field sourceOptions = StarRocksQueryPlanVisitor.class.getDeclaredField("sourceOptions");
         assertTrue(Modifier.isFinal(sourceOptions.getModifiers()));
