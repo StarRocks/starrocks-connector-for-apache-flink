@@ -95,28 +95,29 @@ public class StarRocksQueryVisitor implements Serializable {
     }
 
     private List<Map<String, Object>> executeQuery(String query, String... args) throws ClassNotFoundException, SQLException {
-        PreparedStatement stmt = jdbcConnProvider.getConnection().prepareStatement(query, ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY);
-        for (int i = 0; i < args.length; i++) {
-            stmt.setString(i + 1, args[i]);
-        }
-        ResultSet rs = stmt.executeQuery();
-        rs.next();
-        ResultSetMetaData meta = rs.getMetaData();
-        int columns = meta.getColumnCount();
-        List<Map<String, Object>> list = new ArrayList<>();
-        int currRowIndex = rs.getRow();
-        rs.beforeFirst();
-        while (rs.next()) {
-            Map<String, Object> row = new HashMap<>(columns);
-            for (int i = 1; i <= columns; ++i) {
-                row.put(meta.getColumnName(i), rs.getObject(i));
+        try (PreparedStatement stmt = jdbcConnProvider.getConnection()
+                .prepareStatement(query, ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY)) {
+            for (int i = 0; i < args.length; i++) {
+                stmt.setString(i + 1, args[i]);
             }
-            list.add(row);
+            try (ResultSet rs = stmt.executeQuery()) {
+                rs.next();
+                ResultSetMetaData meta = rs.getMetaData();
+                int columns = meta.getColumnCount();
+                List<Map<String, Object>> list = new ArrayList<>();
+                rs.beforeFirst();
+                while (rs.next()) {
+                    Map<String, Object> row = new HashMap<>(columns);
+                    for (int i = 1; i <= columns; ++i) {
+                        row.put(meta.getColumnName(i), rs.getObject(i));
+                    }
+                    list.add(row);
+                }
+                return list;
+            }
+        } finally {
+            jdbcConnProvider.close();
         }
-        rs.absolute(currRowIndex);
-        rs.close();
-        jdbcConnProvider.close();
-        return list;
     }
 
     public Long getQueryCount(String SQL) {

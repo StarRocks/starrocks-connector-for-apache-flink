@@ -37,41 +37,6 @@ import java.util.stream.Collectors;
 
 
 public class StarRocksSourceCommonFunc {
-    
-    private static volatile StarRocksQueryVisitor starrocksQueryVisitor;
-
-    private static volatile StarRocksQueryPlanVisitor starRocksQueryPlanVisitor;
-    
-
-    private static StarRocksQueryVisitor getStarRocksQueryVisitor(StarRocksSourceOptions sourceOptions) {
-        if (null == starrocksQueryVisitor) {
-            synchronized(StarRocksSourceCommonFunc.class) {
-                if (null == starrocksQueryVisitor) {
-                    StarRocksJdbcConnectionOptions jdbcOptions = new StarRocksJdbcConnectionOptions(
-                        sourceOptions.getJdbcUrl(), sourceOptions.getUsername(), sourceOptions.getPassword()
-                    );
-                    StarRocksJdbcConnectionProvider jdbcConnProvider;
-                    jdbcConnProvider = new StarRocksJdbcConnectionProvider(jdbcOptions);
-                    starrocksQueryVisitor = new StarRocksQueryVisitor(
-                        jdbcConnProvider, sourceOptions.getDatabaseName(), sourceOptions.getTableName()
-                    );
-                }
-            }
-        }
-        return starrocksQueryVisitor;
-    }
-
-    private static StarRocksQueryPlanVisitor getStarRocksQueryPlanVisitor(StarRocksSourceOptions sourceOptions) {
-        if (null == starRocksQueryPlanVisitor) {
-            synchronized(StarRocksSourceCommonFunc.class) {
-                if (null == starRocksQueryPlanVisitor) {
-                    starRocksQueryPlanVisitor = new StarRocksQueryPlanVisitor(sourceOptions);
-                }
-            }
-        }
-        starRocksQueryPlanVisitor.setSourceOptions(sourceOptions);
-        return starRocksQueryPlanVisitor;
-    }
 
     public static List<List<QueryBeXTablets>> splitQueryBeXTablets(int subTaskCount, QueryInfo queryInfo) {
         List<List<QueryBeXTablets>> curBeXTabletList = new ArrayList<>();
@@ -155,7 +120,13 @@ public class StarRocksSourceCommonFunc {
 
 
     public static Long getQueryCount(StarRocksSourceOptions sourceOptions, String SQL) {
-        StarRocksQueryVisitor starrocksQueryVisitor = getStarRocksQueryVisitor(sourceOptions);
+        StarRocksJdbcConnectionOptions jdbcOptions = new StarRocksJdbcConnectionOptions(
+            sourceOptions.getJdbcUrl(), sourceOptions.getUsername(), sourceOptions.getPassword()
+        );
+        StarRocksJdbcConnectionProvider jdbcConnProvider = new StarRocksJdbcConnectionProvider(jdbcOptions);
+        StarRocksQueryVisitor starrocksQueryVisitor = new StarRocksQueryVisitor(
+            jdbcConnProvider, sourceOptions.getDatabaseName(), sourceOptions.getTableName()
+        );
         return starrocksQueryVisitor.getQueryCount(SQL);
     }
 
@@ -200,7 +171,7 @@ public class StarRocksSourceCommonFunc {
     }
 
     public static QueryInfo getQueryInfo(StarRocksSourceOptions sourceOptions, String SQL) {
-        StarRocksQueryPlanVisitor starRocksQueryPlanVisitor = getStarRocksQueryPlanVisitor(sourceOptions);
+        StarRocksQueryPlanVisitor starRocksQueryPlanVisitor = new StarRocksQueryPlanVisitor(sourceOptions);
         QueryInfo queryInfo = null;
         try {
             queryInfo = starRocksQueryPlanVisitor.getQueryInfo(SQL);

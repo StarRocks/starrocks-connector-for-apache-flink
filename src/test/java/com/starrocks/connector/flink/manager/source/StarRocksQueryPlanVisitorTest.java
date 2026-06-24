@@ -20,10 +20,14 @@
 
 package com.starrocks.connector.flink.manager.source;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -32,6 +36,8 @@ import java.util.Map;
 import com.alibaba.fastjson.JSONObject;
 import com.starrocks.connector.flink.it.source.StarRocksSourceBaseTest;
 import com.starrocks.connector.flink.manager.StarRocksQueryPlanVisitor;
+import com.starrocks.connector.flink.manager.StarRocksQueryVisitor;
+import com.starrocks.connector.flink.table.source.StarRocksSourceCommonFunc;
 import com.starrocks.connector.flink.table.source.struct.QueryInfo;
 
 import org.junit.Test;
@@ -57,5 +63,23 @@ public class StarRocksQueryPlanVisitorTest extends StarRocksSourceBaseTest {
         for (int i = 0; i < tabletCount; i ++) {
             assertTrue(i == tabletsList.get(i));
         }
+    }
+
+    @Test
+    public void testSourceCommonFuncDoesNotShareVisitors() throws NoSuchFieldException {
+        boolean hasSharedQueryPlanVisitor = Arrays.stream(StarRocksSourceCommonFunc.class.getDeclaredFields())
+                .anyMatch(field -> Modifier.isStatic(field.getModifiers())
+                        && field.getType().equals(StarRocksQueryPlanVisitor.class));
+        assertFalse(hasSharedQueryPlanVisitor);
+
+        boolean hasSharedQueryVisitor = Arrays.stream(StarRocksSourceCommonFunc.class.getDeclaredFields())
+                .anyMatch(field -> Modifier.isStatic(field.getModifiers())
+                        && field.getType().equals(StarRocksQueryVisitor.class));
+        assertFalse(hasSharedQueryVisitor);
+
+        Field sourceOptions = StarRocksQueryPlanVisitor.class.getDeclaredField("sourceOptions");
+        assertTrue(Modifier.isFinal(sourceOptions.getModifiers()));
+        assertFalse(Arrays.stream(StarRocksQueryPlanVisitor.class.getDeclaredMethods())
+                .anyMatch(method -> method.getName().equals("setSourceOptions")));
     }
 }
