@@ -708,7 +708,7 @@ public class MockedStarRocksHttpServer {
             String path = uri.getPath();
             // path starts with /api/
             List<String> segments = split(path);
-            if (segments.size() >= 4 && "api".equals(segments.get(0))) {
+            if (segments.size() >= 3 && "api".equals(segments.get(0))) {
                 String db = segments.get(1);
                 if (segments.size() == 3 && "get_load_state".equals(segments.get(2))) {
                     // /api/{db}/get_load_state

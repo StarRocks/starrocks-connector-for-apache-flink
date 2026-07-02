@@ -37,9 +37,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 import static com.starrocks.data.load.stream.StreamLoadConstants.getBeginUrl;
 import static com.starrocks.data.load.stream.StreamLoadConstants.getCommitUrl;
@@ -50,6 +53,14 @@ import static com.starrocks.data.load.stream.StreamLoadUtils.getErrorLog;
 public class TransactionStreamLoader extends DefaultStreamLoader {
 
     private static final Logger log = LoggerFactory.getLogger(TransactionStreamLoader.class);
+
+    /**
+     * Transaction states that mean "commit still in progress" — the reconciliation after a lost
+     * commit response polls (rather than fails) while the label is in one of these, so a commit
+     * that is merely slow (not lost) is not prematurely failed.
+     */
+    private static final Set<String> COMMIT_IN_PROGRESS_STATES = Collections.unmodifiableSet(
+            new HashSet<>(Arrays.asList(TransactionStatus.PREPARE.name(), TransactionStatus.PREPARED.name())));
 
     private final boolean enableAutoCommit;
     private Header[] defaultTxnHeaders;
@@ -153,7 +164,7 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
 
         httpPost.setConfig(RequestConfig.custom()
                         .setConnectTimeout(properties.getConnectTimeout())
-                        .setSocketTimeout(properties.getSocketTimeout())
+                        .setSocketTimeout(boundedRpcSocketTimeoutMs(properties))
                         .setExpectContinueEnabled(true)
                         .setRedirectsEnabled(true)
                         .build());
@@ -212,7 +223,7 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
 
         httpPost.setConfig(RequestConfig.custom()
                         .setConnectTimeout(properties.getConnectTimeout())
-                        .setSocketTimeout(properties.getSocketTimeout())
+                        .setSocketTimeout(boundedRpcSocketTimeoutMs(properties))
                         .setExpectContinueEnabled(true)
                         .setRedirectsEnabled(true)
                         .build());
@@ -292,13 +303,14 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
 
         httpPost.setConfig(RequestConfig.custom()
                         .setConnectTimeout(properties.getConnectTimeout())
-                        .setSocketTimeout(properties.getSocketTimeout())
+                        .setSocketTimeout(boundedRpcSocketTimeoutMs(properties))
                         .setExpectContinueEnabled(true)
                         .setRedirectsEnabled(true)
                         .build());
 
         log.info("Transaction commit, label: {}, request : {}", transaction.getLabel(), httpPost);
 
+        StreamLoadResponse.StreamLoadResponseBody streamLoadBody;
         try (CloseableHttpClient client = clientBuilder.build()) {
             String responseBody;
             try (CloseableHttpResponse response = client.execute(httpPost)) {
@@ -306,52 +318,92 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
                         transaction.getLabel(), response);
             }
             log.info("Transaction committed, label: {}, body : {}", transaction.getLabel(), responseBody);
-
-            StreamLoadResponse streamLoadResponse = new StreamLoadResponse();
-            StreamLoadResponse.StreamLoadResponseBody streamLoadBody =
-                    objectMapper.readValue(responseBody, StreamLoadResponse.StreamLoadResponseBody.class);
-            streamLoadResponse.setBody(streamLoadBody);
-            String status = streamLoadBody.getStatus();
-            if (status == null) {
-                throw new StreamLoadFailException(String.format("Commit transaction status is null. db: %s, table: %s, " +
-                                "label: %s, response body: %s", transaction.getDatabase(), transaction.getTable(), transaction.getLabel(),
-                                        responseBody));
-            }
-
-
-            if (StreamLoadConstants.RESULT_STATUS_OK.equals(status)) {
-                manager.callback(streamLoadResponse);
-                return true;
-            }
-
-            // there are many corner cases that can lead to non-ok status. some of them are
-            // 1. TXN_NOT_EXISTS: transaction timeout and the label is cleanup up
-            // 2. Failed: the error message can be "has no backend", The case is that FE leader restarts, and after
-            //    that commit the transaction repeatedly because flink/spark job continues failover for some reason , but
-            //    the transaction actually success, and this commit should be successful
-            // To reduce the dependency for the returned status type, always check the label state
-            String labelState = getLabelState(host, transaction.getDatabase(), transaction.getTable(), transaction.getLabel(), Collections.emptySet());
-            if (TransactionStatus.COMMITTED.isSame(labelState) || TransactionStatus.VISIBLE.isSame(labelState)) {
-                return true;
-            }
-
-            String errorLog = getErrorLog(streamLoadBody.getErrorURL(), properties.isSanitizeErrorLog());
-            log.error("Transaction commit failed, db: {}, table: {}, label: {}, label state: {}, \nresponseBody: {}\nerrorLog: {}",
-                    transaction.getDatabase(), transaction.getTable(), transaction.getLabel(), labelState, responseBody, errorLog);
-
-            String exceptionMsg = String.format("Transaction commit failed, db: %s, table: %s, label: %s, commit response status: %s," +
-                   " label state: %s", transaction.getDatabase(), transaction.getTable(), transaction.getLabel(), status, labelState);
-            // transaction not exist often happens after transaction timeouts
-            if (StreamLoadConstants.RESULT_STATUS_TRANSACTION_NOT_EXISTED.equals(status) ||
-                TransactionStatus.UNKNOWN.isSame(labelState)) {
-                exceptionMsg += ". commit response status with TXN_NOT_EXISTS or label state with UNKNOWN often happens when transaction" +
-                        " timeouts, and please check StarRocks FE leader's log to confirm it. You can find the transaction id for the label" +
-                        " in the FE log first, and search with the transaction id and the keyword 'expired'";
-            }
-            throw new StreamLoadFailException(exceptionMsg);
+            streamLoadBody = objectMapper.readValue(responseBody, StreamLoadResponse.StreamLoadResponseBody.class);
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            // No definitive FE commit status was read: socket timeout, connection reset, a non-200
+            // from an intermediary (proxy/LB), or an unparseable/absent body. The transaction may
+            // nonetheless have COMMITTED server-side — the FE commits, then the reply is dropped by
+            // the LB/network. Reconcile against the real label state before failing; a committed/
+            // visible label means the commit actually succeeded and we must NOT fail the job (which
+            // would otherwise stall the manager thread up to flushTimeoutMs and then restart-storm).
+            return reconcileLostCommit(host, transaction, e);
         }
+
+        // A definitive FE response with a parseable status was read below this point.
+        String status = streamLoadBody.getStatus();
+        if (status == null) {
+            throw new StreamLoadFailException(String.format("Commit transaction status is null. db: %s, table: %s, " +
+                    "label: %s, response body: %s", transaction.getDatabase(), transaction.getTable(),
+                    transaction.getLabel(), streamLoadBody));
+        }
+        if (StreamLoadConstants.RESULT_STATUS_OK.equals(status)) {
+            StreamLoadResponse streamLoadResponse = new StreamLoadResponse();
+            streamLoadResponse.setBody(streamLoadBody);
+            manager.callback(streamLoadResponse);
+            return true;
+        }
+
+        // Definitive non-OK FE status. Double-check the label state once (a non-OK response can
+        // accompany an actually-committed txn — e.g. FE leader failover, or a repeated commit), but
+        // this IS the FE's decision, so do NOT poll in-progress states here (unlike the lost-response
+        // path above): a genuine rejection (e.g. "disk full") must fail fast, not wait ~60s.
+        // corner cases: TXN_NOT_EXISTS (txn timed out and the label was cleaned up); or a Failed
+        // status whose txn actually succeeded (FE leader restart + job failover re-committing).
+        String labelState;
+        try {
+            labelState = getLabelState(host, transaction.getDatabase(), transaction.getTable(),
+                    transaction.getLabel(), Collections.emptySet());
+        } catch (Exception stateEx) {
+            throw new StreamLoadFailException(String.format("Transaction commit failed, db: %s, table: %s, label: %s, " +
+                    "commit response status: %s; the label-state re-check also failed: %s", transaction.getDatabase(),
+                    transaction.getTable(), transaction.getLabel(), status, stateEx));
+        }
+        if (TransactionStatus.COMMITTED.isSame(labelState) || TransactionStatus.VISIBLE.isSame(labelState)) {
+            return true;
+        }
+
+        String errorLog = getErrorLog(streamLoadBody.getErrorURL(), properties.isSanitizeErrorLog());
+        log.error("Transaction commit failed, db: {}, table: {}, label: {}, label state: {}, \nerrorLog: {}",
+                transaction.getDatabase(), transaction.getTable(), transaction.getLabel(), labelState, errorLog);
+        String exceptionMsg = String.format("Transaction commit failed, db: %s, table: %s, label: %s, commit response status: %s," +
+                " label state: %s", transaction.getDatabase(), transaction.getTable(), transaction.getLabel(), status, labelState);
+        if (StreamLoadConstants.RESULT_STATUS_TRANSACTION_NOT_EXISTED.equals(status) ||
+                TransactionStatus.UNKNOWN.isSame(labelState)) {
+            exceptionMsg += ". commit response status with TXN_NOT_EXISTS or label state with UNKNOWN often happens when transaction" +
+                    " timeouts, and please check StarRocks FE leader's log to confirm it. You can find the transaction id for the label" +
+                    " in the FE log first, and search with the transaction id and the keyword 'expired'";
+        }
+        throw new StreamLoadFailException(exceptionMsg);
+    }
+
+    /**
+     * Reconciles a commit whose response was lost/errored before a definitive FE status could be
+     * read (socket timeout, connection reset, non-200 from an LB/proxy, unparseable body). Polls
+     * the real label state — retrying while the commit is still IN PROGRESS ({@code PREPARE}/
+     * {@code PREPARED}) so a commit that is merely slow (not lost) is not prematurely failed — and
+     * treats {@code COMMITTED}/{@code VISIBLE} as success; otherwise rethrows the original cause.
+     *
+     * <p>Relies on {@code get_load_state} reporting the true terminal state for a (multi-statement)
+     * label. Verified on a real cluster that a committed multi-table label reports {@code VISIBLE}
+     * here (the {@code information_schema.loads} / {@code SHOW STREAM LOAD} {@code PREPARING} display
+     * lag is a different FE path; {@code get_load_state} reads the transaction state directly).
+     */
+    private boolean reconcileLostCommit(String host, StreamLoadSnapshot.Transaction transaction, Exception cause) {
+        try {
+            String labelState = getLabelState(host, transaction.getDatabase(), transaction.getTable(),
+                    transaction.getLabel(), COMMIT_IN_PROGRESS_STATES);
+            if (TransactionStatus.COMMITTED.isSame(labelState) || TransactionStatus.VISIBLE.isSame(labelState)) {
+                log.warn("Commit response lost for label {} ({}), but the label is already {} server-side; " +
+                        "treating the commit as successful.", transaction.getLabel(), cause.toString(), labelState);
+                return true;
+            }
+            log.error("Commit response lost for label {}, and label state is {} (not committed); failing.",
+                    transaction.getLabel(), labelState, cause);
+        } catch (Exception stateEx) {
+            log.error("Commit response lost for label {}, and label-state reconciliation also failed; failing.",
+                    transaction.getLabel(), stateEx);
+        }
+        throw new RuntimeException(cause);
     }
 
     @Override

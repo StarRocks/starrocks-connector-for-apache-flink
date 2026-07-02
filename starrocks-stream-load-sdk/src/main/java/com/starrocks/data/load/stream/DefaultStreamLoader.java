@@ -449,6 +449,34 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
         return TransactionStatus.valueOf(state.toUpperCase());
     }
 
+    /**
+     * Bounded socket-read timeout (ms) for the blocking transaction RPCs that run on the sink's
+     * manager thread (begin / prepare / commit) and for the label-state reconciliation query.
+     *
+     * <p>{@link StreamLoadProperties#getSocketTimeout()} defaults to {@code -1} (infinite in
+     * Apache HttpClient). On these blocking calls that means a lost response — the FE processes
+     * the request but the reply is dropped by an LB/proxy/network — hangs the manager thread
+     * indefinitely, stalling the whole subtask until the transport eventually resets. Bounding
+     * the timeout lets a lost response surface as a {@code SocketTimeoutException} that the caller
+     * reconciles against the real label state (see the commit/prepare recovery paths), instead of
+     * a permanent hang. Any explicit user-configured value is honored as-is — including {@code 0},
+     * which the {@code sink.socket.timeout-ms} contract defines as an (opt-in) infinite timeout;
+     * only the {@code -1} default (unset) is replaced with the bounded value.
+     */
+    static int boundedRpcSocketTimeoutMs(StreamLoadProperties properties) {
+        int configured = properties.getSocketTimeout();
+        if (configured >= 0) {
+            // Honor an explicit value, including 0 (= infinite per the option contract): the user
+            // opted in. Only the unset default (-1) is bounded below.
+            return configured;
+        }
+        // No explicit socket timeout: derive a bounded value from the server-side publish
+        // deadline plus margin, capped so it stays well under the manager's flush timeout.
+        int publishMs = properties.getPublishTimeoutMs();
+        long base = publishMs > 0 ? (long) publishMs : 60_000L;
+        return (int) Math.min(base + 30_000L, 300_000L);
+    }
+
     protected String getLabelState(String host, String database, String table, String label, Set<String> retryStates) throws Exception {
         int totalSleepSecond = 0;
         String lastState = null;
@@ -464,11 +492,14 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
             try (CloseableHttpClient client = HttpClients.createDefault()) {
                 String url = host + "/api/" + database + "/get_load_state?label=" + label;
                 HttpGet httpGet = new HttpGet(url);
-                httpGet.setConfig(RequestConfig.custom()
-                        .setConnectTimeout(properties.getConnectTimeout())
-                        .build());
                 httpGet.addHeader("Authorization", StreamLoadUtils.getBasicAuthHeader(properties.getUsername(), properties.getPassword()));
                 httpGet.setHeader("Connection", "close");
+                // Bound the read so a lost get_load_state reply cannot hang this reconciliation
+                // query (its outer 60s loop cap only guards between attempts, not a stuck read).
+                httpGet.setConfig(RequestConfig.custom()
+                        .setSocketTimeout(boundedRpcSocketTimeoutMs(properties))
+                        .setConnectTimeout(properties.getConnectTimeout())
+                        .build());
                 try (CloseableHttpResponse response = client.execute(httpGet)) {
                     int responseStatusCode = response.getStatusLine().getStatusCode();
                     String entityContent = EntityUtils.toString(response.getEntity());
