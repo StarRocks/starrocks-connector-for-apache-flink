@@ -590,6 +590,19 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                             }
                         }
 
+                        // Reconcile any flushQ region that is not carrying the current
+                        // shared label while a shared transaction is active. A region
+                        // first-created in the commit-reopen gap can read isActive()==false
+                        // (keeping a null label) and then have its flushQ.offer land after
+                        // ensureSharedTransaction's weakly-consistent inject loop, so it is
+                        // missed by injection. The !isActive() re-injection above is dormant
+                        // while a txn is active, and nothing else re-validates a region's
+                        // label before selection — an un-injected region would flush under a
+                        // minted independent (orphan) label, splitting a source transaction
+                        // across labels. Repair it here, on the manager thread, before
+                        // flush/commit selection.
+                        reconcileFlushQueueLabels();
+
                         // In multi-table mode, first give the manager-thread
                         // fallback a chance to force-switch any region whose
                         // activeChunk is at a clean transaction boundary and has
@@ -1261,6 +1274,51 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         LOG.info("[MultiTxn] Eagerly opened shared transaction: label={}",
                 txnCoordinator.getSharedLabel());
         return true;
+    }
+
+    /**
+     * Reconciles every {@code flushQ} region to the coordinator's current shared
+     * label while a shared transaction is active. Runs on the manager thread right
+     * before flush/commit selection.
+     *
+     * <p>Region creation ({@link #getCacheRegion}) injects the shared label only when
+     * it observes {@code isActive()} true (:1876/:1886), and {@link #ensureSharedTransaction}
+     * re-injects only when NO txn is active (the {@code if (!isActive())} guard in the
+     * scan loop). A region first-created in the narrow window between a commit's
+     * {@code commitInFlight.set(false)} and the eager reopen's
+     * {@link SharedTransactionCoordinator#begin} publish reads {@code isActive()==false},
+     * so it keeps a null label; if its {@code flushQ.offer} then lands after the reopen's
+     * weakly-consistent {@code ConcurrentLinkedQueue} inject loop has passed the tail, it
+     * is never given the shared label. With a txn active thereafter, nothing re-validates
+     * it, and its first autonomous flush would mint an independent (orphan) transaction via
+     * {@link com.starrocks.data.load.stream.TransactionStreamLoader#begin} (which mints a
+     * fresh label when {@code getLabel()==null}), splitting a source transaction across
+     * labels and breaking cross-table atomicity. This pass closes that gap.
+     *
+     * <p>Uses {@link TransactionTableRegion#trySetLabel}: a region mid-retry
+     * ({@code numRetries > 0}) keeps its own in-flight label (trySetLabel returns false)
+     * and is reconciled on a later scan once the retry settles — it cannot start a new
+     * flush meanwhile (its {@code tryEnterFlushing} is blocked). Skips regions of a
+     * different database, mirroring the single-database guard in {@link #getCacheRegion}.
+     */
+    private void reconcileFlushQueueLabels() {
+        if (!multiTableTransactionEnabled || txnCoordinator == null || !txnCoordinator.isActive()) {
+            return;
+        }
+        String shared = txnCoordinator.getSharedLabel();
+        if (shared == null) {
+            return;
+        }
+        String txnDb = txnCoordinator.getDatabase();
+        for (TransactionTableRegion region : flushQ) {
+            if (shared.equals(region.getLabel())) {
+                continue;
+            }
+            if (txnDb != null && !txnDb.equals(region.getDatabase())) {
+                continue;
+            }
+            region.trySetLabel(shared);
+        }
     }
 
     /**

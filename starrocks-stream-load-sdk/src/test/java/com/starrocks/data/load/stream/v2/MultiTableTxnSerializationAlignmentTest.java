@@ -20,6 +20,8 @@ package com.starrocks.data.load.stream.v2;
 
 import com.starrocks.data.load.stream.MockedStarRocksHttpServer;
 import com.starrocks.data.load.stream.StreamLoadDataFormat;
+import com.starrocks.data.load.stream.StreamLoadUtils;
+import com.starrocks.data.load.stream.TableRegion;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
 import org.junit.After;
@@ -29,6 +31,7 @@ import org.junit.Test;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.BooleanSupplier;
 
 /**
  * Verifies the structural multi-table transaction fixes under sustained
@@ -156,6 +159,94 @@ public class MultiTableTxnSerializationAlignmentTest {
             }
         }
         return perLabel;
+    }
+
+    /** Polls {@code cond} every 20ms until true or the timeout elapses; fails otherwise. */
+    private static void awaitUntil(BooleanSupplier cond, long timeoutMs, String message) throws Exception {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < deadline) {
+            if (cond.getAsBoolean()) {
+                return;
+            }
+            Thread.sleep(20);
+        }
+        Assert.fail("Timed out after " + timeoutMs + "ms: " + message);
+    }
+
+    /**
+     * Regression for the stale/null shared-label race (2026-07): a region can land
+     * in {@code flushQ} holding a label that is NOT the coordinator's current shared
+     * label while a shared transaction is active, and nothing re-validates it before
+     * the autonomous flush selects it — so its first flush mints an independent
+     * (orphan) transaction, splitting a source transaction across labels and breaking
+     * cross-table atomicity.
+     *
+     * <p><b>How the state arises in the wild</b> (verified by whole-system trace):
+     * region creation ({@code getCacheRegion}) injects the shared label and enqueues
+     * to {@code flushQ} under {@code synchronized(regions)}, but the commit-tail
+     * re-open ({@code ensureSharedTransaction}) publishes the new label via
+     * {@code SharedTransactionCoordinator.begin()} BEFORE its weakly-consistent
+     * {@code ConcurrentLinkedQueue} inject-loop iterates — and takes no {@code regions}
+     * monitor. A first write to a NEW (db,table) whose {@code isActive()} read lands in
+     * the {@code commitInFlight==false && !isActive()} gap (so it captures neither the
+     * defensive watermark nor a label) and whose {@code flushQ.offer} lands after the
+     * inject-loop's cursor passes the tail is MISSED by injection. The per-scan
+     * re-injection guard ({@code if (!isActive())}) is then dormant because the txn is
+     * active, so the region is never re-injected.
+     *
+     * <p><b>Why the state is constructed directly here:</b> that interleaving is a
+     * microsecond window between {@code getCacheRegion}'s {@code isActive()} read and
+     * its {@code flushQ.offer}; it cannot be forced deterministically through the
+     * public API (the autonomous manager thread will not stall on demand). We therefore
+     * reproduce the PROVEN-REACHABLE resulting state — a {@code flushQ} region with a
+     * null label while the shared transaction stays active — and assert the manager
+     * repairs it before any flush. This test is RED on the pre-fix code (nothing
+     * reconciles the label while active) and GREEN once the manager reconciles every
+     * {@code flushQ} region to the live shared label before flush selection.
+     */
+    @Test
+    public void testActiveTxnReconcilesRegionMissingSharedLabel() throws Exception {
+        // Large commit interval + no txnEnd + default (large) recycle idle => the shared
+        // transaction opened below stays active and stable for the whole test.
+        DefaultStreamLoadManager manager = new DefaultStreamLoadManager(buildProperties(60000), true);
+        manager.init();
+        try {
+            // 1. Open a shared transaction by writing to the first table (partition 0).
+            manager.write(0, DB, ORDERS, "{\"order_id\":1, " + ORDER_MARKER + ":1}");
+
+            // 2. Wait until the manager thread eagerly opened the shared txn and injected
+            //    its label into the orders region.
+            String ordersKey = "P0-" + StreamLoadUtils.getTableUniqueKey(DB, ORDERS);
+            TableRegion orders = manager.getCacheRegion(ordersKey, DB, ORDERS, 0);
+            awaitUntil(() -> orders.getLabel() != null, 5000,
+                    "shared transaction should open and inject a label into the orders region");
+            final String sharedLabel = orders.getLabel();
+
+            // 3. A sibling region created while the txn is active DOES get the shared label
+            //    (getCacheRegion's isActive()-gated injection path).
+            String itemsKey = "P0-" + StreamLoadUtils.getTableUniqueKey(DB, ITEMS);
+            TableRegion items = manager.getCacheRegion(itemsKey, DB, ITEMS, 0);
+            Assert.assertEquals("precondition: sibling created while active receives the shared label",
+                    sharedLabel, items.getLabel());
+
+            // 4. Reproduce the missed-injection state: the region sits in flushQ with a null
+            //    label while the shared transaction remains active.
+            items.setLabel(null);
+
+            // 5. Let manager scans run. BUG: no re-validation while a txn is active -> the
+            //    region keeps its null label (its first flush would mint an orphan txn).
+            //    FIX: the manager reconciles flushQ regions to the live shared label before
+            //    flush selection, restoring it.
+            awaitUntil(() -> sharedLabel.equals(items.getLabel()), 3000,
+                    "manager must reconcile the flushQ region back to the live shared label "
+                            + "while the shared transaction is active (else its flush mints an orphan txn)");
+
+            Assert.assertEquals("region must carry the live shared label, never null/stale",
+                    sharedLabel, items.getLabel());
+            Assert.assertNull("no failure expected: " + manager.getException(), manager.getException());
+        } finally {
+            manager.close();
+        }
     }
 
     @Test
