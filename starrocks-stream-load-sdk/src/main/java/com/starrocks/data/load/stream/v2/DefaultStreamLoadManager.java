@@ -590,17 +590,12 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                             }
                         }
 
-                        // Reconcile any flushQ region that is not carrying the current
-                        // shared label while a shared transaction is active. A region
-                        // first-created in the commit-reopen gap can read isActive()==false
-                        // (keeping a null label) and then have its flushQ.offer land after
-                        // ensureSharedTransaction's weakly-consistent inject loop, so it is
-                        // missed by injection. The !isActive() re-injection above is dormant
-                        // while a txn is active, and nothing else re-validates a region's
-                        // label before selection — an un-injected region would flush under a
-                        // minted independent (orphan) label, splitting a source transaction
-                        // across labels. Repair it here, on the manager thread, before
-                        // flush/commit selection.
+                        // Best-effort pass keeping flushQ region labels aligned with the
+                        // live shared label (a region can slip in without it — see
+                        // reconcileRegionLabel). The authoritative repair is done per-region
+                        // immediately before region.flush() in the selection loop below, so
+                        // it is atomic with selection; this pass just keeps not-yet-selected
+                        // regions consistent (and avoids churn).
                         reconcileFlushQueueLabels();
 
                         // In multi-table mode, first give the manager-thread
@@ -633,6 +628,13 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
 
                         for (FlushAndCommitStrategy.SelectFlushResult result : flushAndCommitStrategy.selectFlushRegions(flushQ, currentCacheBytes.get())) {
                             TransactionTableRegion region = result.getRegion();
+                            // Authoritative label repair, atomic with selection: a region
+                            // that slipped into flushQ without the current shared label (see
+                            // reconcileRegionLabel) must never flush under a null/stale label
+                            // and mint an orphan transaction. Checking here — for the exact
+                            // region about to flush, on the manager thread — closes the window
+                            // where a concurrently-enqueued region bypasses the flushQ pass.
+                            reconcileRegionLabel(region);
                             boolean flush = region.flush(result.getReason());
                             if (flush && multiTableTransactionEnabled && txnCoordinator != null) {
                                 txnCoordinator.markDataLoaded();
@@ -1277,48 +1279,64 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
     }
 
     /**
-     * Reconciles every {@code flushQ} region to the coordinator's current shared
-     * label while a shared transaction is active. Runs on the manager thread right
-     * before flush/commit selection.
-     *
-     * <p>Region creation ({@link #getCacheRegion}) injects the shared label only when
-     * it observes {@code isActive()} true (:1876/:1886), and {@link #ensureSharedTransaction}
-     * re-injects only when NO txn is active (the {@code if (!isActive())} guard in the
-     * scan loop). A region first-created in the narrow window between a commit's
-     * {@code commitInFlight.set(false)} and the eager reopen's
-     * {@link SharedTransactionCoordinator#begin} publish reads {@code isActive()==false},
-     * so it keeps a null label; if its {@code flushQ.offer} then lands after the reopen's
-     * weakly-consistent {@code ConcurrentLinkedQueue} inject loop has passed the tail, it
-     * is never given the shared label. With a txn active thereafter, nothing re-validates
-     * it, and its first autonomous flush would mint an independent (orphan) transaction via
-     * {@link com.starrocks.data.load.stream.TransactionStreamLoader#begin} (which mints a
-     * fresh label when {@code getLabel()==null}), splitting a source transaction across
-     * labels and breaking cross-table atomicity. This pass closes that gap.
-     *
-     * <p>Uses {@link TransactionTableRegion#trySetLabel}: a region mid-retry
-     * ({@code numRetries > 0}) keeps its own in-flight label (trySetLabel returns false)
-     * and is reconciled on a later scan once the retry settles — it cannot start a new
-     * flush meanwhile (its {@code tryEnterFlushing} is blocked). Skips regions of a
-     * different database, mirroring the single-database guard in {@link #getCacheRegion}.
+     * Best-effort pass reconciling every {@code flushQ} region to the coordinator's
+     * current shared label while a shared transaction is active. Runs on the manager
+     * thread each scan; the authoritative check is {@link #reconcileRegionLabel} invoked
+     * immediately before {@code region.flush()} in the selection loop, which makes the
+     * repair atomic with flush selection so a region enqueued concurrently cannot bypass
+     * it. See {@link #reconcileRegionLabel} for why the repair is needed.
      */
     private void reconcileFlushQueueLabels() {
         if (!multiTableTransactionEnabled || txnCoordinator == null || !txnCoordinator.isActive()) {
             return;
         }
+        for (TransactionTableRegion region : flushQ) {
+            reconcileRegionLabel(region);
+        }
+    }
+
+    /**
+     * Ensures a single region carries the coordinator's live shared label before it is
+     * flushed. No-op unless multi-table mode has an active shared transaction and the
+     * region's label differs.
+     *
+     * <p>A region first-created for a new (db,table) in the window between a commit's
+     * {@code commitInFlight.set(false)} and the eager reopen's shared-label publish reads
+     * {@code isActive()==false}, so {@link #getCacheRegion} skips label injection and the
+     * region keeps a null label; if its {@code flushQ.offer} then lands after
+     * {@link #ensureSharedTransaction}'s weakly-consistent {@code ConcurrentLinkedQueue}
+     * inject loop has passed, it is never given the shared label. The scan-loop
+     * re-injection only runs when NO txn is active, so once a txn is active nothing else
+     * re-validates the label. Left unrepaired, the region's first flush would mint an
+     * independent (orphan) transaction via
+     * {@link com.starrocks.data.load.stream.TransactionStreamLoader#begin} (which mints a
+     * fresh label when {@code getLabel()==null}), splitting a source transaction across
+     * labels and breaking cross-table atomicity. Calling this immediately before
+     * {@code region.flush()} makes the check atomic with flush selection.
+     *
+     * <p>Skips a region that is flushing or retrying: it holds an in-flight label of its
+     * own, so changing it mid-flight would be wrong (matching {@link #ensureSharedTransaction}'s
+     * {@code isFlushing()/isRetrying()} skip), and it cannot start a new flush meanwhile.
+     * Skips regions of a different database, mirroring the single-database guard in
+     * {@link #getCacheRegion}. The label-equality fast path avoids the
+     * {@link TransactionTableRegion#trySetLabel} WARN on the common already-aligned case.
+     */
+    private void reconcileRegionLabel(TransactionTableRegion region) {
+        if (!multiTableTransactionEnabled || txnCoordinator == null) {
+            return;
+        }
         String shared = txnCoordinator.getSharedLabel();
-        if (shared == null) {
+        if (shared == null || shared.equals(region.getLabel())) {
+            return;
+        }
+        if (region.isFlushing() || region.isRetrying()) {
             return;
         }
         String txnDb = txnCoordinator.getDatabase();
-        for (TransactionTableRegion region : flushQ) {
-            if (shared.equals(region.getLabel())) {
-                continue;
-            }
-            if (txnDb != null && !txnDb.equals(region.getDatabase())) {
-                continue;
-            }
-            region.trySetLabel(shared);
+        if (txnDb != null && !txnDb.equals(region.getDatabase())) {
+            return;
         }
+        region.trySetLabel(shared);
     }
 
     /**
