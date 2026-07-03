@@ -68,6 +68,15 @@ public interface TableRegion {
     boolean isReadable();
     boolean isFlushing();
 
+    /**
+     * Releases the FLUSHING state (and any per-table load gate) without consuming the
+     * pending chunk or recording success/failure, so the region becomes eligible for a
+     * fresh load attempt. Used by the loader as a safety net to defer — rather than fail
+     * — a multi-table load that would otherwise send a null shared label to the FE.
+     * Default no-op for region types that do not model a FLUSHING state.
+     */
+    default void exitFlushing() {}
+
     default HttpEntity getHttpEntity() {
         return new StreamLoadEntity(this, getProperties().getDataFormat(), getEntityMeta());
     }

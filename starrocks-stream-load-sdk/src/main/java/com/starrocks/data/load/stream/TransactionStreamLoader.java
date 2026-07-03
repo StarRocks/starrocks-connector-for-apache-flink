@@ -116,6 +116,19 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
     @Override
     public boolean begin(TableRegion region) {
         if (region.getLabel() == null) {
+            // Multi-table transaction mode: a region must only ever load under the
+            // coordinator's injected shared label. A null label here means the shared
+            // label was not yet injected or was cleared concurrently by the manager
+            // thread; minting an independent label would open an orphan single-table
+            // transaction and split a source transaction across labels (breaking
+            // cross-table atomicity). Refuse the load — the caller (streamLoad) releases
+            // FLUSHING so the manager reconciles the shared label and re-triggers.
+            if (properties.isEnableMultiTableTransaction()) {
+                log.warn("Refusing to begin an independent transaction for a multi-table region with a " +
+                        "null shared label, db: {}, table: {}; awaiting manager reconcile",
+                        region.getDatabase(), region.getTable());
+                return false;
+            }
             region.setLabel(region.getLabelGenerator().next());
             if (doBegin(region)) {
                 return true;

@@ -287,6 +287,20 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
             String sendUrl = getSendUrl(host, region.getDatabase(), region.getTable());
             String label = region.getLabel();
 
+            // Multi-table safety net: the region's shared label may have been cleared by
+            // a concurrent commit/recycle/savepoint on the manager thread between the flush
+            // decision and this point. Never send a null label to the FE — it fails fatally
+            // with "Empty label". Abort this load WITHOUT failing the region: release
+            // FLUSHING so the manager reconciles the label and re-triggers; the chunk is
+            // preserved. (In single-table mode begin() always mints a label first, so this
+            // branch is not reached there.)
+            if (label == null && properties.isEnableMultiTableTransaction()) {
+                log.warn("Skipping stream load with null shared label, db: {}, table: {}; the region " +
+                        "will be retried after the manager reconciles its label", region.getDatabase(), region.getTable());
+                region.exitFlushing();
+                return null;
+            }
+
             HttpPut httpPut = new HttpPut(sendUrl);
             httpPut.setConfig(RequestConfig.custom()
                         .setSocketTimeout(properties.getSocketTimeout())

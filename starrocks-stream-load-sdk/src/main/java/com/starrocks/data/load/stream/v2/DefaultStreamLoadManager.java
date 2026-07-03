@@ -444,6 +444,11 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                             boolean allLoadsDone = false;
                             while (!allLoadsDone && this.e == null) {
                                 for (TransactionTableRegion region : flushQ) {
+                                    // Reconcile the shared label before draining: this drain
+                                    // path (unlike the autonomous flush-selection loop) would
+                                    // otherwise load a region that missed label injection under
+                                    // a null/stale label. No-op when already aligned.
+                                    reconcileRegionLabel(region);
                                     if (region.triggerLoadIfNeeded()) {
                                         txnCoordinator.markDataLoaded();
                                     }
@@ -1009,6 +1014,10 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
             // and the txnEnd marker).
             boolean triggeredNew = false;
             for (TransactionTableRegion region : regionSnapshot) {
+                // Reconcile before draining, mirroring the autonomous flush-selection
+                // guard: a region that missed label injection must not be loaded under a
+                // null/stale label from this drain path. No-op when already aligned.
+                reconcileRegionLabel(region);
                 if (region.triggerLoadIfNeeded()) {
                     txnCoordinator.markDataLoaded();
                     triggeredNew = true;
@@ -1462,6 +1471,10 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         long recycleWaitStartMs = System.currentTimeMillis();
         while (true) {
             for (TransactionTableRegion region : recycleRegions) {
+                // Reconcile before draining, mirroring the autonomous flush-selection
+                // guard: a region that missed label injection must not be loaded under a
+                // null/stale label from this drain path. No-op when already aligned.
+                reconcileRegionLabel(region);
                 if (region.triggerLoadIfNeeded()) {
                     txnCoordinator.markDataLoaded();
                 }
