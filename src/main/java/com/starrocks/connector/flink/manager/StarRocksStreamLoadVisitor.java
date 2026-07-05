@@ -212,7 +212,9 @@ public class StarRocksStreamLoadVisitor implements Serializable {
                 host = "http://" + host;
             }
             pos++;
-            if (tryHttpConnection(host)) {
+            // No alternative host to fall back to, so probing is useless: if the only
+            // host is down, the subsequent load request will fail and report it anyway
+            if (hostList.size() == 1 || tryHttpConnection(host)) {
                 return host;
             }
         }
@@ -310,6 +312,7 @@ public class StarRocksStreamLoadVisitor implements Serializable {
             httpPut.setHeader("Authorization", getBasicAuthHeader(sinkOptions.getUsername(), sinkOptions.getPassword()));
             httpPut.setEntity(new ByteArrayEntity(data));
             httpPut.setConfig(RequestConfig.custom()
+                    .setConnectTimeout(sinkOptions.getConnectTimeout())
                     .setSocketTimeout(sinkOptions.getSocketTimeout())
                     .setRedirectsEnabled(true).build());
             try (CloseableHttpResponse resp = httpclient.execute(httpPut)) {
