@@ -34,6 +34,8 @@ flink_minor_version=$1
 check_flink_version_supported $flink_minor_version
 flink_version="$(get_flink_version $flink_minor_version)"
 kafka_connector_version="$(get_kafka_connector_version $flink_minor_version)"
+module="$(get_module_for_version $flink_minor_version)"
+check_jdk_for_version "$flink_minor_version"
 
 # control whether to run tests (default: skip tests)
 skip_tests=true
@@ -51,14 +53,18 @@ else
   mvn_skip_flag="-DskipTests=false"
 fi
 
+# common must always be in -pl: it is compiled against the target flink version
+# and shaded in; a stale copy must never resolve from the local repository
 ${MVN_CMD} clean package ${mvn_skip_flag} \
+  -pl flink-connector-starrocks-common,${module},flink-connector-starrocks-tests \
+  -Dflink.major=${flink_minor_version%%.*} \
   -Dflink.minor.version=${flink_minor_version} \
   -Dflink.version=${flink_version} \
   -Dkafka.connector.version=${kafka_connector_version}
 
 echo "*********************************************************************"
 echo "Successfully build Flink StarRocks Connector for Flink $flink_minor_version"
-echo "You can find the connector jar under the \"target\" directory"
+echo "You can find the connector jar under the \"${module}/target\" directory"
 echo "*********************************************************************"
 
 exit 0
