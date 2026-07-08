@@ -66,10 +66,12 @@ public class StarRocksCommitter implements Committer<StarRocksCommittable> {
         for (CommitRequest<StarRocksCommittable> commitRequest : committables) {
             StarRocksCommittable committable = commitRequest.getCommittable();
             RuntimeException firstException = null;
+            boolean committed = false;
             for (int i = 0; i <= maxRetries; i++) {
                 try {
                     boolean success = sinkManager.commit(committable.getLabelSnapshot());
                     if (success) {
+                        committed = true;
                         break;
                     }
                     throw new RuntimeException("Please see the taskmanager log for the failure reason");
@@ -80,8 +82,10 @@ public class StarRocksCommitter implements Committer<StarRocksCommittable> {
                     }
                 }
             }
-            if (firstException != null) {
-                throw firstException;
+            if (!committed) {
+                throw firstException != null
+                        ? firstException
+                        : new RuntimeException("Failed to commit");
             }
         }
     }

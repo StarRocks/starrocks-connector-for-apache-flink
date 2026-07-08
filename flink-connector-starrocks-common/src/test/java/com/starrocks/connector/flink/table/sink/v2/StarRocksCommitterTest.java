@@ -58,6 +58,16 @@ public class StarRocksCommitterTest {
     }
 
     @Test
+    public void testCommitSuccessOnRetryDoesNotThrow(@Injectable StreamLoadManagerV2 sinkManager) throws Exception {
+        new Expectations() {{
+            sinkManager.commit((StreamLoadSnapshot) any);
+            returns(false, true);
+        }};
+        StarRocksCommitter committer = createCommitter(sinkManager, 2);
+        committer.commit(Collections.singletonList(commitRequest()));
+    }
+
+    @Test
     public void testCommitSuccess(@Injectable StreamLoadManagerV2 sinkManager) throws Exception {
         new Expectations() {{
             sinkManager.commit((StreamLoadSnapshot) any);
