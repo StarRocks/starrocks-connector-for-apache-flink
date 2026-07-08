@@ -84,11 +84,13 @@ public class StarRocksWriter<InputT>
             this.labelGeneratorFactory = new LabelGeneratorFactory.DefaultLabelGeneratorFactory(
                     labelPrefix == null ? "flink" : labelPrefix);
         } else {
-            this.labelGeneratorFactory = new ExactlyOnceLabelGeneratorFactory(
+            ExactlyOnceLabelGeneratorFactory exactlyOnceLabelFactory = new ExactlyOnceLabelGeneratorFactory(
                     labelPrefix,
                     initContext.getNumberOfParallelSubtasks(),
                     initContext.getSubtaskId(),
                     restoredCheckpointId);
+            exactlyOnceLabelFactory.restore(restoredGeneratorSnapshots);
+            this.labelGeneratorFactory = exactlyOnceLabelFactory;
         }
 
         this.sinkManager = new StreamLoadManagerV2(streamLoadProperties,
