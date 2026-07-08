@@ -281,33 +281,49 @@ When you read data by using Flink SQL, take note of the following points:
 
 ### Read data using Flink DataStream
 
-1. Add the following dependencies to the `pom.xml` file:
+1. Add the Flink connector as a dependency to the `pom.xml` file according to your Flink version:
 
-   ```SQL
-   <dependency>
-       <groupId>com.starrocks</groupId>
-       <!-- since connector 1.2.16: use artifactId flink-connector-starrocks-1.x
-            for Apache Flink® 1.16-1.20, and flink-connector-starrocks-2.x for
-            Apache Flink® 2.0+, e.g. <version>1.2.16_flink-2.0</version> -->
-       <artifactId>flink-connector-starrocks</artifactId>
-       <!-- for Apache Flink® 1.15 -->
-       <version>x.x.x_flink-1.15</version>
-       <!-- for Apache Flink® 1.14 -->
-       <version>x.x.x_flink-1.14_2.11</version>
-       <version>x.x.x_flink-1.14_2.12</version>
-       <!-- for Apache Flink® 1.13 -->
-       <version>x.x.x_flink-1.13_2.11</version>
-       <version>x.x.x_flink-1.13_2.12</version>
-       <!-- for Apache Flink® 1.12 -->
-       <version>x.x.x_flink-1.12_2.11</version>
-       <version>x.x.x_flink-1.12_2.12</version>
-       <!-- for Apache Flink® 1.11 -->
-       <version>x.x.x_flink-1.11_2.11</version>
-       <version>x.x.x_flink-1.11_2.12</version>
-   </dependency>
-   ```
+   - Since connector 1.2.16, for Apache Flink® 1.16-1.20
 
-   You must replace `x.x.x` in the preceding code example with the latest Flink connector version that you are using. See [Version information](https://search.maven.org/search?q=g:com.starrocks).
+     ```xml
+     <dependency>
+         <groupId>com.starrocks</groupId>
+         <artifactId>flink-connector-starrocks-1.x</artifactId>
+         <version>${connector_version}_flink-${flink_version}</version>
+     </dependency>
+     ```
+
+   - Since connector 1.2.16, for Apache Flink® 2.0 and later
+
+     ```xml
+     <dependency>
+         <groupId>com.starrocks</groupId>
+         <artifactId>flink-connector-starrocks-2.x</artifactId>
+         <version>${connector_version}_flink-${flink_version}</version>
+     </dependency>
+     ```
+
+   - Up to connector 1.2.15, for Apache Flink® 1.15 and later
+
+     ```xml
+     <dependency>
+         <groupId>com.starrocks</groupId>
+         <artifactId>flink-connector-starrocks</artifactId>
+         <version>${connector_version}_flink-${flink_version}</version>
+     </dependency>
+     ```
+
+   - In versions earlier than Apache Flink® 1.15
+
+     ```xml
+     <dependency>
+         <groupId>com.starrocks</groupId>
+         <artifactId>flink-connector-starrocks</artifactId>
+         <version>${connector_version}_flink-${flink_version}_${scala_version}</version>
+     </dependency>
+     ```
+
+   Replace `connector_version`, `flink_version`, and `scala_version` with the versions you use. See [Version information](https://search.maven.org/search?q=g:com.starrocks).
 
 2. Call the Flink connector to read data from StarRocks:
 
@@ -340,6 +356,12 @@ When you read data by using Flink SQL, take note of the following points:
 
        }
    ```
+
+   > **NOTE**
+   >
+   > This example targets `flink-connector-starrocks-1.x`. With `flink-connector-starrocks-2.x`,
+   > build a `ResolvedSchema` instead of a `TableSchema` and add the source with
+   > `env.fromSource(...)`, because Flink 2.x removed `TableSchema` and `addSource`.
 
 ## What's next
 
