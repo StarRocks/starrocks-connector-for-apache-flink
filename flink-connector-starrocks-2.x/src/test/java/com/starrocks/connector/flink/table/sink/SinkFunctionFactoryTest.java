@@ -195,4 +195,23 @@ public class SinkFunctionFactoryTest {
             }
         }
     }
+
+    @Test
+    public void testCreateSinkRejectsExplicitV1() {
+        Configuration conf = new Configuration();
+        conf.set(StarRocksSinkOptions.TABLE_NAME, "test");
+        conf.set(StarRocksSinkOptions.DATABASE_NAME, "test");
+        conf.setString(StarRocksSinkOptions.LOAD_URL.key(), "127.0.0.1:8030");
+        conf.set(StarRocksSinkOptions.JDBC_URL, "jdbc://127.0.0.1:1234");
+        conf.set(StarRocksSinkOptions.USERNAME, "root");
+        conf.set(StarRocksSinkOptions.PASSWORD, "");
+        conf.set(StarRocksSinkOptions.SINK_VERSION, "V1");
+        StarRocksSinkOptions sinkOptions = new StarRocksSinkOptions(conf, new HashMap<>());
+        try {
+            SinkFunctionFactory.createSink(sinkOptions);
+            fail();
+        } catch (UnsupportedOperationException e) {
+            assertTrue(e.getMessage().contains("not supported in Flink 2.x"));
+        }
+    }
 }

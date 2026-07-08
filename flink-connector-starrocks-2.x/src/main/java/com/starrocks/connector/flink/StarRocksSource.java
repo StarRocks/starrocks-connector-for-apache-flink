@@ -15,11 +15,16 @@
 package com.starrocks.connector.flink;
 
 import com.starrocks.connector.flink.table.source.StarRocksFlinkSource;
+import com.starrocks.connector.flink.table.source.StarRocksSourceCommonFunc;
 import com.starrocks.connector.flink.table.source.StarRocksSourceOptions;
+import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
+import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 
 import org.apache.flink.api.connector.source.Source;
 import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.data.RowData;
+
+import java.util.Map;
 
 
 public class StarRocksSource {
@@ -32,6 +37,14 @@ public class StarRocksSource {
      * @return Source           FLIP-27 Source for use with env.fromSource()
      */
     public static Source<RowData, ?, ?> source(ResolvedSchema flinkSchema, StarRocksSourceOptions sourceOptions) {
-        return new StarRocksFlinkSource(sourceOptions, flinkSchema, null, -1, null, null);
+        // Mirror the 1.x DataStream entry: scan.filter and scan.columns come from the options
+        String filter = sourceOptions.getFilter().isEmpty() ? null : sourceOptions.getFilter();
+        SelectColumn[] selectColumns = null;
+        if (!sourceOptions.getColumns().trim().startsWith("count(")) {
+            Map<String, ColumnRichInfo> columnMap = StarRocksSourceCommonFunc.genColumnMap(flinkSchema);
+            selectColumns = StarRocksSourceCommonFunc.genSelectedColumns(
+                    columnMap, sourceOptions, StarRocksSourceCommonFunc.genColumnRichInfo(columnMap));
+        }
+        return new StarRocksFlinkSource(sourceOptions, flinkSchema, filter, -1, selectColumns, null);
     }
 }
