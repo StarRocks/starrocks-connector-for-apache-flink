@@ -21,6 +21,7 @@ import org.apache.flink.core.memory.DataOutputSerializer;
 import com.starrocks.connector.flink.table.source.struct.QueryBeXTablets;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -47,10 +48,14 @@ public class StarRocksSourceSplitSerializer implements SimpleVersionedSerializer
         for (Long tabletId : tabletIds) {
             out.writeLong(tabletId);
         }
+        // writeUTF caps at 64 KiB and the plan grows with the number of scan ranges
         String plan = split.getOpaquedQueryPlan();
-        out.writeBoolean(plan != null);
-        if (plan != null) {
-            out.writeUTF(plan);
+        if (plan == null) {
+            out.writeInt(-1);
+        } else {
+            byte[] planBytes = plan.getBytes(StandardCharsets.UTF_8);
+            out.writeInt(planBytes.length);
+            out.write(planBytes);
         }
         return out.getCopyOfBuffer();
     }
@@ -66,7 +71,13 @@ public class StarRocksSourceSplitSerializer implements SimpleVersionedSerializer
             tabletIds.add(in.readLong());
         }
         QueryBeXTablets beXTablets = new QueryBeXTablets(beNode, tabletIds);
-        String plan = in.readBoolean() ? in.readUTF() : null;
+        int planLength = in.readInt();
+        String plan = null;
+        if (planLength >= 0) {
+            byte[] planBytes = new byte[planLength];
+            in.readFully(planBytes);
+            plan = new String(planBytes, StandardCharsets.UTF_8);
+        }
         return new StarRocksSourceSplit(beXTablets, splitId, plan);
     }
 }
