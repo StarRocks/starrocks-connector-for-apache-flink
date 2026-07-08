@@ -68,8 +68,8 @@ public class StarRocksSinkITTest extends StarRocksITTestBase {
 
     @Parameterized.Parameters(name = "sinkV2={0}, newSinkApi={1}")
     public static List<Object[]> parameters() {
+        // sink.version=V1 is rejected in Flink 2.x, so only V2 combinations run here
         return Arrays.asList(
-                new Object[] {false, false},
                 new Object[] {true, false},
                 new Object[] {true, true}
             );
