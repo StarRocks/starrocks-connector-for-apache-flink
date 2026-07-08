@@ -90,7 +90,8 @@ public class StarRocksDynamicLookupFunction extends LookupFunction {
         }
         Row cacheKey = Row.of(keys);
         List<RowData> result = cacheMap.get(cacheKey);
-        return result != null ? result : Collections.emptyList();
+        // hand out a copy so the runtime never shares the cache's mutable lists
+        return result != null ? new ArrayList<>(result) : Collections.emptyList();
     }
 
     private void reloadData() {

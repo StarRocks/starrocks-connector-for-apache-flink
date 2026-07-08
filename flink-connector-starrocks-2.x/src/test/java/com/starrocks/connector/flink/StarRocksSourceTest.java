@@ -23,6 +23,7 @@ import org.apache.flink.table.types.DataType;
 
 import com.starrocks.connector.flink.table.source.StarRocksFlinkSource;
 import com.starrocks.connector.flink.table.source.StarRocksSourceOptions;
+import com.starrocks.connector.flink.table.source.StarRocksSourceQueryType;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 import org.junit.Test;
 
@@ -61,6 +62,18 @@ public class StarRocksSourceTest {
 
         assertNull(field(source, "filter"));
         assertNull(field(source, "selectColumns"));
+    }
+
+    @Test
+    public void testUppercaseCountColumnsSkipColumnSelection() throws Exception {
+        Configuration conf = baseConf();
+        conf.set(StarRocksSourceOptions.SCAN_COLUMNS, "COUNT(1)");
+        StarRocksSourceOptions options = new StarRocksSourceOptions(conf, conf.toMap());
+
+        Source<RowData, ?, ?> source = StarRocksSource.source(schema(), options);
+
+        assertNull(field(source, "selectColumns"));
+        assertEquals(StarRocksSourceQueryType.QueryCount, field(source, "queryType"));
     }
 
     private static Configuration baseConf() {
