@@ -12,9 +12,17 @@ The Flink connector supports DataStream API, Table API & SQL, and Python API. It
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.16 (2.x module) | 2.0,2.1,2.2,2.3     | 2.1 and later| 11 (17 for Flink 2.2+) | 2.12 |
+| 1.2.16 (1.x module) | 1.16,1.17,1.18,1.19,1.20 | 2.1 and later| 8 | 2.11,2.12 |
 | 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later| 8    | 2.11,2.12 |
 | 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later| 8    | 2.11,2.12 |
 | 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later| 8    | 2.11,2.12 |
+
+> **NOTE**
+>
+> Since 1.2.16 the connector ships as two artifacts: `flink-connector-starrocks-1.x`
+> for Flink 1.16-1.20 and `flink-connector-starrocks-2.x` for Flink 2.0+. Earlier
+> versions were published as `flink-connector-starrocks`.
 
 ## Obtain Flink connector
 
@@ -26,7 +34,9 @@ You can obtain the Flink connector JAR file in the following ways:
 
 The naming format of the Flink connector JAR file is as follows:
 
-- Since Flink 1.15, it's `flink-connector-starrocks-${connector_version}_flink-${flink_version}.jar`. For example, if you install Flink 1.15 and you want to use Flink connector 1.2.7, you can use `flink-connector-starrocks-1.2.7_flink-1.15.jar`.
+- Since connector 1.2.16, it's `flink-connector-starrocks-1.x-${connector_version}_flink-${flink_version}.jar` for Flink 1.x and `flink-connector-starrocks-2.x-${connector_version}_flink-${flink_version}.jar` for Flink 2.x. For example, for Flink 1.20 use `flink-connector-starrocks-1.x-1.2.16_flink-1.20.jar`, and for Flink 2.0 use `flink-connector-starrocks-2.x-1.2.16_flink-2.0.jar`.
+
+- From Flink 1.15 up to connector 1.2.15, it's `flink-connector-starrocks-${connector_version}_flink-${flink_version}.jar`. For example, if you install Flink 1.15 and you want to use Flink connector 1.2.7, you can use `flink-connector-starrocks-1.2.7_flink-1.15.jar`.
 
 - Prior to Flink 1.15, it's `flink-connector-starrocks-${connector_version}_flink-${flink_version}_${scala_version}.jar`. For example, if you install Flink 1.14 and Scala 2.12 in your environment, and you want to use Flink connector 1.2.7, you can use `flink-connector-starrocks-1.2.7_flink-1.14_2.12.jar`.
 
@@ -42,7 +52,27 @@ Directly download the corresponding version of the Flink connector Jar file from
 
 In your Maven project's `pom.xml` file, add the Flink connector as a dependency according to the following format. Replace `flink_version`, `scala_version`, and `connector_version` with the respective versions.
 
-- In Flink 1.15 and later
+- Since connector 1.2.16, for Flink 1.16-1.20
+
+    ```xml
+    <dependency>
+        <groupId>com.starrocks</groupId>
+        <artifactId>flink-connector-starrocks-1.x</artifactId>
+        <version>${connector_version}_flink-${flink_version}</version>
+    </dependency>
+    ```
+
+- Since connector 1.2.16, for Flink 2.0 and later
+
+    ```xml
+    <dependency>
+        <groupId>com.starrocks</groupId>
+        <artifactId>flink-connector-starrocks-2.x</artifactId>
+        <version>${connector_version}_flink-${flink_version}</version>
+    </dependency>
+    ```
+
+- Up to connector 1.2.15, in Flink 1.15 and later
 
     ```xml
     <dependency>
@@ -71,13 +101,15 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
       sh build.sh <flink_version>
       ```
 
-   For example, if the Flink version in your environment is 1.16, you need to execute the following command:
+   For example, if the Flink version in your environment is 1.16 or 2.0, you need to execute the following command:
 
       ```bash
       sh build.sh 1.16
+      # or
+      sh build.sh 2.0
       ```
 
-3. Go to the `target/` directory to find the Flink connector JAR file, such as `flink-connector-starrocks-1.2.7_flink-1.16-SNAPSHOT.jar`, generated upon compilation.
+3. Go to the `flink-connector-starrocks-1.x/target/` (Flink 1.x) or `flink-connector-starrocks-2.x/target/` (Flink 2.x) directory to find the Flink connector JAR file, such as `flink-connector-starrocks-1.x-1.2.16_flink-1.16-SNAPSHOT.jar`, generated upon compilation.
 
 > **NOTE**
 >

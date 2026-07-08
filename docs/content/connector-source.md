@@ -22,9 +22,17 @@ Unlike the JDBC connector provided by Flink, the Flink connector of StarRocks su
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.16 (2.x module) | 2.0,2.1,2.2,2.3     | 2.1 and later| 11 (17 for Flink 2.2+) | 2.12 |
+| 1.2.16 (1.x module) | 1.16,1.17,1.18,1.19,1.20 | 2.1 and later| 8 | 2.11,2.12 |
 | 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later| 8    | 2.11,2.12 |
 | 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later| 8    | 2.11,2.12 |
 | 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later| 8    | 2.11,2.12 |
+
+> **NOTE**
+>
+> Since 1.2.16 the connector ships as two artifacts: `flink-connector-starrocks-1.x`
+> for Flink 1.16-1.20 and `flink-connector-starrocks-2.x` for Flink 2.0+. Earlier
+> versions were published as `flink-connector-starrocks`.
 
 ## Prerequisites
 
@@ -278,6 +286,9 @@ When you read data by using Flink SQL, take note of the following points:
    ```SQL
    <dependency>
        <groupId>com.starrocks</groupId>
+       <!-- since connector 1.2.16: use artifactId flink-connector-starrocks-1.x
+            for Apache Flink® 1.16-1.20, and flink-connector-starrocks-2.x for
+            Apache Flink® 2.0+, e.g. <version>1.2.16_flink-2.0</version> -->
        <artifactId>flink-connector-starrocks</artifactId>
        <!-- for Apache Flink® 1.15 -->
        <version>x.x.x_flink-1.15</version>
