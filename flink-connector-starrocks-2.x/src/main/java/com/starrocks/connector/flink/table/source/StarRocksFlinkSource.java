@@ -77,7 +77,7 @@ public class StarRocksFlinkSource
             this.queryType = queryType;
         } else {
             String columns = sourceOptions.getColumns();
-            if (columns != null && columns.trim().startsWith("count(")) {
+            if (columns != null && columns.trim().toLowerCase().startsWith("count(")) {
                 this.queryType = StarRocksSourceQueryType.QueryCount;
             } else {
                 this.queryType = null;
