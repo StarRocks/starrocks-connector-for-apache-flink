@@ -128,7 +128,7 @@ public class StarRocksSourceEnumerator
 
     @Override
     public void addSplitsBack(List<StarRocksSourceSplit> splits, int subtaskId) {
-        unassignedSplits.addAll(splits);
+        pendingAssignments.computeIfAbsent(subtaskId, k -> new ArrayList<>()).addAll(splits);
     }
 
     @Override
