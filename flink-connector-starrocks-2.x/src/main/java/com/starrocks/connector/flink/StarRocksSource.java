@@ -40,7 +40,7 @@ public class StarRocksSource {
         // Mirror the 1.x DataStream entry: scan.filter and scan.columns come from the options
         String filter = sourceOptions.getFilter().isEmpty() ? null : sourceOptions.getFilter();
         SelectColumn[] selectColumns = null;
-        if (!sourceOptions.getColumns().trim().startsWith("count(")) {
+        if (!sourceOptions.getColumns().trim().toLowerCase().startsWith("count(")) {
             Map<String, ColumnRichInfo> columnMap = StarRocksSourceCommonFunc.genColumnMap(flinkSchema);
             selectColumns = StarRocksSourceCommonFunc.genSelectedColumns(
                     columnMap, sourceOptions, StarRocksSourceCommonFunc.genColumnRichInfo(columnMap));
