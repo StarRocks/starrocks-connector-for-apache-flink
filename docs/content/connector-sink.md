@@ -37,7 +37,7 @@ The naming format of the Flink connector JAR file is as follows:
 
 - Since connector 1.2.17, it's `flink-connector-starrocks-1.x-${connector_version}_flink-${flink_version}.jar` for Flink 1.x and `flink-connector-starrocks-2.x-${connector_version}_flink-${flink_version}.jar` for Flink 2.x. For example, for Flink 1.20 use `flink-connector-starrocks-1.x-1.2.17_flink-1.20.jar`, and for Flink 2.0 use `flink-connector-starrocks-2.x-1.2.17_flink-2.0.jar`.
 
-- From Flink 1.15 up to connector 1.2.15, it's `flink-connector-starrocks-${connector_version}_flink-${flink_version}.jar`. For example, if you install Flink 1.15 and you want to use Flink connector 1.2.7, you can use `flink-connector-starrocks-1.2.7_flink-1.15.jar`.
+- From Flink 1.15 up to connector 1.2.16, it's `flink-connector-starrocks-${connector_version}_flink-${flink_version}.jar`. For example, if you install Flink 1.15 and you want to use Flink connector 1.2.7, you can use `flink-connector-starrocks-1.2.7_flink-1.15.jar`.
 
 - Prior to Flink 1.15, it's `flink-connector-starrocks-${connector_version}_flink-${flink_version}_${scala_version}.jar`. For example, if you install Flink 1.14 and Scala 2.12 in your environment, and you want to use Flink connector 1.2.7, you can use `flink-connector-starrocks-1.2.7_flink-1.14_2.12.jar`.
 
@@ -73,7 +73,7 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
     </dependency>
     ```
 
-- Up to connector 1.2.15, in Flink 1.15 and later
+- Up to connector 1.2.16, in Flink 1.15 and later
 
     ```xml
     <dependency>
