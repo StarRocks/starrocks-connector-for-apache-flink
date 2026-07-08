@@ -17,8 +17,8 @@ package com.starrocks.connector.flink.table.source;
 import static org.junit.Assert.assertTrue;
 
 import java.io.BufferedReader;
-import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -125,9 +125,9 @@ public class StarrocksExternalServiceImpl implements TStarrocksExternalService.I
             result.setEos(true);
             return result;
         }
-        String fileName = System.getProperty("user.dir") + "/src/test/resources/data/source/rowsData";
         String line = null;
-        try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(
+                getClass().getClassLoader().getResourceAsStream("data/source/rowsData")))) {
             line = br.readLine();
         } catch (IOException e) {
             e.printStackTrace();
