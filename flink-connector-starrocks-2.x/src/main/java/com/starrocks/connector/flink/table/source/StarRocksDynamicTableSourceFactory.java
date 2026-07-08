@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.flink.table.source;
 
+import com.starrocks.connector.flink.catalog.StarRocksUtils;
 import com.starrocks.connector.flink.table.source.struct.PushDownHolder;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ReadableConfig;
@@ -41,7 +42,7 @@ public final class StarRocksDynamicTableSourceFactory implements DynamicTableSou
         ReadableConfig options = helper.getOptions();
         // validate some special properties
         StarRocksSourceOptions sourceOptions = new StarRocksSourceOptions(options, context.getCatalogTable().getOptions());
-        ResolvedSchema flinkSchema = context.getCatalogTable().getResolvedSchema();
+        ResolvedSchema flinkSchema = StarRocksUtils.toPhysicalSchema(context.getCatalogTable().getResolvedSchema());
         PushDownHolder pushDownHolder = new PushDownHolder();
         return new StarRocksDynamicTableSource(sourceOptions, flinkSchema, pushDownHolder);
     }

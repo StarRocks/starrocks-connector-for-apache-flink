@@ -25,6 +25,8 @@ import org.apache.flink.table.catalog.Column;
 import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.catalog.UniqueConstraint;
 
+import com.starrocks.connector.flink.catalog.StarRocksUtils;
+
 import org.junit.Test;
 
 import java.util.Arrays;
@@ -44,7 +46,7 @@ public class StarRocksDynamicTableSinkFactoryTest {
                 Collections.emptyList(),
                 UniqueConstraint.primaryKey("pk", Collections.singletonList("c1")));
 
-        ResolvedSchema result = StarRocksDynamicTableSinkFactory.toPhysicalSchema(schema);
+        ResolvedSchema result = StarRocksUtils.toPhysicalSchema(schema);
 
         assertEquals(Collections.singletonList(physical), result.getColumns());
         assertTrue(result.getPrimaryKey().isPresent());
