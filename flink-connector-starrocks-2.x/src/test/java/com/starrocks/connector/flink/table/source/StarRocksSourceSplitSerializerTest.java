@@ -41,6 +41,22 @@ public class StarRocksSourceSplitSerializerTest {
     }
 
     @Test
+    public void testRoundTripQueryPlanOver64KiB() throws Exception {
+        StringBuilder plan = new StringBuilder(70000);
+        for (int i = 0; i < 70000; i++) {
+            plan.append((char) ('a' + i % 26));
+        }
+        StarRocksSourceSplit split = new StarRocksSourceSplit(
+                new QueryBeXTablets("be1:9060", Arrays.asList(1L)),
+                "split-0-be1:9060",
+                plan.toString());
+
+        StarRocksSourceSplit restored = roundTrip(split);
+
+        assertEquals(plan.toString(), restored.getOpaquedQueryPlan());
+    }
+
+    @Test
     public void testRoundTripCountSplit() throws Exception {
         StarRocksSourceSplit split = new StarRocksSourceSplit(
                 new QueryBeXTablets("count", Collections.emptyList()), "count-42");
