@@ -23,10 +23,21 @@ public class StarRocksSourceSplit implements SourceSplit {
 
     private final QueryBeXTablets beXTablets;
     private final String splitId;
+    // opaque query plan from the FE; null for count splits
+    private final String opaquedQueryPlan;
 
     public StarRocksSourceSplit(QueryBeXTablets beXTablets, String splitId) {
+        this(beXTablets, splitId, null);
+    }
+
+    public StarRocksSourceSplit(QueryBeXTablets beXTablets, String splitId, String opaquedQueryPlan) {
         this.beXTablets = beXTablets;
         this.splitId = splitId;
+        this.opaquedQueryPlan = opaquedQueryPlan;
+    }
+
+    public String getOpaquedQueryPlan() {
+        return opaquedQueryPlan;
     }
 
     @Override

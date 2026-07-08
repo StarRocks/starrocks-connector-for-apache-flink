@@ -94,6 +94,7 @@ public class StarRocksSourceEnumerator
             String sql = StarRocksSourceCommonFunc.buildSQL(
                     queryType, selectColumns, columnNames, sourceOptions, filter);
             QueryInfo queryInfo = StarRocksSourceCommonFunc.getQueryInfo(sourceOptions, sql);
+            String opaquedQueryPlan = queryInfo.getQueryPlan().getOpaqued_query_plan();
             int parallelism = context.currentParallelism();
             List<List<QueryBeXTablets>> splitsBySubtask =
                     StarRocksSourceCommonFunc.splitQueryBeXTablets(parallelism, queryInfo);
@@ -102,7 +103,7 @@ public class StarRocksSourceEnumerator
             for (List<QueryBeXTablets> subtaskSplits : splitsBySubtask) {
                 for (QueryBeXTablets beXTablets : subtaskSplits) {
                     String splitId = "split-" + splitIndex + "-" + beXTablets.getBeNode();
-                    discoveredSplits.add(new StarRocksSourceSplit(beXTablets, splitId));
+                    discoveredSplits.add(new StarRocksSourceSplit(beXTablets, splitId, opaquedQueryPlan));
                     splitIndex++;
                 }
             }

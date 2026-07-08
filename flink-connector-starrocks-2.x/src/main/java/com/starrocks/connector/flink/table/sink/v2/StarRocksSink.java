@@ -58,18 +58,17 @@ public class StarRocksSink<InputT>
     }
 
     @Override
-    public StarRocksWriter<InputT> createWriter(WriterInitContext context) throws IOException {
+    public StarRocksWriterAdapter<InputT> createWriter(WriterInitContext context) throws IOException {
         return restoreWriter(context, Collections.emptyList());
     }
 
     @Override
-    public StarRocksWriter<InputT> restoreWriter(WriterInitContext context, Collection<StarRocksWriterState> recoveredState)
+    public StarRocksWriterAdapter<InputT> restoreWriter(WriterInitContext context, Collection<StarRocksWriterState> recoveredState)
             throws IOException {
         try {
-            return new StarRocksWriter<>(
+            return new StarRocksWriterAdapter<>(
                     sinkOptions,
                     context,
-                    context.asSerializationSchemaInitializationContext(),
                     serializationSchema,
                     streamLoadProperties,
                     recoveredState);

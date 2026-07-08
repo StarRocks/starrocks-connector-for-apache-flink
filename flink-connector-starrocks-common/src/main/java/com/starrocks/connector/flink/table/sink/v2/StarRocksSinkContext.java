@@ -20,28 +20,13 @@
 
 package com.starrocks.connector.flink.table.sink.v2;
 
-import org.apache.flink.api.connector.sink2.Sink;
-
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 
-/** Default implementation for {@link StarRocksSinkContext}. */
-public class DefaultStarRocksSinkContext implements StarRocksSinkContext {
+public interface StarRocksSinkContext {
 
-    private final Sink.InitContext initContext;
-    private final StarRocksSinkOptions sinkOptions;
+    int getNumberOfParallelSubtasks();
 
-    public DefaultStarRocksSinkContext(Sink.InitContext initContext, StarRocksSinkOptions sinkOptions) {
-        this.initContext = initContext;
-        this.sinkOptions = sinkOptions;
-    }
+    int getSubtaskIndex();
 
-    @Override
-    public Sink.InitContext getInitContext() {
-        return initContext;
-    }
-
-    @Override
-    public StarRocksSinkOptions getSinkOptions() {
-        return sinkOptions;
-    }
+    StarRocksSinkOptions getSinkOptions();
 }
