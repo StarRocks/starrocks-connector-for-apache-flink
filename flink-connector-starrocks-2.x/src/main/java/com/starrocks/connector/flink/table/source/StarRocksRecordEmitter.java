@@ -18,18 +18,18 @@
  * limitations under the License.
  */
 
-package com.starrocks.connector.flink.table.sink.v2;
+package com.starrocks.connector.flink.table.source;
 
-import org.apache.flink.api.connector.sink2.InitContext;
+import org.apache.flink.api.connector.source.SourceOutput;
+import org.apache.flink.connector.base.source.reader.RecordEmitter;
+import org.apache.flink.table.data.GenericRowData;
+import org.apache.flink.table.data.RowData;
 
-import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
+public class StarRocksRecordEmitter
+        implements RecordEmitter<GenericRowData, RowData, StarRocksSourceSplit> {
 
-/** This context provides information for {@link RecordSerializationSchema}. */
-public interface StarRocksSinkContext {
-
-    /** Returns the current sink's init context. */
-    InitContext getInitContext();
-
-    /** Returns the sink options . */
-    StarRocksSinkOptions getSinkOptions();
+    @Override
+    public void emitRecord(GenericRowData element, SourceOutput<RowData> output, StarRocksSourceSplit splitState) {
+        output.collect(element);
+    }
 }

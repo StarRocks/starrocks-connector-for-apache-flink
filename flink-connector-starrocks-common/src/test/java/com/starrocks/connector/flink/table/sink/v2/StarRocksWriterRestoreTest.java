@@ -21,8 +21,8 @@
 package com.starrocks.connector.flink.table.sink.v2;
 
 import org.apache.flink.api.common.serialization.SerializationSchema;
-import org.apache.flink.api.connector.sink2.WriterInitContext;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.metrics.MetricGroup;
 
 import com.starrocks.connector.flink.manager.StarRocksStreamLoadListener;
 import com.starrocks.connector.flink.table.data.StarRocksRowData;
@@ -32,14 +32,12 @@ import com.starrocks.connector.flink.table.sink.ExactlyOnceLabelGeneratorSnapsho
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 import com.starrocks.connector.flink.table.sink.StarRocksSinkSemantic;
 import com.starrocks.data.load.stream.v2.StreamLoadManagerV2;
-import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
 import org.junit.Test;
 
 import java.lang.reflect.Field;
 import java.util.Collections;
-import java.util.OptionalLong;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -52,22 +50,17 @@ public class StarRocksWriterRestoreTest {
     public void testRestoredLabelSnapshotsSeedLabelGenerator(
             @Mocked StreamLoadManagerV2 anyManager,
             @Mocked StarRocksStreamLoadListener anyListener,
-            @Injectable WriterInitContext context) throws Exception {
-        new Expectations() {{
-            context.getRestoredCheckpointId();
-            result = OptionalLong.of(5L);
-            context.getTaskInfo().getNumberOfParallelSubtasks();
-            result = 1;
-            context.getTaskInfo().getIndexOfThisSubtask();
-            result = 0;
-        }};
-
+            @Injectable MetricGroup metricGroup,
+            @Injectable SerializationSchema.InitializationContext schemaContext) throws Exception {
         ExactlyOnceLabelGeneratorSnapshot snapshot = new ExactlyOnceLabelGeneratorSnapshot(
                 5L, "test_db", "test_table", LABEL_PREFIX, 1, 0, 42L);
         StarRocksWriter<Object> writer = new StarRocksWriter<>(
                 sinkOptions(),
-                context,
-                null,
+                5L,
+                1,
+                0,
+                metricGroup,
+                schemaContext,
                 new NoopSerializationSchema(),
                 null,
                 Collections.singletonList(new StarRocksWriterState(Collections.singletonList(snapshot))));

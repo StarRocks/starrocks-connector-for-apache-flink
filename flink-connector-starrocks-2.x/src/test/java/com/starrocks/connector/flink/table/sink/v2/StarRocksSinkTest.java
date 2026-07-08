@@ -20,7 +20,6 @@
 
 package com.starrocks.connector.flink.table.sink.v2;
 
-import org.apache.flink.api.common.serialization.SerializationSchema;
 import org.apache.flink.api.connector.sink2.WriterInitContext;
 import org.apache.flink.configuration.Configuration;
 
@@ -38,7 +37,7 @@ public class StarRocksSinkTest {
 
     @Test
     public void testRestoreWriterPassesRecoveredState(
-            @Mocked StarRocksWriter<Object> anyWriter,
+            @Mocked StarRocksWriterAdapter<Object> anyWriter,
             @Injectable WriterInitContext context) throws Exception {
         StarRocksSink<Object> sink = new StarRocksSink<>(sinkOptions(), null, null);
         Collection<StarRocksWriterState> recoveredState =
@@ -47,10 +46,9 @@ public class StarRocksSinkTest {
         sink.restoreWriter(context, recoveredState);
 
         new Verifications() {{
-            new StarRocksWriter<>(
+            new StarRocksWriterAdapter<>(
                     (StarRocksSinkOptions) any,
                     (WriterInitContext) any,
-                    (SerializationSchema.InitializationContext) any,
                     (RecordSerializationSchema<Object>) any,
                     (StreamLoadProperties) any,
                     recoveredState);

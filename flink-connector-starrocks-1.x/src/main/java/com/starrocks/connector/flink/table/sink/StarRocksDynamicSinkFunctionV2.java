@@ -107,7 +107,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
         // StarRocksSinkTable#validateTableStructure, so create serializer after validating table structure
         this.serializer = StarRocksSerializerFactory.createSerializer(sinkOptions, schema.getFieldNames());
         rowTransformer.setStarRocksColumns(sinkTable.getFieldMapping());
-        rowTransformer.setTableSchema(schema);
+        rowTransformer.setTableSchema(TableSchemaConverter.toResolvedSchema(schema));
         this.sinkManager = new StreamLoadManagerV2(sinkOptions.getProperties(sinkTable),
                 sinkOptions.getSemantic() == StarRocksSinkSemantic.AT_LEAST_ONCE);
     }

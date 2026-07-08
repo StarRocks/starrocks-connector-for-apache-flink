@@ -137,7 +137,7 @@ public class SinkFunctionFactory {
             // StarRocksSinkTable#validateTableStructure, so create serializer after validating table structure
             StarRocksISerializer serializer = StarRocksSerializerFactory.createSerializer(sinkOptions, schema.getFieldNames());
             rowTransformer.setStarRocksColumns(sinkTable.getFieldMapping());
-            rowTransformer.setTableSchema(schema);
+            rowTransformer.setTableSchema(TableSchemaConverter.toResolvedSchema(schema));
             RowDataSerializationSchema serializationSchema = new RowDataSerializationSchema(
                     sinkOptions.getDatabaseName(),
                     sinkOptions.getTableName(),

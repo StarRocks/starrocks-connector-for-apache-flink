@@ -67,7 +67,7 @@ public class StarRocksDynamicSinkFunction<T> extends StarRocksDynamicSinkFunctio
         this.sinkManager = new StarRocksSinkManager(sinkOptions, schema, jdbcConnProvider, starrocksQueryVisitor);
 
         rowTransformer.setStarRocksColumns(starrocksQueryVisitor.getFieldMapping());
-        rowTransformer.setTableSchema(schema);
+        rowTransformer.setTableSchema(TableSchemaConverter.toResolvedSchema(schema));
         this.serializer = StarRocksSerializerFactory.createSerializer(sinkOptions, schema.getFieldNames());
         this.rowTransformer = rowTransformer;
         this.sinkOptions = sinkOptions;

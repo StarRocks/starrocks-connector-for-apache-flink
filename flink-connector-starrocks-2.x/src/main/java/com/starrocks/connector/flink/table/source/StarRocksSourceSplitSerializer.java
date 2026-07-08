@@ -47,6 +47,11 @@ public class StarRocksSourceSplitSerializer implements SimpleVersionedSerializer
         for (Long tabletId : tabletIds) {
             out.writeLong(tabletId);
         }
+        String plan = split.getOpaquedQueryPlan();
+        out.writeBoolean(plan != null);
+        if (plan != null) {
+            out.writeUTF(plan);
+        }
         return out.getCopyOfBuffer();
     }
 
@@ -61,6 +66,7 @@ public class StarRocksSourceSplitSerializer implements SimpleVersionedSerializer
             tabletIds.add(in.readLong());
         }
         QueryBeXTablets beXTablets = new QueryBeXTablets(beNode, tabletIds);
-        return new StarRocksSourceSplit(beXTablets, splitId);
+        String plan = in.readBoolean() ? in.readUTF() : null;
+        return new StarRocksSourceSplit(beXTablets, splitId, plan);
     }
 }
