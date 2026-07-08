@@ -23,6 +23,7 @@ package com.starrocks.connector.flink.catalog;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.catalog.CatalogBaseTable;
+import org.apache.flink.table.catalog.Column;
 import org.apache.flink.table.catalog.ObjectPath;
 import org.apache.flink.table.catalog.ResolvedCatalogBaseTable;
 import org.apache.flink.table.catalog.exceptions.CatalogException;
@@ -33,9 +34,22 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.stream.Collectors;
 import java.util.Map;
 
 public class StarRocksUtils {
+
+    // computed/metadata columns exist neither in StarRocks nor in the physical row
+    // the connector produces/consumes; planner pushdown indexes refer to the physical row
+    public static ResolvedSchema toPhysicalSchema(ResolvedSchema schema) {
+        List<Column> physicalColumns = schema.getColumns().stream()
+                .filter(Column::isPhysical)
+                .collect(Collectors.toList());
+        return new ResolvedSchema(
+                physicalColumns,
+                Collections.emptyList(),
+                schema.getPrimaryKey().orElse(null));
+    }
 
     public static StarRocksTable toStarRocksTable(
             String catalogName,
