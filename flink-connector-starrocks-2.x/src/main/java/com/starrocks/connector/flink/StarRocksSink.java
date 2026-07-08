@@ -21,7 +21,6 @@ import com.starrocks.connector.flink.table.sink.SinkFunctionFactory;
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 import org.apache.flink.api.connector.sink2.Sink;
 import org.apache.flink.table.catalog.ResolvedSchema;
-import org.apache.flink.table.data.RowData;
 
 public class StarRocksSink {
 
@@ -44,12 +43,7 @@ public class StarRocksSink {
             StarRocksSinkRowBuilder<T> rowDataTransformer) {
         StarRocksIRowTransformer<T> rowTransformer =
                 new StarRocksGenericRowTransformer<>(rowDataTransformer);
-        // the factory signature is typed to RowData; the generic transformer accepts any T
-        @SuppressWarnings("unchecked")
-        StarRocksIRowTransformer<RowData> castedTransformer = (StarRocksIRowTransformer<RowData>) (StarRocksIRowTransformer<?>) rowTransformer;
-        @SuppressWarnings("unchecked")
-        Sink<T> sink = (Sink<T>) SinkFunctionFactory.createSink(sinkOptions, flinkTableSchema, castedTransformer);
-        return sink;
+        return SinkFunctionFactory.createSink(sinkOptions, flinkTableSchema, rowTransformer);
     }
 
     /**

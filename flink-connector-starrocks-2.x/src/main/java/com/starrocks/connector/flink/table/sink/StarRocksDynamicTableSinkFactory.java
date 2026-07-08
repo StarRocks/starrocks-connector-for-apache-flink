@@ -16,13 +16,17 @@ package com.starrocks.connector.flink.table.sink;
 
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ReadableConfig;
+import org.apache.flink.table.catalog.Column;
 import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.connector.sink.DynamicTableSink;
 import org.apache.flink.table.factories.DynamicTableSinkFactory;
 import org.apache.flink.table.factories.FactoryUtil;
 
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class StarRocksDynamicTableSinkFactory implements DynamicTableSinkFactory {
 
@@ -39,8 +43,19 @@ public class StarRocksDynamicTableSinkFactory implements DynamicTableSinkFactory
         ReadableConfig options = helper.getOptions();
         // validate some special properties
         StarRocksSinkOptions sinkOptions = new StarRocksSinkOptions(options, context.getCatalogTable().getOptions());
-        ResolvedSchema physicalSchema = context.getCatalogTable().getResolvedSchema();
+        ResolvedSchema physicalSchema = toPhysicalSchema(context.getCatalogTable().getResolvedSchema());
         return new StarRocksDynamicTableSink(sinkOptions, physicalSchema);
+    }
+
+    // computed/metadata columns exist neither in StarRocks nor in the emitted RowData
+    static ResolvedSchema toPhysicalSchema(ResolvedSchema schema) {
+        List<Column> physicalColumns = schema.getColumns().stream()
+                .filter(Column::isPhysical)
+                .collect(Collectors.toList());
+        return new ResolvedSchema(
+                physicalColumns,
+                Collections.emptyList(),
+                schema.getPrimaryKey().orElse(null));
     }
 
     @Override
