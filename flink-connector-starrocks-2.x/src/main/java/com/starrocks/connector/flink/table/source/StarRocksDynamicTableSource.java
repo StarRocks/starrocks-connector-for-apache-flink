@@ -24,7 +24,6 @@ import org.apache.flink.table.connector.source.ScanTableSource;
 import org.apache.flink.table.connector.source.SourceProvider;
 import org.apache.flink.table.connector.source.lookup.LookupFunctionProvider;
 import org.apache.flink.table.connector.source.abilities.SupportsFilterPushDown;
-import org.apache.flink.table.connector.source.abilities.SupportsLimitPushDown;
 import org.apache.flink.table.connector.source.abilities.SupportsProjectionPushDown;
 import org.apache.flink.table.expressions.ResolvedExpression;
 
@@ -39,7 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-public class StarRocksDynamicTableSource implements ScanTableSource, LookupTableSource, SupportsLimitPushDown, SupportsFilterPushDown, SupportsProjectionPushDown {
+public class StarRocksDynamicTableSource implements ScanTableSource, LookupTableSource, SupportsFilterPushDown, SupportsProjectionPushDown {
 
     private final ResolvedSchema flinkSchema;
     private final StarRocksSourceOptions options;
@@ -155,8 +154,4 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
         return Result.of(ac, remain);
     }
 
-    @Override
-    public void applyLimit(long limit) {
-        this.pushDownHolder.setLimit(limit);
-    }
 }

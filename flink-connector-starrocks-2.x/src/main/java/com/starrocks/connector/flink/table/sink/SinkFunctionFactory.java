@@ -19,7 +19,6 @@
 package com.starrocks.connector.flink.table.sink;
 
 import org.apache.flink.table.catalog.ResolvedSchema;
-import org.apache.flink.table.data.RowData;
 
 import com.starrocks.connector.flink.manager.StarRocksSinkTable;
 import com.starrocks.connector.flink.row.sink.StarRocksIRowTransformer;
@@ -81,8 +80,8 @@ public class SinkFunctionFactory {
         return sinkVersion;
     }
 
-    public static StarRocksSink<RowData> createSink(
-            StarRocksSinkOptions sinkOptions, ResolvedSchema schema, StarRocksIRowTransformer<RowData> rowTransformer) {
+    public static <T> StarRocksSink<T> createSink(
+            StarRocksSinkOptions sinkOptions, ResolvedSchema schema, StarRocksIRowTransformer<T> rowTransformer) {
         detectStarRocksFeature(sinkOptions);
         StarRocksSinkTable sinkTable = StarRocksSinkTable.builder()
                 .sinkOptions(sinkOptions)
@@ -93,7 +92,7 @@ public class SinkFunctionFactory {
         StarRocksISerializer serializer = StarRocksSerializerFactory.createSerializer(sinkOptions, schema.getColumnNames().toArray(new String[0]));
         rowTransformer.setStarRocksColumns(sinkTable.getFieldMapping());
         rowTransformer.setTableSchema(schema);
-        RowDataSerializationSchema serializationSchema = new RowDataSerializationSchema(
+        RowDataSerializationSchema<T> serializationSchema = new RowDataSerializationSchema<>(
                 sinkOptions.getDatabaseName(),
                 sinkOptions.getTableName(),
                 sinkOptions.supportUpsertDelete(),

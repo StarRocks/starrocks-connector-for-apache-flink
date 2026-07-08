@@ -31,7 +31,7 @@ import com.starrocks.connector.flink.table.data.StarRocksRowData;
 import com.starrocks.connector.flink.tools.JsonWrapper;
 
 /** Serializer for the {@link RowData} record. */
-public class RowDataSerializationSchema implements RecordSerializationSchema<RowData> {
+public class RowDataSerializationSchema<T> implements RecordSerializationSchema<T> {
 
     private static final long serialVersionUID = 1L;
 
@@ -40,7 +40,7 @@ public class RowDataSerializationSchema implements RecordSerializationSchema<Row
     boolean supportUpsertDelete;
     boolean ignoreUpdateBefore;
     private final StarRocksISerializer serializer;
-    private final StarRocksIRowTransformer<RowData> rowTransformer;
+    private final StarRocksIRowTransformer<T> rowTransformer;
     private transient DefaultStarRocksRowData reusableRowData;
 
     public RowDataSerializationSchema(
@@ -49,7 +49,7 @@ public class RowDataSerializationSchema implements RecordSerializationSchema<Row
             boolean supportUpsertDelete,
             boolean ignoreUpdateBefore,
             StarRocksISerializer serializer,
-            StarRocksIRowTransformer<RowData> rowTransformer) {
+            StarRocksIRowTransformer<T> rowTransformer) {
         this.databaseName = databaseName;
         this.tableName = tableName;
         this.supportUpsertDelete = supportUpsertDelete;
@@ -70,14 +70,17 @@ public class RowDataSerializationSchema implements RecordSerializationSchema<Row
     }
 
     @Override
-    public StarRocksRowData serialize(RowData record) {
-        if (RowKind.UPDATE_BEFORE.equals(record.getRowKind()) &&
-                (!supportUpsertDelete || ignoreUpdateBefore)) {
-            return null;
-        }
-        if (!supportUpsertDelete && RowKind.DELETE.equals(record.getRowKind())) {
-            // let go the UPDATE_AFTER and INSERT rows for tables who have a group of `unique` or `duplicate` keys.
-            return null;
+    public StarRocksRowData serialize(T record) {
+        if (record instanceof RowData) {
+            RowKind rowKind = ((RowData) record).getRowKind();
+            if (RowKind.UPDATE_BEFORE.equals(rowKind) &&
+                    (!supportUpsertDelete || ignoreUpdateBefore)) {
+                return null;
+            }
+            if (!supportUpsertDelete && RowKind.DELETE.equals(rowKind)) {
+                // let go the UPDATE_AFTER and INSERT rows for tables who have a group of `unique` or `duplicate` keys.
+                return null;
+            }
         }
         String serializedRow = serializer.serialize(rowTransformer.transform(record, supportUpsertDelete));
         reusableRowData.setRow(serializedRow);
