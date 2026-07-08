@@ -21,10 +21,8 @@
 package com.starrocks.connector.flink.table.sink.v2;
 
 import org.apache.flink.api.common.serialization.SerializationSchema;
-import org.apache.flink.api.connector.sink2.CommittingSinkWriter;
-import org.apache.flink.api.connector.sink2.StatefulSinkWriter;
-import org.apache.flink.api.connector.sink2.WriterInitContext;
-import org.apache.flink.runtime.checkpoint.CheckpointIDCounter;
+import org.apache.flink.api.connector.sink2.SinkWriter;
+import org.apache.flink.metrics.MetricGroup;
 
 import com.starrocks.connector.flink.manager.StarRocksStreamLoadListener;
 import com.starrocks.connector.flink.table.data.StarRocksRowData;
@@ -47,9 +45,12 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
-public class StarRocksWriter<InputT>
-        implements StatefulSinkWriter<InputT, StarRocksWriterState>,
-        CommittingSinkWriter<InputT, StarRocksCommittable> {
+/**
+ * Version-agnostic writer shared by the Flink 1.x and 2.x modules. The per-module
+ * {@code StarRocksWriterAdapter} extracts everything Flink-version-specific from the
+ * writer init context and delegates here.
+ */
+public class StarRocksWriter<InputT> {
 
     private static final Logger LOG = LoggerFactory.getLogger(StarRocksWriter.class);
 
@@ -62,17 +63,19 @@ public class StarRocksWriter<InputT>
 
     public StarRocksWriter(
             StarRocksSinkOptions sinkOptions,
-            WriterInitContext initContext,
+            long restoredCheckpointId,
+            int numberOfParallelSubtasks,
+            int subtaskIndex,
+            MetricGroup metricGroup,
             SerializationSchema.InitializationContext schemaContext,
             RecordSerializationSchema<InputT> serializationSchema,
             StreamLoadProperties streamLoadProperties,
             Collection<StarRocksWriterState> recoveredState) throws Exception {
         this.sinkOptions = sinkOptions;
         this.serializationSchema = serializationSchema;
-        this.serializationSchema.open(schemaContext, new DefaultStarRocksSinkContext(initContext, sinkOptions));
-        this.streamLoadListener = new StarRocksStreamLoadListener(initContext.metricGroup(), sinkOptions);
-        long restoredCheckpointId = initContext.getRestoredCheckpointId()
-                .orElse(CheckpointIDCounter.INITIAL_CHECKPOINT_ID - 1);
+        this.serializationSchema.open(schemaContext,
+                new DefaultStarRocksSinkContext(numberOfParallelSubtasks, subtaskIndex, sinkOptions));
+        this.streamLoadListener = new StarRocksStreamLoadListener(metricGroup, sinkOptions);
         List<ExactlyOnceLabelGeneratorSnapshot> restoredGeneratorSnapshots = new ArrayList<>();
         for (StarRocksWriterState writerState : recoveredState) {
             restoredGeneratorSnapshots.addAll(writerState.getLabelSnapshots());
@@ -86,8 +89,8 @@ public class StarRocksWriter<InputT>
         } else {
             ExactlyOnceLabelGeneratorFactory exactlyOnceLabelFactory = new ExactlyOnceLabelGeneratorFactory(
                     labelPrefix,
-                    initContext.getTaskInfo().getNumberOfParallelSubtasks(),
-                    initContext.getTaskInfo().getIndexOfThisSubtask(),
+                    numberOfParallelSubtasks,
+                    subtaskIndex,
                     restoredCheckpointId);
             exactlyOnceLabelFactory.restore(restoredGeneratorSnapshots);
             this.labelGeneratorFactory = exactlyOnceLabelFactory;
@@ -115,7 +118,7 @@ public class StarRocksWriter<InputT>
                 LingeringTransactionAborter aborter = new LingeringTransactionAborter(
                         sinkOptions.getLabelPrefix(),
                         restoredCheckpointId,
-                        initContext.getTaskInfo().getIndexOfThisSubtask(),
+                        subtaskIndex,
                         sinkOptions.getAbortCheckNumTxns(),
                         sinkOptions.getDbTables(),
                         restoredGeneratorSnapshots,
@@ -136,8 +139,7 @@ public class StarRocksWriter<InputT>
         LOG.info("Create StarRocksWriter. {}", EnvUtils.getGitInformation());
     }
 
-    @Override
-    public void write(InputT element, Context context) throws IOException, InterruptedException {
+    public void write(InputT element, SinkWriter.Context context) throws IOException, InterruptedException {
         StarRocksRowData rowData = serializationSchema.serialize(element);
         if (rowData == null) {
             return;
@@ -180,12 +182,10 @@ public class StarRocksWriter<InputT>
         }
     }
 
-    @Override
     public void flush(boolean endOfInput) throws IOException, InterruptedException {
         sinkManager.flush();
     }
 
-    @Override
     public Collection<StarRocksCommittable> prepareCommit() throws IOException, InterruptedException {
         if (sinkOptions.getSemantic() != StarRocksSinkSemantic.EXACTLY_ONCE) {
             return Collections.emptyList();
@@ -200,7 +200,6 @@ public class StarRocksWriter<InputT>
         }
     }
 
-    @Override
     public List<StarRocksWriterState> snapshotState(long checkpointId) throws IOException {
         if (sinkOptions.getSemantic() != StarRocksSinkSemantic.EXACTLY_ONCE ||
                 !(labelGeneratorFactory instanceof ExactlyOnceLabelGeneratorFactory)) {
@@ -212,7 +211,6 @@ public class StarRocksWriter<InputT>
         return Collections.singletonList(new StarRocksWriterState(labelSnapshots));
     }
 
-    @Override
     public void close() throws Exception {
         LOG.info("Close StarRocksWriter");
         serializationSchema.close();

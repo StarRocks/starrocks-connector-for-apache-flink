@@ -26,10 +26,13 @@ import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.DataType;
 
+import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
+import java.util.Map;
 
 /**
  * FLIP-27 Source implementation for StarRocks.
@@ -90,8 +93,18 @@ public class StarRocksFlinkSource
     @Override
     public SourceReader<RowData, StarRocksSourceSplit> createReader(SourceReaderContext readerContext) throws Exception {
         ResolvedSchema flinkSchema = ResolvedSchema.physical(columnNames, columnTypes);
-        return new StarRocksSourceReader(
-                readerContext, sourceOptions, flinkSchema, filter, limit, selectColumns, queryType);
+        Map<String, ColumnRichInfo> columnMap = StarRocksSourceCommonFunc.genColumnMap(flinkSchema);
+        List<ColumnRichInfo> columnRichInfos = StarRocksSourceCommonFunc.genColumnRichInfo(columnMap);
+        SelectColumn[] readerSelectColumns;
+        if (queryType == StarRocksSourceQueryType.QueryCount) {
+            // Count splits carry the result in their id; no data columns are read
+            readerSelectColumns = null;
+        } else if (selectColumns != null) {
+            readerSelectColumns = selectColumns;
+        } else {
+            readerSelectColumns = StarRocksSourceCommonFunc.genSelectedColumns(columnMap, sourceOptions, columnRichInfos);
+        }
+        return new StarRocksSourceReader(sourceOptions, columnRichInfos, readerSelectColumns, readerContext);
     }
 
     @Override

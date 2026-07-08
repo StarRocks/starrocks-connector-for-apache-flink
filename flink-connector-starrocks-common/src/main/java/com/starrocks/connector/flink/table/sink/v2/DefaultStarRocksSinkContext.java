@@ -20,16 +20,33 @@
 
 package com.starrocks.connector.flink.table.sink.v2;
 
-import org.apache.flink.api.connector.sink2.Sink;
-
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 
-/** This context provides information for {@link RecordSerializationSchema}. */
-public interface StarRocksSinkContext {
+public class DefaultStarRocksSinkContext implements StarRocksSinkContext {
 
-    /** Returns the current sink's init context. */
-    Sink.InitContext getInitContext();
+    private final int numberOfParallelSubtasks;
+    private final int subtaskIndex;
+    private final StarRocksSinkOptions sinkOptions;
 
-    /** Returns the sink options . */
-    StarRocksSinkOptions getSinkOptions();
+    public DefaultStarRocksSinkContext(
+            int numberOfParallelSubtasks, int subtaskIndex, StarRocksSinkOptions sinkOptions) {
+        this.numberOfParallelSubtasks = numberOfParallelSubtasks;
+        this.subtaskIndex = subtaskIndex;
+        this.sinkOptions = sinkOptions;
+    }
+
+    @Override
+    public int getNumberOfParallelSubtasks() {
+        return numberOfParallelSubtasks;
+    }
+
+    @Override
+    public int getSubtaskIndex() {
+        return subtaskIndex;
+    }
+
+    @Override
+    public StarRocksSinkOptions getSinkOptions() {
+        return sinkOptions;
+    }
 }
