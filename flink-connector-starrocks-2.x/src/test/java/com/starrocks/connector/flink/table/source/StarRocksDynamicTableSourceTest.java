@@ -218,17 +218,18 @@ public class StarRocksDynamicTableSourceTest extends StarRocksSourceBaseTest {
     }
 
     @Test
+    public void testLimitPushDownNotDeclared() {
+        // the BE scan cannot enforce a global limit; declaring SupportsLimitPushDown
+        // would let the planner drop its own limit operator
+        Assert.assertFalse(dynamicTableSource instanceof org.apache.flink.table.connector.source.abilities.SupportsLimitPushDown);
+    }
+
+    @Test
     public void testDynamicTableSourceDeepCopy() {
         DynamicTableSource copied = dynamicTableSource.copy();
         assertTrue(copied instanceof StarRocksDynamicTableSource);
         StarRocksDynamicTableSource copiedSource = (StarRocksDynamicTableSource) copied;
         assertNotEquals(dynamicTableSource, copiedSource);
-
-        long currentLimit = pushDownHolder.getLimit();
-        long newLimit = currentLimit + 10;
-        copiedSource.applyLimit(newLimit);
-
-        assertEquals(currentLimit, pushDownHolder.getLimit());
 
         ResolvedExpression c5Ref = new FieldReferenceExpression("c5", DataTypes.TIMESTAMP(), 0, 2);
         ResolvedExpression c5Exp =
