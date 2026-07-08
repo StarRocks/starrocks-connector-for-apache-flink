@@ -72,7 +72,7 @@ public class StarRocksSink<InputT>
                     context.asSerializationSchemaInitializationContext(),
                     serializationSchema,
                     streamLoadProperties,
-                    Collections.emptyList());
+                    recoveredState);
         } catch (Exception e) {
             throw new RuntimeException("Failed to create writer.", e);
         }

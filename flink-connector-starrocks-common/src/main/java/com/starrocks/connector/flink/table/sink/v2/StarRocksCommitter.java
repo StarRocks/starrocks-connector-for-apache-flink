@@ -75,7 +75,7 @@ public class StarRocksCommitter implements Committer<StarRocksCommittable> {
                     throw new RuntimeException("Please see the taskmanager log for the failure reason");
                 } catch (Exception e) {
                     LOG.error("Fail to commit after {} retries, max retries: {}", i, maxRetries, e);
-                    if (firstException != null) {
+                    if (firstException == null) {
                         firstException = new RuntimeException("Failed to commit", e);
                     }
                 }
