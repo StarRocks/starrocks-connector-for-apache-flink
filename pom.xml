@@ -93,12 +93,12 @@ limitations under the License.
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>flink-connector-starrocks-common</artifactId>
-                <version>${srfc.version}-SNAPSHOT</version>
+                <version>${project.parent.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>flink-connector-starrocks-common</artifactId>
-                <version>${srfc.version}-SNAPSHOT</version>
+                <version>${project.parent.version}</version>
                 <type>test-jar</type>
             </dependency>
             <dependency>
@@ -343,6 +343,11 @@ limitations under the License.
                     <configuration>
                         <encoding>${file_encoding}</encoding>
                     </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>3.2.0</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
