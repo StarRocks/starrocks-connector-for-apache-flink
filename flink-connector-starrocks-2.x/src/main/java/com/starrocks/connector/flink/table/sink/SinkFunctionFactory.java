@@ -82,6 +82,7 @@ public class SinkFunctionFactory {
 
     public static <T> StarRocksSink<T> createSink(
             StarRocksSinkOptions sinkOptions, ResolvedSchema schema, StarRocksIRowTransformer<T> rowTransformer) {
+        getSinkVersion(sinkOptions);
         detectStarRocksFeature(sinkOptions);
         StarRocksSinkTable sinkTable = StarRocksSinkTable.builder()
                 .sinkOptions(sinkOptions)
@@ -105,12 +106,14 @@ public class SinkFunctionFactory {
 
     public static <T> StarRocksSink<T> createSink(
             StarRocksSinkOptions sinkOptions, RecordSerializationSchema<T> serializationSchema) {
+        getSinkVersion(sinkOptions);
         detectStarRocksFeature(sinkOptions);
         StreamLoadProperties streamLoadProperties = sinkOptions.getProperties(null);
         return new StarRocksSink<>(sinkOptions, serializationSchema, streamLoadProperties);
     }
 
     public static StarRocksSink<String> createSink(StarRocksSinkOptions sinkOptions) {
+        getSinkVersion(sinkOptions);
         detectStarRocksFeature(sinkOptions);
         StringSerializationSchema serializationSchema = new StringSerializationSchema(
                 sinkOptions.getDatabaseName(), sinkOptions.getTableName());
