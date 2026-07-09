@@ -335,6 +335,9 @@ public class BatchTableRegion implements TableRegion {
             }
             chunkBytes += bytes.length + d;
             chunkRows++;
+            if (!dataFormat.supportsBatching()) {
+                break;
+            }
         }
 
         return new StreamLoadEntityMeta(chunkBytes, chunkRows);

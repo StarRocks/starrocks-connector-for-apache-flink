@@ -27,6 +27,22 @@ public interface StreamLoadManager {
 
     void init();
     void write(String uniqueKey, String database, String table, String... rows);
+
+    /**
+     * Binary write API for formats that produce raw byte payloads (e.g. Arrow IPC).
+     *
+     * <p>Unlike {@link #write(String, String, String, String...)}, this method
+     * accepts pre-serialized {@code byte[]} rows and passes them directly to the
+     * underlying {@link com.starrocks.data.load.stream.TableRegion} without any
+     * character-set conversion.  This is essential for Arrow streams whose IPC
+     * framing bytes are arbitrary binary data and would be corrupted by a
+     * {@code String → getBytes(UTF_8)} round-trip.
+     */
+    default void write(String uniqueKey, String database, String table, byte[]... rows) {
+        throw new UnsupportedOperationException(
+                "Binary write not supported by this StreamLoadManager implementation");
+    }
+
     void callback(StreamLoadResponse response);
     void callback(Throwable e);
     void flush();
@@ -68,6 +84,15 @@ public interface StreamLoadManager {
      */
     default void write(int partition, String database, String table, String... rows) {
         write(null, database, table, rows);
+    }
+
+    /**
+     * Partition-aware binary write for multi-table transaction mode.
+     *
+     * @see #write(String, String, String, byte[])
+     */
+    default void write(int partition, String database, String table, byte[]... rows) {
+        write((String) null, database, table, rows);
     }
 
     default Throwable getException() {

@@ -152,4 +152,33 @@ public class StreamLoadPropertiesTest {
 
         assertEquals(10000, props.getPublishTimeoutMs());
     }
+
+    @Test
+    public void testArrowFormatTableProperties() {
+        StreamLoadTableProperties tableProperties = StreamLoadTableProperties.builder()
+                .database("test_db")
+                .table("test_tbl")
+                .streamLoadDataFormat(StreamLoadDataFormat.ARROW)
+                .build();
+
+        assertEquals(StreamLoadDataFormat.ARROW, tableProperties.getDataFormat());
+        assertEquals("arrow", tableProperties.getDataFormat().name());
+        assertEquals(0, tableProperties.getDataFormat().first().length);
+        assertEquals(0, tableProperties.getDataFormat().delimiter().length);
+        assertEquals(0, tableProperties.getDataFormat().end().length);
+        assertEquals("arrow", tableProperties.getProperties().get("format"));
+    }
+
+    @Test
+    public void testArrowFormatPropertyNotDuplicated() {
+        StreamLoadTableProperties tableProperties = StreamLoadTableProperties.builder()
+                .database("test_db")
+                .table("test_tbl")
+                .streamLoadDataFormat(StreamLoadDataFormat.ARROW)
+                .addProperty("format", "arrow")
+                .build();
+
+        assertEquals(StreamLoadDataFormat.ARROW, tableProperties.getDataFormat());
+        assertEquals("arrow", tableProperties.getProperties().get("format"));
+    }
 }

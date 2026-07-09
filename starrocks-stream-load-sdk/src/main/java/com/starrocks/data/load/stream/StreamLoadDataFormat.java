@@ -28,9 +28,24 @@ import java.nio.charset.StandardCharsets;
 public interface StreamLoadDataFormat {
     StreamLoadDataFormat JSON = new JSONFormat();
     StreamLoadDataFormat CSV = new CSVFormat();
+    StreamLoadDataFormat ARROW = new ArrowFormat();
 
     default String name() {
         return "";
+    }
+
+    /**
+     * Whether this format supports combining multiple records into a single
+     * chunk / HTTP request body using {@link #delimiter()}.
+     *
+     * <p>Formats such as CSV and JSON return {@code true}. Self-contained binary
+     * formats such as Arrow IPC streams return {@code false} because each payload
+     * is an independent stream with its own schema and end-of-stream marker, and
+     * raw concatenation within a single HTTP body causes parser errors or dropped
+     * records on the backend.
+     */
+    default boolean supportsBatching() {
+        return true;
     }
 
     byte[] first();
@@ -126,6 +141,84 @@ public interface StreamLoadDataFormat {
                     ", delimiter=" + new String(delimiter) +
                     ", end=" + new String(end) +
                     '}';
+        }
+    }
+
+    /**
+     * ArrowFormat represents the Apache Arrow IPC stream format.
+     * <p>
+     * Note on validation: This SDK intentionally avoids importing heavyweight Apache Arrow
+     * dependencies (such as arrow-vector and arrow-memory) to keep the client lightweight 
+     * and performant. Therefore, there is no client-side schema validation of the Arrow 
+     * RecordBatches before they are sent. The SDK simply streams the raw bytes directly.
+     * <p>
+     * Validation is delegated to the StarRocks backend's ArrowScanner, which will natively 
+     * parse the Arrow IPC stream and validate its schema against the requested {@code columns} 
+     * mapping HTTP header. If an invalid Arrow byte stream is sent, the stream load 
+     * operation will fail and return an error from the backend.
+     * <p>
+     * <b>Important:</b> Arrow IPC streams contain arbitrary binary data (magic bytes,
+     * flatbuffer metadata, padding) that is not valid UTF-8. Callers <b>must</b> use the
+     * {@link StreamLoadManager#write(String, String, String, byte[]...)} binary write API
+     * instead of the {@code String}-based overload. Passing an Arrow payload through
+     * {@code String.getBytes(UTF_8)} will silently corrupt the stream.
+     * <p>
+     * Furthermore, each {@code byte[]} passed to the write API must be a complete,
+     * self-contained Arrow IPC stream (containing its own Schema message, RecordBatch
+     * messages, and EOS marker). To preserve stream boundaries, the SDK enforces that each
+     * payload is dispatched in an independent HTTP request ({@link #supportsBatching()}
+     * returns {@code false}) rather than being concatenated into a single request body.
+     * <p>
+     * Since Arrow IPC streams are self-describing and do not use text delimiters, 
+     * {@code first()}, {@code delimiter()}, and {@code end()} all return empty byte arrays
+     * to enable zero-copy appending of pre-serialized RecordBatches.
+     */
+    class ArrowFormat implements StreamLoadDataFormat, Serializable {
+        private static final byte[] EMPTY = new byte[0];
+
+        @Override
+        public String name() {
+            return "arrow";
+        }
+
+        @Override
+        public boolean supportsBatching() {
+            return false;
+        }
+
+        @Override
+        public byte[] first() {
+            return EMPTY;
+        }
+
+        @Override
+        public byte[] delimiter() {
+            return EMPTY;
+        }
+
+        @Override
+        public byte[] end() {
+            return EMPTY;
+        }
+
+        @JsonValue
+        @Override
+        public String toString() {
+            return "ArrowFormat{}";
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof ArrowFormat;
+        }
+
+        @Override
+        public int hashCode() {
+            return ArrowFormat.class.hashCode();
+        }
+
+        private Object readResolve() {
+            return ARROW;
         }
     }
 }

@@ -23,6 +23,7 @@ import com.starrocks.data.load.stream.EnvUtils;
 import com.starrocks.data.load.stream.LabelGenerator;
 import com.starrocks.data.load.stream.LabelGeneratorFactory;
 import com.starrocks.data.load.stream.LoadMetrics;
+import com.starrocks.data.load.stream.StreamLoadDataFormat;
 import com.starrocks.data.load.stream.StreamLoadManager;
 import com.starrocks.data.load.stream.StreamLoadResponse;
 import com.starrocks.data.load.stream.StreamLoadSnapshot;
@@ -1697,6 +1698,13 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
     @Override
     public void write(String uniqueKey, String database, String table, String... rows) {
         TableRegion region = getCacheRegion(uniqueKey, database, table);
+        if (region.getProperties() != null
+                && region.getProperties().getDataFormat() instanceof StreamLoadDataFormat.ArrowFormat) {
+            throw new IllegalStateException(
+                    "Arrow format requires the byte[] write API. "
+                    + "String-based writes will corrupt the Arrow IPC stream. "
+                    + "Use write(uniqueKey, database, table, byte[]...) instead.");
+        }
         for (String row : rows) {
             checkAndThrowException();
             if (LOG.isTraceEnabled()) {
@@ -1704,6 +1712,23 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                         uniqueKey == null ? "null" : uniqueKey, database, table, row);
             }
             int bytes = region.write(row.getBytes(StandardCharsets.UTF_8));
+            blockIfCacheFull(currentCacheBytes.addAndGet(bytes));
+        }
+    }
+
+    @Override
+    public void write(String uniqueKey, String database, String table, byte[]... rows) {
+        TableRegion region = getCacheRegion(uniqueKey, database, table);
+        for (byte[] row : rows) {
+            if (row == null) {
+                continue;
+            }
+            checkAndThrowException();
+            if (LOG.isTraceEnabled()) {
+                LOG.trace("Write binary uniqueKey {}, database {}, table {}, {} bytes",
+                        uniqueKey == null ? "null" : uniqueKey, database, table, row.length);
+            }
+            int bytes = region.write(row);
             blockIfCacheFull(currentCacheBytes.addAndGet(bytes));
         }
     }
@@ -2011,9 +2036,35 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         String uniqueKey = "P" + partition + "-" + StreamLoadUtils.getTableUniqueKey(database, table);
         partitionTracker.onWrite(partition);
         TableRegion region = getCacheRegion(uniqueKey, database, table, partition);
+        if (region.getProperties() != null
+                && region.getProperties().getDataFormat() instanceof StreamLoadDataFormat.ArrowFormat) {
+            throw new IllegalStateException(
+                    "Arrow format requires the byte[] write API. "
+                    + "String-based writes will corrupt the Arrow IPC stream. "
+                    + "Use write(partition, database, table, byte[]...) instead.");
+        }
         for (String row : rows) {
             checkAndThrowException();
             int bytes = region.write(row.getBytes(StandardCharsets.UTF_8));
+            blockIfCacheFull(currentCacheBytes.addAndGet(bytes));
+        }
+    }
+
+    @Override
+    public void write(int partition, String database, String table, byte[]... rows) {
+        if (!multiTableTransactionEnabled) {
+            write((String) null, database, table, rows);
+            return;
+        }
+        String uniqueKey = "P" + partition + "-" + StreamLoadUtils.getTableUniqueKey(database, table);
+        partitionTracker.onWrite(partition);
+        TableRegion region = getCacheRegion(uniqueKey, database, table, partition);
+        for (byte[] row : rows) {
+            if (row == null) {
+                continue;
+            }
+            checkAndThrowException();
+            int bytes = region.write(row);
             blockIfCacheFull(currentCacheBytes.addAndGet(bytes));
         }
     }

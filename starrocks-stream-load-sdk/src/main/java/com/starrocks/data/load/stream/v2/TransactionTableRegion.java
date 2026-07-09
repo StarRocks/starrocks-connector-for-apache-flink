@@ -390,8 +390,17 @@ public class TransactionTableRegion implements TableRegion {
         if (activeChunk == null || activeChunk.numRows() == 0) {
             return;
         }
-        lastSwitchedChunkId = activeChunk.getChunkId();
-        inactiveChunks.add(activeChunk);
+        if (!properties.getDataFormat().supportsBatching() && activeChunk.numRows() > 1) {
+            for (byte[] row : activeChunk.getRows()) {
+                Chunk singleChunk = new Chunk(properties.getDataFormat(), chunkIdGenerator.getAndIncrement());
+                singleChunk.addRow(row);
+                lastSwitchedChunkId = singleChunk.getChunkId();
+                inactiveChunks.add(singleChunk);
+            }
+        } else {
+            lastSwitchedChunkId = activeChunk.getChunkId();
+            inactiveChunks.add(activeChunk);
+        }
         activeChunk = new Chunk(properties.getDataFormat(), chunkIdGenerator.getAndIncrement());
     }
 
@@ -503,6 +512,11 @@ public class TransactionTableRegion implements TableRegion {
     /** Returns {@code true} if {@code inactiveChunks} is non-empty. */
     public boolean hasInactiveChunks() {
         return !inactiveChunks.isEmpty();
+    }
+
+    /** Returns the number of inactive chunks. */
+    public int getInactiveChunksCount() {
+        return inactiveChunks.size();
     }
 
     /** Returns the timestamp (epoch ms) of the last switchChunkForCommit. */
@@ -687,9 +701,10 @@ public class TransactionTableRegion implements TableRegion {
     protected int write0(byte[] row) {
         if (!multiTableTransactionEnabled) {
             // Non-multi-table: original behavior — switch when a single row would
-            // exceed chunk size or row limits, so individual HTTP requests stay
-            // bounded.
-            if (activeChunk.estimateChunkSize(row) > properties.getChunkLimit()
+            // exceed chunk size or row limits, or when format does not support batching
+            // (e.g. Arrow IPC streams), so individual HTTP requests stay bounded.
+            if (!properties.getDataFormat().supportsBatching()
+                    || activeChunk.estimateChunkSize(row) > properties.getChunkLimit()
                     || activeChunk.numRows() >= properties.getMaxBufferRows()) {
                 switchChunk();
             }

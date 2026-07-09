@@ -20,6 +20,7 @@ package com.starrocks.data.load.stream.mergecommit;
 
 import com.starrocks.data.load.stream.EnvUtils;
 import com.starrocks.data.load.stream.LabelGeneratorFactory;
+import com.starrocks.data.load.stream.StreamLoadDataFormat;
 import com.starrocks.data.load.stream.StreamLoadManager;
 import com.starrocks.data.load.stream.StreamLoadResponse;
 import com.starrocks.data.load.stream.StreamLoadSnapshot;
@@ -67,7 +68,7 @@ public class MergeCommitManager implements StreamLoadManager, Serializable {
     private final AtomicReference<Throwable> exception;
     private transient Thread cacheMonitorThread;
     private transient AtomicBoolean closed;
-    private transient MetricListener metricListener;
+    private transient MetricListener metricListener = new EmptyMetricListener();
 
     public MergeCommitManager(StreamLoadProperties properties) {
         this.properties = properties;
@@ -99,6 +100,13 @@ public class MergeCommitManager implements StreamLoadManager, Serializable {
     @Override
     public void write(String uniqueKey, String database, String tableName, String... rows) {
         Table table = getTable(database, tableName);
+        if (table.getProperties() != null
+                && table.getProperties().getDataFormat() instanceof StreamLoadDataFormat.ArrowFormat) {
+            throw new IllegalStateException(
+                    "Arrow format requires the byte[] write API. "
+                    + "String-based writes will corrupt the Arrow IPC stream. "
+                    + "Use write(uniqueKey, database, table, byte[]...) instead.");
+        }
         int totalBytes = 0;
         for (String row : rows) {
             checkException();
@@ -116,6 +124,34 @@ public class MergeCommitManager implements StreamLoadManager, Serializable {
             checkCacheFull();
         }
         metricListener.onWrite(rows.length, totalBytes);
+        metricListener.onCacheChange(maxWriteBlockCacheBytes, currentCacheBytes.get());
+    }
+
+    @Override
+    public void write(String uniqueKey, String database, String tableName, byte[]... rows) {
+        Table table = getTable(database, tableName);
+        int totalBytes = 0;
+        int validRows = 0;
+        for (byte[] data : rows) {
+            if (data == null) {
+                continue;
+            }
+            validRows++;
+            checkException();
+            if (properties.isBlackhole()) {
+                totalBytes += data.length;
+            } else {
+                int bytes = table.write(data);
+                totalBytes += bytes;
+                currentCacheBytes.addAndGet(bytes);
+            }
+            if (LOG.isTraceEnabled()) {
+                LOG.trace("Write binary record, database {}, table {}, {} bytes",
+                        database, tableName, data.length);
+            }
+            checkCacheFull();
+        }
+        metricListener.onWrite(validRows, totalBytes);
         metricListener.onCacheChange(maxWriteBlockCacheBytes, currentCacheBytes.get());
     }
 

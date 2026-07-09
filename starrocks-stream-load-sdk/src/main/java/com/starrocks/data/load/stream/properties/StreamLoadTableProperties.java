@@ -239,6 +239,10 @@ public class StreamLoadTableProperties implements Serializable {
             if (columns != null) {
                 addProperty("columns", columns);
             }
+            if (dataFormat instanceof StreamLoadDataFormat.ArrowFormat
+                    && !properties.containsKey("format")) {
+                addProperty("format", "arrow");
+            }
             return new StreamLoadTableProperties(this);
         }
 

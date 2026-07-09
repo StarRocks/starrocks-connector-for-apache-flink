@@ -557,4 +557,37 @@ public class TableTest {
         assertTrue(flushReturned.get());
         assertNull(flushThrowable.get());
     }
+
+    @Test
+    public void testArrowWriteFlushesImmediately() {
+        StreamLoadTableProperties properties = StreamLoadTableProperties.builder()
+                .database("db")
+                .table("tbl")
+                .streamLoadDataFormat(StreamLoadDataFormat.ARROW)
+                .chunkLimit(1024 * 1024)
+                .build();
+        Table table = new Table(
+                properties.getDatabase(),
+                properties.getTable(),
+                manager,
+                loader,
+                properties,
+                3,
+                100,
+                30000,
+                1024 * 1024,
+                10
+        );
+
+        byte[] payload1 = new byte[]{1, 2, 3};
+        byte[] payload2 = new byte[]{4, 5, 6};
+
+        table.write(payload1);
+        table.write(payload2);
+
+        // Verify that 2 writes resulted in 2 separate HTTP sendLoad requests (one per payload)
+        assertEquals(2, sendLoadSpy.size());
+        assertEquals(1, sendLoadSpy.capturedRequests.get(0).loadRequest.getChunk().numRows());
+        assertEquals(1, sendLoadSpy.capturedRequests.get(1).loadRequest.getChunk().numRows());
+    }
 }
