@@ -28,6 +28,7 @@ import java.nio.charset.StandardCharsets;
 public interface StreamLoadDataFormat {
     StreamLoadDataFormat JSON = new JSONFormat();
     StreamLoadDataFormat CSV = new CSVFormat();
+    StreamLoadDataFormat ARROW = new ArrowFormat();
 
     default String name() {
         return "";
@@ -126,6 +127,53 @@ public interface StreamLoadDataFormat {
                     ", delimiter=" + new String(delimiter) +
                     ", end=" + new String(end) +
                     '}';
+        }
+    }
+
+    /**
+     * ArrowFormat represents the Apache Arrow IPC stream format.
+     * <p>
+     * Note on validation: This SDK intentionally avoids importing heavyweight Apache Arrow
+     * dependencies (such as arrow-vector and arrow-memory) to keep the client lightweight 
+     * and performant. Therefore, there is no client-side schema validation of the Arrow 
+     * RecordBatches before they are sent. The SDK simply streams the raw bytes directly.
+     * <p>
+     * Validation is delegated to the StarRocks backend's ArrowScanner, which will natively 
+     * parse the Arrow IPC stream and validate its schema against the requested `columns` 
+     * mapping HTTP header. If an invalid Arrow byte stream is sent, the stream load 
+     * operation will fail and return an error from the backend.
+     * <p>
+     * Since Arrow IPC streams are self-describing and do not use text delimiters, 
+     * `first()`, `delimiter()`, and `end()` all return empty byte arrays to enable 
+     * zero-copy appending of pre-serialized RecordBatches.
+     */
+    class ArrowFormat implements StreamLoadDataFormat, Serializable {
+        private static final byte[] EMPTY = new byte[0];
+
+        @Override
+        public String name() {
+            return "arrow";
+        }
+
+        @Override
+        public byte[] first() {
+            return EMPTY;
+        }
+
+        @Override
+        public byte[] delimiter() {
+            return EMPTY;
+        }
+
+        @Override
+        public byte[] end() {
+            return EMPTY;
+        }
+
+        @JsonValue
+        @Override
+        public String toString() {
+            return "ArrowFormat{}";
         }
     }
 }
