@@ -1533,4 +1533,56 @@ public class StreamLoadManagerMultiTableTest {
             manager.close();
         }
     }
+
+    /**
+     * Verifies the minSwitchBytes batching: with a large min-switch-bytes, ample
+     * buffer (no cache pressure) and no periodic commit during the run, many
+     * small source transactions batch into a single chunk (one stream-load)
+     * instead of one load per txnEnd. Without the size gate (the pre-change
+     * behavior), every interval-elapsed txnEnd would switch and emit a separate
+     * load — roughly one per transaction (~20 here). The gate must not affect
+     * correctness: the final commit still flushes everything.
+     */
+    @Test(timeout = 30000)
+    public void testMinSwitchBytesBatchesSmallTransactions() throws Exception {
+        StreamLoadTableProperties tableProps = StreamLoadTableProperties.builder()
+                .database("test").table("orders")
+                .streamLoadDataFormat(StreamLoadDataFormat.JSON)
+                .maxBufferRows(100000).build();
+        StreamLoadProperties properties = StreamLoadProperties.builder()
+                .loadUrls(mockedServer.getBaseUrl())
+                .username(USERNAME).password(PASSWORD).version("4.0.0")
+                .enableMultiTableTransaction()
+                .multiTableTransactionBufferSize(64L * 1024 * 1024) // 64MB -> 128MB block cap: no pressure
+                .multiTableMiniSwitchIntervalMs(50)                 // short: the interval always elapses
+                .multiTableMinSwitchBytes(64L * 1024 * 1024)        // huge: never reached by tiny rows
+                .labelPrefix("test-mtxn-")
+                .defaultTableProperties(tableProps)
+                .expectDelayTime(60000)                             // 60s: no periodic commit during the run
+                .scanningFrequency(50).ioThreadCount(2)
+                .build();
+        StreamLoadManagerV2 manager = new StreamLoadManagerV2(properties, true);
+        manager.init();
+        try {
+            mockedServer.resetCounters();
+            int txns = 20;
+            for (int t = 0; t < txns; t++) {
+                for (int r = 0; r < 3; r++) {
+                    manager.write(0, "test", "orders", String.format("{\"id\":%06d}", t * 10 + r));
+                }
+                manager.setCommitAllowed(0, true); // txnEnd
+                Thread.sleep(60);                  // let the mini-switch interval elapse between txns
+            }
+            manager.flush();
+            Assert.assertNull("No exception", manager.getException());
+            int loads = mockedServer.getLoadCount();
+            // Batched: 20 tiny txns coalesce into ~1 chunk for the single table,
+            // so at most a handful of loads — NOT ~20 (one per txnEnd).
+            Assert.assertTrue("Expected batched loads (<=3) for 20 tiny txns, got " + loads,
+                    loads >= 1 && loads <= 3);
+            Assert.assertTrue("Expected at least one commit", mockedServer.getCommitCount() >= 1);
+        } finally {
+            manager.close();
+        }
+    }
 }

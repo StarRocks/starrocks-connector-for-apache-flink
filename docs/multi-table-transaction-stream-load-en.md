@@ -34,6 +34,8 @@ Typical scenarios:
 |---|---|---|---|
 | `sink.transaction.multi-table.enabled` | Boolean | `false` | Enable multi-table atomic transaction mode |
 | `sink.transaction.multi-table.buffer-size` | Long | `134217728` (128 MB) | Global buffer size in bytes for multi-table transaction mode. When the total buffered data across all tables reaches this threshold, a flush is triggered |
+| `sink.transaction.multi-table.mini-switch-interval-ms` | Long | `-1` (auto) | Minimum interval (ms) between per-partition chunk switches. Within the interval, source transactions are batched into a single stream-load, bounding HTTP request count. `-1` auto-derives `min(1000, max(500, buffer-flush-interval-ms/4))`; a positive value overrides it |
+| `sink.transaction.multi-table.min-switch-bytes` | Long | `1048576` (1 MB) | An interval-elapsed chunk switch only fires once a region's active chunk has accumulated at least this many bytes, so low-volume partitions batch more source transactions into one stream-load instead of emitting many tiny requests. Half-full headroom or buffer-size memory pressure still forces a switch regardless. Set `<=0` to disable the size gate and restore the prior per-interval switching behavior |
 
 ### 3.2 Related Configuration
 

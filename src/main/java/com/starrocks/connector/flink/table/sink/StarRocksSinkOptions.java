@@ -131,6 +131,25 @@ public class StarRocksSinkOptions implements Serializable {
                             "When the total buffered data across all tables reaches this threshold, " +
                             "a flush is triggered. Default is 128MB.");
 
+    public static final ConfigOption<Long> SINK_MULTI_TABLE_TXN_MINI_SWITCH_INTERVAL_MS =
+            ConfigOptions.key("sink.transaction.multi-table.mini-switch-interval-ms")
+                    .longType()
+                    .defaultValue(-1L)
+                    .withDescription("Multi-table transaction mode: minimum interval (ms) between chunk " +
+                            "switches per partition. Within the interval, source transactions are batched " +
+                            "into a single stream-load, bounding the number of HTTP requests. " +
+                            "-1 (default) auto-derives min(1000, max(500, buffer-flush-interval-ms/4)).");
+
+    public static final ConfigOption<Long> SINK_MULTI_TABLE_TXN_MIN_SWITCH_BYTES =
+            ConfigOptions.key("sink.transaction.multi-table.min-switch-bytes")
+                    .longType()
+                    .defaultValue(MEGA_BYTES_SCALE)
+                    .withDescription("Multi-table transaction mode: an interval-elapsed chunk switch only " +
+                            "fires once a region's active chunk has accumulated at least this many bytes, " +
+                            "so a low-volume partition batches more source transactions into one stream-load " +
+                            "instead of emitting many tiny requests. Half-full headroom or buffer-size memory " +
+                            "pressure still forces a switch regardless. Default 1MB; <=0 disables the size gate.");
+
     public static final ConfigOption<Integer> SINK_MAX_RETRIES = ConfigOptions.key("sink.max-retries")
             .intType().defaultValue(3).withDescription("Max flushing retry times of the row batch.");
 
@@ -370,6 +389,14 @@ public class StarRocksSinkOptions implements Serializable {
 
     public long getMultiTableTransactionBufferSize() {
         return tableOptions.get(SINK_MULTI_TABLE_TXN_BUFFER_SIZE);
+    }
+
+    public long getMultiTableMiniSwitchIntervalMs() {
+        return tableOptions.get(SINK_MULTI_TABLE_TXN_MINI_SWITCH_INTERVAL_MS);
+    }
+
+    public long getMultiTableMinSwitchBytes() {
+        return tableOptions.get(SINK_MULTI_TABLE_TXN_MIN_SWITCH_BYTES);
     }
 
     public Map<String, String> getSinkStreamLoadProperties() {
@@ -691,6 +718,8 @@ public class StarRocksSinkOptions implements Serializable {
             builder.enableTransaction();
             builder.enableMultiTableTransaction();
             builder.multiTableTransactionBufferSize(getMultiTableTransactionBufferSize());
+            builder.multiTableMiniSwitchIntervalMs(getMultiTableMiniSwitchIntervalMs());
+            builder.multiTableMinSwitchBytes(getMultiTableMinSwitchBytes());
             log.info("Enable multi-table transaction stream load");
         }
         return builder.build();
