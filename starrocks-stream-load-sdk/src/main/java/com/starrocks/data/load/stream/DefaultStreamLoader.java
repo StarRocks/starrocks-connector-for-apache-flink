@@ -289,6 +289,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
 
             HttpPut httpPut = new HttpPut(sendUrl);
             httpPut.setConfig(RequestConfig.custom()
+                        .setConnectTimeout(properties.getConnectTimeout())
                         .setSocketTimeout(properties.getSocketTimeout())
                         .setExpectContinueEnabled(true)
                         .setRedirectsEnabled(true)
@@ -364,6 +365,11 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
     protected String getAvailableHost() {
         String[] hosts = properties.getLoadUrls();
         int size = hosts.length;
+        // No alternative host to fall back to, so probing is useless: if the only
+        // host is down, the subsequent load request will fail and report it anyway
+        if (size == 1) {
+            return hosts[0];
+        }
         long pos = availableHostPos;
         long tmp = pos + size;
         while (pos < tmp) {
@@ -458,6 +464,9 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
             try (CloseableHttpClient client = HttpClients.createDefault()) {
                 String url = host + "/api/" + database + "/get_load_state?label=" + label;
                 HttpGet httpGet = new HttpGet(url);
+                httpGet.setConfig(RequestConfig.custom()
+                        .setConnectTimeout(properties.getConnectTimeout())
+                        .build());
                 httpGet.addHeader("Authorization", StreamLoadUtils.getBasicAuthHeader(properties.getUsername(), properties.getPassword()));
                 httpGet.setHeader("Connection", "close");
                 try (CloseableHttpResponse response = client.execute(httpGet)) {
@@ -497,6 +506,9 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
         log.info("Cancel load via FE, db: {}, table: {}, label: {}, url: {}", db, table, label, url);
 
         HttpPost httpPost = new HttpPost(url);
+        httpPost.setConfig(RequestConfig.custom()
+                .setConnectTimeout(properties.getConnectTimeout())
+                .build());
         httpPost.addHeader("Authorization",
                 StreamLoadUtils.getBasicAuthHeader(properties.getUsername(), properties.getPassword()));
         httpPost.setHeader("Connection", "close");
