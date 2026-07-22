@@ -15,7 +15,7 @@
       sh build.sh 1.16
       ```
 
-3. Go to the `target/` directory to find the Flink connector JAR file, such as `flink-connector-starrocks-1.2.7_flink-1.16-SNAPSHOT.jar`, generated upon compilation.
+3. Go to the `flink-connector-starrocks-1.x/target/` (Flink 1.x) or `flink-connector-starrocks-2.x/target/` (Flink 2.x) directory to find the Flink connector JAR file, such as `flink-connector-starrocks-1.x-1.2.16_flink-1.16-SNAPSHOT.jar`, generated upon compilation.
 
 
 ## Prerequisites
@@ -53,7 +53,7 @@ Flink has been deployed. If Flink has not been deployed, follow these steps to d
 
 3. move Flink CDC MySQL Connector and Flink Starrocks Connector to FLINK_HOME lib directory
     ```SQL
-   mv flink-connector-starrocks-1.2.9_flink-1.17.jar lib/
+   mv flink-connector-starrocks-1.x-1.2.16_flink-1.17.jar lib/
    mv flink-sql-connector-mysql-cdc-2.4.2.jar lib/ 
     ```
 
@@ -72,7 +72,7 @@ Flink has been deployed. If Flink has not been deployed, follow these steps to d
 ## Synchronize data
    ```SQL
     # Start sync
-      bin/flink run -Dexecution.checkpointing.interval=2s -Dparallelism.default=1 -c com.starrocks.connector.flink.cdc.StarRocksCdcTools lib/flink-connector-starrocks-1.2.9_flink-1.17-SNAPSHOT.jar mysql-sync-database-starrocks  --database test_cdc \
+      bin/flink run -Dexecution.checkpointing.interval=2s -Dparallelism.default=1 -c com.starrocks.connector.flink.cdc.StarRocksCdcTools lib/flink-connector-starrocks-1.x-1.2.16_flink-1.17-SNAPSHOT.jar mysql-sync-database-starrocks  --database test_cdc \
       --mysql-conf hostname=ip \
       --mysql-conf username=UserName \
       --mysql-conf password=PassWord \

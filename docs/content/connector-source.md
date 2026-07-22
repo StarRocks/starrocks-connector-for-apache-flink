@@ -22,9 +22,17 @@ Unlike the JDBC connector provided by Flink, the Flink connector of StarRocks su
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.16 (2.x module) | 2.0,2.1,2.2,2.3     | 2.1 and later| 11 (17 for Flink 2.2+) | 2.12 |
+| 1.2.16 (1.x module) | 1.16,1.17,1.18,1.19,1.20 | 2.1 and later| 8 | 2.11,2.12 |
 | 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later| 8    | 2.11,2.12 |
 | 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later| 8    | 2.11,2.12 |
 | 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later| 8    | 2.11,2.12 |
+
+> **NOTE**
+>
+> Since 1.2.16 the connector ships as two artifacts: `flink-connector-starrocks-1.x`
+> for Flink 1.16-1.20 and `flink-connector-starrocks-2.x` for Flink 2.0+. Earlier
+> versions were published as `flink-connector-starrocks`.
 
 ## Prerequisites
 
@@ -273,30 +281,49 @@ When you read data by using Flink SQL, take note of the following points:
 
 ### Read data using Flink DataStream
 
-1. Add the following dependencies to the `pom.xml` file:
+1. Add the Flink connector as a dependency to the `pom.xml` file according to your Flink version:
 
-   ```SQL
-   <dependency>
-       <groupId>com.starrocks</groupId>
-       <artifactId>flink-connector-starrocks</artifactId>
-       <!-- for Apache Flink® 1.15 -->
-       <version>x.x.x_flink-1.15</version>
-       <!-- for Apache Flink® 1.14 -->
-       <version>x.x.x_flink-1.14_2.11</version>
-       <version>x.x.x_flink-1.14_2.12</version>
-       <!-- for Apache Flink® 1.13 -->
-       <version>x.x.x_flink-1.13_2.11</version>
-       <version>x.x.x_flink-1.13_2.12</version>
-       <!-- for Apache Flink® 1.12 -->
-       <version>x.x.x_flink-1.12_2.11</version>
-       <version>x.x.x_flink-1.12_2.12</version>
-       <!-- for Apache Flink® 1.11 -->
-       <version>x.x.x_flink-1.11_2.11</version>
-       <version>x.x.x_flink-1.11_2.12</version>
-   </dependency>
-   ```
+   - Since connector 1.2.16, for Apache Flink® 1.16-1.20
 
-   You must replace `x.x.x` in the preceding code example with the latest Flink connector version that you are using. See [Version information](https://search.maven.org/search?q=g:com.starrocks).
+     ```xml
+     <dependency>
+         <groupId>com.starrocks</groupId>
+         <artifactId>flink-connector-starrocks-1.x</artifactId>
+         <version>${connector_version}_flink-${flink_version}</version>
+     </dependency>
+     ```
+
+   - Since connector 1.2.16, for Apache Flink® 2.0 and later
+
+     ```xml
+     <dependency>
+         <groupId>com.starrocks</groupId>
+         <artifactId>flink-connector-starrocks-2.x</artifactId>
+         <version>${connector_version}_flink-${flink_version}</version>
+     </dependency>
+     ```
+
+   - Up to connector 1.2.15, for Apache Flink® 1.15 and later
+
+     ```xml
+     <dependency>
+         <groupId>com.starrocks</groupId>
+         <artifactId>flink-connector-starrocks</artifactId>
+         <version>${connector_version}_flink-${flink_version}</version>
+     </dependency>
+     ```
+
+   - In versions earlier than Apache Flink® 1.15
+
+     ```xml
+     <dependency>
+         <groupId>com.starrocks</groupId>
+         <artifactId>flink-connector-starrocks</artifactId>
+         <version>${connector_version}_flink-${flink_version}_${scala_version}</version>
+     </dependency>
+     ```
+
+   Replace `connector_version`, `flink_version`, and `scala_version` with the versions you use. See [Version information](https://search.maven.org/search?q=g:com.starrocks).
 
 2. Call the Flink connector to read data from StarRocks:
 
@@ -329,6 +356,12 @@ When you read data by using Flink SQL, take note of the following points:
 
        }
    ```
+
+   > **NOTE**
+   >
+   > This example targets `flink-connector-starrocks-1.x`. With `flink-connector-starrocks-2.x`,
+   > build a `ResolvedSchema` instead of a `TableSchema` and add the source with
+   > `env.fromSource(...)`, because Flink 2.x removed `TableSchema` and `addSource`.
 
 ## What's next
 

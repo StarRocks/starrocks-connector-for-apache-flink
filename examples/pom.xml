@@ -25,28 +25,22 @@ limitations under the License.
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <file_encoding>UTF-8</file_encoding>
-        <flink.minor.version>1.17</flink.minor.version>
-        <flink.version>1.17.0</flink.version>
+        <flink.minor.version>1.20</flink.minor.version>
+        <flink.version>1.20.0</flink.version>
         <scala.version>2.12</scala.version>
-        <connector.version>1.2.8</connector.version>
+        <connector.version>1.2.16</connector.version>
         <log4j.version>2.17.1</log4j.version>
     </properties>
 
     <dependencies>
-        <!-- connector dependency for Flink version >= 1.15 -->
+        <!-- connector dependency for Flink 1.16-1.20 (since connector 1.2.16).
+             For Flink 2.0+ use artifactId flink-connector-starrocks-2.x, and
+             for connector versions up to 1.2.15 use flink-connector-starrocks. -->
         <dependency>
             <groupId>com.starrocks</groupId>
-            <artifactId>flink-connector-starrocks</artifactId>
+            <artifactId>flink-connector-starrocks-1.x</artifactId>
             <version>${connector.version}_flink-${flink.minor.version}</version>
         </dependency>
-
-        <!-- connector dependency for Flink version <= 1.14 -->
-<!--        <dependency>-->
-<!--            <groupId>com.starrocks</groupId>-->
-<!--            <artifactId>flink-connector-starrocks</artifactId>-->
-<!--            <version>${connector.version}_flink-${flink.version}_${scala.version}</version>-->
-<!--            <scope>provided</scope>-->
-<!--        </dependency>-->
 
         <dependency>
             <groupId>org.apache.flink</groupId>
