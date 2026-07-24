@@ -586,10 +586,7 @@ This example will show how to load data only to columns `id` and `name`.
 #### Conditional update
 
 This example will show how to do conditional update according to the value of column `score`. The update for an `id`
-takes effect only when the new value for `score` is greater than or equal to the old value.
-
-`sink.properties.merge_condition` works with both `sink.version` `V1` (Stream Load) and `V2` (Transaction Stream Load).
-`V2` (or `AUTO`) is recommended.
+takes effect only when the new value for `score` is has a greater or equal to the old value.
 
 1. Insert two data rows into the StarRocks table in MySQL client.
 
@@ -611,6 +608,7 @@ takes effect only when the new value for `score` is greater than or equal to the
     - Define the DDL including all of columns.
     - Set the option `sink.properties.merge_condition` to `score` to tell the Flink connector to use the column `score`
     as the condition.
+    - Set the option `sink.version` to `V1` or `V2`. Both support conditional update.
 
     ```SQL
     CREATE TABLE `score_board` (
@@ -627,7 +625,7 @@ takes effect only when the new value for `score` is greater than or equal to the
         'username' = 'root',
         'password' = '',
         'sink.properties.merge_condition' = 'score',
-        'sink.version' = 'V2'
+        'sink.version' = 'V1'
           );
     ```
 
