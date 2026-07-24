@@ -414,6 +414,73 @@ public class StarRocksSinkITTest extends StarRocksITTestBase {
         verifyResult(expectedData, actualData);
     }
 
+    /**
+     * Conditional update via sink.properties.merge_condition.
+     * Update takes effect only when the new score >= existing score.
+     */
+    @Test
+    public void testConditionalUpdateMergeCondition() throws Exception {
+        String tableName = "testMergeCondition_" + genRandomUuid();
+        String createStarRocksTable =
+                String.format(
+                        "CREATE TABLE `%s`.`%s` (" +
+                                "id INT," +
+                                "name STRING," +
+                                "score INT" +
+                                ") ENGINE = OLAP " +
+                                "PRIMARY KEY(id) " +
+                                "DISTRIBUTED BY HASH (id) BUCKETS 1 " +
+                                "PROPERTIES (" +
+                                "\"replication_num\" = \"1\"" +
+                                ")",
+                        DB_NAME, tableName);
+        executeSrSQL(createStarRocksTable);
+        executeSrSQL(String.format(
+                "INSERT INTO `%s`.`%s` VALUES (1, 'starrocks', 100), (2, 'flink', 100)",
+                DB_NAME, tableName));
+
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
+
+        List<Row> testData = Arrays.asList(
+                Row.of(1, "starrocks-update", 99),
+                Row.of(2, "flink-update", 101));
+        RowTypeInfo rowTypeInfo = new RowTypeInfo(
+                new TypeInformation[]{Types.INT, Types.STRING, Types.INT},
+                new String[]{"id", "name", "score"});
+        DataStream<Row> srcDs = env.fromCollection(testData).returns(rowTypeInfo);
+        tEnv.createTemporaryView("src", tEnv.fromDataStream(srcDs));
+
+        String createSQL = "CREATE TABLE sink(" +
+                "id INT," +
+                "name STRING," +
+                "score INT," +
+                "PRIMARY KEY (`id`) NOT ENFORCED" +
+                ") WITH ( " +
+                "'connector' = 'starrocks'," +
+                "'jdbc-url'='" + getJdbcUrl() + "'," +
+                "'load-url'='" + getHttpUrls() + "'," +
+                "'sink.version' = '" + (isSinkV2 ? "V2" : "V1") + "'," +
+                "'sink.use.new-sink-api' = '" + (newSinkApi ? "true" : "false") + "'," +
+                "'database-name' = '" + DB_NAME + "'," +
+                "'table-name' = '" + tableName + "'," +
+                "'username' = 'root'," +
+                "'password' = ''," +
+                "'sink.properties.merge_condition' = 'score'" +
+                ")";
+        tEnv.executeSql(createSQL);
+        tEnv.executeSql("INSERT INTO sink SELECT * FROM src").await();
+
+        // id=1: score 99 < 100 → rejected; id=2: score 101 >= 100 → applied
+        List<List<Object>> expectedData = Arrays.asList(
+                Arrays.asList(1, "starrocks", 100),
+                Arrays.asList(2, "flink-update", 101)
+        );
+        List<List<Object>> actualData = scanTable(DB_CONNECTION, DB_NAME, tableName);
+        verifyResult(expectedData, actualData);
+    }
+
     @Test
     public void testAtLeastOnceWithTransaction() throws Exception {
         testConfigurationBase(Collections.emptyMap(), env -> null);
