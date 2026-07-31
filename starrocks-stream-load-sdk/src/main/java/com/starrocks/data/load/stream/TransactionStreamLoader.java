@@ -141,6 +141,25 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
     }
 
     @Override
+    protected void onBeginRefused(TableRegion region) {
+        // Distinguish the multi-table null-label deferral above from a genuine begin()
+        // failure. The two are mutually exclusive: the doBegin() failure path in begin()
+        // is only reachable when multi-table transactions are disabled.
+        //
+        // Failing the region here would be terminal, not a retry: in multi-table mode
+        // TransactionTableRegion.fail() only treats TXN_IN_PROCESSING as retryable, so a
+        // synthetic "Transaction start failed" reaches manager.callback() and aborts the
+        // job — defeating the very race this guard exists to survive. Return quietly
+        // instead; send() still yields null, and the caller releases FLUSHING without
+        // consuming the chunk so the manager's reconcile pass restores the shared label
+        // and re-triggers the load.
+        if (properties.isEnableMultiTableTransaction() && region.getLabel() == null) {
+            return;
+        }
+        super.onBeginRefused(region);
+    }
+
+    @Override
     public boolean beginTransaction(String label, String database) {
         return doBegin(label, database, null);
     }

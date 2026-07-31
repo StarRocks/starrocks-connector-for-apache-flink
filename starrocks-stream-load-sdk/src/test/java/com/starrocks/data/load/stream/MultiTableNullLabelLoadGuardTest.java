@@ -128,6 +128,7 @@ public class MultiTableNullLabelLoadGuardTest {
         private volatile String label;
         final AtomicBoolean httpEntityRequested = new AtomicBoolean(false);
         final AtomicBoolean exitFlushingCalled = new AtomicBoolean(false);
+        final AtomicBoolean failCalled = new AtomicBoolean(false);
 
         StubRegion(String label) {
             this.label = label;
@@ -157,7 +158,7 @@ public class MultiTableNullLabelLoadGuardTest {
         @Override public boolean flush() { return false; }
         @Override public boolean cancel() { return false; }
         @Override public void callback(StreamLoadResponse response) {}
-        @Override public void fail(Throwable e) {}
+        @Override public void fail(Throwable e) { failCalled.set(true); }
         @Override public void complete(StreamLoadResponse response) {}
         @Override public void setResult(Future<?> result) {}
         @Override public Future<?> getResult() { return null; }
@@ -218,6 +219,42 @@ public class MultiTableNullLabelLoadGuardTest {
                     + "(would fail fatally with \"Empty label\")", nullLabel.httpEntityRequested.get());
             Assert.assertTrue("sendToSR must release FLUSHING so the manager reconciles and retries",
                     nullLabel.exitFlushingCalled.get());
+        } finally {
+            loader.close();
+        }
+    }
+
+    /**
+     * The null-label refusal must be a <em>deferral</em>, not a failure. {@code send()} treats a
+     * {@code begin()} refusal as a hard transaction-start failure and calls
+     * {@code region.fail(StreamLoadFailException)}; in multi-table mode
+     * {@code TransactionTableRegion.fail()} only retries {@code TXN_IN_PROCESSING}, so that
+     * synthetic error would reach {@code manager.callback()} and abort the job — turning the
+     * race this guard exists to survive into a terminal failure. {@code send()} must instead
+     * leave the region untouched and return {@code null} so the caller releases FLUSHING and
+     * the manager's reconcile pass re-triggers the load.
+     */
+    @Test
+    public void testSendDefersInsteadOfFailingRegionOnNullLabel() {
+        TransactionStreamLoader loader = new TransactionStreamLoader(true);
+        loader.start(multiTableProperties(), noopManager());
+        try {
+            StubRegion immediate = new StubRegion(null);
+            Assert.assertNull("send() must not schedule a load for a null-label region",
+                    loader.send(immediate));
+            Assert.assertFalse("send() must NOT fail the region on a null-label deferral: in multi-table "
+                    + "mode fail() is terminal for a non-TXN_IN_PROCESSING error and aborts the job",
+                    immediate.failCalled.get());
+            Assert.assertNull("the deferred region must keep its null label (no orphan mint)",
+                    immediate.getLabel());
+
+            // The delayed overload takes the same begin()-refusal branch and must defer identically.
+            StubRegion delayed = new StubRegion(null);
+            Assert.assertNull("send(region, delayMs) must not schedule a load for a null-label region",
+                    loader.send(delayed, 10));
+            Assert.assertFalse("send(region, delayMs) must defer, not fail, on a null shared label",
+                    delayed.failCalled.get());
+            Assert.assertNull(delayed.getLabel());
         } finally {
             loader.close();
         }

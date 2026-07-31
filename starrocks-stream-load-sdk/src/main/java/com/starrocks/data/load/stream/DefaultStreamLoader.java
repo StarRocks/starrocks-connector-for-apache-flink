@@ -160,7 +160,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
         if (begin(region)) {
             return executorService.submit(() -> sendToSR(region));
         } else {
-            region.fail(new StreamLoadFailException("Transaction start failed, db : " + region.getDatabase()));
+            onBeginRefused(region);
         }
 
         return null;
@@ -174,10 +174,20 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
         if (begin(region)) {
             return executorService.schedule(() -> sendToSR(region), delayMs, TimeUnit.MILLISECONDS);
         } else {
-            region.fail(new StreamLoadFailException("Transaction start failed, db : " + region.getDatabase()));
+            onBeginRefused(region);
         }
 
         return null;
+    }
+
+    /**
+     * Invoked when {@link #begin(TableRegion)} declined to start a transaction for the region.
+     * The default treats it as a hard failure. Subclasses may override to defer the load
+     * instead of failing it, in which case they must leave the region recoverable — {@code send()}
+     * still returns {@code null} so the caller can release its flushing state and retry later.
+     */
+    protected void onBeginRefused(TableRegion region) {
+        region.fail(new StreamLoadFailException("Transaction start failed, db : " + region.getDatabase()));
     }
 
     @Override
