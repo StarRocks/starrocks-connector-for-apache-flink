@@ -138,7 +138,7 @@ public class StarRocksSinkOptions implements Serializable {
                     .withDescription("Multi-table transaction mode: minimum interval (ms) between chunk " +
                             "switches per partition. Within the interval, source transactions are batched " +
                             "into a single stream-load, bounding the number of HTTP requests. " +
-                            "-1 (default) auto-derives min(1000, max(500, buffer-flush-interval-ms/4)).");
+                            "-1 (default) auto-derives min(1000, max(500, sink.buffer-flush.interval-ms/4)).");
 
     public static final ConfigOption<Long> SINK_MULTI_TABLE_TXN_MIN_SWITCH_BYTES =
             ConfigOptions.key("sink.transaction.multi-table.min-switch-bytes")

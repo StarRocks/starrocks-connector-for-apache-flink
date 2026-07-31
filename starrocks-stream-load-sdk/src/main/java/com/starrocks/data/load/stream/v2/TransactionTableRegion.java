@@ -658,9 +658,12 @@ public class TransactionTableRegion implements TableRegion {
     }
 
     /**
-     * Bytes currently accumulated in the active chunk (0 if empty). Used by the
-     * partition-level switch decision to enforce a minimum chunk size before an
-     * interval-elapsed switch, so low-volume partitions batch more source
+     * Bytes currently accumulated in the active chunk, including the data-format
+     * framing bytes a fresh chunk is seeded with — so this is non-zero even when
+     * the chunk holds no rows; it returns 0 only when there is no active chunk.
+     * Callers that mean "has committable data" must use {@link #hasActiveRows()}.
+     * Used by the partition-level switch decision to enforce a minimum chunk size
+     * before an interval-elapsed switch, so low-volume partitions batch more source
      * transactions into one stream-load instead of emitting many tiny requests.
      */
     public long getActiveChunkBytes() {

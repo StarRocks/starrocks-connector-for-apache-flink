@@ -90,6 +90,12 @@ public class StarRocksDynamicTableSinkFactory implements DynamicTableSinkFactory
         optionalOptions.add(StarRocksSinkOptions.SINK_WRAP_JSON_AS_ARRAY);
         optionalOptions.add(StarRocksSinkOptions.SINK_SANITIZE_ERROR_LOG);
         optionalOptions.add(StarRocksSinkOptions.SINK_BLACKHOLE);
+        // Without these, validateExcept() rejects a SQL WITH clause that sets any
+        // multi-table transaction option before the sink can read it.
+        optionalOptions.add(StarRocksSinkOptions.SINK_MULTI_TABLE_TXN_ENABLED);
+        optionalOptions.add(StarRocksSinkOptions.SINK_MULTI_TABLE_TXN_BUFFER_SIZE);
+        optionalOptions.add(StarRocksSinkOptions.SINK_MULTI_TABLE_TXN_MINI_SWITCH_INTERVAL_MS);
+        optionalOptions.add(StarRocksSinkOptions.SINK_MULTI_TABLE_TXN_MIN_SWITCH_BYTES);
         optionalOptions.addAll(MergeCommitOptions.getAllConfigOptions());
         return optionalOptions;
     }
