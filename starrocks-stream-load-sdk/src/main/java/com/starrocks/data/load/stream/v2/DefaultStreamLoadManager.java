@@ -444,6 +444,11 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                             boolean allLoadsDone = false;
                             while (!allLoadsDone && this.e == null) {
                                 for (TransactionTableRegion region : flushQ) {
+                                    // Reconcile the shared label before draining: this drain
+                                    // path (unlike the autonomous flush-selection loop) would
+                                    // otherwise load a region that missed label injection under
+                                    // a null/stale label. No-op when already aligned.
+                                    reconcileRegionLabel(region);
                                     if (region.triggerLoadIfNeeded()) {
                                         txnCoordinator.markDataLoaded();
                                     }
@@ -590,6 +595,14 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                             }
                         }
 
+                        // Best-effort pass keeping flushQ region labels aligned with the
+                        // live shared label (a region can slip in without it — see
+                        // reconcileRegionLabel). The authoritative repair is done per-region
+                        // immediately before region.flush() in the selection loop below, so
+                        // it is atomic with selection; this pass just keeps not-yet-selected
+                        // regions consistent (and avoids churn).
+                        reconcileFlushQueueLabels();
+
                         // In multi-table mode, first give the manager-thread
                         // fallback a chance to force-switch any region whose
                         // activeChunk is at a clean transaction boundary and has
@@ -620,6 +633,13 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
 
                         for (FlushAndCommitStrategy.SelectFlushResult result : flushAndCommitStrategy.selectFlushRegions(flushQ, currentCacheBytes.get())) {
                             TransactionTableRegion region = result.getRegion();
+                            // Authoritative label repair, atomic with selection: a region
+                            // that slipped into flushQ without the current shared label (see
+                            // reconcileRegionLabel) must never flush under a null/stale label
+                            // and mint an orphan transaction. Checking here — for the exact
+                            // region about to flush, on the manager thread — closes the window
+                            // where a concurrently-enqueued region bypasses the flushQ pass.
+                            reconcileRegionLabel(region);
                             boolean flush = region.flush(result.getReason());
                             if (flush && multiTableTransactionEnabled && txnCoordinator != null) {
                                 txnCoordinator.markDataLoaded();
@@ -994,6 +1014,10 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
             // and the txnEnd marker).
             boolean triggeredNew = false;
             for (TransactionTableRegion region : regionSnapshot) {
+                // Reconcile before draining, mirroring the autonomous flush-selection
+                // guard: a region that missed label injection must not be loaded under a
+                // null/stale label from this drain path. No-op when already aligned.
+                reconcileRegionLabel(region);
                 if (region.triggerLoadIfNeeded()) {
                     txnCoordinator.markDataLoaded();
                     triggeredNew = true;
@@ -1264,6 +1288,67 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
     }
 
     /**
+     * Best-effort pass reconciling every {@code flushQ} region to the coordinator's
+     * current shared label while a shared transaction is active. Runs on the manager
+     * thread each scan; the authoritative check is {@link #reconcileRegionLabel} invoked
+     * immediately before {@code region.flush()} in the selection loop, which makes the
+     * repair atomic with flush selection so a region enqueued concurrently cannot bypass
+     * it. See {@link #reconcileRegionLabel} for why the repair is needed.
+     */
+    private void reconcileFlushQueueLabels() {
+        if (!multiTableTransactionEnabled || txnCoordinator == null || !txnCoordinator.isActive()) {
+            return;
+        }
+        for (TransactionTableRegion region : flushQ) {
+            reconcileRegionLabel(region);
+        }
+    }
+
+    /**
+     * Ensures a single region carries the coordinator's live shared label before it is
+     * flushed. No-op unless multi-table mode has an active shared transaction and the
+     * region's label differs.
+     *
+     * <p>A region first-created for a new (db,table) in the window between a commit's
+     * {@code commitInFlight.set(false)} and the eager reopen's shared-label publish reads
+     * {@code isActive()==false}, so {@link #getCacheRegion} skips label injection and the
+     * region keeps a null label; if its {@code flushQ.offer} then lands after
+     * {@link #ensureSharedTransaction}'s weakly-consistent {@code ConcurrentLinkedQueue}
+     * inject loop has passed, it is never given the shared label. The scan-loop
+     * re-injection only runs when NO txn is active, so once a txn is active nothing else
+     * re-validates the label. Left unrepaired, the region's first flush would mint an
+     * independent (orphan) transaction via
+     * {@link com.starrocks.data.load.stream.TransactionStreamLoader#begin} (which mints a
+     * fresh label when {@code getLabel()==null}), splitting a source transaction across
+     * labels and breaking cross-table atomicity. Calling this immediately before
+     * {@code region.flush()} makes the check atomic with flush selection.
+     *
+     * <p>Skips a region that is flushing or retrying: it holds an in-flight label of its
+     * own, so changing it mid-flight would be wrong (matching {@link #ensureSharedTransaction}'s
+     * {@code isFlushing()/isRetrying()} skip), and it cannot start a new flush meanwhile.
+     * Skips regions of a different database, mirroring the single-database guard in
+     * {@link #getCacheRegion}. The label-equality fast path avoids the
+     * {@link TransactionTableRegion#trySetLabel} WARN on the common already-aligned case.
+     */
+    private void reconcileRegionLabel(TransactionTableRegion region) {
+        if (!multiTableTransactionEnabled || txnCoordinator == null) {
+            return;
+        }
+        String shared = txnCoordinator.getSharedLabel();
+        if (shared == null || shared.equals(region.getLabel())) {
+            return;
+        }
+        if (region.isFlushing() || region.isRetrying()) {
+            return;
+        }
+        String txnDb = txnCoordinator.getDatabase();
+        if (txnDb != null && !txnDb.equals(region.getDatabase())) {
+            return;
+        }
+        region.trySetLabel(shared);
+    }
+
+    /**
      * Recycles (commit-or-rollback + reopen) the current shared transaction to prevent
      * it from hitting the StarRocks server-side timeout. Must only be called from the
      * manager thread when no region is actively flushing.
@@ -1386,6 +1471,10 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         long recycleWaitStartMs = System.currentTimeMillis();
         while (true) {
             for (TransactionTableRegion region : recycleRegions) {
+                // Reconcile before draining, mirroring the autonomous flush-selection
+                // guard: a region that missed label injection must not be loaded under a
+                // null/stale label from this drain path. No-op when already aligned.
+                reconcileRegionLabel(region);
                 if (region.triggerLoadIfNeeded()) {
                     txnCoordinator.markDataLoaded();
                 }

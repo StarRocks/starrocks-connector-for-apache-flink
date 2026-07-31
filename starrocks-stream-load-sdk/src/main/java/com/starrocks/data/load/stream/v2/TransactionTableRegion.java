@@ -539,8 +539,9 @@ public class TransactionTableRegion implements TableRegion {
         return false;
     }
 
-    /** Transitions FLUSHING -> ACTIVE and releases the table gate (if held). */
-    private void exitFlushing() {
+    /** Transitions the region from FLUSHING back to ACTIVE and releases the table gate (if held). */
+    @Override
+    public void exitFlushing() {
         state.compareAndSet(State.FLUSHING, State.ACTIVE);
         AtomicBoolean gate = tableLoadGate;
         if (gate != null) {
@@ -993,9 +994,32 @@ public class TransactionTableRegion implements TableRegion {
                 exitFlushing();
                 return;
             }
+            // Multi-table safety net: never load under a null shared label. A region's
+            // label can be transiently null — a first write to a new (db,table) that
+            // missed ensureSharedTransaction()'s weakly-consistent injection, or a label
+            // just cleared by a concurrent commit/recycle/savepoint on the manager thread.
+            // Loading now would either mint an independent orphan label (via begin()) or
+            // send a null label to the FE (a fatal "Empty label" error). Defer instead:
+            // release FLUSHING (and the table gate) WITHOUT consuming the chunk, so the
+            // manager's per-scan reconcile restores the live shared label and re-triggers
+            // this load. Self-healing; never orphan-splits a source transaction.
+            if (multiTableTransactionEnabled && label == null) {
+                LOG.warn("[MultiTxn] Deferring load for db: {}, table: {}: region has no shared label yet "
+                        + "(awaiting manager reconcile); inactiveChunks={}", database, table, inactiveChunks.size());
+                exitFlushing();
+                return;
+            }
             LOG.debug("Stream load chunk, db: {}, table: {}, numRows: {}, rowBytes: {}, chunkBytes: {}",
                     database, table, chunk.numRows(), chunk.rowBytes(), chunk.chunkBytes());
             responseFuture = streamLoader.send(this, delayMs);
+            if (multiTableTransactionEnabled && responseFuture == null) {
+                // The loader refused the send (e.g. begin() observed a null shared label
+                // in the microsecond window after the check above). Release FLUSHING so
+                // the manager reconciles and re-triggers; the chunk is preserved for retry.
+                LOG.warn("[MultiTxn] Loader refused send for db: {}, table: {} (null shared label); "
+                        + "will retry after reconcile", database, table);
+                exitFlushing();
+            }
         } catch (Exception e) {
             // Do NOT reset state to ACTIVE here. fail() may schedule a retry
             // via streamLoad(retryIntervalInMs); while that retry is pending

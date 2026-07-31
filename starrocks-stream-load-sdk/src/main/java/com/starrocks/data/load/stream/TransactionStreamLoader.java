@@ -116,6 +116,19 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
     @Override
     public boolean begin(TableRegion region) {
         if (region.getLabel() == null) {
+            // Multi-table transaction mode: a region must only ever load under the
+            // coordinator's injected shared label. A null label here means the shared
+            // label was not yet injected or was cleared concurrently by the manager
+            // thread; minting an independent label would open an orphan single-table
+            // transaction and split a source transaction across labels (breaking
+            // cross-table atomicity). Refuse the load — the caller (streamLoad) releases
+            // FLUSHING so the manager reconciles the shared label and re-triggers.
+            if (properties.isEnableMultiTableTransaction()) {
+                log.warn("Refusing to begin an independent transaction for a multi-table region with a " +
+                        "null shared label, db: {}, table: {}; awaiting manager reconcile",
+                        region.getDatabase(), region.getTable());
+                return false;
+            }
             region.setLabel(region.getLabelGenerator().next());
             if (doBegin(region)) {
                 return true;
@@ -125,6 +138,25 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
             }
         }
         return true;
+    }
+
+    @Override
+    protected void onBeginRefused(TableRegion region) {
+        // Distinguish the multi-table null-label deferral above from a genuine begin()
+        // failure. The two are mutually exclusive: the doBegin() failure path in begin()
+        // is only reachable when multi-table transactions are disabled.
+        //
+        // Failing the region here would be terminal, not a retry: in multi-table mode
+        // TransactionTableRegion.fail() only treats TXN_IN_PROCESSING as retryable, so a
+        // synthetic "Transaction start failed" reaches manager.callback() and aborts the
+        // job — defeating the very race this guard exists to survive. Return quietly
+        // instead; send() still yields null, and the caller releases FLUSHING without
+        // consuming the chunk so the manager's reconcile pass restores the shared label
+        // and re-triggers the load.
+        if (properties.isEnableMultiTableTransaction() && region.getLabel() == null) {
+            return;
+        }
+        super.onBeginRefused(region);
     }
 
     @Override
