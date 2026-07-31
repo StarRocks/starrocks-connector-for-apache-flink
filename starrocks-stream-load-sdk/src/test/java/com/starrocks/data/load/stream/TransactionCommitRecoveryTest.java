@@ -187,6 +187,47 @@ public class TransactionCommitRecoveryTest {
     }
 
     @Test
+    public void testCommitResponseWithoutStatusIsReconciledNotFailed() {
+        // An intermediary can substitute a syntactically valid body that carries no FE status —
+        // `{}` (parses to a body whose status is null) or a bare `null` (parses to null) — AFTER
+        // the FE already committed. Neither is a decision from the FE, so both belong on the
+        // reconciliation path, not the fail-fast one. Previously `{}` threw outside the recovery
+        // catch and `null` NPE'd there, so a committed txn still failed the job.
+        for (String rawBody : new String[]{"{}", "null"}) {
+            TransactionStreamLoader loader = startedLoader(props(-1));
+            String label = "lbl-no-status-" + rawBody.hashCode();
+            MockedStarRocksHttpServer.ResponseOverride ov = new MockedStarRocksHttpServer.ResponseOverride();
+            ov.httpCode = 200;
+            ov.rawBody = rawBody;
+            server.setCommitOverride(ov);
+            server.setLabelState(DB, TABLE, label, TransactionStatus.VISIBLE);
+
+            Assert.assertTrue("a status-less commit body must reconcile to success, body=" + rawBody,
+                    loader.commit(new StreamLoadSnapshot.Transaction(DB, TABLE, label, true)));
+        }
+    }
+
+    @Test
+    public void testCommitResponseWithoutStatusStillFailsWhenNotCommitted() {
+        // The reconciliation must not turn a status-less body into blanket success: if the label
+        // is genuinely not committed, the commit still has to fail.
+        TransactionStreamLoader loader = startedLoader(props(-1));
+        String label = "lbl-no-status-uncommitted";
+        MockedStarRocksHttpServer.ResponseOverride ov = new MockedStarRocksHttpServer.ResponseOverride();
+        ov.httpCode = 200;
+        ov.rawBody = "{}";
+        server.setCommitOverride(ov);
+        server.setLabelState(DB, TABLE, label, TransactionStatus.ABORTED);
+
+        try {
+            loader.commit(new StreamLoadSnapshot.Transaction(DB, TABLE, label, true));
+            Assert.fail("an uncommitted label must still fail even when the body carried no status");
+        } catch (RuntimeException expected) {
+            // expected: reconciliation found a non-committed terminal state and rethrew
+        }
+    }
+
+    @Test
     public void testCommitResponseLostWhileStillCommittingWaitsInsteadOfFailing() throws Exception {
         // The bounded socket timeout can fire WHILE the FE is still committing: the txn is
         // transiently PREPARE, not lost. The reconciliation must poll until it settles, not fail

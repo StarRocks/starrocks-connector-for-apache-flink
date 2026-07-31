@@ -122,6 +122,9 @@ public class MockedStarRocksHttpServer {
         public String message = "";
         public boolean includeErrorURL = false;
         public String errorLogContent;
+        /** When set, sent verbatim instead of the generated JSON — models an intermediary
+         *  substituting a body (e.g. {@code {}} or {@code null}) that carries no FE status. */
+        public String rawBody;
     }
 
     private final HttpServer server;
@@ -638,6 +641,10 @@ public class MockedStarRocksHttpServer {
             commitCount.incrementAndGet();
             ResponseOverride override = commitOverride;
             if (override != null) {
+                if (override.rawBody != null) {
+                    sendJson(exchange, override.httpCode, override.rawBody);
+                    return;
+                }
                 if (override.includeErrorURL && override.errorLogContent != null) {
                     errorLogs.put(label, override.errorLogContent);
                 }

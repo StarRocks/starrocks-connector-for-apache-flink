@@ -319,6 +319,15 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
             }
             log.info("Transaction committed, label: {}, body : {}", transaction.getLabel(), responseBody);
             streamLoadBody = objectMapper.readValue(responseBody, StreamLoadResponse.StreamLoadResponseBody.class);
+            if (streamLoadBody == null || streamLoadBody.getStatus() == null) {
+                // Syntactically valid JSON that carries no FE status — e.g. `{}` or a bare `null`
+                // substituted by an intermediary. That is NOT a decision from the FE, so it belongs
+                // with the lost-response cases below rather than on the fail-fast path: the FE may
+                // well have committed. Thrown here so it lands in the reconciliation catch.
+                throw new StreamLoadFailException(String.format("Commit transaction response carries no status. " +
+                        "db: %s, table: %s, label: %s, response body: %s", transaction.getDatabase(),
+                        transaction.getTable(), transaction.getLabel(), responseBody));
+            }
         } catch (Exception e) {
             // No definitive FE commit status was read: socket timeout, connection reset, a non-200
             // from an intermediary (proxy/LB), or an unparseable/absent body. The transaction may
@@ -329,13 +338,9 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
             return reconcileLostCommit(host, transaction, e);
         }
 
-        // A definitive FE response with a parseable status was read below this point.
+        // A definitive FE response with a parseable, non-null status was read below this point
+        // (a missing status was routed to reconciliation above).
         String status = streamLoadBody.getStatus();
-        if (status == null) {
-            throw new StreamLoadFailException(String.format("Commit transaction status is null. db: %s, table: %s, " +
-                    "label: %s, response body: %s", transaction.getDatabase(), transaction.getTable(),
-                    transaction.getLabel(), streamLoadBody));
-        }
         if (StreamLoadConstants.RESULT_STATUS_OK.equals(status)) {
             StreamLoadResponse streamLoadResponse = new StreamLoadResponse();
             streamLoadResponse.setBody(streamLoadBody);
