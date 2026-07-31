@@ -462,6 +462,10 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
      * a permanent hang. Any explicit user-configured value is honored as-is — including {@code 0},
      * which the {@code sink.socket.timeout-ms} contract defines as an (opt-in) infinite timeout;
      * only the {@code -1} default (unset) is replaced with the bounded value.
+     *
+     * <p>The derived bound is additionally capped by the manager's own flush budget (see
+     * {@link #managerFlushBudgetMs}): blocking here for longer than the manager is willing to wait
+     * is never useful, because the server-side transaction has already timed out by then.
      */
     static int boundedRpcSocketTimeoutMs(StreamLoadProperties properties) {
         int configured = properties.getSocketTimeout();
@@ -471,10 +475,44 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
             return configured;
         }
         // No explicit socket timeout: derive a bounded value from the server-side publish
-        // deadline plus margin, capped so it stays well under the manager's flush timeout.
+        // deadline plus margin.
         int publishMs = properties.getPublishTimeoutMs();
         long base = publishMs > 0 ? (long) publishMs : 60_000L;
-        return (int) Math.min(base + 30_000L, 300_000L);
+        long bound = Math.min(base + 30_000L, 300_000L);
+        // Then cap by the manager's flush budget. Without this, a short configured
+        // `sink.properties.timeout` (below ~82s) leaves this read blocking well past the point
+        // where the manager thread has already abandoned the flush — e.g. timeout=1 gives a 1.1s
+        // flush deadline but would otherwise wait 90s here.
+        long flushBudgetMs = managerFlushBudgetMs(properties);
+        if (flushBudgetMs > 0) {
+            bound = Math.min(bound, flushBudgetMs);
+        }
+        return (int) bound;
+    }
+
+    /**
+     * The manager's flush budget in ms, mirroring the {@code flushTimeoutMs = timeoutSec * 1100}
+     * derivation in {@code DefaultStreamLoadManager} from the stream-load {@code timeout} header.
+     *
+     * @return the budget in ms, or {@code -1} when no usable {@code timeout} header is configured
+     *         (in which case the manager keeps its own default and no extra cap applies here).
+     */
+    private static long managerFlushBudgetMs(StreamLoadProperties properties) {
+        Map<String, String> headers = properties.getHeaders();
+        if (headers == null) {
+            return -1L;
+        }
+        String timeoutStr = headers.get("timeout");
+        if (timeoutStr == null) {
+            return -1L;
+        }
+        try {
+            long timeoutSec = Long.parseLong(timeoutStr.trim());
+            return timeoutSec > 0 ? timeoutSec * 1100L : -1L;
+        } catch (NumberFormatException ex) {
+            // Mirrors the manager, which warns and falls back to its default on an unparseable value.
+            return -1L;
+        }
     }
 
     protected String getLabelState(String host, String database, String table, String label, Set<String> retryStates) throws Exception {

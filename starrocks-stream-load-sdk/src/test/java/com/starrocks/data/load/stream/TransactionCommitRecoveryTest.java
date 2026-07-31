@@ -95,6 +95,26 @@ public class TransactionCommitRecoveryTest {
         return b.build();
     }
 
+    /** Same as {@link #props(int)} but with the stream-load {@code timeout} header set. */
+    private StreamLoadProperties propsWithTimeoutHeader(int socketTimeoutMs, String timeoutSec) {
+        StreamLoadTableProperties table = StreamLoadTableProperties.builder()
+                .database(DB)
+                .table(TABLE)
+                .streamLoadDataFormat(StreamLoadDataFormat.JSON)
+                .build();
+        return StreamLoadProperties.builder()
+                .loadUrls(server.getBaseUrl())
+                .username(USER)
+                .password(PASS)
+                .version("4.0.0")
+                .labelPrefix("test-commit-")
+                .ioThreadCount(2)
+                .defaultTableProperties(table)
+                .socketTimeout(socketTimeoutMs)
+                .addHeader("timeout", timeoutSec)
+                .build();
+    }
+
     private TransactionStreamLoader startedLoader(StreamLoadProperties p) {
         TransactionStreamLoader loader = new TransactionStreamLoader(true);
         loader.start(p, new NoopManager());
@@ -124,6 +144,31 @@ public class TransactionCommitRecoveryTest {
         Assert.assertEquals(7_000, DefaultStreamLoader.boundedRpcSocketTimeoutMs(props(7_000)));
         // An explicit 0 (opt-in infinite per the sink.socket.timeout-ms contract) is honored, NOT bounded.
         Assert.assertEquals(0, DefaultStreamLoader.boundedRpcSocketTimeoutMs(props(0)));
+    }
+
+    @Test
+    public void testBoundedRpcSocketTimeoutStaysWithinManagerFlushBudget() {
+        // DefaultStreamLoadManager derives flushTimeoutMs = timeoutSec * 1100 from the stream-load
+        // `timeout` header. Blocking the manager thread past that budget is never useful: the
+        // server-side transaction is already gone. A short timeout must therefore shrink the bound.
+        Assert.assertEquals("timeout=1 -> 1.1s flush budget must cap the 90s default bound",
+                1_100, DefaultStreamLoader.boundedRpcSocketTimeoutMs(propsWithTimeoutHeader(-1, "1")));
+        Assert.assertEquals("timeout=30 -> 33s flush budget must cap the 90s default bound",
+                33_000, DefaultStreamLoader.boundedRpcSocketTimeoutMs(propsWithTimeoutHeader(-1, "30")));
+
+        // Above the crossover (~82s) the publish-derived bound is already the smaller of the two.
+        Assert.assertEquals("timeout=600 -> 660s flush budget leaves the 90s bound untouched",
+                90_000, DefaultStreamLoader.boundedRpcSocketTimeoutMs(propsWithTimeoutHeader(-1, "600")));
+        // No timeout header at all: the manager keeps its own default, so no extra cap applies.
+        Assert.assertEquals(90_000, DefaultStreamLoader.boundedRpcSocketTimeoutMs(props(-1)));
+
+        // An unparseable or non-positive header must not shrink (or zero out) the bound — the
+        // manager falls back to its default in exactly these cases.
+        Assert.assertEquals(90_000, DefaultStreamLoader.boundedRpcSocketTimeoutMs(propsWithTimeoutHeader(-1, "abc")));
+        Assert.assertEquals(90_000, DefaultStreamLoader.boundedRpcSocketTimeoutMs(propsWithTimeoutHeader(-1, "0")));
+
+        // An explicit socketTimeout still wins over the flush-budget cap: the user opted in.
+        Assert.assertEquals(7_000, DefaultStreamLoader.boundedRpcSocketTimeoutMs(propsWithTimeoutHeader(7_000, "1")));
     }
 
     // ---------- A2 ----------
