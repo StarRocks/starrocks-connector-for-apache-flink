@@ -658,6 +658,32 @@ public class TransactionTableRegion implements TableRegion {
                 && snapshot.chunkBytes() >= multiTableSingleTxnMaxBytes / 2;
     }
 
+    /**
+     * Bytes currently accumulated in the active chunk, including the data-format
+     * framing bytes a fresh chunk is seeded with — so this is non-zero even when
+     * the chunk holds no rows; it returns 0 only when there is no active chunk.
+     * Callers that mean "has committable data" must use {@link #hasActiveRows()}.
+     * Used by the partition-level switch decision to enforce a minimum chunk size
+     * before an interval-elapsed switch, so low-volume partitions batch more source
+     * transactions into one stream-load instead of emitting many tiny requests.
+     */
+    public long getActiveChunkBytes() {
+        Chunk snapshot = activeChunk;
+        return snapshot == null ? 0L : snapshot.chunkBytes();
+    }
+
+    /**
+     * Whether the active chunk holds at least one real row. Lock-free — reads a
+     * volatile snapshot; used by the manager's commit-trigger heuristic. Note
+     * {@link #getActiveChunkBytes()} is non-zero even for an empty chunk because
+     * a fresh chunk is seeded with the data-format framing bytes, so callers that
+     * mean "has committable data" must use this rather than the byte count.
+     */
+    public boolean hasActiveRows() {
+        Chunk snapshot = activeChunk;
+        return snapshot != null && snapshot.numRows() > 0;
+    }
+
     protected int write0(byte[] row) {
         if (!multiTableTransactionEnabled) {
             // Non-multi-table: original behavior — switch when a single row would
