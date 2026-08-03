@@ -826,7 +826,7 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         for (Map.Entry<Integer, List<TransactionTableRegion>> entry : partitionRegions.entrySet()) {
             // Cheap lock-free pre-check: skip partitions with any dirty region.
             boolean allClean = true;
-            boolean reachedMinBytes = minSwitchBytes <= 0 || cacheRelief;
+            boolean reachedMinBytes = minSwitchBytes <= 0;
             boolean halfFull = false;
             for (TransactionTableRegion region : entry.getValue()) {
                 if (!region.isActiveChunkCleanBoundary()) {
@@ -840,13 +840,25 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                     reachedMinBytes = true;
                 }
             }
+            if (!allClean) {
+                continue;
+            }
             // Same size gate as the txnEnd path: only force-switch idle clean data
             // once it is worth a load (minSwitchBytes), or under headroom/cache
             // pressure. Below the threshold the data waits and is flushed by the
             // periodic commit (see shouldTriggerCommit), bounding the delay to the
             // commit interval while avoiding a flood of tiny idle loads.
-            if (allClean && (reachedMinBytes || halfFull)) {
-                lockstepSwitchPartition(entry.getKey(), entry.getValue(), false);
+            //
+            // Pressure and capacity protection must NOT be throttled by the
+            // partition miniInterval: when the cache has reached the flush
+            // threshold or a region hit its per-region headroom cap, refusing the
+            // switch because the previous one was too recent would leave no
+            // inactive chunk to drain, and a writer already parked in
+            // blockIfCacheFull would stay parked until the interval expired. Only
+            // the ordinary size-gated idle switch keeps the interval check.
+            boolean pressure = cacheRelief || halfFull;
+            if (pressure || reachedMinBytes) {
+                lockstepSwitchPartition(entry.getKey(), entry.getValue(), pressure);
             }
         }
     }
@@ -880,14 +892,36 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
             if (region.hasInactiveChunks()) {
                 return true;
             }
-            // Clean-boundary data deferred in the active chunk by the minSwitchBytes
-            // gate is also committable — the commit cut will switch it. Without
-            // this, low-volume batched data could sit uncommitted until more data
-            // arrives (the switch that would create an inactive chunk is gated).
-            // Use hasActiveRows() (numRows > 0), NOT getActiveChunkBytes() > 0: a
-            // fresh chunk is seeded with framing bytes, so a byte check would fire
-            // on an empty chunk and spin an empty begin+rollback every interval.
-            if (region.isActiveChunkCleanBoundary() && region.hasActiveRows()) {
+        }
+        // Clean-boundary data deferred in the active chunk by the minSwitchBytes
+        // gate is also committable — the commit cut will switch it. Without
+        // this, low-volume batched data could sit uncommitted until more data
+        // arrives (the switch that would create an inactive chunk is gated).
+        //
+        // Evaluated at PARTITION scope, never per region: the commit cut can only
+        // freeze a partition whose regions are ALL at a clean boundary (see
+        // cutPartitionWithWatermark). A lone clean region whose sibling table is
+        // mid-transaction would arm a commit cycle that cannot switch anything,
+        // burning an empty begin+rollback round trip on the FE every interval.
+        // Every region has partition >= 0 in multi-table mode (the sink fails
+        // fast otherwise), so partitionRegions covers the same set as flushQ.
+        //
+        // Use hasActiveRows() (numRows > 0), NOT getActiveChunkBytes() > 0: a
+        // fresh chunk is seeded with framing bytes, so a byte check would fire
+        // on an empty chunk and spin an empty begin+rollback every interval.
+        for (List<TransactionTableRegion> pRegions : partitionRegions.values()) {
+            boolean allClean = true;
+            boolean anyRows = false;
+            for (TransactionTableRegion region : pRegions) {
+                if (!region.isActiveChunkCleanBoundary()) {
+                    allClean = false;
+                    break;
+                }
+                if (region.hasActiveRows()) {
+                    anyRows = true;
+                }
+            }
+            if (allClean && anyRows) {
                 return true;
             }
         }
@@ -1075,9 +1109,11 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                 }
             }
 
+            boolean actuallyCommitted = false;
             if (anyTable != null) {
                 if (txnCoordinator.hasDataLoaded()) {
                     txnCoordinator.prepareAndCommit(anyTable);
+                    actuallyCommitted = true;
                 } else {
                     // No data was loaded — rollback the empty transaction.
                     LOG.info("[MultiTxn] No data loaded in shared transaction; rolling back empty txn");
@@ -1100,9 +1136,26 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
             commitInFlight.set(false);
             partitionTracker.reset();
             // Record the commit time so shouldTriggerCommit() re-starts its
-            // interval countdown from this point.
-            lastCommitTimeMs = System.currentTimeMillis();
-            LOG.info("[MultiTxn] Shared transaction cycle completed; commitInFlight=false");
+            // interval countdown from this point — but only on a REAL commit,
+            // mirroring recycleSharedTransaction(). A rollback-empty cycle is not
+            // a commit: re-arming the full interval would delay data that becomes
+            // committable moments later (e.g. a partition whose sibling region was
+            // mid-transaction when the cut ran and re-cleans right after) by up to
+            // another commitIntervalMs.
+            //
+            // An empty cycle still backs off by the batching interval instead of
+            // retrying on the very next scan: the cut runs one scan after
+            // shouldTriggerCommit() sampled the boundary flags, so a partition can
+            // legitimately go dirty in between. Without a backoff that race would
+            // spin begin+rollback pairs against the FE every scanningFrequency.
+            if (actuallyCommitted) {
+                lastCommitTimeMs = System.currentTimeMillis();
+            } else {
+                long backoffMs = Math.min(miniSwitchIntervalMs, commitIntervalMs);
+                lastCommitTimeMs = System.currentTimeMillis() - (commitIntervalMs - backoffMs);
+            }
+            LOG.info("[MultiTxn] Shared transaction cycle completed; commitInFlight=false, committed={}",
+                    actuallyCommitted);
 
             // Immediately open a new shared transaction for the next cycle,
             // so any subsequent autonomous flushes are under the new shared label.
