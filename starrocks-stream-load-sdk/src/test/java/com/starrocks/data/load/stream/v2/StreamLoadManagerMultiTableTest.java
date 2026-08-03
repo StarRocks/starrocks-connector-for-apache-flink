@@ -1585,4 +1585,74 @@ public class StreamLoadManagerMultiTableTest {
             manager.close();
         }
     }
+
+    /**
+     * Regression for the minSwitchBytes commit-latency bound. Under a CONTINUOUS
+     * stream of small sub-1MB source transactions, completed data must still be
+     * committed within a bounded multiple of the flush interval — WITHOUT an
+     * explicit flush() and WITHOUT the source ever pausing.
+     *
+     * The size gate ({@code minSwitchBytes}, default 1MB) means a low-volume
+     * partition never reaches the byte threshold, so the task-thread txnEnd
+     * switch used to be suppressed. The manager-thread periodic fallback cannot
+     * rescue it here: the active chunk is DIRTY for almost the whole cycle (a
+     * transaction is open across the 5ms pacing sleep) and clean only for the
+     * microseconds between one txnEnd and the next write, so the 50ms manager
+     * scan almost never samples a clean boundary. The fix bounds the deferral on
+     * the task thread: once a full flush interval has elapsed since the partition
+     * last switched, the next txnEnd freezes whatever has accumulated regardless
+     * of size. Because that check runs immediately after markCleanBoundary(), the
+     * chunk is guaranteed clean and no sampling race exists.
+     *
+     * Total bytes stay far below 1MB, so ONLY the interval bound — not the byte
+     * gate, headroom, or cache pressure — can produce the commits asserted here.
+     * Verified to FAIL (commitsWhileWriting == 0) when the interval bound is
+     * removed.
+     */
+    @Test(timeout = 30000)
+    public void testCompletedDataCommittedWithinFlushIntervalUnderContinuousSmallTxns() throws Exception {
+        int flushIntervalMs = 500;
+        StreamLoadProperties properties = buildMultiTableProperties(flushIntervalMs); // default 1MB size gate
+        StreamLoadManagerV2 manager = new StreamLoadManagerV2(properties, true);
+        manager.init();
+        try {
+            mockedServer.resetCounters();
+
+            // Continuous small transactions for ~6 flush intervals. The 5ms pacing
+            // sleep sits INSIDE the transaction (between the write and its txnEnd),
+            // so the chunk is dirty for ~5ms per cycle and clean only for the
+            // microseconds after txnEnd — the manager scan (50ms) almost never
+            // catches the clean boundary, reproducing the condition under which
+            // the periodic fallback fails. No flush(), no pause between txns.
+            long writeDeadline = System.currentTimeMillis() + 3000L;
+            int id = 0;
+            while (System.currentTimeMillis() < writeDeadline) {
+                manager.write(0, "test", "orders", String.format("{\"id\":%08d}", id++)); // chunk now dirty
+                Thread.sleep(5);                                                          // stays dirty ~5ms
+                manager.setCommitAllowed(0, true); // txnEnd, chunk clean for microseconds only
+            }
+
+            // Snapshot DURING the continuous phase (no flush, source never paused):
+            // with the fix, the interval bound has forced several switches, each
+            // committed by the manager's periodic path.
+            int commitsWhileWriting = mockedServer.getCommitCount();
+            int loadsWhileWriting = mockedServer.getLoadCount();
+            Assert.assertNull("No exception during continuous writes", manager.getException());
+            Assert.assertTrue(
+                    "Completed data must be committed within the flush interval under continuous "
+                            + "small txns (no flush(), no pause). Expected >=2 commits over ~6 intervals, got "
+                            + commitsWhileWriting,
+                    commitsWhileWriting >= 2);
+            Assert.assertTrue("Expected loads to accompany the commits, got " + loadsWhileWriting,
+                    loadsWhileWriting >= 2);
+
+            // And the size gate still batches: only a handful of loads (~one per
+            // flush interval), NOT one load per txnEnd (~600 over the run).
+            Assert.assertTrue("Size gate must still batch (loads should be far fewer than txnEnds), got "
+                            + loadsWhileWriting,
+                    loadsWhileWriting <= 50);
+        } finally {
+            manager.close();
+        }
+    }
 }

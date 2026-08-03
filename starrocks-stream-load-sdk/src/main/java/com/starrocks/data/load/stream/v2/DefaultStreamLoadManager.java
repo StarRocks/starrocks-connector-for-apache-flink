@@ -704,16 +704,31 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                 region.markCleanBoundary();
             }
             AtomicLong lastSwitch = partitionLastSwitchMs.computeIfAbsent(partition, k -> new AtomicLong(0L));
-            boolean intervalElapsed = System.currentTimeMillis() - lastSwitch.get() >= miniSwitchIntervalMs;
+            long sinceLastSwitchMs = System.currentTimeMillis() - lastSwitch.get();
+            boolean intervalElapsed = sinceLastSwitchMs >= miniSwitchIntervalMs;
             // A time-elapsed switch only fires once at least one region has
             // accumulated minSwitchBytes, so a low-volume partition keeps batching
             // source transactions into one chunk instead of emitting tiny loads.
-            // Two overrides always force a switch regardless of the size gate:
+            // Three overrides always force a switch regardless of the size gate:
             //   - halfFull: a single region reached its per-region headroom cap;
             //   - cacheRelief: the manager's buffered bytes reached the flush
             //     threshold. The batching optimization must NEVER starve the drain,
             //     or writes would stall in blockIfCacheFull with nothing to flush.
+            //   - maxDeferElapsed: an upper bound on how long the byte gate may
+            //     hold completed data. Once it has been a full flush interval since
+            //     this partition last switched, freeze whatever has accumulated
+            //     even if it is below minSwitchBytes. Without this bound, a source
+            //     of small back-to-back transactions could keep the active chunk
+            //     under 1 MB indefinitely and its completed rows would only reach
+            //     StarRocks once bytes finally hit the threshold (minutes at low
+            //     volume) — the periodic-commit fallback cannot rescue them because
+            //     the next transaction dirties the chunk within microseconds, long
+            //     before the manager thread samples a clean boundary. This check
+            //     runs on the task thread right after markCleanBoundary(), so the
+            //     chunk is GUARANTEED to be at a clean transaction boundary here;
+            //     it needs no clean-window sampling and cannot misalign siblings.
             boolean cacheRelief = currentCacheBytes.get() >= maxCacheBytes;
+            boolean maxDeferElapsed = sinceLastSwitchMs >= commitIntervalMs;
             boolean reachedMinBytes = minSwitchBytes <= 0;
             boolean halfFull = false;
             for (TransactionTableRegion region : pRegions) {
@@ -725,7 +740,7 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                     reachedMinBytes = true;
                 }
             }
-            if ((intervalElapsed && reachedMinBytes) || halfFull || cacheRelief) {
+            if ((intervalElapsed && reachedMinBytes) || maxDeferElapsed || halfFull || cacheRelief) {
                 lockstepSwitchPartition(partition, pRegions, true);
             }
         }
