@@ -39,6 +39,7 @@ public class RowDataSerializationSchema implements RecordSerializationSchema<Row
     private final String tableName;
     boolean supportUpsertDelete;
     boolean ignoreUpdateBefore;
+    boolean ignoreDelete;
     private final StarRocksISerializer serializer;
     private final StarRocksIRowTransformer<RowData> rowTransformer;
     private transient DefaultStarRocksRowData reusableRowData;
@@ -48,12 +49,14 @@ public class RowDataSerializationSchema implements RecordSerializationSchema<Row
             String tableName,
             boolean supportUpsertDelete,
             boolean ignoreUpdateBefore,
+            boolean ignoreDelete,
             StarRocksISerializer serializer,
             StarRocksIRowTransformer<RowData> rowTransformer) {
         this.databaseName = databaseName;
         this.tableName = tableName;
         this.supportUpsertDelete = supportUpsertDelete;
         this.ignoreUpdateBefore = ignoreUpdateBefore;
+        this.ignoreDelete = ignoreDelete;
         this.serializer = serializer;
         this.rowTransformer = rowTransformer;
     }
@@ -79,7 +82,7 @@ public class RowDataSerializationSchema implements RecordSerializationSchema<Row
             // let go the UPDATE_AFTER and INSERT rows for tables who have a group of `unique` or `duplicate` keys.
             return null;
         }
-        String serializedRow = serializer.serialize(rowTransformer.transform(record, supportUpsertDelete));
+        String serializedRow = serializer.serialize(rowTransformer.transform(record, supportUpsertDelete, ignoreDelete));
         reusableRowData.setRow(serializedRow);
         return reusableRowData;
     }
