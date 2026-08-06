@@ -50,6 +50,8 @@ public class TransactionCommitRecoveryTest {
     private static final String PASS = "";
     private static final String DB = "test";
     private static final String TABLE = "orders";
+    /** Port 1 is reserved and never listening, so connections are refused immediately. */
+    private static final String DEAD_HOST = "http://127.0.0.1:1";
 
     private MockedStarRocksHttpServer server;
     private final List<TransactionStreamLoader> loaders = new ArrayList<>();
@@ -266,6 +268,75 @@ public class TransactionCommitRecoveryTest {
             Assert.fail("a genuinely-uncommitted lost commit must still fail (no false success)");
         } catch (RuntimeException expected) {
             // expected
+        }
+    }
+
+    @Test
+    public void testCommitResponseLostIsReconciledViaAnotherConfiguredFe() {
+        // The FE that took the commit can be exactly the thing that died: it commits, then becomes
+        // unreachable before the reply is read. getLabelState does no host selection of its own, so
+        // pinning reconciliation to that FE turned a durably committed txn into a job failure even
+        // though another configured FE could answer. The query must fail over to the other hosts.
+        String deadFe = DEAD_HOST;
+        StreamLoadProperties p = StreamLoadProperties.builder()
+                .loadUrls(deadFe, server.getBaseUrl())
+                .username(USER)
+                .password(PASS)
+                .version("4.0.0")
+                .labelPrefix("test-commit-")
+                .ioThreadCount(2)
+                .defaultTableProperties(StreamLoadTableProperties.builder()
+                        .database(DB)
+                        .table(TABLE)
+                        .streamLoadDataFormat(StreamLoadDataFormat.JSON)
+                        .build())
+                .socketTimeout(-1)
+                .build();
+        // Force the commit onto the dead FE, so both the commit and the first label-state query hit
+        // it — the exact "committed, then that FE went away" shape.
+        TransactionStreamLoader loader = new TransactionStreamLoader(true) {
+            @Override
+            protected String getAvailableHost() {
+                return deadFe;
+            }
+        };
+        loader.start(p, new NoopManager());
+        loaders.add(loader);
+
+        String label = "lbl-committed-fe-gone";
+        // The surviving FE reports the truth: the transaction did commit.
+        server.setLabelState(DB, TABLE, label, TransactionStatus.VISIBLE);
+
+        Assert.assertTrue("a commit whose FE died after committing must be reconciled through another "
+                        + "configured FE, not failed",
+                loader.commit(new StreamLoadSnapshot.Transaction(DB, TABLE, label, true)));
+    }
+
+    @Test
+    public void testCommitReconciliationStillFailsWhenNoConfiguredFeAnswers() {
+        // Failover must not become blanket success: if no configured FE can answer, the commit
+        // still fails rather than being assumed committed.
+        StreamLoadProperties p = StreamLoadProperties.builder()
+                .loadUrls(DEAD_HOST)
+                .username(USER)
+                .password(PASS)
+                .version("4.0.0")
+                .labelPrefix("test-commit-")
+                .ioThreadCount(2)
+                .defaultTableProperties(StreamLoadTableProperties.builder()
+                        .database(DB)
+                        .table(TABLE)
+                        .streamLoadDataFormat(StreamLoadDataFormat.JSON)
+                        .build())
+                .socketTimeout(-1)
+                .build();
+        TransactionStreamLoader loader = startedLoader(p);
+
+        try {
+            loader.commit(new StreamLoadSnapshot.Transaction(DB, TABLE, "lbl-no-fe-answers", true));
+            Assert.fail("with no FE able to report the label state the commit must still fail");
+        } catch (RuntimeException expected) {
+            // expected: every candidate host failed, so the original cause is rethrown
         }
     }
 

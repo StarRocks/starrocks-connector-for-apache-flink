@@ -37,10 +37,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -392,11 +394,27 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
      * label. Verified on a real cluster that a committed multi-table label reports {@code VISIBLE}
      * here (the {@code information_schema.loads} / {@code SHOW STREAM LOAD} {@code PREPARING} display
      * lag is a different FE path; {@code get_load_state} reads the transaction state directly).
+     *
+     * <p>The query is not pinned to the FE that took the commit: the very failure being reconciled
+     * can be that FE going away right after it committed, and {@link #getLabelState} performs no
+     * host selection of its own. The commit host is tried first (it is the most likely to answer),
+     * then every other configured load URL, so a single dead FE cannot turn a durably committed
+     * transaction into a job failure. Only a FAILED query moves on to the next host — any FE that
+     * answers reports the same transaction state, so the first answer is taken as definitive.
      */
     private boolean reconcileLostCommit(String host, StreamLoadSnapshot.Transaction transaction, Exception cause) {
-        try {
-            String labelState = getLabelState(host, transaction.getDatabase(), transaction.getTable(),
-                    transaction.getLabel(), COMMIT_IN_PROGRESS_STATES);
+        Exception lastStateEx = null;
+        for (String candidate : reconciliationHosts(host)) {
+            String labelState;
+            try {
+                labelState = getLabelState(candidate, transaction.getDatabase(), transaction.getTable(),
+                        transaction.getLabel(), COMMIT_IN_PROGRESS_STATES);
+            } catch (Exception stateEx) {
+                lastStateEx = stateEx;
+                log.warn("Commit response lost for label {}; the label-state query via {} failed, " +
+                        "trying the next configured FE if there is one.", transaction.getLabel(), candidate, stateEx);
+                continue;
+            }
             if (TransactionStatus.COMMITTED.isSame(labelState) || TransactionStatus.VISIBLE.isSame(labelState)) {
                 log.warn("Commit response lost for label {} ({}), but the label is already {} server-side; " +
                         "treating the commit as successful.", transaction.getLabel(), cause.toString(), labelState);
@@ -404,11 +422,32 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
             }
             log.error("Commit response lost for label {}, and label state is {} (not committed); failing.",
                     transaction.getLabel(), labelState, cause);
-        } catch (Exception stateEx) {
-            log.error("Commit response lost for label {}, and label-state reconciliation also failed; failing.",
-                    transaction.getLabel(), stateEx);
+            throw new RuntimeException(cause);
         }
+        log.error("Commit response lost for label {}, and the label-state re-check failed on every configured FE; " +
+                "failing.", transaction.getLabel(), lastStateEx);
         throw new RuntimeException(cause);
+    }
+
+    /**
+     * The hosts to try for a lost-commit label-state query: the FE that took the commit first, then
+     * every other configured load URL, de-duplicated. Falls back to the configured URLs alone when
+     * the commit host is unknown (host probing can return {@code null} when every FE failed a probe).
+     */
+    private List<String> reconciliationHosts(String commitHost) {
+        List<String> hosts = new ArrayList<>();
+        if (commitHost != null) {
+            hosts.add(commitHost);
+        }
+        String[] loadUrls = properties.getLoadUrls();
+        if (loadUrls != null) {
+            for (String url : loadUrls) {
+                if (url != null && !hosts.contains(url)) {
+                    hosts.add(url);
+                }
+            }
+        }
+        return hosts;
     }
 
     @Override
