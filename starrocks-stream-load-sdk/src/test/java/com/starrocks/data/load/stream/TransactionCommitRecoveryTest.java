@@ -169,6 +169,13 @@ public class TransactionCommitRecoveryTest {
         Assert.assertEquals(90_000, DefaultStreamLoader.boundedRpcSocketTimeoutMs(propsWithTimeoutHeader(-1, "abc")));
         Assert.assertEquals(90_000, DefaultStreamLoader.boundedRpcSocketTimeoutMs(propsWithTimeoutHeader(-1, "0")));
 
+        // Whitespace must be treated exactly as the manager treats it. DefaultStreamLoadManager
+        // calls Long.parseLong on the raw header, so " 1 " throws there and it keeps its 660s
+        // default. Parsing more leniently here would cap the RPC at 1.1s against a budget the
+        // manager never adopted, failing begin/prepare/commit prematurely.
+        Assert.assertEquals("a padded header must not shrink the bound: the manager rejects it too",
+                90_000, DefaultStreamLoader.boundedRpcSocketTimeoutMs(propsWithTimeoutHeader(-1, " 1 ")));
+
         // An explicit socketTimeout still wins over the flush-budget cap: the user opted in.
         Assert.assertEquals(7_000, DefaultStreamLoader.boundedRpcSocketTimeoutMs(propsWithTimeoutHeader(7_000, "1")));
     }

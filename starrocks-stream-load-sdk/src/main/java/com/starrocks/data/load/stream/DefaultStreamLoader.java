@@ -507,7 +507,11 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
             return -1L;
         }
         try {
-            long timeoutSec = Long.parseLong(timeoutStr.trim());
+            // Deliberately parses the raw string, exactly as the manager does — no trim(). Being
+            // more lenient here would cap the socket timeout off a budget the manager never adopts:
+            // for a header like " 1 " the manager's parse throws and it keeps its 660s default,
+            // while a trimming parse here would clamp the RPC to 1.1s and fail it prematurely.
+            long timeoutSec = Long.parseLong(timeoutStr);
             return timeoutSec > 0 ? timeoutSec * 1100L : -1L;
         } catch (NumberFormatException ex) {
             // Mirrors the manager, which warns and falls back to its default on an unparseable value.
