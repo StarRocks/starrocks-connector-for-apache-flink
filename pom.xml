@@ -432,6 +432,7 @@ limitations under the License.
                         <exclude>.cursor/**</exclude>
                         <exclude>starrocks-stream-load-sdk/**</exclude>
                         <exclude>.claude/**</exclude>
+                        <exclude>.agents/**</exclude>
                     </excludes>
                 </configuration>
             </plugin>

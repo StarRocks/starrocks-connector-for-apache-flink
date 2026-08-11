@@ -473,6 +473,76 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
         return TransactionStatus.valueOf(state.toUpperCase());
     }
 
+    /**
+     * Bounded socket-read timeout (ms) for the blocking transaction RPCs that run on the sink's
+     * manager thread (begin / prepare / commit) and for the label-state reconciliation query.
+     *
+     * <p>{@link StreamLoadProperties#getSocketTimeout()} defaults to {@code -1} (infinite in
+     * Apache HttpClient). On these blocking calls that means a lost response — the FE processes
+     * the request but the reply is dropped by an LB/proxy/network — hangs the manager thread
+     * indefinitely, stalling the whole subtask until the transport eventually resets. Bounding
+     * the timeout lets a lost response surface as a {@code SocketTimeoutException} that the caller
+     * reconciles against the real label state (see the commit/prepare recovery paths), instead of
+     * a permanent hang. Any explicit user-configured value is honored as-is — including {@code 0},
+     * which the {@code sink.socket.timeout-ms} contract defines as an (opt-in) infinite timeout;
+     * only the {@code -1} default (unset) is replaced with the bounded value.
+     *
+     * <p>The derived bound is additionally capped by the manager's own flush budget (see
+     * {@link #managerFlushBudgetMs}): blocking here for longer than the manager is willing to wait
+     * is never useful, because the server-side transaction has already timed out by then.
+     */
+    static int boundedRpcSocketTimeoutMs(StreamLoadProperties properties) {
+        int configured = properties.getSocketTimeout();
+        if (configured >= 0) {
+            // Honor an explicit value, including 0 (= infinite per the option contract): the user
+            // opted in. Only the unset default (-1) is bounded below.
+            return configured;
+        }
+        // No explicit socket timeout: derive a bounded value from the server-side publish
+        // deadline plus margin.
+        int publishMs = properties.getPublishTimeoutMs();
+        long base = publishMs > 0 ? (long) publishMs : 60_000L;
+        long bound = Math.min(base + 30_000L, 300_000L);
+        // Then cap by the manager's flush budget. Without this, a short configured
+        // `sink.properties.timeout` (below ~82s) leaves this read blocking well past the point
+        // where the manager thread has already abandoned the flush — e.g. timeout=1 gives a 1.1s
+        // flush deadline but would otherwise wait 90s here.
+        long flushBudgetMs = managerFlushBudgetMs(properties);
+        if (flushBudgetMs > 0) {
+            bound = Math.min(bound, flushBudgetMs);
+        }
+        return (int) bound;
+    }
+
+    /**
+     * The manager's flush budget in ms, mirroring the {@code flushTimeoutMs = timeoutSec * 1100}
+     * derivation in {@code DefaultStreamLoadManager} from the stream-load {@code timeout} header.
+     *
+     * @return the budget in ms, or {@code -1} when no usable {@code timeout} header is configured
+     *         (in which case the manager keeps its own default and no extra cap applies here).
+     */
+    private static long managerFlushBudgetMs(StreamLoadProperties properties) {
+        Map<String, String> headers = properties.getHeaders();
+        if (headers == null) {
+            return -1L;
+        }
+        String timeoutStr = headers.get("timeout");
+        if (timeoutStr == null) {
+            return -1L;
+        }
+        try {
+            // Deliberately parses the raw string, exactly as the manager does — no trim(). Being
+            // more lenient here would cap the socket timeout off a budget the manager never adopts:
+            // for a header like " 1 " the manager's parse throws and it keeps its 660s default,
+            // while a trimming parse here would clamp the RPC to 1.1s and fail it prematurely.
+            long timeoutSec = Long.parseLong(timeoutStr);
+            return timeoutSec > 0 ? timeoutSec * 1100L : -1L;
+        } catch (NumberFormatException ex) {
+            // Mirrors the manager, which warns and falls back to its default on an unparseable value.
+            return -1L;
+        }
+    }
+
     protected String getLabelState(String host, String database, String table, String label, Set<String> retryStates) throws Exception {
         int totalSleepSecond = 0;
         String lastState = null;
@@ -488,11 +558,14 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
             try (CloseableHttpClient client = HttpClients.createDefault()) {
                 String url = host + "/api/" + database + "/get_load_state?label=" + label;
                 HttpGet httpGet = new HttpGet(url);
-                httpGet.setConfig(RequestConfig.custom()
-                        .setConnectTimeout(properties.getConnectTimeout())
-                        .build());
                 httpGet.addHeader("Authorization", StreamLoadUtils.getBasicAuthHeader(properties.getUsername(), properties.getPassword()));
                 httpGet.setHeader("Connection", "close");
+                // Bound the read so a lost get_load_state reply cannot hang this reconciliation
+                // query (its outer 60s loop cap only guards between attempts, not a stuck read).
+                httpGet.setConfig(RequestConfig.custom()
+                        .setSocketTimeout(boundedRpcSocketTimeoutMs(properties))
+                        .setConnectTimeout(properties.getConnectTimeout())
+                        .build());
                 try (CloseableHttpResponse response = client.execute(httpGet)) {
                     int responseStatusCode = response.getStatusLine().getStatusCode();
                     String entityContent = EntityUtils.toString(response.getEntity());
