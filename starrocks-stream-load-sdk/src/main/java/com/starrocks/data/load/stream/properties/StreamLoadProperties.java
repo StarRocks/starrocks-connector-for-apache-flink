@@ -56,6 +56,13 @@ public class StreamLoadProperties implements Serializable {
     private final boolean enableTransaction;
     private final boolean enableMultiTableTransaction;
     private final long multiTableTransactionBufferSize;
+    // Multi-table mode: min interval (ms) between chunk switches per partition
+    // (-1 = auto-derive from the commit interval). Batches source transactions
+    // into one stream-load to bound the number of HTTP requests.
+    private final long multiTableMiniSwitchIntervalMs;
+    // Multi-table mode: a time-elapsed switch only fires once a region's active
+    // chunk has accumulated at least this many bytes, avoiding many tiny loads.
+    private final long multiTableMinSwitchBytes;
 
     // manager settings
     /**
@@ -126,6 +133,8 @@ public class StreamLoadProperties implements Serializable {
         this.enableTransaction = builder.enableTransaction;
         this.enableMultiTableTransaction = builder.enableMultiTableTransaction;
         this.multiTableTransactionBufferSize = builder.multiTableTransactionBufferSize;
+        this.multiTableMiniSwitchIntervalMs = builder.multiTableMiniSwitchIntervalMs;
+        this.multiTableMinSwitchBytes = builder.multiTableMinSwitchBytes;
 
         this.labelPrefix = builder.labelPrefix;
 
@@ -175,6 +184,14 @@ public class StreamLoadProperties implements Serializable {
 
     public long getMultiTableTransactionBufferSize() {
         return multiTableTransactionBufferSize;
+    }
+
+    public long getMultiTableMiniSwitchIntervalMs() {
+        return multiTableMiniSwitchIntervalMs;
+    }
+
+    public long getMultiTableMinSwitchBytes() {
+        return multiTableMinSwitchBytes;
     }
 
     public String getJdbcUrl() {
@@ -350,6 +367,8 @@ public class StreamLoadProperties implements Serializable {
         private boolean enableTransaction;
         private boolean enableMultiTableTransaction;
         private long multiTableTransactionBufferSize = 128 * 1024 * 1024; // 128MB default
+        private long multiTableMiniSwitchIntervalMs = -1L; // -1 = auto-derive from commit interval
+        private long multiTableMinSwitchBytes = 1024 * 1024; // 1MB default; <=0 disables the size gate
 
         private String labelPrefix = "";
 
@@ -439,6 +458,16 @@ public class StreamLoadProperties implements Serializable {
                 throw new IllegalArgumentException("multiTableTransactionBufferSize must be greater than 0, got: " + bufferSize);
             }
             this.multiTableTransactionBufferSize = bufferSize;
+            return this;
+        }
+
+        public Builder multiTableMiniSwitchIntervalMs(long ms) {
+            this.multiTableMiniSwitchIntervalMs = ms;
+            return this;
+        }
+
+        public Builder multiTableMinSwitchBytes(long bytes) {
+            this.multiTableMinSwitchBytes = bytes;
             return this;
         }
 

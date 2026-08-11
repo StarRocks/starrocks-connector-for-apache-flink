@@ -1533,4 +1533,126 @@ public class StreamLoadManagerMultiTableTest {
             manager.close();
         }
     }
+
+    /**
+     * Verifies the minSwitchBytes batching: with a large min-switch-bytes, ample
+     * buffer (no cache pressure) and no periodic commit during the run, many
+     * small source transactions batch into a single chunk (one stream-load)
+     * instead of one load per txnEnd. Without the size gate (the pre-change
+     * behavior), every interval-elapsed txnEnd would switch and emit a separate
+     * load — roughly one per transaction (~20 here). The gate must not affect
+     * correctness: the final commit still flushes everything.
+     */
+    @Test(timeout = 30000)
+    public void testMinSwitchBytesBatchesSmallTransactions() throws Exception {
+        StreamLoadTableProperties tableProps = StreamLoadTableProperties.builder()
+                .database("test").table("orders")
+                .streamLoadDataFormat(StreamLoadDataFormat.JSON)
+                .maxBufferRows(100000).build();
+        StreamLoadProperties properties = StreamLoadProperties.builder()
+                .loadUrls(mockedServer.getBaseUrl())
+                .username(USERNAME).password(PASSWORD).version("4.0.0")
+                .enableMultiTableTransaction()
+                .multiTableTransactionBufferSize(64L * 1024 * 1024) // 64MB -> 128MB block cap: no pressure
+                .multiTableMiniSwitchIntervalMs(50)                 // short: the interval always elapses
+                .multiTableMinSwitchBytes(64L * 1024 * 1024)        // huge: never reached by tiny rows
+                .labelPrefix("test-mtxn-")
+                .defaultTableProperties(tableProps)
+                .expectDelayTime(60000)                             // 60s: no periodic commit during the run
+                .scanningFrequency(50).ioThreadCount(2)
+                .build();
+        StreamLoadManagerV2 manager = new StreamLoadManagerV2(properties, true);
+        manager.init();
+        try {
+            mockedServer.resetCounters();
+            int txns = 20;
+            for (int t = 0; t < txns; t++) {
+                for (int r = 0; r < 3; r++) {
+                    manager.write(0, "test", "orders", String.format("{\"id\":%06d}", t * 10 + r));
+                }
+                manager.setCommitAllowed(0, true); // txnEnd
+                Thread.sleep(60);                  // let the mini-switch interval elapse between txns
+            }
+            manager.flush();
+            Assert.assertNull("No exception", manager.getException());
+            int loads = mockedServer.getLoadCount();
+            // Batched: 20 tiny txns coalesce into ~1 chunk for the single table,
+            // so at most a handful of loads — NOT ~20 (one per txnEnd).
+            Assert.assertTrue("Expected batched loads (<=3) for 20 tiny txns, got " + loads,
+                    loads >= 1 && loads <= 3);
+            Assert.assertTrue("Expected at least one commit", mockedServer.getCommitCount() >= 1);
+        } finally {
+            manager.close();
+        }
+    }
+
+    /**
+     * Regression for the minSwitchBytes commit-latency bound. Under a CONTINUOUS
+     * stream of small sub-1MB source transactions, completed data must still be
+     * committed within a bounded multiple of the flush interval — WITHOUT an
+     * explicit flush() and WITHOUT the source ever pausing.
+     *
+     * The size gate ({@code minSwitchBytes}, default 1MB) means a low-volume
+     * partition never reaches the byte threshold, so the task-thread txnEnd
+     * switch used to be suppressed. The manager-thread periodic fallback cannot
+     * rescue it here: the active chunk is DIRTY for almost the whole cycle (a
+     * transaction is open across the 5ms pacing sleep) and clean only for the
+     * microseconds between one txnEnd and the next write, so the 50ms manager
+     * scan almost never samples a clean boundary. The fix bounds the deferral on
+     * the task thread: once a full flush interval has elapsed since the partition
+     * last switched, the next txnEnd freezes whatever has accumulated regardless
+     * of size. Because that check runs immediately after markCleanBoundary(), the
+     * chunk is guaranteed clean and no sampling race exists.
+     *
+     * Total bytes stay far below 1MB, so ONLY the interval bound — not the byte
+     * gate, headroom, or cache pressure — can produce the commits asserted here.
+     * Verified to FAIL (commitsWhileWriting == 0) when the interval bound is
+     * removed.
+     */
+    @Test(timeout = 30000)
+    public void testCompletedDataCommittedWithinFlushIntervalUnderContinuousSmallTxns() throws Exception {
+        int flushIntervalMs = 500;
+        StreamLoadProperties properties = buildMultiTableProperties(flushIntervalMs); // default 1MB size gate
+        StreamLoadManagerV2 manager = new StreamLoadManagerV2(properties, true);
+        manager.init();
+        try {
+            mockedServer.resetCounters();
+
+            // Continuous small transactions for ~6 flush intervals. The 5ms pacing
+            // sleep sits INSIDE the transaction (between the write and its txnEnd),
+            // so the chunk is dirty for ~5ms per cycle and clean only for the
+            // microseconds after txnEnd — the manager scan (50ms) almost never
+            // catches the clean boundary, reproducing the condition under which
+            // the periodic fallback fails. No flush(), no pause between txns.
+            long writeDeadline = System.currentTimeMillis() + 3000L;
+            int id = 0;
+            while (System.currentTimeMillis() < writeDeadline) {
+                manager.write(0, "test", "orders", String.format("{\"id\":%08d}", id++)); // chunk now dirty
+                Thread.sleep(5);                                                          // stays dirty ~5ms
+                manager.setCommitAllowed(0, true); // txnEnd, chunk clean for microseconds only
+            }
+
+            // Snapshot DURING the continuous phase (no flush, source never paused):
+            // with the fix, the interval bound has forced several switches, each
+            // committed by the manager's periodic path.
+            int commitsWhileWriting = mockedServer.getCommitCount();
+            int loadsWhileWriting = mockedServer.getLoadCount();
+            Assert.assertNull("No exception during continuous writes", manager.getException());
+            Assert.assertTrue(
+                    "Completed data must be committed within the flush interval under continuous "
+                            + "small txns (no flush(), no pause). Expected >=2 commits over ~6 intervals, got "
+                            + commitsWhileWriting,
+                    commitsWhileWriting >= 2);
+            Assert.assertTrue("Expected loads to accompany the commits, got " + loadsWhileWriting,
+                    loadsWhileWriting >= 2);
+
+            // And the size gate still batches: only a handful of loads (~one per
+            // flush interval), NOT one load per txnEnd (~600 over the run).
+            Assert.assertTrue("Size gate must still batch (loads should be far fewer than txnEnds), got "
+                            + loadsWhileWriting,
+                    loadsWhileWriting <= 50);
+        } finally {
+            manager.close();
+        }
+    }
 }
