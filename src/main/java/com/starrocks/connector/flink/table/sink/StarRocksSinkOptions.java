@@ -161,6 +161,15 @@ public class StarRocksSinkOptions implements Serializable {
     public static final ConfigOption<Integer> SINK_METRIC_HISTOGRAM_WINDOW_SIZE = ConfigOptions.key("sink.metric.histogram-window-size")
             .intType().defaultValue(100).withDescription("Window size of histogram metrics.");
 
+    public static final ConfigOption<Boolean> SINK_JSON_COLUMNS_FROM_FLINK_SCHEMA =
+            ConfigOptions.key("sink.json.columns-from-flink-schema")
+            .booleanType().defaultValue(false).withDescription("Whether the Stream Load columns header is derived " +
+                    "from the Flink table schema when the format is json. By default no header is sent for json, so " +
+                    "the server declares every table column and a column the payload does not carry is stored as NULL " +
+                    "even when it has a DEFAULT. When true, the Flink table's columns are sent as the header, so a " +
+                    "column the Flink schema does not declare is left off and the server applies its DEFAULT. " +
+                    "Requires a Flink schema and sink.properties.format=json; cannot be combined with " +
+                    "sink.properties.columns or sink.properties.jsonpaths.");
     public static final ConfigOption<Boolean> SINK_IGNORE_UPDATE_BEFORE = ConfigOptions.key("sink.ignore.update-before")
             .booleanType().defaultValue(true).withDescription("Whether to ignore update_before records. In general, update_before " +
                     "and update_after have the same primary key, and appear in pair, so we only need to write the update_after " +
@@ -216,9 +225,16 @@ public class StarRocksSinkOptions implements Serializable {
     private static final Set<String> SINK_SEMANTIC_ENUMS = Arrays.stream(StarRocksSinkSemantic.values()).map(s -> s.getName()).collect(Collectors.toSet());
     // wild stream load properties' prefix
     public static final String SINK_PROPERTIES_PREFIX = "sink.properties.";
+    public static final String COLUMNS_KEY = "columns";
+    /** Raised wherever the Flink schema is needed to derive the header and there is none. */
+    public static final String COLUMNS_FROM_FLINK_SCHEMA_NEEDS_SCHEMA_MESSAGE =
+            "sink.json.columns-from-flink-schema=true needs a Flink schema, which this sink does not have. "
+            + "Use the table API or a schema aware sink, or set " + SINK_PROPERTIES_PREFIX + COLUMNS_KEY
+            + " explicitly.";
 
     private final ReadableConfig tableOptions;
     private final Map<String, String> streamLoadProps = new HashMap<>();
+    private final boolean columnsFromFlinkSchema;
     private final Map<String, String> tableOptionsMap;
     private StarRocksSinkSemantic sinkSemantic;
     private boolean supportUpsertDelete;
@@ -231,6 +247,7 @@ public class StarRocksSinkOptions implements Serializable {
     public StarRocksSinkOptions(ReadableConfig options, Map<String, String> optionsMap) {
         this.tableOptions = options;
         this.tableOptionsMap = optionsMap;
+        this.columnsFromFlinkSchema = options.get(SINK_JSON_COLUMNS_FROM_FLINK_SCHEMA);
         parseSinkStreamLoadProperties();
         this.validate();
     }
@@ -260,6 +277,27 @@ public class StarRocksSinkOptions implements Serializable {
         validateParamsRange();
         validateMergeCommit();
         validateMultiTableTransaction();
+        validateColumnsSource();
+    }
+
+    private void validateColumnsSource() {
+        if (!columnsFromFlinkSchema) {
+            return;
+        }
+        String option = SINK_JSON_COLUMNS_FROM_FLINK_SCHEMA.key();
+        if (streamLoadProps.containsKey(COLUMNS_KEY)) {
+            throw new IllegalArgumentException(option + "=true cannot be combined with an explicit "
+                    + SINK_PROPERTIES_PREFIX + COLUMNS_KEY + ". Remove one of them.");
+        }
+        if (getStreamLoadFormat() != StreamLoadFormat.JSON) {
+            throw new IllegalArgumentException(option + "=true only applies to " + SINK_PROPERTIES_PREFIX
+                    + "format=json. The csv format already derives the header from the Flink schema "
+                    + "whenever the Flink and StarRocks schemas differ.");
+        }
+        if (streamLoadProps.containsKey("jsonpaths")) {
+            throw new IllegalArgumentException(option + "=true cannot be combined with " + SINK_PROPERTIES_PREFIX
+                    + "jsonpaths, because jsonpaths are matched to the columns header by position.");
+        }
     }
 
     public void setTableSchemaFieldNames(String[] fieldNames) {
@@ -404,7 +442,16 @@ public class StarRocksSinkOptions implements Serializable {
     }
 
     public boolean hasColumnMappingProperty() {
-        return streamLoadProps.containsKey("columns");
+        return streamLoadProps.containsKey(COLUMNS_KEY);
+    }
+
+    /**
+     * Whether the Stream Load columns header is derived from the Flink schema. A column the Flink
+     * schema does not declare is then left off the header, so the server applies that column's
+     * DEFAULT instead of receiving an explicit NULL for it.
+     */
+    public boolean isColumnsFromFlinkSchema() {
+        return columnsFromFlinkSchema;
     }
 
     public StreamLoadFormat getStreamLoadFormat() {
@@ -589,6 +636,27 @@ public class StarRocksSinkOptions implements Serializable {
     }
 
     /**
+     * Whether a columns header is sent at all. Today json sends none on any modern server, which
+     * makes the FE declare every table column and the BE store NULL for any key a row lacks, over
+     * that column's DEFAULT. sink.json.columns-from-flink-schema forces the header so the Flink schema
+     * decides which columns the load supplies. Package private so the decision can be tested
+     * without a live FE, since getProperties reads the server version.
+     */
+    static boolean shouldSendColumnsHeader(boolean csvFormat,
+                                           boolean flinkAndStarRocksAligned,
+                                           boolean supportUpsertDelete,
+                                           boolean opAutoProjectionInJson,
+                                           boolean columnsFromFlinkSchema) {
+        if (columnsFromFlinkSchema) {
+            return true;
+        }
+        if (csvFormat) {
+            return !flinkAndStarRocksAligned;
+        }
+        return supportUpsertDelete && !opAutoProjectionInJson;
+    }
+
+    /**
      * Builder for {@link StarRocksSinkOptions}.
      */
     public static final class Builder {
@@ -632,20 +700,27 @@ public class StarRocksSinkOptions implements Serializable {
                 .chunkLimit(getChunkLimit())
                 .enableUpsertDelete(supportUpsertDelete());
 
+        if (columnsFromFlinkSchema && getTableSchemaFieldNames() == null) {
+            // The raw DataStream sink carries no Flink schema, so there is nothing to derive from.
+            // Fail here rather than silently sending no header, which is the behavior this option
+            // exists to replace.
+            throw new IllegalArgumentException(COLUMNS_FROM_FLINK_SCHEMA_NEEDS_SCHEMA_MESSAGE);
+        }
         if (hasColumnMappingProperty()) {
-            defaultTablePropertiesBuilder.columns(streamLoadProps.get("columns"));
+            defaultTablePropertiesBuilder.columns(streamLoadProps.get(COLUMNS_KEY));
         } else if (getTableSchemaFieldNames() != null) {
-            // don't need to add "columns" header in following cases
-            // 1. use csv format but the flink and starrocks schemas are aligned
-            // 2. use json format, except that it's loading o a primary key table for StarRocks 1.x
-            boolean noNeedAddColumnsHeader;
-            if (dataFormat instanceof StreamLoadDataFormat.CSVFormat) {
-                noNeedAddColumnsHeader = sinkTable.isFlinkAndStarRocksColumnsAligned();
-            } else {
-                noNeedAddColumnsHeader = !supportUpsertDelete() || sinkTable.isOpAutoProjectionInJson();
-            }
+            // Today no header is sent for csv when the schemas are aligned, and none for json except
+            // a primary key table on StarRocks 1.x. sink.json.columns-from-flink-schema overrides that so the
+            // Flink schema decides which columns the load supplies.
+            boolean csvFormat = dataFormat instanceof StreamLoadDataFormat.CSVFormat;
+            boolean sendHeader = shouldSendColumnsHeader(
+                    csvFormat,
+                    csvFormat && sinkTable.isFlinkAndStarRocksColumnsAligned(),
+                    supportUpsertDelete(),
+                    !csvFormat && sinkTable.isOpAutoProjectionInJson(),
+                    columnsFromFlinkSchema);
 
-            if (!noNeedAddColumnsHeader) {
+            if (sendHeader) {
                 String[] columns;
                 if (supportUpsertDelete()) {
                     columns = new String[getTableSchemaFieldNames().length + 1];

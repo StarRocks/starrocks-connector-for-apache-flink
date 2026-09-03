@@ -73,6 +73,11 @@ public class StarRocksStreamLoadVisitor implements Serializable {
     private transient JsonWrapper jsonWrapper;
 
     public StarRocksStreamLoadVisitor(StarRocksSinkOptions sinkOptions, String[] fieldNames, boolean __opAutoProjectionInJson) {
+        // Deriving the header from the Flink schema needs one. The raw String sink has none, so fail
+        // here, when the sink is built, rather than at the first flush on the writer thread.
+        if (sinkOptions.isColumnsFromFlinkSchema() && (fieldNames == null || fieldNames.length == 0)) {
+            throw new IllegalArgumentException(StarRocksSinkOptions.COLUMNS_FROM_FLINK_SCHEMA_NEEDS_SCHEMA_MESSAGE);
+        }
         this.fieldNames = fieldNames;
         this.sinkOptions = sinkOptions;
         this.__opAutoProjectionInJson = __opAutoProjectionInJson;
@@ -297,7 +302,13 @@ public class StarRocksStreamLoadVisitor implements Serializable {
             for (Map.Entry<String,String> entry : props.entrySet()) {
                 httpPut.setHeader(entry.getKey(), entry.getValue());
             }
-            if (!props.containsKey("columns") && ((sinkOptions.supportUpsertDelete() && !__opAutoProjectionInJson) || StarRocksSinkOptions.StreamLoadFormat.CSV.equals(sinkOptions.getStreamLoadFormat()))) {
+            // sink.json.columns-from-flink-schema forces the header so the Flink schema decides which
+            // columns the load supplies; a column it does not declare then takes its server side DEFAULT
+            // instead of an explicit NULL. The constructor already refused a sink with no schema.
+            boolean columnsFromFlinkSchema = sinkOptions.isColumnsFromFlinkSchema();
+            if (!props.containsKey(StarRocksSinkOptions.COLUMNS_KEY) && (columnsFromFlinkSchema
+                    || (sinkOptions.supportUpsertDelete() && !__opAutoProjectionInJson)
+                    || StarRocksSinkOptions.StreamLoadFormat.CSV.equals(sinkOptions.getStreamLoadFormat()))) {
                 String cols = String.join(",", Arrays.asList(fieldNames).stream().map(f -> String.format("`%s`", f.trim().replace("`", ""))).collect(Collectors.toList()));
                 if (cols.length() > 0 && sinkOptions.supportUpsertDelete()) {
                     cols += String.format(",%s", StarRocksSinkOP.COLUMN_KEY);
