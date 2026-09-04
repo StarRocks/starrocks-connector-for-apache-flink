@@ -63,6 +63,9 @@ public class StreamLoadProperties implements Serializable {
     // Multi-table mode: a time-elapsed switch only fires once a region's active
     // chunk has accumulated at least this many bytes, avoiding many tiny loads.
     private final long multiTableMinSwitchBytes;
+    // Multi-table mode: hard cap (bytes) on in-progress source-transaction data
+    // buffered by one sink subtask; <= 0 = unlimited (default).
+    private final long multiTableMaxTxnBytes;
 
     // manager settings
     /**
@@ -135,6 +138,7 @@ public class StreamLoadProperties implements Serializable {
         this.multiTableTransactionBufferSize = builder.multiTableTransactionBufferSize;
         this.multiTableMiniSwitchIntervalMs = builder.multiTableMiniSwitchIntervalMs;
         this.multiTableMinSwitchBytes = builder.multiTableMinSwitchBytes;
+        this.multiTableMaxTxnBytes = builder.multiTableMaxTxnBytes;
 
         this.labelPrefix = builder.labelPrefix;
 
@@ -192,6 +196,17 @@ public class StreamLoadProperties implements Serializable {
 
     public long getMultiTableMinSwitchBytes() {
         return multiTableMinSwitchBytes;
+    }
+
+    /**
+     * Multi-table transaction mode: hard cap (bytes) on the in-progress
+     * source-transaction data buffered by one sink subtask while it waits for
+     * txnEnd. The writer never blocks on such data (it cannot be flushed before
+     * txnEnd), so this is what bounds a large source transaction. {@code <= 0}
+     * (default) means unlimited: the JVM heap is the only bound.
+     */
+    public long getMultiTableMaxTxnBytes() {
+        return multiTableMaxTxnBytes;
     }
 
     public String getJdbcUrl() {
@@ -369,6 +384,7 @@ public class StreamLoadProperties implements Serializable {
         private long multiTableTransactionBufferSize = 128 * 1024 * 1024; // 128MB default
         private long multiTableMiniSwitchIntervalMs = -1L; // -1 = auto-derive from commit interval
         private long multiTableMinSwitchBytes = 1024 * 1024; // 1MB default; <=0 disables the size gate
+        private long multiTableMaxTxnBytes = 0L; // <=0 = unlimited (default)
 
         private String labelPrefix = "";
 
@@ -468,6 +484,11 @@ public class StreamLoadProperties implements Serializable {
 
         public Builder multiTableMinSwitchBytes(long bytes) {
             this.multiTableMinSwitchBytes = bytes;
+            return this;
+        }
+
+        public Builder multiTableMaxTxnBytes(long bytes) {
+            this.multiTableMaxTxnBytes = bytes;
             return this;
         }
 

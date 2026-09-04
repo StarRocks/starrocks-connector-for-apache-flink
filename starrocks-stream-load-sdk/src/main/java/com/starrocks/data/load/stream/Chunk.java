@@ -92,6 +92,19 @@ public class Chunk {
         return new DataIterator();
     }
 
+    /**
+     * Read-only view of the buffered rows in insertion order, WITHOUT the
+     * data-format framing (first/delimiter/end) that {@link #iterator()} adds.
+     * Multi-table transaction mode uses it to re-cut an oversized frozen chunk
+     * into load-sized pieces at switch time.
+     */
+    public Iterable<byte[]> rows() {
+        if (buffer == null) {
+            throw new RuntimeException("Buffer has been released");
+        }
+        return java.util.Collections.unmodifiableList(buffer);
+    }
+
     enum ItemType {
         NONE,
         FIRST,

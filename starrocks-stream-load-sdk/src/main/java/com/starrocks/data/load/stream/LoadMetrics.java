@@ -37,6 +37,11 @@ public class LoadMetrics {
     private final AtomicLong numberWriteTriggerFlush = new AtomicLong();
     private final AtomicLong numberWriteBlock = new AtomicLong();
     private final AtomicLong totalWriteBlockTimeNano = new AtomicLong();
+    // Multi-table transaction mode: number of times the writer was let past the
+    // write-block cap because nothing in the cache could be flushed before a
+    // txnEnd, and the largest cache size observed while doing so.
+    private final AtomicLong numberCapBypass = new AtomicLong();
+    private final AtomicLong maxCacheBytes = new AtomicLong();
 
     public LoadMetrics() {
         this.startTimeNano = System.nanoTime();
@@ -68,6 +73,14 @@ public class LoadMetrics {
         totalWriteBlockTimeNano.addAndGet(timeNano);
     }
 
+    public void updateCapBypass() {
+        numberCapBypass.incrementAndGet();
+    }
+
+    public void updateMaxCacheBytes(long bytes) {
+        maxCacheBytes.accumulateAndGet(bytes, Math::max);
+    }
+
     @Override
     public String toString() {
         return "LoadMetrics{" +
@@ -81,6 +94,8 @@ public class LoadMetrics {
                 ", numberWriteTriggerFlush=" + numberWriteTriggerFlush +
                 ", numberWriteBlock=" + numberWriteBlock +
                 ", totalWriteBlockTimeNano=" + totalWriteBlockTimeNano +
+                ", numberCapBypass=" + numberCapBypass +
+                ", maxCacheBytes=" + maxCacheBytes +
                 '}';
     }
 }

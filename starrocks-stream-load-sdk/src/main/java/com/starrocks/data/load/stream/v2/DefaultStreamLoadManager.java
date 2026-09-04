@@ -91,6 +91,27 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
     private final long maxCacheBytes;
     // threshold to block write
     private final long maxWriteBlockCacheBytes;
+    // Multi-table mode only: hard cap (bytes) on in-progress source-transaction
+    // data buffered by this manager. <= 0 means unlimited - the writer keeps
+    // buffering until txnEnd and the JVM heap is the only bound. Deliberately
+    // decoupled from maxWriteBlockCacheBytes; see blockIfCacheFull.
+    private final long maxTxnBytes;
+    // Multi-table mode only, owned by the task thread. True once blockIfCacheFull
+    // found the cache at the write-block cap with nothing flushable and let the
+    // writer through; the fast path in blockIfCacheFull then skips the per-row
+    // flushability scan. Cleared on the next txnEnd (setCommitAllowed) - the
+    // only event that can turn buffered bytes into flushable bytes again.
+    // Volatile only so the manager thread can report it in recycle diagnostics.
+    private volatile boolean capBypass = false;
+    // Multi-table mode only, task-thread owned: true from the first cap-bypass
+    // WARN until the cache drops back below the write-block cap; drives the
+    // bypass-ended INFO and the throttling of the progress log.
+    private boolean capBypassEpisode = false;
+    private long capBypassStartMs;
+    private long capBypassNextLogBytes;
+    private long capBypassNextLogMs;
+    private static final long CAP_BYPASS_LOG_BYTES_STEP = 64L * 1024 * 1024;
+    private static final long CAP_BYPASS_LOG_INTERVAL_MS = 30_000L;
     private final Map<String, TableRegion> regions = new ConcurrentHashMap<>();
     private final AtomicLong currentCacheBytes = new AtomicLong(0L);
     private final AtomicLong totalFlushRows = new AtomicLong(0L);
@@ -103,14 +124,11 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
     // clean boundary and its in-progress contribution is subtracted from this
     // counter.
     //
-    // The per-region fail-fast in TransactionTableRegion only catches the case
-    // where a single region's in-progress chunk exceeds maxWriteBlockCacheBytes.
-    // When a single source transaction splits its payload across many regions,
-    // each region can stay under the per-region cap while the aggregate pushes
-    // currentCacheBytes past the write-block threshold — blockIfCacheFull then
-    // parks the task thread, which in turn cannot deliver the txnEnd marker,
-    // resulting in a silent deadlock. This aggregate counter lets us fail fast
-    // in write() before the deadlock window opens.
+    // Used for two things: the optional hard cap maxTxnBytes (fail-fast in
+    // TransactionTableRegion.write0 when a single source transaction - alone or
+    // aggregated across tables - would exceed it), and the diagnostics printed
+    // when blockIfCacheFull lets the writer past the write-block cap because
+    // nothing in the cache can be flushed before a txnEnd.
     private final AtomicLong aggregateInProgressTxnBytes = new AtomicLong(0L);
 
     private final AtomicLong numberTotalRows = new AtomicLong(0L);
@@ -276,6 +294,8 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
             this.maxCacheBytes = properties.getMaxCacheBytes();
         }
         this.maxWriteBlockCacheBytes = 2 * maxCacheBytes;
+        this.maxTxnBytes = properties.isEnableMultiTableTransaction()
+                ? properties.getMultiTableMaxTxnBytes() : 0L;
         this.scanningFrequency = properties.getScanningFrequency();
         this.multiTableTransactionEnabled = properties.isEnableMultiTableTransaction();
         // Pass the (possibly overridden) maxCacheBytes so the strategy's
@@ -675,7 +695,9 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
 
             if (multiTableTransactionEnabled) {
                 this.txnCoordinator = new SharedTransactionCoordinator(streamLoader, labelGeneratorFactory);
-                LOG.info("[MultiTxn] Multi-table transaction mode enabled");
+                LOG.info("[MultiTxn] Multi-table transaction mode enabled, bufferSize={}, writeBlockCap={}, "
+                                + "maxTxnBytes={}", maxCacheBytes, maxWriteBlockCacheBytes,
+                        maxTxnBytes <= 0 ? "unlimited" : String.valueOf(maxTxnBytes));
             }
 
             // Start the manager thread AFTER streamLoader and txnCoordinator
@@ -700,6 +722,10 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         if (!allowed) {
             return;
         }
+        // A txnEnd is the only event that can turn buffered bytes back into
+        // flushable bytes (the partition may switch below), so re-arm the full
+        // flushability check in blockIfCacheFull.
+        capBypass = false;
 
         // Mark every region of the partition clean, then make ONE partition-level
         // switch decision and apply it to ALL regions atomically (lockstep).
@@ -1566,6 +1592,19 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
             LOG.debug("[MultiTxn] Recycle: could not cut all partitions this scan; retrying next scan");
             return;
         }
+        // Partitions that are mid-transaction were skipped by the cut above and keep
+        // their data buffered until txnEnd. Say so explicitly, with sizes, so a
+        // long-running or oversized source transaction shows up in the logs
+        // instead of looking like an idle recycle. Logged only once the cut has
+        // succeeded, i.e. once per recycle rather than on every retried scan.
+        List<Integer> dirtyPartitions = collectDirtyPartitions();
+        if (!dirtyPartitions.isEmpty()) {
+            LOG.info("[MultiTxn] Recycle: partitions {} are mid-transaction (inProgress={} bytes, "
+                            + "unflushable={} bytes, capBypass={}); their data stays buffered until txnEnd "
+                            + "and is not part of this recycle. label={}",
+                    dirtyPartitions, aggregateInProgressTxnBytes.get(), unflushableBytes(), capBypass,
+                    txnCoordinator.getSharedLabel());
+        }
         // Freeze the participating region set, exactly like the timer-driven
         // commit's committingRegions snapshot: only regions whose watermark was
         // frozen by the cut take part. A region created mid-recycle (first
@@ -1731,30 +1770,66 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
     }
 
     /**
-     * Returns the effective write-block threshold. When the multi-table aggregate
-     * in-progress bytes plus an incoming row would exceed this threshold, the
-     * task thread would be blocked by {@link #blockIfCacheFull} with no way for
-     * any region to flush (no region has reached a clean boundary yet) — a
-     * silent deadlock. Regions call this to know when to fail fast.
+     * Returns the write-block cap (2 * buffer size): the bound on the
+     * <em>flushable</em> part of the cache, and the headroom reference for the
+     * partition-level protective switch ({@code isActiveChunkHalfFull}). Bytes
+     * that cannot be flushed before a txnEnd are not bounded by it - see
+     * {@link #blockIfCacheFull} and {@link #getMaxTxnBytes()}.
      */
     long getMaxWriteBlockCacheBytes() {
         return maxWriteBlockCacheBytes;
     }
 
     /**
-     * Blocks the calling (task) thread if the write-side cache is full, and signals
-     * the manager thread to flush when the soft threshold is reached.
+     * Multi-table mode: hard cap on in-progress source-transaction bytes
+     * ({@code <= 0} = unlimited). Regions fail fast in {@code write0} when an
+     * in-progress transaction - alone or aggregated across tables - would exceed it.
+     */
+    long getMaxTxnBytes() {
+        return maxTxnBytes;
+    }
+
+    /**
+     * Applies write-side back-pressure. Signals the manager thread to flush when
+     * the soft threshold ({@code maxCacheBytes}) is reached, and parks the calling
+     * (task) thread while the cache is at the write-block cap
+     * ({@code maxWriteBlockCacheBytes}) <em>and there is something the manager can
+     * flush</em>.
+     *
+     * <p>Multi-table transaction mode: bytes that belong to an in-progress source
+     * transaction - or to sibling tables of a partition that is mid-transaction
+     * and therefore cannot be lockstep-switched - can only leave the cache after
+     * that partition's txnEnd, which is delivered by this very thread. Parking on
+     * them is a guaranteed deadlock (the writer never delivers the txnEnd, the
+     * manager finds nothing to flush). So when the cache is at the cap but every
+     * buffered byte is of that kind, the writer is let through and keeps
+     * buffering until txnEnd; that growth is bounded only by {@code maxTxnBytes}
+     * (fail-fast in {@code TransactionTableRegion.write0}) or, when unlimited, by
+     * the JVM heap. While any flushable byte remains (inactive chunks, in-flight
+     * loads, or an all-clean partition the manager can switch), the writer still
+     * waits for it to drain - that is real back-pressure, and it keeps the
+     * flushable part of the cache bounded by the cap.
      *
      * <p>Extracted to avoid duplication between the two {@code write()} overloads.
      */
     private void blockIfCacheFull(long cachedBytes) {
         if (cachedBytes >= maxWriteBlockCacheBytes) {
+            if (multiTableTransactionEnabled && capBypass) {
+                // Fast path: nothing flushable was found earlier in this
+                // in-progress stretch and no txnEnd has arrived since, so the
+                // answer cannot have changed (see capBypass). Skip the scan.
+                logCapBypassProgress(cachedBytes);
+                return;
+            }
             long startTime = System.nanoTime();
             lock.lock();
             try {
                 int idx = 0;
                 while (currentCacheBytes.get() >= maxWriteBlockCacheBytes) {
                     checkAndThrowException();
+                    if (multiTableTransactionEnabled && enterCapBypassIfNothingFlushable()) {
+                        break;
+                    }
                     LOG.info("Cache full, wait flush, currentBytes: {}, maxWriteBlockCacheBytes: {}",
                             currentCacheBytes.get(), maxWriteBlockCacheBytes);
                     flushable.signal();
@@ -1767,7 +1842,12 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                 lock.unlock();
             }
             loadMetrics.updateWriteBlock(1, System.nanoTime() - startTime);
-        } else if (cachedBytes >= maxCacheBytes && writeTriggerFlush.compareAndSet(false, true)) {
+            return;
+        }
+        if (capBypassEpisode) {
+            endCapBypassEpisode(cachedBytes);
+        }
+        if (cachedBytes >= maxCacheBytes && writeTriggerFlush.compareAndSet(false, true)) {
             lock.lock();
             try {
                 flushable.signal();
@@ -1777,6 +1857,106 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
             loadMetrics.updateWriteTriggerFlush(1);
             LOG.info("Trigger flush, currentBytes: {}, maxCacheBytes: {}", cachedBytes, maxCacheBytes);
         }
+    }
+
+    /**
+     * Bytes in the cache that cannot leave it before a txnEnd this (task) thread
+     * has yet to deliver: the whole activeChunk of every region belonging to a
+     * partition with at least one dirty region. That covers both the in-progress
+     * rows themselves and the completed rows of sibling tables that the lockstep
+     * rule holds back until the partition is clean again. Everything else
+     * (inactive chunks, in-flight loads, all-clean partitions) can be drained by
+     * the manager thread.
+     *
+     * <p>Multi-table mode only. Stable while the task thread sits in
+     * blockIfCacheFull: only the task thread dirties or cleans a region, and the
+     * manager's lockstep switch touches all-clean partitions only.
+     */
+    private long unflushableBytes() {
+        long bytes = 0L;
+        for (List<TransactionTableRegion> pRegions : partitionRegions.values()) {
+            boolean dirty = false;
+            for (TransactionTableRegion region : pRegions) {
+                if (!region.isActiveChunkCleanBoundary()) {
+                    dirty = true;
+                    break;
+                }
+            }
+            if (dirty) {
+                for (TransactionTableRegion region : pRegions) {
+                    bytes += region.getActiveChunkRowBytes();
+                }
+            }
+        }
+        return bytes;
+    }
+
+    /** Partitions with at least one dirty region (multi-table mode). */
+    private List<Integer> collectDirtyPartitions() {
+        List<Integer> dirty = new ArrayList<>();
+        for (Map.Entry<Integer, List<TransactionTableRegion>> entry : partitionRegions.entrySet()) {
+            for (TransactionTableRegion region : entry.getValue()) {
+                if (!region.isActiveChunkCleanBoundary()) {
+                    dirty.add(entry.getKey());
+                    break;
+                }
+            }
+        }
+        return dirty;
+    }
+
+    /**
+     * Called by the task thread while parked at the write-block cap (under
+     * {@code lock}). Returns {@code true} - and arms {@link #capBypass} - when
+     * every buffered byte is unflushable before a txnEnd, so waiting cannot
+     * make progress.
+     */
+    private boolean enterCapBypassIfNothingFlushable() {
+        long total = currentCacheBytes.get();
+        long unflushable = unflushableBytes();
+        if (total - unflushable > 0) {
+            return false;
+        }
+        long now = System.currentTimeMillis();
+        capBypass = true;
+        if (!capBypassEpisode) {
+            capBypassEpisode = true;
+            capBypassStartMs = now;
+            loadMetrics.updateCapBypass();
+            long inProgress = aggregateInProgressTxnBytes.get();
+            LOG.warn("[MultiTxn] Write-block cap {} bytes reached with nothing flushable: all {} buffered bytes "
+                            + "belong to in-progress source transactions ({} bytes) or to sibling tables held back "
+                            + "until their partition's txnEnd ({} bytes), dirty partitions={}. Continuing to buffer "
+                            + "until txnEnd instead of blocking; hard limit sink.transaction.multi-table.max-txn-bytes={}",
+                    maxWriteBlockCacheBytes, total, inProgress, Math.max(0L, unflushable - inProgress),
+                    collectDirtyPartitions(), maxTxnBytes <= 0 ? "unlimited" : String.valueOf(maxTxnBytes));
+        }
+        loadMetrics.updateMaxCacheBytes(total);
+        capBypassNextLogBytes = total + CAP_BYPASS_LOG_BYTES_STEP;
+        capBypassNextLogMs = now + CAP_BYPASS_LOG_INTERVAL_MS;
+        return true;
+    }
+
+    /** Throttled progress log while the writer keeps buffering past the cap. */
+    private void logCapBypassProgress(long cachedBytes) {
+        loadMetrics.updateMaxCacheBytes(cachedBytes);
+        if (cachedBytes < capBypassNextLogBytes && System.currentTimeMillis() < capBypassNextLogMs) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        LOG.info("[MultiTxn] Still buffering past the write-block cap waiting for txnEnd: currentBytes={}, "
+                        + "inProgress={}, cap={}, elapsed={}ms, dirty partitions={}",
+                cachedBytes, aggregateInProgressTxnBytes.get(), maxWriteBlockCacheBytes,
+                now - capBypassStartMs, collectDirtyPartitions());
+        capBypassNextLogBytes = cachedBytes + CAP_BYPASS_LOG_BYTES_STEP;
+        capBypassNextLogMs = now + CAP_BYPASS_LOG_INTERVAL_MS;
+    }
+
+    private void endCapBypassEpisode(long cachedBytes) {
+        capBypassEpisode = false;
+        capBypass = false;
+        LOG.info("[MultiTxn] Write-block cap bypass ended after {}ms: currentBytes={} is back below cap={}",
+                System.currentTimeMillis() - capBypassStartMs, cachedBytes, maxWriteBlockCacheBytes);
     }
 
     @Override
@@ -2036,19 +2216,22 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                     String tableKey = StreamLoadUtils.getTableUniqueKey(database, table);
                     StreamLoadTableProperties tableProperties = properties.getTableProperties(tableKey, database, table);
                     LabelGenerator labelGenerator = labelGeneratorFactory.create(database, table);
-                    // In multi-table mode, pass maxWriteBlockCacheBytes (= 2 * multi-table
-                    // buffer size) as the per-region hard cap for an in-progress source
-                    // transaction. This is the exact threshold at which blockIfCacheFull
-                    // would start blocking the task thread; if a single region's activeChunk
-                    // alone exceeds it, deadlock is inevitable because the manager has no
-                    // inactiveChunks to flush (multi-table mode cannot switch activeChunk
-                    // until the next txnEnd arrives). Failing fast here gives a clear error
-                    // instead of a silent hang.
-                    long singleTxnMaxBytes = multiTableTransactionEnabled ? maxWriteBlockCacheBytes : 0L;
+                    // In multi-table mode the region gets two thresholds:
+                    //   - headroom = maxWriteBlockCacheBytes (2 * buffer size): the
+                    //     partition-level protective switch fires once an active chunk
+                    //     reaches half of it (isActiveChunkHalfFull);
+                    //   - maxTxnBytes: the hard cap on in-progress source-transaction
+                    //     data (fail-fast in write0), <= 0 = unlimited. Deliberately NOT
+                    //     tied to the write-block cap: the writer does not block on bytes
+                    //     that cannot be flushed before txnEnd (see blockIfCacheFull), so
+                    //     a source transaction may grow past 2 * buffer size and only
+                    //     this cap bounds it.
+                    long headroomBytes = multiTableTransactionEnabled ? maxWriteBlockCacheBytes : 0L;
+                    long txnCapBytes = multiTableTransactionEnabled ? maxTxnBytes : 0L;
                     TransactionTableRegion newRegion = new TransactionTableRegion(
                             uniqueKey, database, table, this,
                             tableProperties, streamLoader, labelGenerator, maxRetries, retryIntervalInMs,
-                            multiTableTransactionEnabled, miniSwitchIntervalMs, singleTxnMaxBytes);
+                            multiTableTransactionEnabled, miniSwitchIntervalMs, headroomBytes, txnCapBytes);
                     if (multiTableTransactionEnabled) {
                         newRegion.getHeaders().put("transaction_type", "multi");
                         // All partition-regions of the same (db, table) share one

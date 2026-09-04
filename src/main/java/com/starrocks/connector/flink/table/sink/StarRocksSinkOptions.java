@@ -131,6 +131,17 @@ public class StarRocksSinkOptions implements Serializable {
                             "When the total buffered data across all tables reaches this threshold, " +
                             "a flush is triggered. Default is 128MB.");
 
+    public static final ConfigOption<Long> SINK_MULTI_TABLE_TXN_MAX_TXN_BYTES =
+            ConfigOptions.key("sink.transaction.multi-table.max-txn-bytes")
+                    .longType()
+                    .defaultValue(0L)
+                    .withDescription("Multi-table transaction mode: hard limit in bytes on the in-progress " +
+                            "source-transaction data one sink subtask may buffer while waiting for txnEnd. " +
+                            "The writer never blocks on data that cannot be flushed before txnEnd, so a single " +
+                            "source transaction may grow past 2 x buffer-size; this option bounds that growth " +
+                            "and fails the job with a clear error when exceeded. 0 (default) means no limit, " +
+                            "i.e. the JVM heap is the only bound.");
+
     public static final ConfigOption<Long> SINK_MULTI_TABLE_TXN_MINI_SWITCH_INTERVAL_MS =
             ConfigOptions.key("sink.transaction.multi-table.mini-switch-interval-ms")
                     .longType()
@@ -399,6 +410,10 @@ public class StarRocksSinkOptions implements Serializable {
         return tableOptions.get(SINK_MULTI_TABLE_TXN_MIN_SWITCH_BYTES);
     }
 
+    public long getMultiTableMaxTxnBytes() {
+        return tableOptions.get(SINK_MULTI_TABLE_TXN_MAX_TXN_BYTES);
+    }
+
     public Map<String, String> getSinkStreamLoadProperties() {
         return streamLoadProps;
     }
@@ -576,6 +591,12 @@ public class StarRocksSinkOptions implements Serializable {
                     "Please disable '" + SINK_PROPERTIES_PREFIX + LoadParameters.ENABLE_MERGE_COMMIT +
                     "' when '" + SINK_MULTI_TABLE_TXN_ENABLED.key() + "' is enabled.");
         }
+        long maxTxnBytes = tableOptions.get(SINK_MULTI_TABLE_TXN_MAX_TXN_BYTES);
+        if (maxTxnBytes < 0) {
+            throw new ValidationException(
+                    "'" + SINK_MULTI_TABLE_TXN_MAX_TXN_BYTES.key() + "' must be >= 0 (0 = unlimited), got " +
+                    maxTxnBytes + ".");
+        }
     }
 
     private void parseSinkStreamLoadProperties() {
@@ -720,6 +741,7 @@ public class StarRocksSinkOptions implements Serializable {
             builder.multiTableTransactionBufferSize(getMultiTableTransactionBufferSize());
             builder.multiTableMiniSwitchIntervalMs(getMultiTableMiniSwitchIntervalMs());
             builder.multiTableMinSwitchBytes(getMultiTableMinSwitchBytes());
+            builder.multiTableMaxTxnBytes(getMultiTableMaxTxnBytes());
             log.info("Enable multi-table transaction stream load");
         }
         return builder.build();
