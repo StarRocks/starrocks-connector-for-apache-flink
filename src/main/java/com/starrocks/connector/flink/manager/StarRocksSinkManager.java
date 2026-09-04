@@ -452,6 +452,8 @@ public class StarRocksSinkManager implements Serializable {
             // column's DEFAULT. Checking that every StarRocks column has a Flink counterpart would
             // reject exactly the case the option exists for, so validate the other direction, that
             // every Flink column exists in StarRocks and the types agree. This mirrors the V2 path.
+            StarRocksSinkOptions.checkMergingKeysDeclared(rows, flinkSchema.getFieldNames(),
+                    sinkOptions.getTableName());
             Map<String, Map<String, Object>> starRocksColumnsByName = new HashMap<>();
             for (Map<String, Object> row : rows) {
                 starRocksColumnsByName.put(row.get("COLUMN_NAME").toString().toLowerCase(), row);

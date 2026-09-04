@@ -676,6 +676,39 @@ public class StarRocksSinkOptions implements Serializable {
     }
 
     /**
+     * Refuses a Flink schema that omits a key column rows merge on. Primary, unique and aggregate
+     * keys all identify a row, so leaving one off the derived header makes the server fill the same
+     * default for every row, and they then replace or aggregate into one another. A duplicate key
+     * table's key is only a sort key, nothing merges on it, so omitting one is allowed.
+     */
+    public static void checkMergingKeysDeclared(List<Map<String, Object>> starRocksColumns,
+                                         String[] flinkFieldNames, String tableName) {
+        Set<String> declared = new HashSet<>();
+        for (String name : flinkFieldNames) {
+            declared.add(name.toLowerCase());
+        }
+        for (Map<String, Object> column : starRocksColumns) {
+            Object keyType = column.get("COLUMN_KEY");
+            if (keyType == null) {
+                continue;
+            }
+            String key = keyType.toString();
+            boolean mergesRows = "PRI".equalsIgnoreCase(key) || "UNI".equalsIgnoreCase(key)
+                    || "AGG".equalsIgnoreCase(key);
+            if (!mergesRows) {
+                continue;
+            }
+            String name = column.get("COLUMN_NAME").toString();
+            if (!declared.contains(name.toLowerCase())) {
+                throw new IllegalArgumentException(SINK_JSON_COLUMNS_FROM_FLINK_SCHEMA.key()
+                        + "=true requires the Flink schema of " + tableName + " to declare key column "
+                        + name + ". Rows merge on that key, so filling it from its default would give "
+                        + "every row the same key.");
+            }
+        }
+    }
+
+    /**
      * Quotes a column name for the Stream Load columns header. An embedded backtick is doubled,
      * which is how the header's parser escapes one, rather than stripped: stripping renames the
      * column, and the serializer still emits the original Flink field name, so the header would
@@ -700,6 +733,14 @@ public class StarRocksSinkOptions implements Serializable {
                 || headerValue(tableProperties, COLUMNS_KEY) != null
                 || !isSameTable(tableProperties)) {
             return tableProperties;
+        }
+        // The global validation runs before addTableProperties, so it never saw this override.
+        // jsonpaths are matched to the header by position, so pairing them with a derived subset
+        // would load values into the wrong columns.
+        if (headerValue(tableProperties, "jsonpaths") != null) {
+            throw new IllegalArgumentException(SINK_JSON_COLUMNS_FROM_FLINK_SCHEMA.key()
+                    + "=true cannot be combined with jsonpaths, but the properties registered for "
+                    + tableProperties.getDatabase() + "." + tableProperties.getTable() + " set it.");
         }
         StreamLoadTableProperties.Builder overrideBuilder = StreamLoadTableProperties.builder()
                 .copyFrom(tableProperties)

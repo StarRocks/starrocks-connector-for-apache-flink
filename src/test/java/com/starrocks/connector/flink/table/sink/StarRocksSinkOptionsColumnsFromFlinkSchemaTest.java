@@ -21,6 +21,11 @@
 package com.starrocks.connector.flink.table.sink;
 
 import com.starrocks.connector.flink.manager.StarRocksSinkTable;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import com.starrocks.data.load.stream.StreamLoadDataFormat;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
@@ -156,6 +161,78 @@ public class StarRocksSinkOptionsColumnsFromFlinkSchemaTest {
         StreamLoadTableProperties disabled = off.getProperties(StarRocksSinkTable.builder().sinkOptions(off).build())
                 .getTableProperties("db-t", "db", "t");
         assertNull(disabled.getColumns());
+    }
+
+    private Map<String, Object> column(String name, String keyType) {
+        Map<String, Object> row = new HashMap<>();
+        row.put("COLUMN_NAME", name);
+        row.put("COLUMN_KEY", keyType);
+        return row;
+    }
+
+    @Test
+    public void testOmittingAKeyRowsMergeOnIsRejected() {
+        // Unique and aggregate keys identify a row just as a primary key does, so filling one from
+        // its default would give every row the same key and they would merge into one another.
+        for (String keyType : new String[] {"PRI", "UNI", "AGG"}) {
+            List<Map<String, Object>> starRocksColumns = Arrays.asList(
+                    column("id", keyType), column("v", ""));
+            try {
+                StarRocksSinkOptions.checkMergingKeysDeclared(
+                        starRocksColumns, new String[] {"v"}, "t");
+                fail("expected IllegalArgumentException for " + keyType);
+            } catch (IllegalArgumentException expected) {
+                assertTrue(expected.getMessage().contains("id"));
+            }
+        }
+    }
+
+    @Test
+    public void testOmittingADuplicateKeySortColumnIsAllowed() {
+        // Nothing merges on a duplicate key table's sort key, so its default may fire like any
+        // other column's.
+        List<Map<String, Object>> starRocksColumns = Arrays.asList(
+                column("event_day", "DUP"), column("payload", ""));
+
+        StarRocksSinkOptions.checkMergingKeysDeclared(starRocksColumns, new String[] {"payload"}, "t");
+    }
+
+    @Test
+    public void testDeclaringTheKeyIsAccepted() {
+        List<Map<String, Object>> starRocksColumns = Arrays.asList(
+                column("id", "UNI"), column("v", ""));
+
+        StarRocksSinkOptions.checkMergingKeysDeclared(starRocksColumns, new String[] {"ID", "v"}, "t");
+    }
+
+    @Test
+    public void testSameTableOverrideWithJsonpathsIsRejected() throws Exception {
+        new MockUp<StarRocksSinkTable>() {
+            @Mock
+            public String getVersion() {
+                return "3.3.0";
+            }
+        };
+
+        StarRocksSinkOptions options = base()
+                .withProperty("sink.json.columns-from-flink-schema", "true")
+                .build();
+        options.setTableSchemaFieldNames(new String[] {"a", "b"});
+        // The global validation ran at construction, before this override existed, so it never saw
+        // these jsonpaths.
+        options.addTableProperties(StreamLoadTableProperties.builder()
+                .database("db").table("t")
+                .streamLoadDataFormat(StreamLoadDataFormat.JSON)
+                .addProperty("jsonpaths", "[\"a\"]")
+                .build());
+
+        try {
+            options.getProperties(StarRocksSinkTable.builder().sinkOptions(options).build());
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("jsonpaths"));
+            assertTrue(expected.getMessage().contains("db.t"));
+        }
     }
 
     @Test
