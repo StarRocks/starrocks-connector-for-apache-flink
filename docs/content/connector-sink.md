@@ -132,7 +132,9 @@ applies its DEFAULT. This means the Flink table definition is the column list: l
 column out of the Flink DDL and it gets its default; declare it and the connector sends whatever
 value the row carries, including null.
 
-This needs a Flink schema, so it applies to Flink SQL and to sinks built with a schema. The raw
+This needs a Flink schema, so it applies to Flink SQL and to sinks built with a schema. With
+`sink.version=V1` you must also set `sink.properties.strip_outer_array=true`, because the V1 sink
+sends each batch as a json array and, unlike V2, does not set that property for you. The raw
 `String` DataStream sink has no schema and rejects the option at startup; set
 `sink.properties.columns` explicitly there instead.
 

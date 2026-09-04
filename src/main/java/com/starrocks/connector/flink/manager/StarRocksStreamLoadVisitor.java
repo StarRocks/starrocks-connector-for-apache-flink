@@ -309,7 +309,9 @@ public class StarRocksStreamLoadVisitor implements Serializable {
             if (!props.containsKey(StarRocksSinkOptions.COLUMNS_KEY) && (columnsFromFlinkSchema
                     || (sinkOptions.supportUpsertDelete() && !__opAutoProjectionInJson)
                     || StarRocksSinkOptions.StreamLoadFormat.CSV.equals(sinkOptions.getStreamLoadFormat()))) {
-                String cols = String.join(",", Arrays.asList(fieldNames).stream().map(f -> String.format("`%s`", f.trim().replace("`", ""))).collect(Collectors.toList()));
+                String cols = Arrays.stream(fieldNames)
+                        .map(StarRocksSinkOptions::quoteColumnName)
+                        .collect(Collectors.joining(","));
                 if (cols.length() > 0 && sinkOptions.supportUpsertDelete()) {
                     cols += String.format(",%s", StarRocksSinkOP.COLUMN_KEY);
                 }

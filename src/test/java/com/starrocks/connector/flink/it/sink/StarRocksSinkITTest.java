@@ -244,6 +244,9 @@ public class StarRocksSinkITTest extends StarRocksITTestBase {
                 "'sink.version' = '" + (isSinkV2 ? "V2" : "V1") + "'," +
                 "'sink.use.new-sink-api' = '" + (newSinkApi ? "true" : "false") + "'," +
                 "'sink.properties.format' = 'json'," +
+                // The V2 path sets strip_outer_array for json itself; V1 does not, and it sends the
+                // batch as a json array, so it has to be set here for the V1 parameter to load at all.
+                "'sink.properties.strip_outer_array' = 'true'," +
                 "'sink.json.columns-from-flink-schema' = '" + columnsFromFlinkSchema + "'," +
                 "'database-name' = '" + DB_NAME + "'," +
                 "'table-name' = '" + tableName + "'," +

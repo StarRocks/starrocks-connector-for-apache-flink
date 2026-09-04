@@ -675,6 +675,67 @@ public class StarRocksSinkOptions implements Serializable {
         }
     }
 
+    /**
+     * Quotes a column name for the Stream Load columns header. An embedded backtick is doubled,
+     * which is how the header's parser escapes one, rather than stripped: stripping renames the
+     * column, and the serializer still emits the original Flink field name, so the header would
+     * point at a column that does not exist. The name is not trimmed for the same reason.
+     */
+    public static String quoteColumnName(String name) {
+        return "`" + name.replace("`", "``") + "`";
+    }
+
+    /**
+     * Carries the derived header onto a registered override for this sink's own table. The sdk picks
+     * an exact database and table override over the default properties, so without this the option
+     * would silently do nothing for that table.
+     *
+     * <p>Only an override for this sink's own table qualifies. The header is built from this sink's
+     * Flink schema, so handing it to a different table would name that table's columns wrongly.
+     */
+    private StreamLoadTableProperties withDerivedColumns(StreamLoadTableProperties tableProperties,
+                                                         String derivedColumns) {
+        if (derivedColumns == null
+                || tableProperties.getColumns() != null
+                || headerValue(tableProperties, COLUMNS_KEY) != null
+                || !isSameTable(tableProperties)) {
+            return tableProperties;
+        }
+        StreamLoadTableProperties.Builder overrideBuilder = StreamLoadTableProperties.builder()
+                .copyFrom(tableProperties)
+                // copyFrom carries neither the unique key nor the per table headers. The key is what
+                // registers this entry, and the headers can carry load semantics, so losing either
+                // would quietly change how the table is written.
+                .uniqueKey(tableProperties.getUniqueKey())
+                .database(tableProperties.getDatabase())
+                .table(tableProperties.getTable())
+                .columns(derivedColumns);
+        for (Map.Entry<String, String> property : tableProperties.getProperties().entrySet()) {
+            overrideBuilder.addProperty(property.getKey(), property.getValue());
+        }
+        return overrideBuilder.build();
+    }
+
+    private boolean isSameTable(StreamLoadTableProperties tableProperties) {
+        return getDatabaseName() != null && getTableName() != null
+                && getDatabaseName().equals(tableProperties.getDatabase())
+                && getTableName().equals(tableProperties.getTable());
+    }
+
+    /**
+     * Reads a per table header without assuming its case. Headers set through addProperty keep the
+     * caller's spelling, unlike the sink.properties path which lowercases every key, and the server
+     * treats header names case insensitively either way.
+     */
+    private static String headerValue(StreamLoadTableProperties tableProperties, String header) {
+        for (Map.Entry<String, String> property : tableProperties.getProperties().entrySet()) {
+            if (header.equalsIgnoreCase(property.getKey())) {
+                return property.getValue();
+            }
+        }
+        return null;
+    }
+
     public StreamLoadProperties getProperties(@Nullable StarRocksSinkTable table) {
         StarRocksSinkTable sinkTable = table;
         if (sinkTable == null) {
@@ -700,6 +761,7 @@ public class StarRocksSinkOptions implements Serializable {
                 .chunkLimit(getChunkLimit())
                 .enableUpsertDelete(supportUpsertDelete());
 
+        String derivedColumns = null;
         if (columnsFromFlinkSchema && getTableSchemaFieldNames() == null) {
             // The raw DataStream sink carries no Flink schema, so there is nothing to derive from.
             // Fail here rather than silently sending no header, which is the behavior this option
@@ -730,10 +792,10 @@ public class StarRocksSinkOptions implements Serializable {
                     columns = getTableSchemaFieldNames();
                 }
 
-                String cols = Arrays.stream(columns)
-                        .map(f -> String.format("`%s`", f.trim().replace("`", "")))
+                derivedColumns = Arrays.stream(columns)
+                        .map(StarRocksSinkOptions::quoteColumnName)
                         .collect(Collectors.joining(","));
-                defaultTablePropertiesBuilder.columns(cols);
+                defaultTablePropertiesBuilder.columns(derivedColumns);
             }
         }
 
@@ -780,7 +842,7 @@ public class StarRocksSinkOptions implements Serializable {
         builder.addHeaders(streamLoadProperties)
                 .defaultTableProperties(defaultTablePropertiesBuilder.build());
         for (StreamLoadTableProperties tableProperties : tablePropertiesList) {
-            builder.addTableProperties(tableProperties);
+            builder.addTableProperties(withDerivedColumns(tableProperties, derivedColumns));
         }
 
         if (isSupportTransactionStreamLoad() &&

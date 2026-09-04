@@ -21,6 +21,8 @@
 package com.starrocks.connector.flink.table.sink;
 
 import com.starrocks.connector.flink.manager.StarRocksSinkTable;
+import com.starrocks.data.load.stream.StreamLoadDataFormat;
+import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
 import mockit.Mock;
 import mockit.MockUp;
@@ -154,6 +156,71 @@ public class StarRocksSinkOptionsColumnsFromFlinkSchemaTest {
         StreamLoadTableProperties disabled = off.getProperties(StarRocksSinkTable.builder().sinkOptions(off).build())
                 .getTableProperties("db-t", "db", "t");
         assertNull(disabled.getColumns());
+    }
+
+    @Test
+    public void testQuotingEscapesRatherThanNormalises() {
+        // Stripping a backtick or trimming whitespace renames the column, and the serializer still
+        // emits the original Flink field name, so the header would point at a column that is not there.
+        assertEquals("`c1`", StarRocksSinkOptions.quoteColumnName("c1"));
+        assertEquals("`we``ird`", StarRocksSinkOptions.quoteColumnName("we`ird"));
+        assertEquals("` padded `", StarRocksSinkOptions.quoteColumnName(" padded "));
+    }
+
+    @Test
+    public void testOverrideForTheSameTableInheritsTheDerivedHeader() throws Exception {
+        new MockUp<StarRocksSinkTable>() {
+            @Mock
+            public String getVersion() {
+                return "3.3.0";
+            }
+        };
+
+        StarRocksSinkOptions options = base()
+                .withProperty("sink.json.columns-from-flink-schema", "true")
+                .build();
+        options.setTableSchemaFieldNames(new String[] {"a", "b"});
+        // An override registered for this sink's own table would otherwise be selected by the sdk
+        // ahead of the default properties, and it carries no columns, so the option would do nothing.
+        options.addTableProperties(StreamLoadTableProperties.builder()
+                .database("db").table("t")
+                .streamLoadDataFormat(StreamLoadDataFormat.JSON)
+                .addProperty("max_filter_ratio", "0.1")
+                .build());
+
+        StreamLoadProperties properties =
+                options.getProperties(StarRocksSinkTable.builder().sinkOptions(options).build());
+        StreamLoadTableProperties resolved = properties.getTableProperties("db-t", "db", "t");
+
+        assertEquals("`a`,`b`", resolved.getColumns());
+        // The override's own headers must survive the rebuild.
+        assertEquals("0.1", resolved.getProperties().get("max_filter_ratio"));
+    }
+
+    @Test
+    public void testOverrideForAnotherTableDoesNotInheritTheHeader() throws Exception {
+        new MockUp<StarRocksSinkTable>() {
+            @Mock
+            public String getVersion() {
+                return "3.3.0";
+            }
+        };
+
+        StarRocksSinkOptions options = base()
+                .withProperty("sink.json.columns-from-flink-schema", "true")
+                .build();
+        options.setTableSchemaFieldNames(new String[] {"a", "b"});
+        // A different table's columns are not this sink's Flink schema, so handing it this header
+        // would name that table's columns wrongly.
+        options.addTableProperties(StreamLoadTableProperties.builder()
+                .database("db").table("other")
+                .streamLoadDataFormat(StreamLoadDataFormat.JSON)
+                .build());
+
+        StreamLoadProperties properties =
+                options.getProperties(StarRocksSinkTable.builder().sinkOptions(options).build());
+
+        assertNull(properties.getTableProperties("db-other", "db", "other").getColumns());
     }
 
     @Test
