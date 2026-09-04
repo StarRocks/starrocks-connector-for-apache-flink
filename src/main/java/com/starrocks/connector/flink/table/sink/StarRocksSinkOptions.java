@@ -764,12 +764,24 @@ public class StarRocksSinkOptions implements Serializable {
     }
 
     /**
-     * Reads a per table header without assuming its case. Headers set through addProperty keep the
-     * caller's spelling, unlike the sink.properties path which lowercases every key, and the server
-     * treats header names case insensitively either way.
+     * Reads the effective value of a per table header. Two maps can carry one: the per table map and
+     * the common map, and the sdk merges the common map first so the per table map wins. Both are
+     * searched, in that precedence, or a header set through addCommonProperties would look absent.
+     *
+     * <p>Case is not assumed either. Headers set through addProperty keep the caller's spelling,
+     * unlike the sink.properties path which lowercases every key, and the server treats header names
+     * case insensitively.
      */
     private static String headerValue(StreamLoadTableProperties tableProperties, String header) {
-        for (Map.Entry<String, String> property : tableProperties.getProperties().entrySet()) {
+        String value = lookupIgnoreCase(tableProperties.getProperties(), header);
+        return value != null ? value : lookupIgnoreCase(tableProperties.getCommonProperties(), header);
+    }
+
+    private static String lookupIgnoreCase(Map<String, String> properties, String header) {
+        if (properties == null) {
+            return null;
+        }
+        for (Map.Entry<String, String> property : properties.entrySet()) {
             if (header.equalsIgnoreCase(property.getKey())) {
                 return property.getValue();
             }

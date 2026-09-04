@@ -236,6 +236,66 @@ public class StarRocksSinkOptionsColumnsFromFlinkSchemaTest {
     }
 
     @Test
+    public void testCommonPropertiesColumnsIsRespected() throws Exception {
+        new MockUp<StarRocksSinkTable>() {
+            @Mock
+            public String getVersion() {
+                return "3.3.0";
+            }
+        };
+
+        StarRocksSinkOptions options = base()
+                .withProperty("sink.json.columns-from-flink-schema", "true")
+                .build();
+        options.setTableSchemaFieldNames(new String[] {"a", "b"});
+        Map<String, String> common = new HashMap<>();
+        common.put("columns", "`only`,`mine`");
+        // The sdk merges the common map before the per table map, so a derived header written to the
+        // per table map would silently outrank this explicit value.
+        options.addTableProperties(StreamLoadTableProperties.builder()
+                .database("db").table("t")
+                .streamLoadDataFormat(StreamLoadDataFormat.JSON)
+                .addCommonProperties(common)
+                .build());
+
+        StreamLoadProperties properties =
+                options.getProperties(StarRocksSinkTable.builder().sinkOptions(options).build());
+        StreamLoadTableProperties resolved = properties.getTableProperties("db-t", "db", "t");
+
+        assertNull(resolved.getColumns());
+        assertEquals("`only`,`mine`", resolved.getCommonProperties().get("columns"));
+    }
+
+    @Test
+    public void testCommonPropertiesJsonpathsIsRejected() throws Exception {
+        new MockUp<StarRocksSinkTable>() {
+            @Mock
+            public String getVersion() {
+                return "3.3.0";
+            }
+        };
+
+        StarRocksSinkOptions options = base()
+                .withProperty("sink.json.columns-from-flink-schema", "true")
+                .build();
+        options.setTableSchemaFieldNames(new String[] {"a", "b"});
+        Map<String, String> common = new HashMap<>();
+        common.put("jsonpaths", "[\"a\"]");
+        options.addTableProperties(StreamLoadTableProperties.builder()
+                .database("db").table("t")
+                .streamLoadDataFormat(StreamLoadDataFormat.JSON)
+                .addCommonProperties(common)
+                .build());
+
+        try {
+            options.getProperties(StarRocksSinkTable.builder().sinkOptions(options).build());
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("jsonpaths"));
+        }
+    }
+
+    @Test
     public void testQuotingEscapesRatherThanNormalises() {
         // Stripping a backtick or trimming whitespace renames the column, and the serializer still
         // emits the original Flink field name, so the header would point at a column that is not there.
