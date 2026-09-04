@@ -41,7 +41,7 @@ public class LoadMetrics {
     // write-block cap because nothing in the cache could be flushed before a
     // txnEnd, and the largest cache size observed while doing so.
     private final AtomicLong numberCapBypass = new AtomicLong();
-    private final AtomicLong maxCacheBytes = new AtomicLong();
+    private final AtomicLong maxObservedCacheBytes = new AtomicLong();
 
     public LoadMetrics() {
         this.startTimeNano = System.nanoTime();
@@ -77,8 +77,16 @@ public class LoadMetrics {
         numberCapBypass.incrementAndGet();
     }
 
-    public void updateMaxCacheBytes(long bytes) {
-        maxCacheBytes.accumulateAndGet(bytes, Math::max);
+    public void updateMaxObservedCacheBytes(long bytes) {
+        maxObservedCacheBytes.accumulateAndGet(bytes, Math::max);
+    }
+
+    public long getNumberCapBypass() {
+        return numberCapBypass.get();
+    }
+
+    public long getMaxObservedCacheBytes() {
+        return maxObservedCacheBytes.get();
     }
 
     @Override
@@ -95,7 +103,7 @@ public class LoadMetrics {
                 ", numberWriteBlock=" + numberWriteBlock +
                 ", totalWriteBlockTimeNano=" + totalWriteBlockTimeNano +
                 ", numberCapBypass=" + numberCapBypass +
-                ", maxCacheBytes=" + maxCacheBytes +
+                ", maxObservedCacheBytes=" + maxObservedCacheBytes +
                 '}';
     }
 }

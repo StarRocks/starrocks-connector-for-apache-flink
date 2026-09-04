@@ -398,22 +398,28 @@ public class TransactionTableRegion implements TableRegion {
             return;
         }
         Chunk frozen = activeChunk;
-        Long limit = properties.getChunkLimit();
-        long chunkLimit = limit == null ? 0L : limit;
-        if (multiTableTransactionEnabled && chunkLimit > 0 && frozen.chunkBytes() > chunkLimit) {
+        long pieceLimit = multiTableTransactionEnabled ? splitPieceLimitBytes() : 0L;
+        int maxRows = properties.getMaxBufferRows();
+        if (pieceLimit > 0 && (frozen.chunkBytes() > pieceLimit || frozen.numRows() > maxRows)) {
             // Multi-table mode never switches mid-transaction, so a large source
             // transaction freezes as one oversized chunk. Re-cut it here into
-            // load-sized pieces (each <= chunkLimit; a single row larger than
-            // the limit gets a piece of its own) so no /api/transaction/load
-            // body exceeds sink.buffer-flush.max-bytes. Pieces take fresh,
-            // increasing chunk ids in queue order and the new activeChunk is
-            // allocated AFTER them, so the commit watermark (lastSwitchedChunkId
-            // at cut time) always covers the whole frozen transaction and a
-            // later chunk can never sit ahead of an earlier one in the queue.
+            // load-sized pieces: at most pieceLimit bytes (see
+            // splitPieceLimitBytes) and maxBufferRows rows per piece, mirroring
+            // the two bounds of the non-multi-table write path. The only piece
+            // that can exceed pieceLimit is one holding a single row that is
+            // itself larger than the limit - such a row cannot be split and gets
+            // a piece of its own, exactly as the non-multi-table path would emit
+            // it.
+            // Pieces take fresh, increasing chunk ids in queue order and the new
+            // activeChunk is allocated AFTER them, so the commit watermark
+            // (lastSwitchedChunkId at cut time) always covers the whole frozen
+            // transaction and a later chunk can never sit ahead of an earlier
+            // one in the queue.
             int pieces = 0;
             Chunk piece = new Chunk(properties.getDataFormat(), chunkIdGenerator.getAndIncrement());
             for (byte[] row : frozen.rows()) {
-                if (piece.numRows() > 0 && piece.estimateChunkSize(row) > chunkLimit) {
+                if (piece.numRows() > 0
+                        && (piece.estimateChunkSize(row) > pieceLimit || piece.numRows() >= maxRows)) {
                     lastSwitchedChunkId = piece.getChunkId();
                     inactiveChunks.add(piece);
                     pieces++;
@@ -426,12 +432,36 @@ public class TransactionTableRegion implements TableRegion {
             pieces++;
             LOG.info("[MultiTxn] Split oversized frozen chunk for db: {}, table: {}: {} rows / {} bytes into {} "
                             + "pieces of at most {} bytes", database, table, frozen.numRows(), frozen.chunkBytes(),
-                    pieces, chunkLimit);
+                    pieces, pieceLimit);
         } else {
             lastSwitchedChunkId = frozen.getChunkId();
             inactiveChunks.add(frozen);
         }
         activeChunk = new Chunk(properties.getDataFormat(), chunkIdGenerator.getAndIncrement());
+    }
+
+    /**
+     * Byte bound for one re-cut piece of an oversized frozen chunk (multi-table
+     * mode): the smaller of the table's chunkLimit ({@code sink.chunk-limit}, the
+     * documented per-request chunk size, 3 GB by default in the connector) and
+     * the multi-table buffer size (half of {@code multiTableHeadroomBytes}, i.e.
+     * {@code sink.transaction.multi-table.buffer-size}). Bounding by the buffer
+     * size means a huge source transaction is loaded in buffer-sized requests
+     * even with the default chunkLimit, and that the split still engages for a
+     * pure-SDK caller that never set a chunkLimit. Returns 0 when neither bound
+     * is configured (no split).
+     */
+    private long splitPieceLimitBytes() {
+        long limit = 0L;
+        long chunkLimit = properties.getChunkLimit();
+        if (chunkLimit > 0) {
+            limit = chunkLimit;
+        }
+        long bufferSize = multiTableHeadroomBytes / 2;
+        if (bufferSize > 0 && (limit == 0L || bufferSize < limit)) {
+            limit = bufferSize;
+        }
+        return limit;
     }
 
     /**
@@ -678,8 +708,38 @@ public class TransactionTableRegion implements TableRegion {
      * {@code lockstepSwitchPartition()}.
      */
     public void markCleanBoundary() {
-        activeChunkCleanBoundary = true;
-        releaseInProgressBytes();
+        // Flip the flag and release the in-progress bytes under the write lock.
+        // The manager's lockstep switch may observe the flag the instant it turns
+        // true and run switchForCommitUnderLock() -> releaseInProgressBytes()
+        // concurrently; without the lock both threads would read the same
+        // inProgressTxnBytes and subtract it twice from the manager's aggregate
+        // counter, driving it negative and silently weakening the max-txn-bytes
+        // cap. Under the lock the manager's tryLockWrite() fails and it simply
+        // retries on its next scan.
+        lockWriteSpinning();
+        try {
+            activeChunkCleanBoundary = true;
+            releaseInProgressBytes();
+        } finally {
+            writeLock.set(false);
+        }
+    }
+
+    /**
+     * Acquires the region write lock, yielding briefly and then parking with an
+     * escalating backoff (the lock is only ever held for single-row writes or
+     * chunk switches). Pair with {@code writeLock.set(false)} in a finally block.
+     */
+    private void lockWriteSpinning() {
+        int spins = 0;
+        while (!writeLock.compareAndSet(false, true)) {
+            if (spins < MAX_SPIN_ATTEMPTS) {
+                Thread.yield();
+            } else {
+                LockSupport.parkNanos(SPIN_BACKOFF_NANOS * (spins - MAX_SPIN_ATTEMPTS + 1));
+            }
+            spins++;
+        }
     }
 
     /**
@@ -758,32 +818,29 @@ public class TransactionTableRegion implements TableRegion {
             // oversized transaction - with a clear error instead of heap
             // exhaustion.
             //
-            // (1) Per-region check: this region's activeChunk alone.
-            if (activeChunk.estimateChunkSize(row) > multiTableMaxTxnBytes) {
+            // The cap applies to IN-PROGRESS bytes only: the rows written since
+            // the last clean boundary, summed across all tables of this manager
+            // (a single source transaction may span many regions). Completed
+            // rows that merely sit in the same activeChunk because the
+            // mini-switch batching has not frozen them yet are NOT counted -
+            // otherwise a small transaction following a burst of batched ones
+            // could be rejected although it is nowhere near the cap. When no
+            // manager-level aggregate is available (never the case in
+            // production), fall back to this region's own in-progress bytes.
+            long inProgress = aggregateTracker != null
+                    ? aggregateTracker.getAggregateInProgressTxnBytes()
+                    : inProgressTxnBytes;
+            long projected = inProgress + row.length;
+            if (projected > multiTableMaxTxnBytes) {
                 throw new IllegalStateException(
-                        "In-progress source transaction for db=" + database + ", table=" + table
-                                + " would exceed sink.transaction.multi-table.max-txn-bytes ("
-                                + multiTableMaxTxnBytes + " bytes): the active chunk already holds "
-                                + activeChunk.chunkBytes() + " bytes and multi-table mode cannot switch "
-                                + "it mid-transaction. Split the source transaction upstream or raise "
-                                + "max-txn-bytes.");
-            }
-            // (2) Aggregate check across regions: a single source transaction
-            //     spanning many tables can stay under the per-region cap in every
-            //     region while its total does not.
-            if (aggregateTracker != null) {
-                long projected = aggregateTracker.getAggregateInProgressTxnBytes() + row.length;
-                if (projected > multiTableMaxTxnBytes) {
-                    throw new IllegalStateException(
-                            "Aggregate in-progress source-transaction bytes across all tables ("
-                                    + projected + " bytes) would exceed "
-                                    + "sink.transaction.multi-table.max-txn-bytes (" + multiTableMaxTxnBytes
-                                    + " bytes). Multi-table mode cannot switch active chunks "
-                                    + "mid-transaction, so the combined payload of a single source "
-                                    + "transaction across all tables must fit within the cap. Split the "
-                                    + "source transaction upstream or raise max-txn-bytes. Offending "
-                                    + "region: db=" + database + ", table=" + table + ".");
-                }
+                        "Aggregate in-progress source-transaction bytes across all tables ("
+                                + projected + " bytes) would exceed "
+                                + "sink.transaction.multi-table.max-txn-bytes (" + multiTableMaxTxnBytes
+                                + " bytes). Multi-table mode cannot switch active chunks "
+                                + "mid-transaction, so the combined payload of a single source "
+                                + "transaction across all tables must fit within the cap. Split the "
+                                + "source transaction upstream or raise max-txn-bytes. Offending "
+                                + "region: db=" + database + ", table=" + table + ".");
             }
         }
         // Multi-table mode: never switch mid-transaction here (see above).

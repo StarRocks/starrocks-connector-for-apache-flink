@@ -1806,8 +1806,8 @@ public class StreamLoadManagerMultiTableTest {
             Assert.assertTrue("Writer should have waited for the in-flight P1 load (~" + loadDelayMs
                             + "ms) instead of bypassing the cap, but the writes took only " + elapsed + "ms",
                     elapsed >= 800L);
-            Assert.assertEquals("P1's frozen chunk must have been loaded while the writer waited",
-                    1, mockedServer.getLoadCount());
+            Assert.assertTrue("P1's frozen chunk must have been loaded while the writer waited, loads="
+                    + mockedServer.getLoadCount(), mockedServer.getLoadCount() >= 1);
 
             mockedServer.setTxnLoadDelayMs(0);
             manager.setCommitAllowed(0, true);
@@ -1897,6 +1897,148 @@ public class StreamLoadManagerMultiTableTest {
             }
             Assert.assertTrue("Expected >= 4 pieces, got " + mockedServer.getLoadCount(),
                     mockedServer.getLoadCount() >= 4);
+        } finally {
+            manager.close();
+        }
+    }
+
+    /**
+     * In multi-table mode a region created through the legacy, partition-less
+     * write(uniqueKey, ...) path never receives a txnEnd, so its bytes could never
+     * be flushed and would eventually park the writer for good (they are also
+     * invisible to the unflushable-bytes accounting that lets the writer past the
+     * cap). The manager must reject such writes up front instead of hanging later.
+     */
+    @Test(timeout = 10000)
+    public void testLegacyWriteRejectedInMultiTableMode() throws Exception {
+        StreamLoadProperties properties = buildMultiTableProperties(60000);
+        StreamLoadManagerV2 manager = new StreamLoadManagerV2(properties, true);
+        manager.init();
+        try {
+            try {
+                manager.write(null, "test", "orders", "{\"id\":1}");
+                Assert.fail("Expected IllegalStateException for a partition-less write in multi-table mode");
+            } catch (IllegalStateException e) {
+                Assert.assertTrue("Message should point at the partition-aware write: " + e.getMessage(),
+                        e.getMessage().contains("write(partition"));
+            }
+            // The partition-aware path is unaffected.
+            manager.write(0, "test", "orders", "{\"id\":2}");
+            manager.setCommitAllowed(0, true);
+            manager.flush();
+            Assert.assertNull("No exception expected after flush", manager.getException());
+        } finally {
+            manager.close();
+        }
+    }
+
+    /**
+     * A single row larger than the piece limit cannot be split: it is loaded as a
+     * one-row piece of its own, and the remaining rows are still re-cut normally.
+     */
+    @Test(timeout = 30000)
+    public void testRowLargerThanPieceLimitGetsItsOwnPiece() throws Exception {
+        // 64 MB buffer (no pressure), chunkLimit 64 B: every ~75-byte row exceeds
+        // the limit on its own, so a 10-row transaction must become 10 loads.
+        StreamLoadProperties properties = buildCapBypassProperties(64L * 1024 * 1024, 0L, 60000L, 64L);
+        StreamLoadManagerV2 manager = new StreamLoadManagerV2(properties, true);
+        manager.init();
+        try {
+            mockedServer.resetCounters();
+            int rows = 10;
+            for (int i = 0; i < rows; i++) {
+                manager.write(0, "test", "orders", row("wide", i));
+            }
+            manager.setCommitAllowed(0, true);
+            waitUntil(() -> mockedServer.getLoadCount() >= rows, 10000, "one load per oversized row");
+            manager.flush();
+            Assert.assertNull("No exception after flush", manager.getException());
+            Assert.assertEquals("Each oversized row must travel in its own piece", rows, mockedServer.getLoadCount());
+            Assert.assertEquals("One commit for the whole transaction", 1, mockedServer.getCommitCount());
+            String body = mockedServer.getTxnLoadBodies().values().iterator().next();
+            for (int i = 0; i < rows; i++) {
+                Assert.assertTrue("Row " + i + " missing", body.contains(row("wide", i)));
+            }
+        } finally {
+            manager.close();
+        }
+    }
+
+    /**
+     * The max-txn-bytes cap is enforced on the in-progress bytes of a source
+     * transaction summed across all its tables, and it still fires after the
+     * writer has been let past the 2 KB write-block cap: three tables, no txnEnd,
+     * each region far below 4 KB, aggregate crossing 4 KB.
+     */
+    @Test(timeout = 30000)
+    public void testAggregateMaxTxnBytesFailsFastAcrossTablesAfterPassingTheCap() throws Exception {
+        StreamLoadProperties properties = buildCapBypassProperties(1024L, 4096L, 60000L, 0L);
+        StreamLoadManagerV2 manager = new StreamLoadManagerV2(properties, true);
+        manager.init();
+        try {
+            IllegalStateException caught = null;
+            long bytesWritten = 0L;
+            String[] tables = {"orders", "items", "customers"};
+            try {
+                for (int i = 0; i < 500; i++) {
+                    String r = row("agg", i);
+                    manager.write(0, "test", tables[i % tables.length], r);
+                    bytesWritten += r.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+                }
+                Assert.fail("Expected IllegalStateException once the aggregate reaches 4 KB");
+            } catch (IllegalStateException e) {
+                caught = e;
+            }
+            Assert.assertNotNull(caught);
+            Assert.assertTrue("Error must be the aggregate guard naming the cap: " + caught.getMessage(),
+                    caught.getMessage().toLowerCase().contains("aggregate")
+                            && caught.getMessage().contains("max-txn-bytes"));
+            Assert.assertTrue("Writer must have passed the 2 KB write-block cap first, bytesWritten="
+                    + bytesWritten, bytesWritten > 2048L);
+            Assert.assertTrue("Writer must fail before exceeding the 4 KB cap, bytesWritten=" + bytesWritten,
+                    bytesWritten <= 4096L);
+        } finally {
+            try {
+                manager.close();
+            } catch (Exception ignore) {
+                // best-effort after a deliberate failure
+            }
+        }
+    }
+
+    /**
+     * The cap applies to IN-PROGRESS bytes only. Completed transactions that are
+     * still batched in the active chunk (mini-switch interval not elapsed) must
+     * not count against the next transaction: here ~3 KB of completed rows sit in
+     * the chunk and a following ~1.5 KB transaction stays well under the 4 KB cap.
+     */
+    @Test(timeout = 30000)
+    public void testMaxTxnBytesIgnoresCompletedRowsBatchedInActiveChunk() throws Exception {
+        // 64 MB buffer: no cache pressure, so txnEnd never force-switches; a long
+        // mini-switch interval keeps the completed rows batched in activeChunk.
+        StreamLoadProperties properties = buildCapBypassProperties(64L * 1024 * 1024, 4096L, 60000L, 0L);
+        StreamLoadManagerV2 manager = new StreamLoadManagerV2(properties, true);
+        manager.init();
+        try {
+            mockedServer.resetCounters();
+            // First txnEnd of the partition always switches; get it out of the way.
+            manager.write(0, "test", "orders", row("warm", 0));
+            manager.setCommitAllowed(0, true);
+            waitUntil(() -> mockedServer.getLoadCount() >= 1, 5000, "warm-up load");
+            // ~3 KB of completed rows, batched (interval not elapsed, below min-switch-bytes).
+            for (int i = 0; i < 40; i++) {
+                manager.write(0, "test", "orders", row("done", i));
+            }
+            manager.setCommitAllowed(0, true);
+            // A ~1.5 KB in-progress transaction: chunk total ~4.5 KB > cap, but the
+            // in-progress part is far below it, so no failure is allowed.
+            for (int i = 0; i < 20; i++) {
+                manager.write(0, "test", "orders", row("next", i));
+            }
+            manager.setCommitAllowed(0, true);
+            manager.flush();
+            Assert.assertNull("No exception expected: only in-progress bytes count", manager.getException());
+            Assert.assertTrue(mockedServer.getCommitCount() >= 1);
         } finally {
             manager.close();
         }

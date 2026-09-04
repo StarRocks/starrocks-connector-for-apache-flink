@@ -344,6 +344,11 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         if (multiTableTransactionEnabled) {
             this.partitionTracker = new PartitionCommitTracker();
             this.lastCommitTimeMs = System.currentTimeMillis();
+            // Defensive reset for instance reuse (init() after close()), mirroring
+            // the aggregate-counter reset in close(): a stale capBypass would let
+            // the first over-cap write skip the flushability scan.
+            this.capBypass = false;
+            this.capBypassEpisode = false;
         }
         if (state.compareAndSet(State.INACTIVE, State.ACTIVE)) {
             this.manager = new Thread(() -> {
@@ -724,8 +729,15 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         }
         // A txnEnd is the only event that can turn buffered bytes back into
         // flushable bytes (the partition may switch below), so re-arm the full
-        // flushability check in blockIfCacheFull.
+        // flushability check in blockIfCacheFull and close the current cap-bypass
+        // episode here: after this txnEnd the held-back data is flushable, and
+        // waiting for a later sub-cap write to log the end would never fire if
+        // this large transaction is the source's last activity, and would fold a
+        // genuinely new episode into this one (suppressing its WARN).
         capBypass = false;
+        if (capBypassEpisode) {
+            endCapBypassEpisode("txnEnd received, buffered data is flushable again", currentCacheBytes.get());
+        }
 
         // Mark every region of the partition clean, then make ONE partition-level
         // switch decision and apply it to ALL regions atomically (lockstep).
@@ -1735,6 +1747,18 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
 
     @Override
     public void write(String uniqueKey, String database, String table, String... rows) {
+        if (multiTableTransactionEnabled) {
+            // A region created through this partition-less path never receives a
+            // txnEnd, so in multi-table mode it could never be switched or
+            // flushed: its bytes would sit in the cache for good, invisible to
+            // the unflushable-bytes accounting of blockIfCacheFull, and
+            // eventually park the writer with nothing the manager can drain.
+            // Reject the write up front instead of hanging later.
+            throw new IllegalStateException("Multi-table transaction mode requires the partition-aware "
+                    + "write(partition, database, table, rows); write(uniqueKey, ...) carries no source "
+                    + "partition, so its data could never be flushed or committed. db=" + database
+                    + ", table=" + table);
+        }
         TableRegion region = getCacheRegion(uniqueKey, database, table);
         for (String row : rows) {
             checkAndThrowException();
@@ -1817,7 +1841,10 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
             if (multiTableTransactionEnabled && capBypass) {
                 // Fast path: nothing flushable was found earlier in this
                 // in-progress stretch and no txnEnd has arrived since, so the
-                // answer cannot have changed (see capBypass). Skip the scan.
+                // answer cannot have changed (see capBypass). Skip the scan, but
+                // keep surfacing a manager/loader failure promptly - the writer
+                // must not keep buffering past the cap on a failed manager.
+                checkAndThrowException();
                 logCapBypassProgress(cachedBytes);
                 return;
             }
@@ -1845,7 +1872,8 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
             return;
         }
         if (capBypassEpisode) {
-            endCapBypassEpisode(cachedBytes);
+            // Fallback only: the episode normally ends at txnEnd (setCommitAllowed).
+            endCapBypassEpisode("cache back below the cap", cachedBytes);
         }
         if (cachedBytes >= maxCacheBytes && writeTriggerFlush.compareAndSet(false, true)) {
             lock.lock();
@@ -1931,7 +1959,7 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
                     maxWriteBlockCacheBytes, total, inProgress, Math.max(0L, unflushable - inProgress),
                     collectDirtyPartitions(), maxTxnBytes <= 0 ? "unlimited" : String.valueOf(maxTxnBytes));
         }
-        loadMetrics.updateMaxCacheBytes(total);
+        loadMetrics.updateMaxObservedCacheBytes(total);
         capBypassNextLogBytes = total + CAP_BYPASS_LOG_BYTES_STEP;
         capBypassNextLogMs = now + CAP_BYPASS_LOG_INTERVAL_MS;
         return true;
@@ -1939,7 +1967,7 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
 
     /** Throttled progress log while the writer keeps buffering past the cap. */
     private void logCapBypassProgress(long cachedBytes) {
-        loadMetrics.updateMaxCacheBytes(cachedBytes);
+        loadMetrics.updateMaxObservedCacheBytes(cachedBytes);
         if (cachedBytes < capBypassNextLogBytes && System.currentTimeMillis() < capBypassNextLogMs) {
             return;
         }
@@ -1952,11 +1980,13 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
         capBypassNextLogMs = now + CAP_BYPASS_LOG_INTERVAL_MS;
     }
 
-    private void endCapBypassEpisode(long cachedBytes) {
+    private void endCapBypassEpisode(String reason, long cachedBytes) {
         capBypassEpisode = false;
         capBypass = false;
-        LOG.info("[MultiTxn] Write-block cap bypass ended after {}ms: currentBytes={} is back below cap={}",
-                System.currentTimeMillis() - capBypassStartMs, cachedBytes, maxWriteBlockCacheBytes);
+        LOG.info("[MultiTxn] Write-block cap bypass ended after {}ms ({}): currentBytes={}, cap={}, "
+                        + "peak buffered bytes so far={}",
+                System.currentTimeMillis() - capBypassStartMs, reason, cachedBytes, maxWriteBlockCacheBytes,
+                loadMetrics.getMaxObservedCacheBytes());
     }
 
     @Override

@@ -129,4 +129,11 @@ public class StarRocksSinkOptionsTest {
         StarRocksSinkOptions sinkOptions = createSinkOptions(conf);
         assertEquals(-1L, sinkOptions.getMultiTableMaxTxnBytes());
     }
+
+    @Test
+    public void testMultiTableMaxTxnBytesRegisteredWithTableFactory() {
+        // Without this registration the SQL/Table API would reject the option as unknown.
+        org.junit.Assert.assertTrue(new StarRocksDynamicTableSinkFactory().optionalOptions()
+                .contains(StarRocksSinkOptions.SINK_MULTI_TABLE_TXN_MAX_TXN_BYTES));
+    }
 }
