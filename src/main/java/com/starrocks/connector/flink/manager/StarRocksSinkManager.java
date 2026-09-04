@@ -445,6 +445,35 @@ public class StarRocksSinkManager implements Serializable {
         if (sinkOptions.hasColumnMappingProperty()) {
             return;
         }
+        List<TableColumn> flinkColumns = flinkSchema.getTableColumns();
+        if (sinkOptions.isColumnsFromFlinkSchema()) {
+            // The Flink schema is deliberately allowed to be a subset here: a StarRocks column the
+            // Flink table does not declare is left off the columns header so the server applies that
+            // column's DEFAULT. Checking that every StarRocks column has a Flink counterpart would
+            // reject exactly the case the option exists for, so validate the other direction, that
+            // every Flink column exists in StarRocks and the types agree. This mirrors the V2 path.
+            Map<String, Map<String, Object>> starRocksColumnsByName = new HashMap<>();
+            for (Map<String, Object> row : rows) {
+                starRocksColumnsByName.put(row.get("COLUMN_NAME").toString().toLowerCase(), row);
+            }
+            for (TableColumn column : flinkColumns) {
+                Map<String, Object> starRocksColumn = starRocksColumnsByName.get(column.getName().toLowerCase());
+                if (starRocksColumn == null) {
+                    throw new IllegalArgumentException("StarRocks does not have column " + column.getName());
+                }
+                String starRocksType = starRocksColumn.get("DATA_TYPE").toString().toLowerCase();
+                // A StarRocks type with no entry in typesMap, such as json, has no native Flink
+                // mapping but is generally representable as STRING, so treat it as matched.
+                boolean typeMatched = !typesMap.containsKey(starRocksType)
+                        || typesMap.get(starRocksType).contains(column.getType().getLogicalType().getTypeRoot());
+                if (!typeMatched) {
+                    throw new IllegalArgumentException(String.format(
+                            "Flink and StarRocks types are not matched for column %s, flink type is %s, "
+                                    + "starrocks type is %s", column.getName(), column.getType(), starRocksType));
+                }
+            }
+            return;
+        }
         if (flinkSchema.getFieldCount() != rows.size()) {
             throw new IllegalArgumentException("Fields count of "+this.sinkOptions.getTableName()+" mismatch. \nflinkSchema["
                     +flinkSchema.getFieldNames().length+"]:"
@@ -452,11 +481,10 @@ public class StarRocksSinkManager implements Serializable {
                     +"\n realTab["+rows.size()+"]:"
                     +rows.stream().map((r)-> String.valueOf(r.get("COLUMN_NAME"))).collect(Collectors.joining(",")));
         }
-        List<TableColumn> flinkCols = flinkSchema.getTableColumns();
         for (int i = 0; i < rows.size(); i++) {
             String starrocksField = rows.get(i).get("COLUMN_NAME").toString().toLowerCase();
             String starrocksType = rows.get(i).get("DATA_TYPE").toString().toLowerCase();
-            List<TableColumn> matchedFlinkCols = flinkCols.stream()
+            List<TableColumn> matchedFlinkCols = flinkColumns.stream()
                 .filter(col -> col.getName().toLowerCase().equals(starrocksField) && (!typesMap.containsKey(starrocksType) || typesMap.get(starrocksType).contains(col.getType().getLogicalType().getTypeRoot())))
                 .collect(Collectors.toList());
             if (matchedFlinkCols.isEmpty()) {
