@@ -97,6 +97,7 @@ public class StarRocksDynamicTableSinkFactory implements DynamicTableSinkFactory
         optionalOptions.add(StarRocksSinkOptions.SINK_MULTI_TABLE_TXN_BUFFER_SIZE);
         optionalOptions.add(StarRocksSinkOptions.SINK_MULTI_TABLE_TXN_MINI_SWITCH_INTERVAL_MS);
         optionalOptions.add(StarRocksSinkOptions.SINK_MULTI_TABLE_TXN_MIN_SWITCH_BYTES);
+        optionalOptions.add(StarRocksSinkOptions.SINK_MULTI_TABLE_TXN_MAX_TXN_BYTES);
         optionalOptions.addAll(MergeCommitOptions.getAllConfigOptions());
         return optionalOptions;
     }
