@@ -70,6 +70,47 @@ public interface StreamLoadManager {
         write(null, database, table, rows);
     }
 
+    /**
+     * Write raw bytes directly to stream load without string conversion overhead.
+     *
+     * <p><b>Ownership transfer contract:</b> The caller transfers ownership of the provided
+     * {@code byte[]} arrays to {@link StreamLoadManager}. To maintain zero-copy high throughput,
+     * the arrays are buffered directly in memory chunks without defensive copying until they are
+     * asynchronously transmitted over HTTP. The caller <b>must not</b> reuse, pool, or mutate
+     * these arrays after passing them to this method.
+     *
+     * <p><b>Multi-table transaction mode:</b> This partition-less method is disallowed when
+     * multi-table transaction mode is enabled. Use {@link #writeBytes(int, String, String, byte[]...)} instead.
+     *
+     * @param uniqueKey unique key for transactional table region, can be null
+     * @param database  target database
+     * @param table     target table
+     * @param rows      binary row records
+     * @throws IllegalStateException if called when multi-table transaction mode is enabled
+     */
+    default void writeBytes(String uniqueKey, String database, String table, byte[]... rows) {
+        throw new UnsupportedOperationException("writeBytes is not supported");
+    }
+
+    /**
+     * Partition-aware writeBytes for multi-table transaction mode.
+     * Routes binary data to a per-partition region.
+     *
+     * <p><b>Ownership transfer contract:</b> The caller transfers ownership of the provided
+     * {@code byte[]} arrays to {@link StreamLoadManager}. To maintain zero-copy high throughput,
+     * the arrays are buffered directly in memory chunks without defensive copying until they are
+     * asynchronously transmitted over HTTP. The caller <b>must not</b> reuse, pool, or mutate
+     * these arrays after passing them to this method.
+     *
+     * @param partition partition index
+     * @param database  target database
+     * @param table     target table
+     * @param rows      binary row records
+     */
+    default void writeBytes(int partition, String database, String table, byte[]... rows) {
+        writeBytes(null, database, table, rows);
+    }
+
     default Throwable getException() {
         return null;
     }
