@@ -20,8 +20,9 @@
 
 package com.starrocks.data.load.stream;
 
+import java.util.ArrayList;
 import java.util.Iterator;
-import java.util.LinkedList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -33,15 +34,19 @@ import java.util.concurrent.atomic.AtomicLong;
 public class Chunk {
 
     private final StreamLoadDataFormat format;
-    private volatile LinkedList<byte[]> buffer;
+    private volatile List<byte[]> buffer;
     private final AtomicInteger numRows;
     private final AtomicLong rowBytes;
     private final AtomicLong chunkBytes;
     private final long chunkId;
 
     public Chunk(StreamLoadDataFormat format, long chunkId) {
+        this(format, chunkId, 0);
+    }
+
+    public Chunk(StreamLoadDataFormat format, long chunkId, int initialCapacity) {
         this.format = format;
-        this.buffer = new LinkedList<>();
+        this.buffer = initialCapacity > 0 ? new ArrayList<>(initialCapacity) : new ArrayList<>();
         this.numRows = new AtomicInteger(0);
         this.rowBytes = new AtomicLong(0);
         this.chunkBytes = new AtomicLong(0);

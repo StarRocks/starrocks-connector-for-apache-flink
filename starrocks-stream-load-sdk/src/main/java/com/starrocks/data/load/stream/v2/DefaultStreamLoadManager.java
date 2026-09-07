@@ -1696,14 +1696,46 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
 
     @Override
     public void write(String uniqueKey, String database, String table, String... rows) {
-        TableRegion region = getCacheRegion(uniqueKey, database, table);
+        if (rows == null) {
+            return;
+        }
+        TableRegion region = null;
         for (String row : rows) {
+            if (row == null) {
+                continue;
+            }
             checkAndThrowException();
+            if (region == null) {
+                region = getCacheRegion(uniqueKey, database, table);
+            }
             if (LOG.isTraceEnabled()) {
                 LOG.trace("Write uniqueKey {}, database {}, table {}, row {}",
                         uniqueKey == null ? "null" : uniqueKey, database, table, row);
             }
             int bytes = region.write(row.getBytes(StandardCharsets.UTF_8));
+            blockIfCacheFull(currentCacheBytes.addAndGet(bytes));
+        }
+    }
+
+    @Override
+    public void writeBytes(String uniqueKey, String database, String table, byte[]... rows) {
+        if (rows == null) {
+            return;
+        }
+        TableRegion region = null;
+        for (byte[] row : rows) {
+            if (row == null) {
+                continue;
+            }
+            checkAndThrowException();
+            if (region == null) {
+                region = getCacheRegion(uniqueKey, database, table);
+            }
+            if (LOG.isTraceEnabled()) {
+                LOG.trace("Write uniqueKey {}, database {}, table {}, row length {}",
+                        uniqueKey == null ? "null" : uniqueKey, database, table, row.length);
+            }
+            int bytes = region.write(row);
             blockIfCacheFull(currentCacheBytes.addAndGet(bytes));
         }
     }
@@ -2008,12 +2040,54 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
             write(null, database, table, rows);
             return;
         }
+        if (rows == null) {
+            return;
+        }
         String uniqueKey = "P" + partition + "-" + StreamLoadUtils.getTableUniqueKey(database, table);
-        partitionTracker.onWrite(partition);
-        TableRegion region = getCacheRegion(uniqueKey, database, table, partition);
+        boolean partitionTracked = false;
+        TableRegion region = null;
         for (String row : rows) {
+            if (row == null) {
+                continue;
+            }
             checkAndThrowException();
+            if (!partitionTracked) {
+                partitionTracker.onWrite(partition);
+                partitionTracked = true;
+            }
+            if (region == null) {
+                region = getCacheRegion(uniqueKey, database, table, partition);
+            }
             int bytes = region.write(row.getBytes(StandardCharsets.UTF_8));
+            blockIfCacheFull(currentCacheBytes.addAndGet(bytes));
+        }
+    }
+
+    @Override
+    public void writeBytes(int partition, String database, String table, byte[]... rows) {
+        if (!multiTableTransactionEnabled) {
+            writeBytes(null, database, table, rows);
+            return;
+        }
+        if (rows == null) {
+            return;
+        }
+        String uniqueKey = "P" + partition + "-" + StreamLoadUtils.getTableUniqueKey(database, table);
+        boolean partitionTracked = false;
+        TableRegion region = null;
+        for (byte[] row : rows) {
+            if (row == null) {
+                continue;
+            }
+            checkAndThrowException();
+            if (!partitionTracked) {
+                partitionTracker.onWrite(partition);
+                partitionTracked = true;
+            }
+            if (region == null) {
+                region = getCacheRegion(uniqueKey, database, table, partition);
+            }
+            int bytes = region.write(row);
             blockIfCacheFull(currentCacheBytes.addAndGet(bytes));
         }
     }
