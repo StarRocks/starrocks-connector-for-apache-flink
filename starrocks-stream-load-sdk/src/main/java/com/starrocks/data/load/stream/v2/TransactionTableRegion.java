@@ -398,6 +398,16 @@ public class TransactionTableRegion implements TableRegion {
             return;
         }
         Chunk frozen = activeChunk;
+        if (!properties.getDataFormat().supportsBatching() && frozen.numRows() > 1) {
+            for (byte[] row : frozen.getRows()) {
+                Chunk singleRowChunk = new Chunk(properties.getDataFormat(), chunkIdGenerator.getAndIncrement());
+                singleRowChunk.addRow(row);
+                lastSwitchedChunkId = singleRowChunk.getChunkId();
+                inactiveChunks.add(singleRowChunk);
+            }
+            activeChunk = new Chunk(properties.getDataFormat(), chunkIdGenerator.getAndIncrement());
+            return;
+        }
         long pieceLimit = multiTableTransactionEnabled ? splitPieceLimitBytes() : 0L;
         int maxRows = properties.getMaxBufferRows();
         if (pieceLimit > 0 && (frozen.chunkBytes() > pieceLimit || frozen.numRows() > maxRows)) {
@@ -798,9 +808,10 @@ public class TransactionTableRegion implements TableRegion {
         if (!multiTableTransactionEnabled) {
             // Non-multi-table: original behavior — switch when a single row would
             // exceed chunk size or row limits, so individual HTTP requests stay
-            // bounded.
+            // bounded. Also switch if data format does not support batching (single row per chunk).
             if (activeChunk.estimateChunkSize(row) > properties.getChunkLimit()
-                    || activeChunk.numRows() >= properties.getMaxBufferRows()) {
+                    || activeChunk.numRows() >= properties.getMaxBufferRows()
+                    || (!properties.getDataFormat().supportsBatching() && activeChunk.numRows() > 0)) {
                 switchChunk();
             }
         } else if (multiTableMaxTxnBytes > 0) {

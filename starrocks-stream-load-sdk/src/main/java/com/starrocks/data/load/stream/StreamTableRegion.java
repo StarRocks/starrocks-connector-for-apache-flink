@@ -198,7 +198,8 @@ public class StreamTableRegion implements TableRegion, Serializable {
                 }
                 final int delimiterL = dataFormat.delimiter() == null ? 0 : dataFormat.delimiter().length;
 
-                if (totalFlushBytes.get() + row.length + delimiterL > chunkLimit) {
+                if (totalFlushBytes.get() + row.length + delimiterL > chunkLimit
+                        || (!dataFormat.supportsBatching() && flushRows.get() > 0)) {
                     next = row;
                     flushing = false;
                     log.info("Read part EOF");
