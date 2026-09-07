@@ -137,7 +137,11 @@ public class Table {
             chunk.addRow(row);
             cacheBytes.addAndGet(row.length);
             cacheRows.incrementAndGet();
-            switchChunk(FlushChunkReason.CHUNK_FULL);
+            if (!properties.getDataFormat().supportsBatching()) {
+                switchChunk(FlushChunkReason.FLUSH);
+            } else {
+                switchChunk(FlushChunkReason.CHUNK_FULL);
+            }
             return row.length;
         } finally {
             lock.unlock();
