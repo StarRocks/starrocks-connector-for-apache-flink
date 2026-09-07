@@ -65,6 +65,7 @@ public class StarRocksDynamicTableSinkFactory implements DynamicTableSinkFactory
     public Set<ConfigOption<?>> optionalOptions() {
         Set<ConfigOption<?>> optionalOptions = new HashSet<>();
         optionalOptions.add(StarRocksSinkOptions.SINK_VERSION);
+        optionalOptions.add(StarRocksSinkOptions.SINK_JSON_COLUMNS_FROM_FLINK_SCHEMA);
         optionalOptions.add(StarRocksSinkOptions.SINK_BATCH_MAX_SIZE);
         optionalOptions.add(StarRocksSinkOptions.SINK_BATCH_MAX_ROWS);
         optionalOptions.add(StarRocksSinkOptions.SINK_BATCH_FLUSH_INTERVAL);

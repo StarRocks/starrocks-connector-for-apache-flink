@@ -124,6 +124,10 @@ public class StarRocksSinkTable {
             return;
         }
 
+        if (sinkOptions.isColumnsFromFlinkSchema()) {
+            StarRocksSinkOptions.checkMergingKeysDeclared(rows, flinkSchema.getFieldNames(), table);
+        }
+
         // 2. verify the columns of flink are contained in the starrocks schema
         // and the type is compatible
         Map<String, Map<String, Object>> starrocksColumnMapping = new HashMap<>();
