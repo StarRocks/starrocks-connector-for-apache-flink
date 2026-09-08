@@ -47,12 +47,18 @@ public class StarRocksGenericRowTransformer<T> implements StarRocksIRowTransform
     public void setRuntimeContext(RuntimeContext ctx) {}
 
     @Override
-    public Object[] transform(T record, boolean supportUpsertDelete) {
+    public Object[] transform(T record, boolean supportUpsertDelete, boolean ignoreDelete) {
         Object[] rowData = new Object[fieldNames.length + (supportUpsertDelete ? 1 : 0)];
         consumer.accept(rowData, record);
         if (supportUpsertDelete && (record instanceof RowData)) {
             // set `__op` column
-            rowData[rowData.length - 1] = StarRocksSinkOP.parse(((RowData)record).getRowKind()).ordinal();
+            if (ignoreDelete && StarRocksSinkOP.parse(((RowData) record).getRowKind()) == StarRocksSinkOP.DELETE) {
+                // Convert DELETE to UPSERT when ignoreDelete is true
+                rowData[rowData.length - 1] = StarRocksSinkOP.UPSERT.ordinal();
+            } else {
+                // Use the original operation type
+                rowData[rowData.length - 1] = StarRocksSinkOP.parse(((RowData) record).getRowKind()).ordinal();
+            }
         }
         return rowData;
     }

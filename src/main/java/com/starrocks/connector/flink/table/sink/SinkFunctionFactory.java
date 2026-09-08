@@ -143,6 +143,7 @@ public class SinkFunctionFactory {
                     sinkOptions.getTableName(),
                     sinkOptions.supportUpsertDelete(),
                     sinkOptions.getIgnoreUpdateBefore(),
+                    sinkOptions.getIgnoreDelete(),
                     serializer,
                     rowTransformer);
             StreamLoadProperties streamLoadProperties = sinkOptions.getProperties(sinkTable);
