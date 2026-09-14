@@ -78,4 +78,62 @@ public class StarRocksSinkOptionsTest {
 
         assertEquals(300000, sinkOptions.getPublishTimeoutMs());
     }
+
+    // -------------------------------------------------------------------------
+    // sink.transaction.multi-table.max-txn-bytes
+    // -------------------------------------------------------------------------
+
+    private Configuration createMultiTableConfiguration() {
+        Configuration conf = createBaseConfiguration();
+        conf.setBoolean(StarRocksSinkOptions.SINK_MULTI_TABLE_TXN_ENABLED, true);
+        conf.setString(StarRocksSinkOptions.SINK_SEMANTIC, StarRocksSinkSemantic.AT_LEAST_ONCE.getName());
+        return conf;
+    }
+
+    @Test
+    public void testMultiTableMaxTxnBytesDefaultsToUnlimited() {
+        StarRocksSinkOptions sinkOptions = createSinkOptions(createMultiTableConfiguration());
+        // 0 = no hard cap: the writer buffers an in-progress source transaction
+        // until txnEnd and only the JVM heap bounds it.
+        assertEquals(0L, sinkOptions.getMultiTableMaxTxnBytes());
+    }
+
+    @Test
+    public void testMultiTableMaxTxnBytesCustomValue() {
+        Configuration conf = createMultiTableConfiguration();
+        conf.setLong(StarRocksSinkOptions.SINK_MULTI_TABLE_TXN_MAX_TXN_BYTES, 512L * 1024 * 1024);
+        StarRocksSinkOptions sinkOptions = createSinkOptions(conf);
+        assertEquals(512L * 1024 * 1024, sinkOptions.getMultiTableMaxTxnBytes());
+    }
+
+    @Test
+    public void testMultiTableMaxTxnBytesRejectsNegative() {
+        Configuration conf = createMultiTableConfiguration();
+        conf.setLong(StarRocksSinkOptions.SINK_MULTI_TABLE_TXN_MAX_TXN_BYTES, -1L);
+        try {
+            createSinkOptions(conf);
+            org.junit.Assert.fail("Expected a validation failure for a negative max-txn-bytes");
+        } catch (RuntimeException e) {
+            assertEquals("ValidationException", e.getClass().getSimpleName());
+            org.junit.Assert.assertTrue("Message should name the option: " + e.getMessage(),
+                    e.getMessage().contains(StarRocksSinkOptions.SINK_MULTI_TABLE_TXN_MAX_TXN_BYTES.key()));
+        }
+    }
+
+    @Test
+    public void testMultiTableMaxTxnBytesNotValidatedWhenMultiTableDisabled() {
+        // The option is meaningless outside multi-table mode; a stray negative
+        // value must not break an ordinary sink.
+        Configuration conf = createBaseConfiguration();
+        conf.setLong(StarRocksSinkOptions.SINK_MULTI_TABLE_TXN_MAX_TXN_BYTES, -1L);
+        StarRocksSinkOptions sinkOptions = createSinkOptions(conf);
+        assertEquals(-1L, sinkOptions.getMultiTableMaxTxnBytes());
+    }
+
+    @Test
+    public void testMultiTableMaxTxnBytesRegisteredWithTableFactory() {
+        // Without this registration the SQL/Table API would reject the option as unknown.
+        org.junit.Assert.assertTrue(new StarRocksDynamicTableSinkFactory().optionalOptions()
+                .contains(StarRocksSinkOptions.SINK_MULTI_TABLE_TXN_MAX_TXN_BYTES));
+    }
 }
