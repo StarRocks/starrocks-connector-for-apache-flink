@@ -107,4 +107,51 @@ public class ChunkTest {
         }
         assertFalse(actualIterator.hasNext());
     }
+
+    @Test
+    public void testLargeChunkExpansion() {
+        Chunk chunk = new Chunk(StreamLoadDataFormat.JSON, 100);
+        int numRows = 3000;
+        for (int i = 0; i < numRows; i++) {
+            chunk.addRow(("row-" + i).getBytes());
+        }
+        assertEquals(numRows, chunk.numRows());
+        int count = 0;
+        Iterator<byte[]> it = chunk.iterator();
+        while (it.hasNext()) {
+            it.next();
+            count++;
+        }
+        // Total items in iterator: FIRST + END + numRows + (numRows - 1) delimiters
+        assertEquals(2 + numRows + (numRows - 1), count);
+    }
+
+    @Test
+    public void testChunkInitialCapacity() {
+        assertEquals(2048, Chunk.DEFAULT_INITIAL_CAPACITY);
+
+        Chunk chunkDefault = new Chunk(StreamLoadDataFormat.JSON, 1);
+        assertEquals(0, chunkDefault.numRows());
+        assertEquals(Chunk.DEFAULT_INITIAL_CAPACITY, chunkDefault.getInitialCapacity());
+        chunkDefault.addRow("row1".getBytes());
+        assertEquals(1, chunkDefault.numRows());
+
+        Chunk chunkExplicit = new Chunk(StreamLoadDataFormat.JSON, 2, 64);
+        assertEquals(0, chunkExplicit.numRows());
+        assertEquals(64, chunkExplicit.getInitialCapacity());
+        chunkExplicit.addRow("row2".getBytes());
+        assertEquals(1, chunkExplicit.numRows());
+
+        Chunk chunkZero = new Chunk(StreamLoadDataFormat.JSON, 3, 0);
+        assertEquals(0, chunkZero.numRows());
+        assertEquals(0, chunkZero.getInitialCapacity());
+        chunkZero.addRow("row3".getBytes());
+        assertEquals(1, chunkZero.numRows());
+
+        Chunk chunkNegative = new Chunk(StreamLoadDataFormat.JSON, 4, -10);
+        assertEquals(0, chunkNegative.numRows());
+        assertEquals(0, chunkNegative.getInitialCapacity());
+        chunkNegative.addRow("row4".getBytes());
+        assertEquals(1, chunkNegative.numRows());
+    }
 }

@@ -67,7 +67,7 @@ public class MergeCommitManager implements StreamLoadManager, Serializable {
     private final AtomicReference<Throwable> exception;
     private transient Thread cacheMonitorThread;
     private transient AtomicBoolean closed;
-    private transient MetricListener metricListener;
+    private transient MetricListener metricListener = new EmptyMetricListener();
 
     public MergeCommitManager(StreamLoadProperties properties) {
         this.properties = properties;
@@ -78,11 +78,12 @@ public class MergeCommitManager implements StreamLoadManager, Serializable {
         this.maxCacheBytes = properties.getMaxCacheBytes();
         this.maxWriteBlockCacheBytes = 2 * maxCacheBytes;
         this.exception = new AtomicReference<>();
+        this.metricListener = new EmptyMetricListener();
     }
 
     @Override
     public void setMetricListener(MetricListener metricListener) {
-        this.metricListener = metricListener;
+        this.metricListener = metricListener == null ? new EmptyMetricListener() : metricListener;
     }
 
     @Override
@@ -98,9 +99,17 @@ public class MergeCommitManager implements StreamLoadManager, Serializable {
 
     @Override
     public void write(String uniqueKey, String database, String tableName, String... rows) {
+        if (rows == null) {
+            return;
+        }
         Table table = getTable(database, tableName);
         int totalBytes = 0;
+        int writtenRows = 0;
         for (String row : rows) {
+            if (row == null) {
+                continue;
+            }
+            writtenRows++;
             checkException();
             byte[] data = row.getBytes(StandardCharsets.UTF_8);
             if (properties.isBlackhole()) {
@@ -115,8 +124,42 @@ public class MergeCommitManager implements StreamLoadManager, Serializable {
             }
             checkCacheFull();
         }
-        metricListener.onWrite(rows.length, totalBytes);
-        metricListener.onCacheChange(maxWriteBlockCacheBytes, currentCacheBytes.get());
+        if (metricListener != null) {
+            metricListener.onWrite(writtenRows, totalBytes);
+            metricListener.onCacheChange(maxWriteBlockCacheBytes, currentCacheBytes.get());
+        }
+    }
+
+    @Override
+    public void writeBytes(String uniqueKey, String database, String tableName, byte[]... rows) {
+        if (rows == null) {
+            return;
+        }
+        Table table = getTable(database, tableName);
+        int totalBytes = 0;
+        int writtenRows = 0;
+        for (byte[] data : rows) {
+            if (data == null) {
+                continue;
+            }
+            writtenRows++;
+            checkException();
+            if (properties.isBlackhole()) {
+                totalBytes += data.length;
+            } else {
+                int bytes = table.write(data);
+                totalBytes += bytes;
+                currentCacheBytes.addAndGet(bytes);
+            }
+            if (LOG.isTraceEnabled()) {
+                LOG.trace("Write record, database {}, table {}, byte length {}", database, tableName, data.length);
+            }
+            checkCacheFull();
+        }
+        if (metricListener != null) {
+            metricListener.onWrite(writtenRows, totalBytes);
+            metricListener.onCacheChange(maxWriteBlockCacheBytes, currentCacheBytes.get());
+        }
     }
 
     private void checkCacheFull() {
