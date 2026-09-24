@@ -33,6 +33,17 @@ public interface StreamLoadDataFormat {
         return "";
     }
 
+    /**
+     * Whether this data format supports batching multiple records into a single chunk
+     * using record delimiters.
+     *
+     * @return true if multiple records can be concatenated into one chunk; false if each
+     *         record represents a self-contained payload that must be sent in its own chunk.
+     */
+    default boolean supportsBatching() {
+        return true;
+    }
+
     byte[] first();
     byte[] delimiter();
     byte[] end();

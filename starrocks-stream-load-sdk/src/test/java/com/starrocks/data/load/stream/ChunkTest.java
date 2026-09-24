@@ -107,4 +107,27 @@ public class ChunkTest {
         }
         assertFalse(actualIterator.hasNext());
     }
+
+    @Test
+    public void testChunkGetRows() {
+        Chunk chunk = new Chunk(StreamLoadDataFormat.JSON, 1);
+        byte[] row1 = "{\"a\":1}".getBytes();
+        byte[] row2 = "{\"b\":2}".getBytes();
+        chunk.addRow(row1);
+        chunk.addRow(row2);
+
+        List<byte[]> rows = chunk.getRows();
+        assertEquals(2, rows.size());
+        assertArrayEquals(row1, rows.get(0));
+        assertArrayEquals(row2, rows.get(1));
+
+        chunk.release();
+        boolean threw = false;
+        try {
+            chunk.getRows();
+        } catch (RuntimeException e) {
+            threw = true;
+        }
+        assertTrue("getRows() after release() must throw RuntimeException", threw);
+    }
 }
