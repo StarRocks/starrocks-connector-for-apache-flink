@@ -23,6 +23,8 @@ package com.starrocks.data.load.stream;
 import com.starrocks.data.load.stream.mergecommit.MetricListener;
 import com.starrocks.data.load.stream.v2.StreamLoadListener;
 
+import java.nio.charset.StandardCharsets;
+
 public interface StreamLoadManager {
 
     void init();
@@ -89,7 +91,15 @@ public interface StreamLoadManager {
      * @throws IllegalStateException if called when multi-table transaction mode is enabled
      */
     default void writeBytes(String uniqueKey, String database, String table, byte[]... rows) {
-        throw new UnsupportedOperationException("writeBytes is not supported");
+        if (rows == null) {
+            write(uniqueKey, database, table, (String[]) null);
+            return;
+        }
+        String[] stringRows = new String[rows.length];
+        for (int i = 0; i < rows.length; i++) {
+            stringRows[i] = rows[i] == null ? null : new String(rows[i], StandardCharsets.UTF_8);
+        }
+        write(uniqueKey, database, table, stringRows);
     }
 
     /**

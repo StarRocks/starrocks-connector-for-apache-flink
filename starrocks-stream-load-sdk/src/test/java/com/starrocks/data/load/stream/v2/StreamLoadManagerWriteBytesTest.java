@@ -263,4 +263,89 @@ public class StreamLoadManagerWriteBytesTest {
             manager.close();
         }
     }
+
+    @Test
+    public void testStreamLoadManagerDefaultWriteBytesFallback() {
+        class RecordingStreamLoadManager implements com.starrocks.data.load.stream.StreamLoadManager {
+            String capturedUniqueKey;
+            String capturedDatabase;
+            String capturedTable;
+            String[] capturedRows;
+            int callCount = 0;
+
+            @Override
+            public void write(String uniqueKey, String database, String table, String... rows) {
+                this.capturedUniqueKey = uniqueKey;
+                this.capturedDatabase = database;
+                this.capturedTable = table;
+                this.capturedRows = rows;
+                this.callCount++;
+            }
+
+            @Override
+            public void init() {}
+
+            @Override
+            public void flush() {}
+
+            @Override
+            public void close() {}
+
+            @Override
+            public com.starrocks.data.load.stream.StreamLoadSnapshot snapshot() {
+                return null;
+            }
+
+            @Override
+            public boolean prepare(com.starrocks.data.load.stream.StreamLoadSnapshot snapshot) {
+                return true;
+            }
+
+            @Override
+            public boolean commit(com.starrocks.data.load.stream.StreamLoadSnapshot snapshot) {
+                return true;
+            }
+
+            @Override
+            public boolean abort(com.starrocks.data.load.stream.StreamLoadSnapshot snapshot) {
+                return true;
+            }
+
+            @Override
+            public void callback(com.starrocks.data.load.stream.StreamLoadResponse response) {}
+
+            @Override
+            public void callback(Throwable e) {}
+        }
+
+        RecordingStreamLoadManager manager = new RecordingStreamLoadManager();
+        byte[] row1 = "hello".getBytes(StandardCharsets.UTF_8);
+        byte[] row2 = "world".getBytes(StandardCharsets.UTF_8);
+
+        // Test normal writeBytes fallback to write(uniqueKey, database, table, String...)
+        manager.writeBytes("key1", "db1", "tbl1", row1, row2);
+        Assert.assertEquals(1, manager.callCount);
+        Assert.assertEquals("key1", manager.capturedUniqueKey);
+        Assert.assertEquals("db1", manager.capturedDatabase);
+        Assert.assertEquals("tbl1", manager.capturedTable);
+        Assert.assertArrayEquals(new String[]{"hello", "world"}, manager.capturedRows);
+
+        // Test null rows array handling
+        manager.writeBytes("key2", "db2", "tbl2", (byte[][]) null);
+        Assert.assertEquals(2, manager.callCount);
+        Assert.assertNull(manager.capturedRows);
+
+        // Test null element within rows array
+        manager.writeBytes("key3", "db3", "tbl3", row1, null, row2);
+        Assert.assertEquals(3, manager.callCount);
+        Assert.assertArrayEquals(new String[]{"hello", null, "world"}, manager.capturedRows);
+
+        // Test partition writeBytes fallback
+        manager.writeBytes(5, "db4", "tbl4", row1);
+        Assert.assertEquals(4, manager.callCount);
+        Assert.assertNull(manager.capturedUniqueKey);
+        Assert.assertEquals("db4", manager.capturedDatabase);
+        Assert.assertEquals("tbl4", manager.capturedTable);
+        Assert.assertArrayEquals(new String[]{"hello"}, manager.capturedRows);
+    }
 }

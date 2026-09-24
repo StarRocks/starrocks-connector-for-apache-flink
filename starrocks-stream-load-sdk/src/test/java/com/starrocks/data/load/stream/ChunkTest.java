@@ -128,19 +128,30 @@ public class ChunkTest {
 
     @Test
     public void testChunkInitialCapacity() {
+        assertEquals(2048, Chunk.DEFAULT_INITIAL_CAPACITY);
+
         Chunk chunkDefault = new Chunk(StreamLoadDataFormat.JSON, 1);
         assertEquals(0, chunkDefault.numRows());
+        assertEquals(Chunk.DEFAULT_INITIAL_CAPACITY, chunkDefault.getInitialCapacity());
         chunkDefault.addRow("row1".getBytes());
         assertEquals(1, chunkDefault.numRows());
 
         Chunk chunkExplicit = new Chunk(StreamLoadDataFormat.JSON, 2, 64);
         assertEquals(0, chunkExplicit.numRows());
+        assertEquals(64, chunkExplicit.getInitialCapacity());
         chunkExplicit.addRow("row2".getBytes());
         assertEquals(1, chunkExplicit.numRows());
 
         Chunk chunkZero = new Chunk(StreamLoadDataFormat.JSON, 3, 0);
         assertEquals(0, chunkZero.numRows());
+        assertEquals(0, chunkZero.getInitialCapacity());
         chunkZero.addRow("row3".getBytes());
         assertEquals(1, chunkZero.numRows());
+
+        Chunk chunkNegative = new Chunk(StreamLoadDataFormat.JSON, 4, -10);
+        assertEquals(0, chunkNegative.numRows());
+        assertEquals(0, chunkNegative.getInitialCapacity());
+        chunkNegative.addRow("row4".getBytes());
+        assertEquals(1, chunkNegative.numRows());
     }
 }

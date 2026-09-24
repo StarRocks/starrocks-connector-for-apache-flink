@@ -33,19 +33,23 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class Chunk {
 
+    public static final int DEFAULT_INITIAL_CAPACITY = 2048;
+
     private final StreamLoadDataFormat format;
     private volatile List<byte[]> buffer;
     private final AtomicInteger numRows;
     private final AtomicLong rowBytes;
     private final AtomicLong chunkBytes;
     private final long chunkId;
+    private final int initialCapacity;
 
     public Chunk(StreamLoadDataFormat format, long chunkId) {
-        this(format, chunkId, 0);
+        this(format, chunkId, DEFAULT_INITIAL_CAPACITY);
     }
 
     public Chunk(StreamLoadDataFormat format, long chunkId, int initialCapacity) {
         this.format = format;
+        this.initialCapacity = initialCapacity > 0 ? initialCapacity : 0;
         this.buffer = initialCapacity > 0 ? new ArrayList<>(initialCapacity) : new ArrayList<>();
         this.numRows = new AtomicInteger(0);
         this.rowBytes = new AtomicLong(0);
@@ -57,6 +61,10 @@ public class Chunk {
 
     public long getChunkId() {
         return chunkId;
+    }
+
+    public int getInitialCapacity() {
+        return initialCapacity;
     }
 
     public void addRow(byte[] data) {
