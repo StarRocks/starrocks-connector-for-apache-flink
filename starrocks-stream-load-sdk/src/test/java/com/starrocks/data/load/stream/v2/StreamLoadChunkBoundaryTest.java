@@ -388,4 +388,66 @@ public class StreamLoadChunkBoundaryTest {
         byte[] secondRead = region.read();
         Assert.assertNull(secondRead);
     }
+
+    @Test
+    public void testStreamTableRegionOversizedPayloadRead() throws Exception {
+        StreamLoadTableProperties tableProps = StreamLoadTableProperties.builder()
+                .database("db")
+                .table("tbl")
+                .streamLoadDataFormat(StreamLoadDataFormat.CSV)
+                .chunkLimit(10)
+                .build();
+
+        StreamTableRegion region = new StreamTableRegion("key", "db", "tbl", null, tableProps, null, null);
+        byte[] oversizedRow = "oversized_payload_exceeding_chunk_limit".getBytes(StandardCharsets.UTF_8);
+        byte[] normalRow = "row2".getBytes(StandardCharsets.UTF_8);
+        region.write(oversizedRow);
+        region.write(normalRow);
+
+        Assert.assertTrue(region.testPrepare());
+
+        // First read must return the oversized row even though its length exceeds chunkLimit
+        byte[] firstRead = region.read();
+        Assert.assertNotNull("First read must not be null for oversized row", firstRead);
+        Assert.assertArrayEquals(oversizedRow, firstRead);
+
+        // Second read must hit part EOF because chunkLimit was exceeded after row 1
+        byte[] secondRead = region.read();
+        Assert.assertNull("Second read must return null (part EOF)", secondRead);
+
+        // Turn over chunk via flip() and verify normalRow is read in next chunk
+        Method flipMethod = StreamTableRegion.class.getDeclaredMethod("flip");
+        flipMethod.setAccessible(true);
+        flipMethod.invoke(region);
+
+        byte[] thirdRead = region.read();
+        Assert.assertArrayEquals(normalRow, thirdRead);
+    }
+
+    @Test
+    public void testStreamTableRegionOversizedUnbatchablePayloadRead() {
+        StreamLoadDataFormat format = new TestUnbatchableFormat();
+        StreamLoadTableProperties tableProps = StreamLoadTableProperties.builder()
+                .database("db")
+                .table("tbl")
+                .streamLoadDataFormat(format)
+                .chunkLimit(10)
+                .build();
+
+        StreamTableRegion region = new StreamTableRegion("key", "db", "tbl", null, tableProps, null, null);
+        byte[] oversizedRow = "oversized_payload_exceeding_chunk_limit".getBytes(StandardCharsets.UTF_8);
+        byte[] normalRow = "row2".getBytes(StandardCharsets.UTF_8);
+        region.write(oversizedRow);
+        region.write(normalRow);
+
+        Assert.assertTrue(region.testPrepare());
+
+        // First read returns oversized row
+        byte[] firstRead = region.read();
+        Assert.assertArrayEquals(oversizedRow, firstRead);
+
+        // Second read hits part EOF immediately (due to unbatchable format and flushRows > 0)
+        byte[] secondRead = region.read();
+        Assert.assertNull("Second read must return null (part EOF)", secondRead);
+    }
 }
