@@ -48,7 +48,7 @@ public class StarRocksTableRowTransformerTest extends StarRocksSinkBaseTest {
         rowTransformer.setRuntimeContext(runtimeCtx);
         rowTransformer.setTableSchema(TABLE_SCHEMA);
         GenericRowData rowData = createRowData();
-        String result = StarRocksSerializerFactory.createSerializer(OPTIONS, TABLE_SCHEMA.getFieldNames()).serialize(rowTransformer.transform(rowData, OPTIONS.supportUpsertDelete()));
+        String result = StarRocksSerializerFactory.createSerializer(OPTIONS, TABLE_SCHEMA.getFieldNames()).serialize(rowTransformer.transform(rowData, OPTIONS.supportUpsertDelete(), OPTIONS.getIgnoreDelete()));
 
         Map<String, String> loadProsp = OPTIONS.getSinkStreamLoadProperties();
         String format = loadProsp.get("format");
