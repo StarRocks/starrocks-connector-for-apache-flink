@@ -34,6 +34,10 @@ user-facing release guide.
 - Run from inside the connector repo (or set `CONNECTOR_REPO=/path/to/repo`).
 - The release machine needs: JDK 8, Maven, a GPG signing key, and a `<server><id>central</id>`
   entry in `~/.m2/settings.xml` (Central Portal user token). Stage 00 checks all of this.
+- Maven must run on **JDK 8**: `mvn -v` must show `Java version: 1.8…`, or stage 00 hard-fails.
+  If the default JDK is newer, `export JAVA_HOME=/path/to/jdk8` and keep it set for every stage.
+  Only stage 00 checks it, and an agent's shell may not keep env between commands, so an agent
+  should set it on each stage's command.
 - You don't need to pre-set `srfc.version` on `main`: stage 01 sets it to the version you pass
   (on the release branch only), so you can cut an RC or any version that differs from `main`
   without a prior bump+merge. `main` is never modified by the release.
