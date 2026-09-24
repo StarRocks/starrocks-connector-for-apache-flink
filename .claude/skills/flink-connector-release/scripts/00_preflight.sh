@@ -2,8 +2,8 @@
 # 00_preflight.sh  — read-only ENVIRONMENT readiness check. Changes nothing.
 #
 # Run this first. It fails loudly if the machine cannot produce a correct,
-# signed, publishable release (no maven / no gpg key / no Central credentials),
-# so you find out before cutting a tag or (worse) publishing a broken jar.
+# signed, publishable release (no maven / not JDK 8 / no gpg key / no Central
+# credentials), so you find out before cutting a tag or (worse) publishing a broken jar.
 # Repo/version/tag-state checks live in 01_tag.sh.
 
 set -euo pipefail
@@ -23,12 +23,18 @@ info "Preflight (environment readiness) for flink-connector-starrocks  (repo: $R
 if command -v "${MVN[0]}" >/dev/null 2>&1; then pass "maven found: $(command -v "${MVN[0]}")"
 else fail "maven (${MVN[0]}) not found"; hard=$((hard+1)); fi
 
-# 2. java 8 (connector targets 1.8; building on a much newer JDK can surprise you)
+# 2. Maven must run on JDK 8 — a hard requirement, not a warning. The pom compiles with
+#    -source/-target 1.8, not --release 8, so a newer javac links against its own class library:
+#    e.g. ByteBuffer.flip() in the bundled SDK becomes flip()Ljava/nio/ByteBuffer;, which throws
+#    NoSuchMethodError on a Java 8 runtime. The build still succeeds (only warnings), and a
+#    published jar can never be fixed. Maven compiles on the JDK it runs on (JAVA_HOME), so ask
+#    `mvn -v`, not the `java` on PATH. Fail closed when the version cannot be read.
 jline="$("${MVN[@]}" -v 2>/dev/null | grep -i 'Java version' || true)"
-case "$jline" in
-  *1.8*) pass "Java 8 ($jline)";;
-  "")    warn "could not determine Java version from '${MVN[*]} -v'";;
-  *)     warn "Java is not 1.8 — connector targets 1.8: $jline";;
+jver="$(sed -n 's/.*[Jj]ava version: *\([^, ]*\).*/\1/p' <<<"$jline")"
+case "$jver" in
+  1.8.*) pass "Java 8 ($jline)";;
+  "")    fail "could not determine the Java version from '${MVN[*]} -v' — the release must be built on JDK 8"; hard=$((hard+1));;
+  *)     fail "Maven runs on Java $jver, not 1.8 — the release must be built on JDK 8; export JAVA_HOME=/path/to/jdk8 and keep it set for every stage"; hard=$((hard+1));;
 esac
 
 # 3. gpg signing key (release profile signs every artifact)
