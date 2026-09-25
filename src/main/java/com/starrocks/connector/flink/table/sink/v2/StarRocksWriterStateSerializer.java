@@ -20,7 +20,6 @@
 
 package com.starrocks.connector.flink.table.sink.v2;
 
-import com.starrocks.connector.flink.table.sink.StarrocksSnapshotState;
 import com.starrocks.connector.flink.tools.JsonWrapper;
 import org.apache.flink.core.io.SimpleVersionedSerializer;
 
@@ -46,6 +45,6 @@ public class StarRocksWriterStateSerializer implements SimpleVersionedSerializer
 
     @Override
     public StarRocksWriterState deserialize(int version, byte[] serialized) throws IOException {
-        return jsonWrapper.parseObject(serialized, StarrocksSnapshotState.class);
+        return jsonWrapper.parseObject(serialized, StarRocksWriterState.class);
     }
 }
