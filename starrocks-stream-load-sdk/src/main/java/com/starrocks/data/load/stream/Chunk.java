@@ -20,8 +20,10 @@
 
 package com.starrocks.data.load.stream;
 
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -83,6 +85,13 @@ public class Chunk {
 
     public void release() {
         buffer = null;
+    }
+
+    public List<byte[]> getRows() {
+        if (buffer == null) {
+            throw new RuntimeException("Buffer has been released");
+        }
+        return Collections.unmodifiableList(buffer);
     }
 
     public Iterator<byte[]> iterator() {

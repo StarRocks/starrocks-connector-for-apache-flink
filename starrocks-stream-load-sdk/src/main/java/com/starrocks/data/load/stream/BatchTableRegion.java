@@ -330,11 +330,14 @@ public class BatchTableRegion implements TableRegion {
         for (byte[] bytes : inBuffer) {
             int d = first ? 0 : delimiter;
             first = false;
-            if (chunkBytes + d + bytes.length > properties.getChunkLimit()) {
+            if (chunkRows > 0 && chunkBytes + d + bytes.length > properties.getChunkLimit()) {
                 break;
             }
             chunkBytes += bytes.length + d;
             chunkRows++;
+            if (!dataFormat.supportsBatching()) {
+                break;
+            }
         }
 
         return new StreamLoadEntityMeta(chunkBytes, chunkRows);
