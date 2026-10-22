@@ -32,6 +32,6 @@ public interface StarRocksIRowTransformer<T> extends Serializable {
 
     default void setFastJsonWrapper(JsonWrapper jsonWrapper) {}
 
-    Object[] transform(T record, boolean supportUpsertDelete);
+    Object[] transform(T record, boolean supportUpsertDelete, boolean ignoreDelete);
     
 }
