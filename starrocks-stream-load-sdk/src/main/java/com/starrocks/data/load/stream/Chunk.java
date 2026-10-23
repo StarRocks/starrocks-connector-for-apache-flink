@@ -38,6 +38,8 @@ public class Chunk {
     private final AtomicLong rowBytes;
     private final AtomicLong chunkBytes;
     private final long chunkId;
+    // Epoch millis when the first row was added, -1 while the chunk is empty.
+    private volatile long firstRowTimeMs = -1L;
 
     public Chunk(StreamLoadDataFormat format, long chunkId) {
         this.format = format;
@@ -54,7 +56,27 @@ public class Chunk {
         return chunkId;
     }
 
+    /**
+     * Epoch millis when the first row was added to this chunk, or -1 if the
+     * chunk has no rows.
+     */
+    public long getFirstRowTimeMs() {
+        return firstRowTimeMs;
+    }
+
+    /**
+     * Overrides the first-row time. Must be called before any row is added.
+     * Used when a frozen chunk is re-cut into pieces, so that every piece keeps
+     * the arrival time of the original chunk instead of the re-cut time.
+     */
+    public void setFirstRowTimeMs(long firstRowTimeMs) {
+        this.firstRowTimeMs = firstRowTimeMs;
+    }
+
     public void addRow(byte[] data) {
+        if (firstRowTimeMs < 0) {
+            firstRowTimeMs = System.currentTimeMillis();
+        }
         numRows.addAndGet(1);
         rowBytes.addAndGet(data.length);
         chunkBytes.addAndGet(data.length + (buffer.isEmpty() ?  0 : format.delimiter().length));

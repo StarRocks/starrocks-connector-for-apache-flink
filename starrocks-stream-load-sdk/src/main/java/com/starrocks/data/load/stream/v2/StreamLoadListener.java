@@ -23,4 +23,16 @@ import com.starrocks.data.load.stream.StreamLoadResponse;
 public interface StreamLoadListener {
 
     void onResponse(StreamLoadResponse response);
+
+    /**
+     * Called after a shared transaction commits in multi-table transaction mode.
+     * Only called when the first-row time of the transaction is known.
+     *
+     * @param label the shared transaction label
+     * @param firstRowTimeMs epoch millis when the earliest row committed in this
+     *                       transaction entered the sink buffer
+     * @param latencyMs time from {@code firstRowTimeMs} until the commit returned
+     */
+    default void onSharedTransactionCommitted(String label, long firstRowTimeMs, long latencyMs) {
+    }
 }

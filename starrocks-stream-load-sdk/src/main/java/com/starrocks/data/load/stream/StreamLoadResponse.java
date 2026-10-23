@@ -29,6 +29,8 @@ public class StreamLoadResponse implements Serializable {
     private Long flushRows;
     private Long flushBytes;
     private Long costNanoTime;
+    // Epoch millis when the first row of the loaded chunk entered the sink buffer.
+    private Long firstRowTimeMs;
 
     private StreamLoadResponseBody body;
     private Exception exception;
@@ -53,6 +55,10 @@ public class StreamLoadResponse implements Serializable {
         return costNanoTime;
     }
 
+    public Long getFirstRowTimeMs() {
+        return firstRowTimeMs;
+    }
+
     public StreamLoadResponseBody getBody() {
         return body;
     }
@@ -71,6 +77,10 @@ public class StreamLoadResponse implements Serializable {
 
     public void setCostNanoTime(long costNanoTime) {
         this.costNanoTime = costNanoTime;
+    }
+
+    public void setFirstRowTimeMs(long firstRowTimeMs) {
+        this.firstRowTimeMs = firstRowTimeMs;
     }
 
     public void setBody(StreamLoadResponseBody body) {
