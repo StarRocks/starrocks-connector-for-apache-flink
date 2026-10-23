@@ -20,12 +20,16 @@ package com.starrocks.data.load.stream.v2;
 
 import com.starrocks.data.load.stream.MockedStarRocksHttpServer;
 import com.starrocks.data.load.stream.StreamLoadDataFormat;
+import com.starrocks.data.load.stream.StreamLoadResponse;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class StreamLoadManagerMultiTableTest {
 
@@ -2041,6 +2045,149 @@ public class StreamLoadManagerMultiTableTest {
             Assert.assertTrue(mockedServer.getCommitCount() >= 1);
         } finally {
             manager.close();
+        }
+    }
+
+    // ---- Shared transaction latency (first-row time) ----
+
+    /**
+     * A committed shared transaction reports when its earliest row entered the
+     * sink buffer (here the orders row, written 50 ms before the order_items
+     * row) and the latency until the commit returned. The listener is set after
+     * init(): the coordinator reads it at commit time.
+     */
+    @Test(timeout = 30000)
+    public void testReportsFirstRowTimeAndLatency() throws Exception {
+        StreamLoadManagerV2 manager = new StreamLoadManagerV2(buildMultiTableProperties(100), true);
+        manager.init();
+        CommitRecorder recorder = new CommitRecorder();
+        manager.setStreamLoadListener(recorder);
+        try {
+            long beforeFirstWrite = System.currentTimeMillis();
+            manager.write(0, "test", "orders", "{\"order_id\":1}");
+            long afterFirstWrite = System.currentTimeMillis();
+            Thread.sleep(50);
+            manager.write(0, "test", "order_items", "{\"item_id\":1, \"order_id\":1}");
+            long beforeTxnEnd = System.currentTimeMillis();
+            manager.setCommitAllowed(0, true);
+
+            waitUntil(() -> recorder.calls.size() >= 1, 10000, "shared transaction commit");
+            long observed = System.currentTimeMillis();
+            Assert.assertNull(manager.getException());
+
+            CommitRecorder.Call call = recorder.calls.get(0);
+            Assert.assertNotNull(call.label);
+            Assert.assertTrue("first row is the earlier orders row: " + call.firstRowTimeMs,
+                    call.firstRowTimeMs >= beforeFirstWrite && call.firstRowTimeMs <= afterFirstWrite);
+            long committedAt = call.firstRowTimeMs + call.latencyMs;
+            Assert.assertTrue("commit returned after txnEnd and before it was observed: " + committedAt,
+                    committedAt >= beforeTxnEnd && committedAt <= observed);
+        } finally {
+            manager.close();
+        }
+    }
+
+    /** Each shared transaction reports its own first row, not one from an earlier transaction. */
+    @Test(timeout = 30000)
+    public void testFirstRowTimeIsPerTransaction() throws Exception {
+        StreamLoadManagerV2 manager = new StreamLoadManagerV2(buildMultiTableProperties(100), true);
+        manager.init();
+        CommitRecorder recorder = new CommitRecorder();
+        manager.setStreamLoadListener(recorder);
+        try {
+            manager.write(0, "test", "orders", "{\"order_id\":1}");
+            manager.setCommitAllowed(0, true);
+            waitUntil(() -> recorder.calls.size() >= 1, 10000, "first commit");
+
+            long beforeSecondWrite = System.currentTimeMillis();
+            manager.write(0, "test", "orders", "{\"order_id\":2}");
+            manager.setCommitAllowed(0, true);
+            waitUntil(() -> recorder.calls.size() >= 2, 10000, "second commit");
+            Assert.assertNull(manager.getException());
+
+            Assert.assertNotEquals(recorder.calls.get(0).label, recorder.calls.get(1).label);
+            Assert.assertTrue(recorder.calls.get(1).firstRowTimeMs >= beforeSecondWrite);
+        } finally {
+            manager.close();
+        }
+    }
+
+    /**
+     * A frozen chunk with more rows than maxBufferRows is re-cut into pieces at
+     * switch time, 100 ms after its first row was written. The pieces keep the
+     * first row's arrival time.
+     */
+    @Test(timeout = 30000)
+    public void testSplitChunkKeepsFirstRowTime() throws Exception {
+        StreamLoadTableProperties tableProps = StreamLoadTableProperties.builder()
+                .database("test")
+                .table("orders")
+                .streamLoadDataFormat(StreamLoadDataFormat.JSON)
+                .maxBufferRows(2)
+                .build();
+        StreamLoadProperties properties = StreamLoadProperties.builder()
+                .loadUrls(mockedServer.getBaseUrl())
+                .username(USERNAME)
+                .password(PASSWORD)
+                .version("4.0.0")
+                .enableMultiTableTransaction()
+                .labelPrefix("test-mtxn-")
+                .defaultTableProperties(tableProps)
+                .expectDelayTime(100)
+                .scanningFrequency(50)
+                .ioThreadCount(2)
+                .build();
+        StreamLoadManagerV2 manager = new StreamLoadManagerV2(properties, true);
+        manager.init();
+        CommitRecorder recorder = new CommitRecorder();
+        manager.setStreamLoadListener(recorder);
+        try {
+            mockedServer.resetCounters();
+            long beforeFirstWrite = System.currentTimeMillis();
+            manager.write(0, "test", "orders", row("split", 0));
+            long afterFirstWrite = System.currentTimeMillis();
+            Thread.sleep(100);
+            for (int i = 1; i < 5; i++) {
+                manager.write(0, "test", "orders", row("split", i));
+            }
+            manager.setCommitAllowed(0, true);
+
+            waitUntil(() -> recorder.calls.size() >= 1, 10000, "shared transaction commit");
+            Assert.assertNull(manager.getException());
+            Assert.assertTrue("5 rows with maxBufferRows=2 load as 3 pieces, loads: "
+                    + mockedServer.getLoadCount(), mockedServer.getLoadCount() >= 3);
+            long firstRowTimeMs = recorder.calls.get(0).firstRowTimeMs;
+            Assert.assertTrue("pieces keep the first row's time: " + firstRowTimeMs,
+                    firstRowTimeMs >= beforeFirstWrite && firstRowTimeMs <= afterFirstWrite);
+        } finally {
+            manager.close();
+        }
+    }
+
+    /** Records the shared transaction commits reported to the listener. */
+    private static class CommitRecorder implements StreamLoadListener {
+
+        static class Call {
+            final String label;
+            final long firstRowTimeMs;
+            final long latencyMs;
+
+            Call(String label, long firstRowTimeMs, long latencyMs) {
+                this.label = label;
+                this.firstRowTimeMs = firstRowTimeMs;
+                this.latencyMs = latencyMs;
+            }
+        }
+
+        final List<Call> calls = new CopyOnWriteArrayList<>();
+
+        @Override
+        public void onResponse(StreamLoadResponse response) {
+        }
+
+        @Override
+        public void onSharedTransactionCommitted(String label, long firstRowTimeMs, long latencyMs) {
+            calls.add(new Call(label, firstRowTimeMs, latencyMs));
         }
     }
 }
