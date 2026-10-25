@@ -184,6 +184,104 @@ public class StarRocksSinkITTest extends StarRocksITTestBase {
         verifyResult(expectedData, actualData);
     }
 
+    @Test
+    public void testColumnsFromFlinkSchemaLetsDefaultFire() throws Exception {
+        // The Flink table omits c1, which carries a DEFAULT. With the option on, c1 is left off the
+        // columns header so the server fills its default instead of storing NULL over it.
+        String tableName = createDefaultValueTable("testColumnsFromFlinkSchemaLetsDefaultFire");
+        List<Row> testData = Arrays.asList(Row.of(1, "abc"), Row.of(2, "def"));
+        RowTypeInfo rowTypeInfo = new RowTypeInfo(
+                new TypeInformation[]{Types.INT, Types.STRING},
+                new String[]{"c0", "c2"});
+        List<List<Object>> expectedData = Arrays.asList(
+                Arrays.asList(1, 99, "abc"),
+                Arrays.asList(2, 99, "def"));
+
+        testColumnsFromFlinkSchemaBase(tableName, "c0 INT, c2 STRING", rowTypeInfo, testData, expectedData, true);
+    }
+
+    @Test
+    public void testWithoutTheOptionTheDefaultIsOverwritten() throws Exception {
+        // Same job with the option off, to pin the behavior the option exists to change: the omitted
+        // column is declared by the server and stored as NULL, losing its DEFAULT.
+        // V2 only: with the option off, V1 still rejects a Flink schema whose field count differs
+        // from the table's, so it cannot reach the load at all.
+        assumeTrue(isSinkV2);
+        String tableName = createDefaultValueTable("testWithoutTheOptionTheDefaultIsOverwritten");
+        List<Row> testData = Arrays.asList(Row.of(1, "abc"));
+        RowTypeInfo rowTypeInfo = new RowTypeInfo(
+                new TypeInformation[]{Types.INT, Types.STRING},
+                new String[]{"c0", "c2"});
+        List<List<Object>> expectedData = Arrays.asList(Arrays.asList(1, null, "abc"));
+
+        testColumnsFromFlinkSchemaBase(tableName, "c0 INT, c2 STRING", rowTypeInfo, testData, expectedData, false);
+    }
+
+    @Test
+    public void testColumnsFromFlinkSchemaWithAllColumnsDeclared() throws Exception {
+        // Declaring the defaulted column means the job supplies it, so the value it sends wins.
+        String tableName = createDefaultValueTable("testColumnsFromFlinkSchemaAllColumns");
+        List<Row> testData = Arrays.asList(Row.of(1, 7, "abc"));
+        RowTypeInfo rowTypeInfo = new RowTypeInfo(
+                new TypeInformation[]{Types.INT, Types.INT, Types.STRING},
+                new String[]{"c0", "c1", "c2"});
+        List<List<Object>> expectedData = Arrays.asList(Arrays.asList(1, 7, "abc"));
+
+        testColumnsFromFlinkSchemaBase(tableName, "c0 INT, c1 INT, c2 STRING", rowTypeInfo, testData,
+                expectedData, true);
+    }
+
+    private void testColumnsFromFlinkSchemaBase(String tableName, String flinkDDL, RowTypeInfo rowTypeInfo,
+                                                List<Row> testData, List<List<Object>> expectedData,
+                                                boolean columnsFromFlinkSchema) throws Exception {
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
+        String createSQL = "CREATE TABLE sink(" + flinkDDL +
+                ") WITH ( " +
+                "'connector' = 'starrocks'," +
+                "'jdbc-url'='" + getJdbcUrl() + "'," +
+                "'load-url'='" + getHttpUrls() + "'," +
+                "'sink.version' = '" + (isSinkV2 ? "V2" : "V1") + "'," +
+                "'sink.use.new-sink-api' = '" + (newSinkApi ? "true" : "false") + "'," +
+                "'sink.properties.format' = 'json'," +
+                // The V2 path sets strip_outer_array for json itself; V1 does not, and it sends the
+                // batch as a json array, so it has to be set here for the V1 parameter to load at all.
+                "'sink.properties.strip_outer_array' = 'true'," +
+                "'sink.json.columns-from-flink-schema' = '" + columnsFromFlinkSchema + "'," +
+                "'database-name' = '" + DB_NAME + "'," +
+                "'table-name' = '" + tableName + "'," +
+                "'username' = 'root'," +
+                "'password' = ''" +
+                ")";
+        tEnv.executeSql(createSQL);
+        DataStream<Row> srcDs = env.fromCollection(testData).returns(rowTypeInfo);
+        tEnv.createTemporaryView("src", tEnv.fromDataStream(srcDs));
+        tEnv.executeSql("INSERT INTO sink SELECT * FROM src").await();
+
+        List<List<Object>> actualData = scanTable(DB_CONNECTION, DB_NAME, tableName);
+        verifyResult(expectedData, actualData);
+    }
+
+    private String createDefaultValueTable(String tablePrefix) throws Exception {
+        String tableName = tablePrefix + "_" + genRandomUuid();
+        String createStarRocksTable =
+                String.format(
+                        "CREATE TABLE `%s`.`%s` (" +
+                                "c0 INT," +
+                                "c1 INT DEFAULT \"99\"," +
+                                "c2 STRING" +
+                                ") ENGINE = OLAP " +
+                                "DUPLICATE KEY(c0) " +
+                                "DISTRIBUTED BY HASH (c0) BUCKETS 8 " +
+                                "PROPERTIES (" +
+                                "\"replication_num\" = \"1\"" +
+                                ")",
+                        DB_NAME, tableName);
+        executeSrSQL(createStarRocksTable);
+        return tableName;
+    }
+
     private String createDupTable(String tablePrefix) throws Exception {
         String tableName = tablePrefix + "_" + genRandomUuid();
         String createStarRocksTable =
@@ -410,6 +508,73 @@ public class StarRocksSinkITTest extends StarRocksITTestBase {
         List<List<Object>> expectedData = Arrays.asList(
                 Arrays.asList(2, 2.0, "22"),
                 Arrays.asList(3, null, "3")
+        );
+        List<List<Object>> actualData = scanTable(DB_CONNECTION, DB_NAME, tableName);
+        verifyResult(expectedData, actualData);
+    }
+
+    /**
+     * Conditional update via sink.properties.merge_condition.
+     * Update takes effect only when the new score >= existing score.
+     */
+    @Test
+    public void testConditionalUpdateMergeCondition() throws Exception {
+        String tableName = "testMergeCondition_" + genRandomUuid();
+        String createStarRocksTable =
+                String.format(
+                        "CREATE TABLE `%s`.`%s` (" +
+                                "id INT," +
+                                "name STRING," +
+                                "score INT" +
+                                ") ENGINE = OLAP " +
+                                "PRIMARY KEY(id) " +
+                                "DISTRIBUTED BY HASH (id) BUCKETS 1 " +
+                                "PROPERTIES (" +
+                                "\"replication_num\" = \"1\"" +
+                                ")",
+                        DB_NAME, tableName);
+        executeSrSQL(createStarRocksTable);
+        executeSrSQL(String.format(
+                "INSERT INTO `%s`.`%s` VALUES (1, 'starrocks', 100), (2, 'flink', 100)",
+                DB_NAME, tableName));
+
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
+
+        List<Row> testData = Arrays.asList(
+                Row.of(1, "starrocks-update", 99),
+                Row.of(2, "flink-update", 101));
+        RowTypeInfo rowTypeInfo = new RowTypeInfo(
+                new TypeInformation[]{Types.INT, Types.STRING, Types.INT},
+                new String[]{"id", "name", "score"});
+        DataStream<Row> srcDs = env.fromCollection(testData).returns(rowTypeInfo);
+        tEnv.createTemporaryView("src", tEnv.fromDataStream(srcDs));
+
+        String createSQL = "CREATE TABLE sink(" +
+                "id INT," +
+                "name STRING," +
+                "score INT," +
+                "PRIMARY KEY (`id`) NOT ENFORCED" +
+                ") WITH ( " +
+                "'connector' = 'starrocks'," +
+                "'jdbc-url'='" + getJdbcUrl() + "'," +
+                "'load-url'='" + getHttpUrls() + "'," +
+                "'sink.version' = '" + (isSinkV2 ? "V2" : "V1") + "'," +
+                "'sink.use.new-sink-api' = '" + (newSinkApi ? "true" : "false") + "'," +
+                "'database-name' = '" + DB_NAME + "'," +
+                "'table-name' = '" + tableName + "'," +
+                "'username' = 'root'," +
+                "'password' = ''," +
+                "'sink.properties.merge_condition' = 'score'" +
+                ")";
+        tEnv.executeSql(createSQL);
+        tEnv.executeSql("INSERT INTO sink SELECT * FROM src").await();
+
+        // id=1: score 99 < 100 → rejected; id=2: score 101 >= 100 → applied
+        List<List<Object>> expectedData = Arrays.asList(
+                Arrays.asList(1, "starrocks", 100),
+                Arrays.asList(2, "flink-update", 101)
         );
         List<List<Object>> actualData = scanTable(DB_CONNECTION, DB_NAME, tableName);
         verifyResult(expectedData, actualData);
