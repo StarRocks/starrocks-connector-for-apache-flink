@@ -34,6 +34,7 @@ flink_minor_version=$1
 check_flink_version_supported $flink_minor_version
 flink_version="$(get_flink_version $flink_minor_version)"
 kafka_connector_version="$(get_kafka_connector_version $flink_minor_version)"
+flink_shaded_guava_version="$(get_flink_shaded_guava_version $flink_minor_version)"
 module="$(get_module_for_version $flink_minor_version)"
 check_jdk_for_version "$flink_minor_version"
 
@@ -60,7 +61,8 @@ ${MVN_CMD} clean package ${mvn_skip_flag} \
   -Dflink.major=${flink_minor_version%%.*} \
   -Dflink.minor.version=${flink_minor_version} \
   -Dflink.version=${flink_version} \
-  -Dkafka.connector.version=${kafka_connector_version}
+  -Dkafka.connector.version=${kafka_connector_version} \
+  -Dflink.shaded.guava.version=${flink_shaded_guava_version}
 
 echo "*********************************************************************"
 echo "Successfully build Flink StarRocks Connector for Flink $flink_minor_version"
