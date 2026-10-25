@@ -37,12 +37,14 @@ public class StarRocksCommitter implements Committer<StarRocksCommittable> {
     private static final Logger LOG = LoggerFactory.getLogger(StarRocksCommitter.class);
 
     private final int maxRetries;
+    private final boolean ignoreCommitError;
     private final StreamLoadManagerV2 sinkManager;
 
     public StarRocksCommitter(
             StarRocksSinkOptions sinkOptions,
             StreamLoadProperties streamLoadProperties) {
         this.maxRetries = sinkOptions.getSinkMaxRetries();
+        this.ignoreCommitError = sinkOptions.isIgnoreCommitError();
         this.sinkManager = new StreamLoadManagerV2(streamLoadProperties,
                 sinkOptions.getSemantic() == StarRocksSinkSemantic.AT_LEAST_ONCE);
         try {
@@ -83,9 +85,15 @@ public class StarRocksCommitter implements Committer<StarRocksCommittable> {
                 }
             }
             if (!committed) {
-                throw firstException != null
+                RuntimeException failure = firstException != null
                         ? firstException
                         : new RuntimeException("Failed to commit");
+                if (!ignoreCommitError) {
+                    throw failure;
+                }
+                LOG.error("Skip the transactions that failed to commit because sink.exactly-once.ignore-commit-error " +
+                        "is enabled, and their data is lost: {}",
+                        committable.getLabelSnapshot().getTransactions(), failure);
             }
         }
     }

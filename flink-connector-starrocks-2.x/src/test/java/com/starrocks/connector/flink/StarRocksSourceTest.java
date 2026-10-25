@@ -22,6 +22,7 @@ import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.DataType;
 
 import com.starrocks.connector.flink.table.source.StarRocksFlinkSource;
+import com.starrocks.connector.flink.table.source.StarRocksSourceCommonFunc;
 import com.starrocks.connector.flink.table.source.StarRocksSourceOptions;
 import com.starrocks.connector.flink.table.source.StarRocksSourceQueryType;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
@@ -74,6 +75,49 @@ public class StarRocksSourceTest {
 
         assertNull(field(source, "selectColumns"));
         assertEquals(StarRocksSourceQueryType.QueryCount, field(source, "queryType"));
+        assertEquals("COUNT(1)", field(source, "countExpression"));
+    }
+
+    @Test
+    public void testCountExpressionRunsAsWritten() throws Exception {
+        Configuration conf = baseConf();
+        conf.set(StarRocksSourceOptions.SCAN_COLUMNS, "count(c1)");
+        conf.set(StarRocksSourceOptions.SCAN_FILTER, "c2 > 10");
+        StarRocksSourceOptions options = new StarRocksSourceOptions(conf, conf.toMap());
+
+        Source<RowData, ?, ?> source = StarRocksSource.source(schema(), options);
+
+        assertEquals("count(c1)", field(source, "countExpression"));
+        assertEquals("select count(c1) from `test_db`.`test_table` where c2 > 10",
+                StarRocksSourceCommonFunc.buildSQL(StarRocksSourceQueryType.QueryCount, null, null,
+                        (String) field(source, "countExpression"), options, "c2 > 10"));
+    }
+
+    @Test
+    public void testTableCountPushDownIsCountStar() throws Exception {
+        StarRocksSourceOptions options = new StarRocksSourceOptions(baseConf(), baseConf().toMap());
+
+        StarRocksFlinkSource source = new StarRocksFlinkSource(
+                options, schema(), null, -1, null, StarRocksSourceQueryType.QueryCount);
+
+        assertNull(field(source, "countExpression"));
+        assertEquals("select count(*) from `test_db`.`test_table`",
+                StarRocksSourceCommonFunc.buildSQL(StarRocksSourceQueryType.QueryCount, null, null, null, options, null));
+    }
+
+    @Test
+    public void testScanColumnsWithoutProjectionPushDownAreResolvedOnce() throws Exception {
+        Configuration conf = baseConf();
+        conf.set(StarRocksSourceOptions.SCAN_COLUMNS, "c1,c3");
+        StarRocksSourceOptions options = new StarRocksSourceOptions(conf, conf.toMap());
+
+        // what the table source passes when the planner pushed no projection
+        StarRocksFlinkSource source = new StarRocksFlinkSource(options, schema(), null, -1, null, null);
+
+        SelectColumn[] selectColumns = (SelectColumn[]) field(source, "selectColumns");
+        assertEquals("select `c1`,`c3` from `test_db`.`test_table`",
+                StarRocksSourceCommonFunc.buildSQL(null, selectColumns, new String[] {"c1", "c2", "c3"},
+                        null, options, null));
     }
 
     private static Configuration baseConf() {

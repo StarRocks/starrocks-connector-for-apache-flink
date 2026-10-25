@@ -99,11 +99,6 @@ limitations under the License.
             <groupId>org.apache.arrow</groupId>
             <artifactId>arrow-memory-netty</artifactId>
         </dependency>
-        <dependency>
-            <groupId>com.ververica</groupId>
-            <artifactId>flink-sql-connector-mysql-cdc</artifactId>
-            <scope>provided</scope>
-        </dependency>
 
         <!-- Test dependencies -->
         <dependency>
@@ -182,6 +177,26 @@ limitations under the License.
             </resource>
         </resources>
         <plugins>
+            <!-- the few public APIs whose signatures differ between the Flink majors -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>add-flink-major-sources</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>add-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>src/main/flink${flink.major}/java</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <!-- Produce test-jar so 1.x and 2.x can use shared test classes -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

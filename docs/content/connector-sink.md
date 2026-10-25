@@ -12,8 +12,8 @@ The Flink connector supports DataStream API, Table API & SQL, and Python API. It
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
-| 1.2.17 (2.x module) | 2.0,2.1,2.2,2.3     | 2.1 and later| 11 (17 for Flink 2.2+) | 2.12 |
-| 1.2.17 (1.x module) | 1.16,1.17,1.18,1.19,1.20 | 2.1 and later| 8 | 2.11,2.12 |
+| 1.2.17    | 2.0,2.1,2.2,2.3               | 2.1 and later| 11   | 2.12      |
+| 1.2.17    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later| 8    | 2.11,2.12 |
 | 1.2.16    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later| 8    | 2.11,2.12 |
 | 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later| 8    | 2.11,2.12 |
 | 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later| 8    | 2.11,2.12 |
@@ -21,9 +21,9 @@ The Flink connector supports DataStream API, Table API & SQL, and Python API. It
 
 > **NOTE**
 >
-> Since 1.2.17 the connector ships as two artifacts: `flink-connector-starrocks-1.x`
-> for Flink 1.16-1.20 and `flink-connector-starrocks-2.x` for Flink 2.0+. Earlier
-> versions were published as `flink-connector-starrocks`.
+> Since 1.2.17 the connector also supports Flink 2.0+. It is still published as
+> `com.starrocks:flink-connector-starrocks`; the `_flink-<version>` suffix of the version selects the
+> build for your Flink version, as before. Flink 2.x builds need Java 11+.
 
 ## Obtain Flink connector
 
@@ -35,9 +35,7 @@ You can obtain the Flink connector JAR file in the following ways:
 
 The naming format of the Flink connector JAR file is as follows:
 
-- Since connector 1.2.17, it's `flink-connector-starrocks-1.x-${connector_version}_flink-${flink_version}.jar` for Flink 1.x and `flink-connector-starrocks-2.x-${connector_version}_flink-${flink_version}.jar` for Flink 2.x. For example, for Flink 1.20 use `flink-connector-starrocks-1.x-1.2.17_flink-1.20.jar`, and for Flink 2.0 use `flink-connector-starrocks-2.x-1.2.17_flink-2.0.jar`.
-
-- From Flink 1.15 up to connector 1.2.16, it's `flink-connector-starrocks-${connector_version}_flink-${flink_version}.jar`. For example, if you install Flink 1.15 and you want to use Flink connector 1.2.7, you can use `flink-connector-starrocks-1.2.7_flink-1.15.jar`.
+- Since Flink 1.15, it's `flink-connector-starrocks-${connector_version}_flink-${flink_version}.jar`. For example, if you install Flink 1.15 and you want to use Flink connector 1.2.7, you can use `flink-connector-starrocks-1.2.7_flink-1.15.jar`, and for Flink 2.0 and connector 1.2.17 you can use `flink-connector-starrocks-1.2.17_flink-2.0.jar`.
 
 - Prior to Flink 1.15, it's `flink-connector-starrocks-${connector_version}_flink-${flink_version}_${scala_version}.jar`. For example, if you install Flink 1.14 and Scala 2.12 in your environment, and you want to use Flink connector 1.2.7, you can use `flink-connector-starrocks-1.2.7_flink-1.14_2.12.jar`.
 
@@ -53,27 +51,7 @@ Directly download the corresponding version of the Flink connector Jar file from
 
 In your Maven project's `pom.xml` file, add the Flink connector as a dependency according to the following format. Replace `flink_version`, `scala_version`, and `connector_version` with the respective versions.
 
-- Since connector 1.2.17, for Flink 1.16-1.20
-
-    ```xml
-    <dependency>
-        <groupId>com.starrocks</groupId>
-        <artifactId>flink-connector-starrocks-1.x</artifactId>
-        <version>${connector_version}_flink-${flink_version}</version>
-    </dependency>
-    ```
-
-- Since connector 1.2.17, for Flink 2.0 and later
-
-    ```xml
-    <dependency>
-        <groupId>com.starrocks</groupId>
-        <artifactId>flink-connector-starrocks-2.x</artifactId>
-        <version>${connector_version}_flink-${flink_version}</version>
-    </dependency>
-    ```
-
-- Up to connector 1.2.16, in Flink 1.15 and later
+- In Flink 1.15 and later, including Flink 2.x
 
     ```xml
     <dependency>
@@ -110,7 +88,7 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
       sh build.sh 2.0
       ```
 
-3. Go to the `flink-connector-starrocks-1.x/target/` (Flink 1.x) or `flink-connector-starrocks-2.x/target/` (Flink 2.x) directory to find the Flink connector JAR file, such as `flink-connector-starrocks-1.x-1.2.17_flink-1.16-SNAPSHOT.jar`, generated upon compilation.
+3. Go to the `flink-connector-starrocks-1.x/target/` (Flink 1.x) or `flink-connector-starrocks-2.x/target/` (Flink 2.x) directory to find the Flink connector JAR file, such as `flink-connector-starrocks-1.2.17_flink-1.16-SNAPSHOT.jar`, generated upon compilation.
 
 > **NOTE**
 >
@@ -128,6 +106,7 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 | username                          | Yes          | NONE              | The username of the account that you want to use to load data into StarRocks. The account needs [SELECT and INSERT privileges](https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/account-management/GRANT).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | password                          | Yes          | NONE              | The password of the preceding account.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | sink.semantic                     | No           | at-least-once     | The semantic guaranteed by sink. Valid values: **at-least-once** and **exactly-once**.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| sink.exactly-once.ignore-commit-error | No | false | Only available when `sink.semantic` is `exactly-once`. Supported since 1.2.17. Whether to log and skip a transaction that still fails to commit after `sink.max-retries`, instead of failing the job. Only use it to recover a job whose checkpointed transactions have expired, for example when restoring from an old checkpoint: the data of a skipped transaction is lost. |
 | sink.version                      | No           | AUTO              | The interface used to load data. This parameter is supported from Flink connector version 1.2.4 onwards. <ul><li>`V1`: Use [Stream Load](https://docs.starrocks.io/en-us/latest/loading/StreamLoad) interface to load data. Connectors before 1.2.4 only support this mode. </li> <li>`V2`: Use [Transaction Stream Load](https://docs.starrocks.io/en-us/latest/loading/Stream_Load_transaction_interface) interface to load data. It requires StarRocks to be at least version 2.4. Recommends `V2` because it optimizes the memory usage and provides a more stable exactly-once implementation. </li> <li>`AUTO`: If the version of StarRocks supports transaction Stream Load, will choose `V2` automatically, otherwise choose `V1` </li></ul> |
 | sink.label-prefix                 | No           | NONE              | The label prefix used by Stream Load. Recommend to configure it if you are using exactly-once with connector 1.2.8 and later. See [exactly-once usage notes](#exactly-once).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | sink.buffer-flush.max-bytes       | No           | 94371840(90M)     | The maximum size of data that can be accumulated in memory before being sent to StarRocks at a time. The maximum value ranges from 64 MB to 10 GB. Setting this parameter to a larger value can improve loading performance but may increase loading latency. This parameter only takes effect when `sink.semantic` is set to `at-least-once`. If `sink.semantic` is set to `exactly-once`, the data in memory is flushed when a Flink checkpoint is triggered. In this circumstance, this parameter does not take effect. |
@@ -212,6 +191,15 @@ The following stream load properties are used to control merge commit behavior:
 
 ## Usage notes
 
+### Flink 2.x
+
+Flink 2.0 removed the legacy `SinkFunction` API, so on Flink 2.x:
+
+- The connector always uses the unified sink API (sink V2). `sink.version` `AUTO` and `V2` select it, `V1` is rejected, and `sink.use.new-sink-api` is ignored.
+- In the DataStream API, `StarRocksSink.sink(...)` returns a `Sink`: attach it with `sinkTo(...)` instead of `addSink(...)`, and describe the table with a `ResolvedSchema` instead of a `TableSchema`.
+- `sink.semantic` `exactly-once` requires the Stream Load transaction interface (StarRocks 2.4 and later). If StarRocks does not support it, the job fails at startup instead of falling back to the V1 sink as on Flink 1.x.
+- The [MySQL CDC synchronization tool](./Realtime%20synchronization%20from%20MySQL.md) is only available for Flink 1.x.
+
 ### Exactly Once
 
 - If you want sink to guarantee exactly-once semantics, we recommend you to upgrade StarRocks to 2.5 or later, and Flink connector to 1.2.4 or later
@@ -221,7 +209,15 @@ The following stream load properties are used to control merge commit behavior:
     stability of loading.
   
   - If the version of StarRocks is earlier than 2.4 or the version of Flink connector is earlier than 1.2.4, the sink
-    will automatically choose the implementation based on Stream Load non-transactional interface.
+    will automatically choose the implementation based on Stream Load non-transactional interface. On Flink 2.x that
+    implementation does not exist, and the job fails at startup instead.
+
+- Since connector 1.2.17, a transaction that still fails to commit after `sink.max-retries` fails the job. Earlier
+  versions logged the error and continued, which lost the data of that transaction. A job restored from a checkpoint
+  whose transactions have expired in StarRocks therefore fails on every restore: restart it without that checkpoint, or
+  set `sink.exactly-once.ignore-commit-error` to `true` to skip those transactions and accept the loss. Also since
+  1.2.17, the label generator state is restored from the checkpoint, so labels do not restart from the beginning after
+  a restore.
   
 - Configurations to guarantee exactly-once
     

@@ -204,6 +204,12 @@ public class StarRocksSinkOptions implements Serializable {
                     "The number of transactions to check if they are lingering. -1 indicates that check until finding the first " +
                     "transaction that is not lingering.");
 
+    public static final ConfigOption<Boolean> SINK_IGNORE_COMMIT_ERROR = ConfigOptions.key("sink.exactly-once.ignore-commit-error")
+            .booleanType().defaultValue(false).withDescription("Only available when using exactly-once. Whether to log and " +
+                    "skip a transaction that still fails to commit after sink.max-retries, instead of failing the job. Only " +
+                    "use it to recover a job whose checkpointed transactions have expired, for example when restoring from " +
+                    "an old checkpoint: the data of a skipped transaction is lost.");
+
     public static final ConfigOption<Boolean> SINK_USE_NEW_SINK_API = ConfigOptions.key("sink.use.new-sink-api")
             .booleanType().defaultValue(false).withDescription("Whether to use the implementation with the unified sink api " +
                     "described in Flink FLIP-191. When not set explicitly, it defaults to false on Flink 1.x (where the " +
@@ -504,6 +510,10 @@ public class StarRocksSinkOptions implements Serializable {
 
     public int getAbortCheckNumTxns() {
         return tableOptions.get(SINK_ABORT_CHECK_NUM_TXNS);
+    }
+
+    public boolean isIgnoreCommitError() {
+        return tableOptions.get(SINK_IGNORE_COMMIT_ERROR);
     }
 
     public boolean isUseUnifiedSinkApi() {

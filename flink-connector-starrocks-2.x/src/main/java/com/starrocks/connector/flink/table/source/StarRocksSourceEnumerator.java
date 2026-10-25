@@ -16,143 +16,110 @@ package com.starrocks.connector.flink.table.source;
 
 import org.apache.flink.api.connector.source.SplitEnumerator;
 import org.apache.flink.api.connector.source.SplitEnumeratorContext;
-import org.apache.flink.api.connector.source.SplitsAssignment;
+import org.apache.flink.util.FlinkRuntimeException;
 
-import com.starrocks.connector.flink.table.source.struct.QueryBeXTablets;
-import com.starrocks.connector.flink.table.source.struct.QueryInfo;
-import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
-import java.io.IOException;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
+import java.util.Deque;
+import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.Callable;
 
-/** Enumerator that discovers splits from StarRocks query plan and assigns them to readers. */
+/**
+ * Plans the scan once and hands out one split per reader request. Planning talks to the FE,
+ * so it runs off the coordinator thread.
+ */
 public class StarRocksSourceEnumerator
-        implements SplitEnumerator<StarRocksSourceSplit, Collection<StarRocksSourceSplit>> {
+        implements SplitEnumerator<StarRocksSourceSplit, StarRocksSourceEnumeratorState> {
 
     private static final Logger LOG = LoggerFactory.getLogger(StarRocksSourceEnumerator.class);
 
     private final SplitEnumeratorContext<StarRocksSourceSplit> context;
-    private final StarRocksSourceOptions sourceOptions;
-    private final String[] columnNames;
-    private final String filter;
-    private final long limit;
-    private final SelectColumn[] selectColumns;
-    private final StarRocksSourceQueryType queryType;
-
-    /** Splits not yet assigned to any reader, used for checkpoint state. */
-    private final List<StarRocksSourceSplit> unassignedSplits;
-
-    /** Pre-computed per-subtask assignments. Populated in start(), consumed in addReader(). */
-    private final Map<Integer, List<StarRocksSourceSplit>> pendingAssignments = new HashMap<>();
+    private final Callable<List<StarRocksSourceSplit>> splitDiscoverer;
+    private final Deque<StarRocksSourceSplit> pendingSplits;
+    private final Set<Integer> readersAwaitingSplit = new LinkedHashSet<>();
+    private boolean splitsDiscovered;
 
     public StarRocksSourceEnumerator(
             SplitEnumeratorContext<StarRocksSourceSplit> context,
-            StarRocksSourceOptions sourceOptions,
-            String[] columnNames,
-            String filter,
-            long limit,
-            SelectColumn[] selectColumns,
-            StarRocksSourceQueryType queryType,
-            Collection<StarRocksSourceSplit> restoredSplits) {
+            Callable<List<StarRocksSourceSplit>> splitDiscoverer,
+            StarRocksSourceEnumeratorState state) {
         this.context = context;
-        this.sourceOptions = sourceOptions;
-        this.columnNames = columnNames;
-        this.filter = filter;
-        this.limit = limit;
-        this.selectColumns = selectColumns;
-        this.queryType = queryType;
-        this.unassignedSplits = new ArrayList<>(restoredSplits);
+        this.splitDiscoverer = splitDiscoverer;
+        this.pendingSplits = new ArrayDeque<>(state.getPendingSplits());
+        this.splitsDiscovered = state.isSplitsDiscovered();
     }
 
     @Override
     public void start() {
-        if (!unassignedSplits.isEmpty()) {
-            // Restored from checkpoint — distribute restored splits round-robin
-            distributeRoundRobin(unassignedSplits);
-            unassignedSplits.clear();
+        if (splitsDiscovered) {
+            LOG.info("Restored {} pending splits, skipping split discovery", pendingSplits.size());
             return;
         }
-
-        List<StarRocksSourceSplit> discoveredSplits = new ArrayList<>();
-
-        if (queryType == StarRocksSourceQueryType.QueryCount) {
-            String sql = StarRocksSourceCommonFunc.buildSQL(
-                    queryType, selectColumns, columnNames, sourceOptions, filter);
-            Long count = StarRocksSourceCommonFunc.getQueryCount(sourceOptions, sql);
-            QueryBeXTablets countTablets = new QueryBeXTablets("count", new ArrayList<>());
-            discoveredSplits.add(new StarRocksSourceSplit(countTablets, "count-" + count));
-        } else {
-            String sql = StarRocksSourceCommonFunc.buildSQL(
-                    queryType, selectColumns, columnNames, sourceOptions, filter);
-            QueryInfo queryInfo = StarRocksSourceCommonFunc.getQueryInfo(sourceOptions, sql);
-            String opaquedQueryPlan = queryInfo.getQueryPlan().getOpaqued_query_plan();
-            int parallelism = context.currentParallelism();
-            List<List<QueryBeXTablets>> splitsBySubtask =
-                    StarRocksSourceCommonFunc.splitQueryBeXTablets(parallelism, queryInfo);
-
-            int splitIndex = 0;
-            for (List<QueryBeXTablets> subtaskSplits : splitsBySubtask) {
-                for (QueryBeXTablets beXTablets : subtaskSplits) {
-                    String splitId = "split-" + splitIndex + "-" + beXTablets.getBeNode();
-                    discoveredSplits.add(new StarRocksSourceSplit(beXTablets, splitId, opaquedQueryPlan));
-                    splitIndex++;
-                }
-            }
-        }
-
-        LOG.info("Discovered {} splits", discoveredSplits.size());
-        distributeRoundRobin(discoveredSplits);
+        context.callAsync(splitDiscoverer, this::onSplitsDiscovered);
     }
 
-    private void distributeRoundRobin(List<StarRocksSourceSplit> splits) {
-        int parallelism = context.currentParallelism();
-        for (int i = 0; i < splits.size(); i++) {
-            int subtask = i % parallelism;
-            pendingAssignments.computeIfAbsent(subtask, k -> new ArrayList<>()).add(splits.get(i));
+    private void onSplitsDiscovered(List<StarRocksSourceSplit> splits, @Nullable Throwable error) {
+        if (error != null) {
+            throw new FlinkRuntimeException("Failed to discover splits from the StarRocks query plan", error);
         }
+        LOG.info("Discovered {} splits", splits.size());
+        pendingSplits.addAll(splits);
+        splitsDiscovered = true;
+        assignPendingSplits();
     }
 
     @Override
     public void handleSplitRequest(int subtaskId, @Nullable String requesterHostname) {
-        // All splits are pre-assigned in addReader(); nothing to do here.
-        context.signalNoMoreSplits(subtaskId);
+        readersAwaitingSplit.add(subtaskId);
+        assignPendingSplits();
+    }
+
+    private void assignPendingSplits() {
+        Iterator<Integer> readers = readersAwaitingSplit.iterator();
+        while (readers.hasNext()) {
+            int subtaskId = readers.next();
+            if (!context.registeredReaders().containsKey(subtaskId)) {
+                readers.remove();
+                continue;
+            }
+            StarRocksSourceSplit split = pendingSplits.poll();
+            if (split != null) {
+                context.assignSplit(split, subtaskId);
+                LOG.info("Assigned split {} to subtask {}", split.splitId(), subtaskId);
+            } else if (splitsDiscovered) {
+                context.signalNoMoreSplits(subtaskId);
+            } else {
+                return;
+            }
+            readers.remove();
+        }
     }
 
     @Override
     public void addSplitsBack(List<StarRocksSourceSplit> splits, int subtaskId) {
-        pendingAssignments.computeIfAbsent(subtaskId, k -> new ArrayList<>()).addAll(splits);
+        LOG.info("Subtask {} returned {} splits", subtaskId, splits.size());
+        pendingSplits.addAll(splits);
     }
 
     @Override
     public void addReader(int subtaskId) {
-        List<StarRocksSourceSplit> splits = pendingAssignments.remove(subtaskId);
-        if (splits != null && !splits.isEmpty()) {
-            context.assignSplits(new SplitsAssignment<>(Collections.singletonMap(subtaskId, splits)));
-            LOG.info("Assigned {} splits to subtask {}", splits.size(), subtaskId);
-        }
-        context.signalNoMoreSplits(subtaskId);
+        // readers ask for splits themselves, see StarRocksSourceReader
     }
 
     @Override
-    public Collection<StarRocksSourceSplit> snapshotState(long checkpointId) throws Exception {
-        // Include both unassigned splits and any pending assignments not yet delivered
-        List<StarRocksSourceSplit> state = new ArrayList<>(unassignedSplits);
-        for (List<StarRocksSourceSplit> pending : pendingAssignments.values()) {
-            state.addAll(pending);
-        }
-        return state;
+    public StarRocksSourceEnumeratorState snapshotState(long checkpointId) {
+        return new StarRocksSourceEnumeratorState(splitsDiscovered, new ArrayList<>(pendingSplits));
     }
 
     @Override
-    public void close() throws IOException {
+    public void close() {
     }
 }

@@ -62,6 +62,9 @@ public class StarRocksSourceSplitSerializer implements SimpleVersionedSerializer
 
     @Override
     public StarRocksSourceSplit deserialize(int version, byte[] serialized) throws IOException {
+        if (version != VERSION) {
+            throw new IOException("Unknown StarRocks source split version: " + version);
+        }
         DataInputDeserializer in = new DataInputDeserializer(serialized);
         String splitId = in.readUTF();
         String beNode = in.readUTF();

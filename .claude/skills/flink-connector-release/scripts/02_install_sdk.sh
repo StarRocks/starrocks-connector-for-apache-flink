@@ -28,8 +28,9 @@ info "Checking out $TAG (detached HEAD) so all builds carry the tag's commit"
 git checkout --quiet "$TAG"
 EXPECTED_COMMIT="$(git rev-parse HEAD)"
 
-info "Installing the stream-load SDK from the tag into $MAVEN_REPO"
-( cd starrocks-stream-load-sdk && "${MVN[@]}" clean install -DskipTests )
+SDK_JAVA_HOME="$(sdk_java_home "$REPO_ROOT")"
+info "Installing the stream-load SDK from the tag into $MAVEN_REPO (on JDK $(java_major "$SDK_JAVA_HOME"), the oldest connector runtime)"
+( cd starrocks-stream-load-sdk && JAVA_HOME="$SDK_JAVA_HOME" "${MVN[@]}" clean install -DskipTests )
 
 # Verify the artifact the connector build will actually shade in.
 verify_installed_sdk "$REPO_ROOT" "$EXPECTED_COMMIT"

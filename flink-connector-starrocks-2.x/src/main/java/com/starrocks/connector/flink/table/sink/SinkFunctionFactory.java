@@ -76,14 +76,28 @@ public class SinkFunctionFactory {
         } else {
             throw new UnsupportedOperationException("Unsupported sink type " + sinkTypeOption);
         }
+        if (!sinkOptions.isUseUnifiedSinkApi()) {
+            LOG.warn("sink.use.new-sink-api=false is ignored: Flink 2.x only has the unified sink API.");
+        }
         LOG.info("Choose sink version {}", sinkVersion.name());
         return sinkVersion;
+    }
+
+    // 1.x fell back to the V1 sink here; V2 without transaction load would silently be at-least-once
+    static void checkExactlyOnceSupported(StarRocksSinkOptions sinkOptions) {
+        if (sinkOptions.getSemantic() == StarRocksSinkSemantic.EXACTLY_ONCE
+                && !sinkOptions.isSupportTransactionStreamLoad()) {
+            throw new UnsupportedOperationException(
+                    "sink.semantic=exactly-once requires transaction stream load (StarRocks 2.4+), which the " +
+                    "StarRocks cluster does not support. Upgrade StarRocks or use sink.semantic=at-least-once.");
+        }
     }
 
     public static <T> StarRocksSink<T> createSink(
             StarRocksSinkOptions sinkOptions, ResolvedSchema schema, StarRocksIRowTransformer<T> rowTransformer) {
         getSinkVersion(sinkOptions);
         detectStarRocksFeature(sinkOptions);
+        checkExactlyOnceSupported(sinkOptions);
         StarRocksSinkTable sinkTable = StarRocksSinkTable.builder()
                 .sinkOptions(sinkOptions)
                 .build();
@@ -108,6 +122,7 @@ public class SinkFunctionFactory {
             StarRocksSinkOptions sinkOptions, RecordSerializationSchema<T> serializationSchema) {
         getSinkVersion(sinkOptions);
         detectStarRocksFeature(sinkOptions);
+        checkExactlyOnceSupported(sinkOptions);
         StreamLoadProperties streamLoadProperties = sinkOptions.getProperties(null);
         return new StarRocksSink<>(sinkOptions, serializationSchema, streamLoadProperties);
     }
@@ -115,6 +130,7 @@ public class SinkFunctionFactory {
     public static StarRocksSink<String> createSink(StarRocksSinkOptions sinkOptions) {
         getSinkVersion(sinkOptions);
         detectStarRocksFeature(sinkOptions);
+        checkExactlyOnceSupported(sinkOptions);
         StringSerializationSchema serializationSchema = new StringSerializationSchema(
                 sinkOptions.getDatabaseName(), sinkOptions.getTableName());
         StreamLoadProperties streamLoadProperties = sinkOptions.getProperties(null);

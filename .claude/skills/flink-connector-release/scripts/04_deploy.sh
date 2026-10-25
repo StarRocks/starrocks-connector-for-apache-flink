@@ -66,6 +66,12 @@ pass "all requested versions ($(IFS=,; echo "${VERSIONS[*]}")) were verified by 
 verify_installed_sdk "$REPO_ROOT" "$EXPECTED_COMMIT"
 pass "the locally-installed SDK still matches the tag"
 
+# Gate 1d: every version must have its release JDK before anything is published, so a missing JDK
+# cannot stop the run halfway through.
+declare -A JDK_HOME
+for m in "${VERSIONS[@]}"; do JDK_HOME[$m]="$(release_java_home "$REPO_ROOT" "$m")"; done
+pass "release JDKs found for all requested versions"
+
 # Gate 2: explicit human confirmation, because this cannot be undone.
 echo
 warn "About to PUBLISH to Maven Central (cannot be undone):"
@@ -83,7 +89,7 @@ pin_local_snapshots
 declare -a RESULT; overall=0
 for m in "${VERSIONS[@]}"; do
   info "──────── deploy flink $m (via deploy.sh) ────────"
-  if bash deploy.sh "$m"; then
+  if JAVA_HOME="${JDK_HOME[$m]}" bash deploy.sh "$m"; then
     pass "published flink $m"; RESULT+=("$m PUBLISHED")
   else
     fail "deploy.sh FAILED for flink $m"; RESULT+=("$m FAILED"); overall=1

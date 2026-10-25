@@ -31,9 +31,12 @@ import com.starrocks.connector.flink.table.sink.ExactlyOnceLabelGeneratorFactory
 import com.starrocks.connector.flink.table.sink.ExactlyOnceLabelGeneratorSnapshot;
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 import com.starrocks.connector.flink.table.sink.StarRocksSinkSemantic;
+import com.starrocks.data.load.stream.mergecommit.MetricListener;
+import com.starrocks.data.load.stream.v2.StreamLoadListener;
 import com.starrocks.data.load.stream.v2.StreamLoadManagerV2;
 import mockit.Injectable;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.junit.Test;
 
 import java.lang.reflect.Field;
@@ -57,8 +60,7 @@ public class StarRocksWriterRestoreTest {
         StarRocksWriter<Object> writer = new StarRocksWriter<>(
                 sinkOptions(),
                 5L,
-                1,
-                0,
+                new DefaultStarRocksSinkContext(1, 0, sinkOptions()),
                 metricGroup,
                 schemaContext,
                 new NoopSerializationSchema(),
@@ -72,6 +74,31 @@ public class StarRocksWriterRestoreTest {
         ExactlyOnceLabelGenerator generator =
                 ((ExactlyOnceLabelGeneratorFactory) factory).create("test_db", "test_table");
         assertEquals(42L, generator.snapshot(6L).getNextId());
+    }
+
+    @Test
+    public void testWriterReportsMetricsFromEveryLoadPath(
+            @Mocked StreamLoadManagerV2 anyManager,
+            @Mocked StarRocksStreamLoadListener anyListener,
+            @Injectable MetricGroup metricGroup,
+            @Injectable SerializationSchema.InitializationContext schemaContext) throws Exception {
+        new StarRocksWriter<>(
+                sinkOptions(),
+                5L,
+                new DefaultStarRocksSinkContext(1, 0, sinkOptions()),
+                metricGroup,
+                schemaContext,
+                new NoopSerializationSchema(),
+                null,
+                Collections.emptyList());
+
+        // merge commit reports through the metric listener, not the stream load listener
+        new Verifications() {{
+            anyManager.setStreamLoadListener((StreamLoadListener) any);
+            times = 1;
+            anyManager.setMetricListener((MetricListener) any);
+            times = 1;
+        }};
     }
 
     private static StarRocksSinkOptions sinkOptions() {

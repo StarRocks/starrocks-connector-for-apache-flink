@@ -10,7 +10,9 @@ scripts that carry out each step, see `SKILL.md` next to this guide.
 
 - **Version scheme.** Each Flink version is published under its own coordinates,
   `com.starrocks:flink-connector-starrocks:<version>_flink-<minor>` (e.g. `1.2.15_flink-1.20`), one
-  per supported Flink minor version. The project version normally carries a `-SNAPSHOT` suffix;
+  per supported Flink minor version. The `flink-connector-starrocks-1.x` module builds it for Flink
+  1.x and `flink-connector-starrocks-2.x` for Flink 2.x; the `common` and `tests` modules are
+  build-internal and never published. The project versions normally carry a `-SNAPSHOT` suffix;
   releasing means producing builds without it.
 - **The stream-load SDK is bundled in.** The connector shades `starrocks-stream-load-sdk` (a
   `1.1-SNAPSHOT`) into its jar; the SDK is never published on its own. The catch: a build can pick up
@@ -22,7 +24,9 @@ scripts that carry out each step, see `SKILL.md` next to this guide.
 
 ## Prerequisites (one-time per release machine)
 
-- JDK 8 and Maven.
+- JDK 8 (for the Flink 1.x builds), JDK 11 (for the Flink 2.x builds), and Maven. Each build must
+  run on exactly that JDK: the poms compile with `-source`/`-target`, so a newer JDK links against
+  its own class library and the jar can fail on the older runtime.
 - **Publish rights to the `com.starrocks` namespace — the access-controlled part.** The namespace is
   owned by the StarRocks org, so you publish with a Central Portal user token from an account the
   maintainers/admins have granted access to (you cannot self-provision this — get it from the
@@ -68,22 +72,28 @@ scripts that carry out each step, see `SKILL.md` next to this guide.
 ## The release process
 
 1. **Tag.** Create a release tag, based on the latest `main`, pointing at a commit that has the
-   `-SNAPSHOT` removed from the project version. Before tagging, make sure `main`'s user docs
+   `-SNAPSHOT` removed from the project versions: `srfc.version` and the parent version in the root
+   pom, the `<parent>` version in each module pom, and the connector version in the module poms. Before tagging, make sure `main`'s user docs
    (`docs/content/connector-sink.md` and `connector-source.md`) already list this release in their
    **Version requirements** table; if not, add the row (or consciously decide to skip it) first.
 2. **Install the SDK from the tag.** Check out the tag, then install the stream-load SDK locally from
-   it, so the connector bundles this release's SDK rather than a stale remote one:
+   it on JDK 8 (it is shaded into the Flink 1.x jars too), so the connector bundles this release's SDK
+   rather than a stale remote one:
 
    ```bash
-   cd starrocks-stream-load-sdk && mvn clean install -DskipTests
+   cd starrocks-stream-load-sdk && JAVA_HOME=/path/to/jdk8 mvn clean install -DskipTests
    ```
 3. **Deploy.** Build and publish the connector to Maven Central with `deploy.sh`, once per supported
    Flink version (publishing is irreversible — a published jar can never be changed, so each version
    is strictly validated first):
 
    ```bash
-   bash deploy.sh 1.20    # run once for each supported Flink minor version (1.16 … 1.20)
+   JAVA_HOME=/path/to/jdk8  bash deploy.sh 1.20   # once per Flink 1.x minor (1.16 … 1.20)
+   JAVA_HOME=/path/to/jdk11 bash deploy.sh 2.2    # once per Flink 2.x minor (2.0 … 2.3)
    ```
+
+   Each run builds the `common` module and the connector module for that Flink version; the
+   publishing plugin uploads only the connector (`excludeArtifacts` in the root pom).
 4. **Verify on Maven Central.** Download each published jar and confirm both embedded commit
    fingerprints (connector and bundled SDK) equal the tag commit, and the version is not a snapshot.
 5. **Release notes.** Write release notes for this version and create the GitHub release on the tag,

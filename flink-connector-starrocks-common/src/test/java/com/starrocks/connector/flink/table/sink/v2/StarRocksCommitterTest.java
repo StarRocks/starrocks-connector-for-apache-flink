@@ -58,6 +58,19 @@ public class StarRocksCommitterTest {
     }
 
     @Test
+    public void testCommitFailureIsSkippedWhenIgnoringCommitErrors(@Injectable StreamLoadManagerV2 sinkManager)
+            throws Exception {
+        new Expectations() {{
+            sinkManager.commit((StreamLoadSnapshot) any);
+            result = false;
+            times = 3;
+        }};
+        StarRocksCommitter committer = createCommitter(sinkManager, 2);
+        setField(committer, "ignoreCommitError", true);
+        committer.commit(Collections.singletonList(commitRequest()));
+    }
+
+    @Test
     public void testCommitSuccessOnRetryDoesNotThrow(@Injectable StreamLoadManagerV2 sinkManager) throws Exception {
         new Expectations() {{
             sinkManager.commit((StreamLoadSnapshot) any);
