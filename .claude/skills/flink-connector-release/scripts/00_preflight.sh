@@ -2,7 +2,7 @@
 # 00_preflight.sh  — read-only ENVIRONMENT readiness check. Changes nothing.
 #
 # Run this first. It fails loudly if the machine cannot produce a correct,
-# signed, publishable release (no maven / not JDK 8 / no gpg key / no Central
+# signed, publishable release (no maven / not the release JDKs / no gpg key / no Central
 # credentials), so you find out before cutting a tag or (worse) publishing a broken jar.
 # Repo/version/tag-state checks live in 01_tag.sh.
 
@@ -23,19 +23,26 @@ info "Preflight (environment readiness) for flink-connector-starrocks  (repo: $R
 if command -v "${MVN[0]}" >/dev/null 2>&1; then pass "maven found: $(command -v "${MVN[0]}")"
 else fail "maven (${MVN[0]}) not found"; hard=$((hard+1)); fi
 
-# 2. Maven must run on JDK 8 — a hard requirement, not a warning. The pom compiles with
-#    -source/-target 1.8, not --release 8, so a newer javac links against its own class library:
-#    e.g. ByteBuffer.flip() in the bundled SDK becomes flip()Ljava/nio/ByteBuffer;, which throws
-#    NoSuchMethodError on a Java 8 runtime. The build still succeeds (only warnings), and a
-#    published jar can never be fixed. Maven compiles on the JDK it runs on (JAVA_HOME), so ask
-#    `mvn -v`, not the `java` on PATH. Fail closed when the version cannot be read.
-jline="$("${MVN[@]}" -v 2>/dev/null | grep -i 'Java version' || true)"
-jver="$(sed -n 's/.*[Jj]ava version: *\([^, ]*\).*/\1/p' <<<"$jline")"
-case "$jver" in
-  1.8.*) pass "Java 8 ($jline)";;
-  "")    fail "could not determine the Java version from '${MVN[*]} -v' — the release must be built on JDK 8"; hard=$((hard+1));;
-  *)     fail "Maven runs on Java $jver, not 1.8 — the release must be built on JDK 8; export JAVA_HOME=/path/to/jdk8 and keep it set for every stage"; hard=$((hard+1));;
-esac
+# 2. Each Flink version is released on exactly the JDK it targets — JDK 8 for Flink 1.x, JDK 11 for
+#    Flink 2.x — a hard requirement, not a warning (see release_jdk in lib.sh for why). The stages
+#    run Maven with JAVA_HOME set from JAVA8_HOME / JAVA11_HOME, so ask `mvn -v` under each, not the
+#    `java` on PATH. Fail closed when a version cannot be read.
+for jdk in $(for m in $(supported_minor_versions "$REPO_ROOT"); do release_jdk "$REPO_ROOT" "$m"; done | sort -un); do
+  var="JAVA${jdk}_HOME"
+  home="${!var:-}"
+  if [ -z "$home" ]; then
+    fail "$var is not set — the Flink versions released on JDK $jdk need it"; hard=$((hard+1)); continue
+  fi
+  jline="$(JAVA_HOME="$home" "${MVN[@]}" -v 2>/dev/null | grep -i 'Java version' || true)"
+  jver="$(sed -n 's/.*[Jj]ava version: *\([^, ]*\).*/\1/p' <<<"$jline")"
+  case "$jver" in
+    1.8.*) got=8;;
+    "")    got=;;
+    *)     got="${jver%%.*}";;
+  esac
+  if [ "$got" = "$jdk" ]; then pass "$var: Maven runs on Java $jver"
+  else fail "$var ($home): Maven runs on Java ${jver:-unknown}, not $jdk"; hard=$((hard+1)); fi
+done
 
 # 3. gpg signing key (release profile signs every artifact)
 if command -v gpg >/dev/null 2>&1 && [ -n "$(gpg --list-secret-keys 2>/dev/null)" ]; then

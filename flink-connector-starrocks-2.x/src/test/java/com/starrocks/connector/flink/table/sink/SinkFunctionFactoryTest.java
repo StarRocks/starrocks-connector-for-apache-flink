@@ -214,4 +214,35 @@ public class SinkFunctionFactoryTest {
             assertTrue(e.getMessage().contains("not supported in Flink 2.x"));
         }
     }
+
+    @Test
+    public void testExactlyOnceRequiresTransactionStreamLoad() {
+        StarRocksSinkOptions exactlyOnce = sinkOptions("exactly-once");
+        exactlyOnce.setSupportTransactionStreamLoad(true);
+        SinkFunctionFactory.checkExactlyOnceSupported(exactlyOnce);
+
+        exactlyOnce.setSupportTransactionStreamLoad(false);
+        try {
+            SinkFunctionFactory.checkExactlyOnceSupported(exactlyOnce);
+            fail("exactly-once must not silently degrade to at-least-once");
+        } catch (UnsupportedOperationException e) {
+            assertTrue(e.getMessage().contains("transaction stream load"));
+        }
+
+        StarRocksSinkOptions atLeastOnce = sinkOptions("at-least-once");
+        atLeastOnce.setSupportTransactionStreamLoad(false);
+        SinkFunctionFactory.checkExactlyOnceSupported(atLeastOnce);
+    }
+
+    private static StarRocksSinkOptions sinkOptions(String semantic) {
+        Configuration conf = new Configuration();
+        conf.set(StarRocksSinkOptions.TABLE_NAME, "test");
+        conf.set(StarRocksSinkOptions.DATABASE_NAME, "test");
+        conf.setString(StarRocksSinkOptions.LOAD_URL.key(), "127.0.0.1:8030");
+        conf.set(StarRocksSinkOptions.JDBC_URL, "jdbc://127.0.0.1:1234");
+        conf.set(StarRocksSinkOptions.USERNAME, "root");
+        conf.set(StarRocksSinkOptions.PASSWORD, "");
+        conf.setString(StarRocksSinkOptions.SINK_SEMANTIC.key(), semantic);
+        return new StarRocksSinkOptions(conf, new HashMap<>());
+    }
 }

@@ -48,8 +48,10 @@ public class StarRocksWriterAdapter<InputT>
         this.delegate = new StarRocksWriter<>(
                 sinkOptions,
                 initContext.getRestoredCheckpointId().orElse(InitContext.INITIAL_CHECKPOINT_ID - 1),
-                initContext.getTaskInfo().getNumberOfParallelSubtasks(),
-                initContext.getTaskInfo().getIndexOfThisSubtask(),
+                new DefaultStarRocksSinkContext(
+                        initContext.getTaskInfo().getNumberOfParallelSubtasks(),
+                        initContext.getTaskInfo().getIndexOfThisSubtask(),
+                        sinkOptions),
                 initContext.metricGroup(),
                 initContext.asSerializationSchemaInitializationContext(),
                 serializationSchema,

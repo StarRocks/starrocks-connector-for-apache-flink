@@ -26,4 +26,10 @@ public class StarRocksDynamicTableSinkFactoryOptionsTest {
         assertTrue(new StarRocksDynamicTableSinkFactory().optionalOptions()
                 .contains(StarRocksSinkOptions.SINK_MULTI_TABLE_TXN_MAX_TXN_BYTES));
     }
+
+    @Test
+    public void testIgnoreCommitErrorRegisteredWithTableFactory() {
+        assertTrue(new StarRocksDynamicTableSinkFactory().optionalOptions()
+                .contains(StarRocksSinkOptions.SINK_IGNORE_COMMIT_ERROR));
+    }
 }

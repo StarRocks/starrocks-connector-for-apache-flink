@@ -180,11 +180,12 @@ public class StarRocksSourceCommonFunc {
             StarRocksSourceQueryType queryType,
             SelectColumn[] selectColumns,
             String[] columnNames,
+            String countExpression,
             StarRocksSourceOptions sourceOptions,
             String filter) {
         StringBuilder sqlSb = new StringBuilder("select ");
         if (queryType == StarRocksSourceQueryType.QueryCount) {
-            sqlSb.append("count(*)");
+            sqlSb.append(countExpression == null ? "count(*)" : countExpression);
         } else if (selectColumns != null && selectColumns.length > 0) {
             for (int i = 0; i < selectColumns.length; i++) {
                 if (i > 0) {

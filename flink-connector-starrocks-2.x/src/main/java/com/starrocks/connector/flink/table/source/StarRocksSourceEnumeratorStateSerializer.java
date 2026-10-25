@@ -19,12 +19,18 @@ import org.apache.flink.core.memory.DataInputDeserializer;
 import org.apache.flink.core.memory.DataOutputSerializer;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
-/** Serializer for the enumerator state (a collection of unassigned splits). */
+/**
+ * Serializer for {@link StarRocksSourceEnumeratorState}. Pending splits normally share one query plan,
+ * so each distinct plan is written once and the splits refer to it.
+ */
 public class StarRocksSourceEnumeratorStateSerializer
-        implements SimpleVersionedSerializer<Collection<StarRocksSourceSplit>> {
+        implements SimpleVersionedSerializer<StarRocksSourceEnumeratorState> {
 
     public static final StarRocksSourceEnumeratorStateSerializer INSTANCE =
             new StarRocksSourceEnumeratorStateSerializer();
@@ -37,28 +43,69 @@ public class StarRocksSourceEnumeratorStateSerializer
     }
 
     @Override
-    public byte[] serialize(Collection<StarRocksSourceSplit> splits) throws IOException {
+    public byte[] serialize(StarRocksSourceEnumeratorState state) throws IOException {
+        StarRocksSourceSplitSerializer splitSerializer = StarRocksSourceSplitSerializer.INSTANCE;
+        List<String> plans = new ArrayList<>();
+        Map<String, Integer> planIndexes = new HashMap<>();
+        List<byte[]> splitBytes = new ArrayList<>();
+        List<Integer> splitPlanIndexes = new ArrayList<>();
+        for (StarRocksSourceSplit split : state.getPendingSplits()) {
+            String plan = split.getOpaquedQueryPlan();
+            int planIndex = -1;
+            if (plan != null) {
+                planIndex = planIndexes.computeIfAbsent(plan, p -> {
+                    plans.add(p);
+                    return plans.size() - 1;
+                });
+            }
+            splitBytes.add(splitSerializer.serialize(
+                    new StarRocksSourceSplit(split.getBeXTablets(), split.splitId(), null)));
+            splitPlanIndexes.add(planIndex);
+        }
+
         DataOutputSerializer out = new DataOutputSerializer(256);
-        out.writeInt(splits.size());
-        for (StarRocksSourceSplit split : splits) {
-            byte[] splitBytes = StarRocksSourceSplitSerializer.INSTANCE.serialize(split);
-            out.writeInt(splitBytes.length);
-            out.write(splitBytes);
+        out.writeBoolean(state.isSplitsDiscovered());
+        out.writeInt(splitSerializer.getVersion());
+        out.writeInt(plans.size());
+        for (String plan : plans) {
+            byte[] planBytes = plan.getBytes(StandardCharsets.UTF_8);
+            out.writeInt(planBytes.length);
+            out.write(planBytes);
+        }
+        out.writeInt(splitBytes.size());
+        for (int i = 0; i < splitBytes.size(); i++) {
+            out.writeInt(splitPlanIndexes.get(i));
+            out.writeInt(splitBytes.get(i).length);
+            out.write(splitBytes.get(i));
         }
         return out.getCopyOfBuffer();
     }
 
     @Override
-    public Collection<StarRocksSourceSplit> deserialize(int version, byte[] serialized) throws IOException {
-        DataInputDeserializer in = new DataInputDeserializer(serialized);
-        int size = in.readInt();
-        Collection<StarRocksSourceSplit> splits = new ArrayList<>(size);
-        for (int i = 0; i < size; i++) {
-            int splitBytesLen = in.readInt();
-            byte[] splitBytes = new byte[splitBytesLen];
-            in.readFully(splitBytes);
-            splits.add(StarRocksSourceSplitSerializer.INSTANCE.deserialize(VERSION, splitBytes));
+    public StarRocksSourceEnumeratorState deserialize(int version, byte[] serialized) throws IOException {
+        if (version != VERSION) {
+            throw new IOException("Unknown StarRocks source enumerator state version: " + version);
         }
-        return splits;
+        DataInputDeserializer in = new DataInputDeserializer(serialized);
+        boolean splitsDiscovered = in.readBoolean();
+        int splitVersion = in.readInt();
+        List<String> plans = new ArrayList<>();
+        int planCount = in.readInt();
+        for (int i = 0; i < planCount; i++) {
+            byte[] planBytes = new byte[in.readInt()];
+            in.readFully(planBytes);
+            plans.add(new String(planBytes, StandardCharsets.UTF_8));
+        }
+        int splitCount = in.readInt();
+        List<StarRocksSourceSplit> splits = new ArrayList<>(splitCount);
+        for (int i = 0; i < splitCount; i++) {
+            int planIndex = in.readInt();
+            byte[] splitBytes = new byte[in.readInt()];
+            in.readFully(splitBytes);
+            StarRocksSourceSplit split = StarRocksSourceSplitSerializer.INSTANCE.deserialize(splitVersion, splitBytes);
+            splits.add(new StarRocksSourceSplit(
+                    split.getBeXTablets(), split.splitId(), planIndex < 0 ? null : plans.get(planIndex)));
+        }
+        return new StarRocksSourceEnumeratorState(splitsDiscovered, splits);
     }
 }

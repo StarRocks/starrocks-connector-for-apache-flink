@@ -25,7 +25,7 @@ limitations under the License.
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>flink-connector-starrocks-1.x</artifactId>
+    <artifactId>flink-connector-starrocks</artifactId>
     <version>${srfc.version}_flink-${flink.minor.version}-SNAPSHOT</version>
 
     <name>StarRocks Flink Connector 1.x</name>
@@ -34,12 +34,7 @@ limitations under the License.
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
-        <flink.minor.version>1.20</flink.minor.version>
-        <flink.version>1.20.0</flink.version>
-        <kafka.connector.version>3.4.0-1.20</kafka.connector.version>
         <guava.version>32.0.1-jre</guava.version>
-        <flink.shaded.guava.version>31.1-jre-17.0</flink.shaded.guava.version>
-        <skipPublishing>false</skipPublishing>
     </properties>
 
     <dependencies>
