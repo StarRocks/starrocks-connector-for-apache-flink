@@ -68,22 +68,27 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
 
     @Override
     public LookupRuntimeProvider getLookupRuntimeProvider(LookupContext context) {
-        int[] projectedFields = Arrays.stream(context.getKeys()).mapToInt(value -> value[0]).toArray();
-        ColumnRichInfo[] filerRichInfo = new ColumnRichInfo[projectedFields.length];
-        for (int i = 0; i < projectedFields.length; i ++) {
-            ColumnRichInfo columnRichInfo = new ColumnRichInfo(
-                this.flinkSchema.getColumn(projectedFields[i]).get().getName(), 
-                projectedFields[i],
-                this.flinkSchema.getColumn(projectedFields[i]).get().getDataType()
-            );
-            filerRichInfo[i] = columnRichInfo;
+        Map<String, ColumnRichInfo> columnMap = StarRocksSourceCommonFunc.genColumnMap(flinkSchema);
+        List<ColumnRichInfo> columnRichInfos = StarRocksSourceCommonFunc.genColumnRichInfo(columnMap);
+        SelectColumn[] selectColumns = pushDownHolder.getSelectColumns();
+        if (selectColumns == null) {
+            selectColumns = StarRocksSourceCommonFunc.genSelectedColumns(columnMap, options, columnRichInfos);
         }
 
-        Map<String, ColumnRichInfo> columnMap = StarRocksSourceCommonFunc.genColumnMap(flinkSchema);
-        List<ColumnRichInfo> ColumnRichInfos = StarRocksSourceCommonFunc.genColumnRichInfo(columnMap);
-        SelectColumn[] selectColumns = StarRocksSourceCommonFunc.genSelectedColumns(columnMap, this.options, ColumnRichInfos);
+        // Lookup keys index the projected row, while SelectColumn retains the original
+        // schema index needed by the BE reader to choose the correct field converter.
+        int[][] keys = context.getKeys();
+        ColumnRichInfo[] filterRichInfos = new ColumnRichInfo[keys.length];
+        for (int i = 0; i < keys.length; i++) {
+            int outputIndex = keys[i][0];
+            SelectColumn column = selectColumns[outputIndex];
+            filterRichInfos[i] = new ColumnRichInfo(
+                    column.getColumnName(), outputIndex,
+                    flinkSchema.getColumn(column.getColumnIndexInFlinkTable()).get().getDataType());
+        }
 
-        StarRocksDynamicLookupFunction lookupFunction = new StarRocksDynamicLookupFunction(this.options, filerRichInfo, ColumnRichInfos, selectColumns);
+        StarRocksDynamicLookupFunction lookupFunction = new StarRocksDynamicLookupFunction(
+                options, filterRichInfos, columnRichInfos, selectColumns);
         return LookupFunctionProvider.of(lookupFunction);
     }
 

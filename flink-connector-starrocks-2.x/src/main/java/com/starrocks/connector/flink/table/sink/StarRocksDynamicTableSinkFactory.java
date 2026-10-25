@@ -65,6 +65,7 @@ public class StarRocksDynamicTableSinkFactory implements DynamicTableSinkFactory
     public Set<ConfigOption<?>> optionalOptions() {
         Set<ConfigOption<?>> optionalOptions = new HashSet<>();
         optionalOptions.add(StarRocksSinkOptions.SINK_VERSION);
+        optionalOptions.add(StarRocksSinkOptions.SINK_JSON_COLUMNS_FROM_FLINK_SCHEMA);
         optionalOptions.add(StarRocksSinkOptions.SINK_BATCH_MAX_SIZE);
         optionalOptions.add(StarRocksSinkOptions.SINK_BATCH_MAX_ROWS);
         optionalOptions.add(StarRocksSinkOptions.SINK_BATCH_FLUSH_INTERVAL);
@@ -90,6 +91,13 @@ public class StarRocksDynamicTableSinkFactory implements DynamicTableSinkFactory
         optionalOptions.add(StarRocksSinkOptions.SINK_WRAP_JSON_AS_ARRAY);
         optionalOptions.add(StarRocksSinkOptions.SINK_SANITIZE_ERROR_LOG);
         optionalOptions.add(StarRocksSinkOptions.SINK_BLACKHOLE);
+        // Without these, validateExcept() rejects a SQL WITH clause that sets any
+        // multi-table transaction option before the sink can read it.
+        optionalOptions.add(StarRocksSinkOptions.SINK_MULTI_TABLE_TXN_ENABLED);
+        optionalOptions.add(StarRocksSinkOptions.SINK_MULTI_TABLE_TXN_BUFFER_SIZE);
+        optionalOptions.add(StarRocksSinkOptions.SINK_MULTI_TABLE_TXN_MINI_SWITCH_INTERVAL_MS);
+        optionalOptions.add(StarRocksSinkOptions.SINK_MULTI_TABLE_TXN_MIN_SWITCH_BYTES);
+        optionalOptions.add(StarRocksSinkOptions.SINK_MULTI_TABLE_TXN_MAX_TXN_BYTES);
         optionalOptions.addAll(MergeCommitOptions.getAllConfigOptions());
         return optionalOptions;
     }

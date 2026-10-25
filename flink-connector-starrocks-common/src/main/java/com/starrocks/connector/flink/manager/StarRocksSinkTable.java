@@ -125,7 +125,7 @@ public class StarRocksSinkTable {
         }
 
         if (sinkOptions.isColumnsFromFlinkSchema()) {
-            StarRocksSinkOptions.checkMergingKeysDeclared(rows, flinkSchema.getFieldNames(), table);
+            StarRocksSinkOptions.checkMergingKeysDeclared(rows, flinkSchema.getColumnNames().toArray(new String[0]), table);
         }
 
         // 2. verify the columns of flink are contained in the starrocks schema
