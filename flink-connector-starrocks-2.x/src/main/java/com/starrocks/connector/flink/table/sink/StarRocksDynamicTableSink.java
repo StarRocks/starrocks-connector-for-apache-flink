@@ -22,6 +22,7 @@ import org.apache.flink.table.connector.ChangelogMode;
 import org.apache.flink.table.connector.sink.DynamicTableSink;
 import org.apache.flink.table.connector.sink.SinkV2Provider;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.types.RowKind;
 
 public class StarRocksDynamicTableSink implements DynamicTableSink {
 
@@ -35,7 +36,17 @@ public class StarRocksDynamicTableSink implements DynamicTableSink {
 
     @Override
     public ChangelogMode getChangelogMode(ChangelogMode requestedMode) {
-        return requestedMode;
+        // The writer drops UPDATE_BEFORE for a keyed sink that ignores it, so don't make upstream produce it.
+        if (!flinkSchema.getPrimaryKey().isPresent() || !sinkOptions.getIgnoreUpdateBefore()) {
+            return requestedMode;
+        }
+        ChangelogMode.Builder builder = ChangelogMode.newBuilder();
+        for (RowKind kind : requestedMode.getContainedKinds()) {
+            if (kind != RowKind.UPDATE_BEFORE) {
+                builder.addContainedKind(kind);
+            }
+        }
+        return builder.build();
     }
 
     @Override
