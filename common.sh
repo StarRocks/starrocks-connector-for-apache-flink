@@ -25,6 +25,8 @@ SUPPORTED_MINOR_VERSION=("1.16" "1.17" "1.18" "1.19" "1.20" "2.0" "2.1" "2.2" "2
 # version formats are different among flink versions; kafka connector is
 # test-only, 2.1/2.3 have no dedicated release yet so the nearest is used
 SUPPORTED_KAFKA_CONNECTOR_VERSION=("1.16.0" "1.17.0" "3.0.1-1.18" "3.2.0-1.19" "3.4.0-1.20" "4.0.1-2.0" "4.0.1-2.0" "5.0.0-2.2" "5.0.0-2.2")
+# test-only; must match the relocated guava package the flink version references
+SUPPORTED_FLINK_SHADED_GUAVA_VERSION=("30.1.1-jre-15.0" "30.1.1-jre-16.1" "31.1-jre-17.0" "31.1-jre-17.0" "31.1-jre-17.0" "32.1.3-jre-19.0" "33.4.0-jre-20.0" "33.4.0-jre-20.0" "33.5.0-jre-21.0")
 # minimum JDK per flink version (Flink ships Java 17 class files since 2.2)
 REQUIRED_JDK_VERSION=("8" "8" "8" "8" "8" "11" "11" "17" "17")
 VERSION_MESSAGE=$(IFS=, ; echo "${SUPPORTED_MINOR_VERSION[*]}")
@@ -123,4 +125,16 @@ function get_kafka_connector_version() {
     echo "Can't find kafka connector version for flink-${FLINK_MINOR_VERSION}"
     exit 1
   fi
+}
+
+function get_flink_shaded_guava_version() {
+  local FLINK_MINOR_VERSION=$1
+  for ((i=0; i<${#SUPPORTED_MINOR_VERSION[@]}; i++)); do
+      if [ "${SUPPORTED_MINOR_VERSION[i]}" = "$FLINK_MINOR_VERSION" ]; then
+          echo "${SUPPORTED_FLINK_SHADED_GUAVA_VERSION[i]}"
+          return
+      fi
+  done
+  echo "Can't find flink-shaded-guava version for flink-${FLINK_MINOR_VERSION}"
+  exit 1
 }
