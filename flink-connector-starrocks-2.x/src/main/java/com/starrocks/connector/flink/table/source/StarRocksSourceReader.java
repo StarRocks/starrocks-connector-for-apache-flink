@@ -20,12 +20,14 @@ import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
 
 import com.starrocks.connector.flink.table.source.struct.ColumnRichInfo;
+import com.starrocks.connector.flink.table.source.struct.QueryPlan;
 import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
 
-/** FLIP-27 SourceReader that reads data from StarRocks BE nodes. */
+/** FLIP-27 SourceReader that reads data from StarRocks BE nodes, one split at a time. */
 public class StarRocksSourceReader extends SingleThreadMultiplexSourceReaderBase<
         GenericRowData, RowData, StarRocksSourceSplit, StarRocksSourceSplit> {
 
@@ -33,16 +35,26 @@ public class StarRocksSourceReader extends SingleThreadMultiplexSourceReaderBase
             StarRocksSourceOptions sourceOptions,
             List<ColumnRichInfo> columnRichInfos,
             SelectColumn[] selectColumns,
+            Callable<QueryPlan> planner,
             SourceReaderContext readerContext) {
         super(
-                () -> new StarRocksSplitReader(sourceOptions, columnRichInfos, selectColumns),
+                () -> new StarRocksSplitReader(sourceOptions, columnRichInfos, selectColumns, planner),
                 new StarRocksRecordEmitter(),
                 readerContext.getConfiguration(),
                 readerContext);
     }
 
     @Override
+    public void start() {
+        // a reader restored with a split finishes it before asking for another
+        if (getNumberOfCurrentlyAssignedSplits() == 0) {
+            context.sendSplitRequest();
+        }
+    }
+
+    @Override
     protected void onSplitFinished(Map<String, StarRocksSourceSplit> finishedSplitIds) {
+        context.sendSplitRequest();
     }
 
     @Override

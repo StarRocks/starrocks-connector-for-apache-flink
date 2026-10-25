@@ -64,8 +64,7 @@ public class StarRocksWriter<InputT> {
     public StarRocksWriter(
             StarRocksSinkOptions sinkOptions,
             long restoredCheckpointId,
-            int numberOfParallelSubtasks,
-            int subtaskIndex,
+            StarRocksSinkContext sinkContext,
             MetricGroup metricGroup,
             SerializationSchema.InitializationContext schemaContext,
             RecordSerializationSchema<InputT> serializationSchema,
@@ -73,8 +72,9 @@ public class StarRocksWriter<InputT> {
             Collection<StarRocksWriterState> recoveredState) throws Exception {
         this.sinkOptions = sinkOptions;
         this.serializationSchema = serializationSchema;
-        this.serializationSchema.open(schemaContext,
-                new DefaultStarRocksSinkContext(numberOfParallelSubtasks, subtaskIndex, sinkOptions));
+        this.serializationSchema.open(schemaContext, sinkContext);
+        int numberOfParallelSubtasks = sinkContext.getNumberOfParallelSubtasks();
+        int subtaskIndex = sinkContext.getSubtaskIndex();
         this.streamLoadListener = new StarRocksStreamLoadListener(metricGroup, sinkOptions);
         List<ExactlyOnceLabelGeneratorSnapshot> restoredGeneratorSnapshots = new ArrayList<>();
         for (StarRocksWriterState writerState : recoveredState) {
@@ -99,6 +99,7 @@ public class StarRocksWriter<InputT> {
         this.sinkManager = new StreamLoadManagerV2(streamLoadProperties,
                 sinkOptions.getSemantic() == StarRocksSinkSemantic.AT_LEAST_ONCE);
         sinkManager.setStreamLoadListener(streamLoadListener);
+        sinkManager.setMetricListener(streamLoadListener);
         sinkManager.setLabelGeneratorFactory(labelGeneratorFactory);
         try {
             sinkManager.init();

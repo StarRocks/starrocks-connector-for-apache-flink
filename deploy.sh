@@ -35,9 +35,10 @@ kafka_connector_version="$(get_kafka_connector_version $flink_minor_version)"
 module="$(get_module_for_version $flink_minor_version)"
 check_jdk_for_version "$flink_minor_version"
 
-# only the connector module is published; common is built for shading only
+# common is built for shading only; the publishing plugin excludes it from the bundle
 ${MVN_CMD} clean deploy -Prelease -DskipTests \
   -pl flink-connector-starrocks-common,${module} \
+  -Dflink.major=${flink_minor_version%%.*} \
   -Dflink.minor.version=${flink_minor_version} \
   -Dflink.version=${flink_version} \
   -Dkafka.connector.version=${kafka_connector_version}

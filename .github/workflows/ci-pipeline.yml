@@ -39,7 +39,7 @@ jobs:
       fail-fast: true
       max-parallel: 3
       matrix:
-        # 1.x -> JDK 8, 2.0/2.1 -> JDK 11, 2.2+ -> JDK 17
+        # 1.x -> JDK 8, 2.x -> JDK 11
         include:
           - flink: '1.20'
             java: '8'
@@ -56,9 +56,9 @@ jobs:
           - flink: '2.1'
             java: '11'
           - flink: '2.2'
-            java: '17'
+            java: '11'
           - flink: '2.3'
-            java: '17'
+            java: '11'
     env:
       CUSTOM_MVN: mvn -B -ntp
     steps:

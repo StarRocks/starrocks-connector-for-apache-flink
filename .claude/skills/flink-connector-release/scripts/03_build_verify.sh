@@ -43,11 +43,12 @@ pin_local_snapshots
 
 for m in "${VERSIONS[@]}"; do
   info "──────── build flink $m (via build.sh) ────────"
-  if ! bash build.sh "$m"; then
+  jdk_home="$(release_java_home "$REPO_ROOT" "$m")"
+  if ! JAVA_HOME="$jdk_home" bash build.sh "$m"; then
     fail "build.sh failed for flink $m"; RESULT+=("$m FAIL(build)"); overall=1; continue
   fi
 
-  jar="target/flink-connector-starrocks-${SRFC}_flink-${m}.jar"
+  jar="$(connector_jar "$REPO_ROOT" "$m" "$SRFC")"
   if [ ! -f "$jar" ]; then fail "expected jar not found: $jar"; RESULT+=("$m FAIL(no-jar)"); overall=1; continue; fi
 
   if ! "$SCRIPT_DIR/verify_jar.sh" "$jar" "$EXPECTED_COMMIT" "${SRFC}_flink-${m}"; then
