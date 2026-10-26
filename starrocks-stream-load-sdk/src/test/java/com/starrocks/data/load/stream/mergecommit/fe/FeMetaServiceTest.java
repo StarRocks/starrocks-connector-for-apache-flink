@@ -24,6 +24,8 @@ import java.util.Arrays;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
 public class FeMetaServiceTest {
 
@@ -40,21 +42,51 @@ public class FeMetaServiceTest {
     }
 
     @Test
-    public void testDifferentConfigsGetDifferentServices() {
-        FeMetaService serviceA = FeMetaService.getInstance(config("userA", "http://fe-a:8030"));
-        FeMetaService serviceB = FeMetaService.getInstance(config("userB", "http://fe-b:8030"));
-        assertNotSame(serviceA, serviceB);
-        assertEquals("http://fe-a:8030", serviceA.getFeUrl());
-        assertEquals("http://fe-b:8030", serviceB.getFeUrl());
+    public void testDifferentConfigsGetDifferentServices() throws Exception {
+        FeMetaService serviceA = FeMetaService.acquire(config("userA", "http://fe-a:8030"));
+        FeMetaService serviceB = FeMetaService.acquire(config("userB", "http://fe-b:8030"));
+        // same hosts as serviceA, another user
+        FeMetaService serviceC = FeMetaService.acquire(config("userB", "http://fe-a:8030"));
+        try {
+            assertNotSame(serviceA, serviceB);
+            assertNotSame(serviceA, serviceC);
+            assertNotSame(serviceB, serviceC);
+            assertEquals("http://fe-a:8030", serviceA.getFeUrl());
+            assertEquals("http://fe-b:8030", serviceB.getFeUrl());
+        } finally {
+            serviceA.release();
+            serviceB.release();
+            serviceC.release();
+        }
+    }
+
+    @Test
+    public void testEqualConfigsShareService() throws Exception {
+        FeMetaService service1 = FeMetaService.acquire(config("user", "http://fe-a:8030", "http://fe-b:8030"));
+        FeMetaService service2 = FeMetaService.acquire(config("user", "http://fe-b:8030", "http://fe-a:8030"));
+        try {
+            assertSame(service1, service2);
+        } finally {
+            service1.release();
+            service2.release();
+        }
     }
 
     @Test
     public void testNewConfigTakesEffectAfterLastRelease() throws Exception {
-        FeMetaService oldService = FeMetaService.getInstance(config("user", "http://fe-a:8030"));
-        oldService.takeRef();
-        oldService.releaseRef();
+        FeMetaService oldService = FeMetaService.acquire(config("user", "http://fe-a:8030"));
+        oldService.release();
 
-        FeMetaService newService = FeMetaService.getInstance(config("user", "http://fe-b:8030"));
-        assertEquals("http://fe-b:8030", newService.getFeUrl());
+        FeMetaService newService = FeMetaService.acquire(config("user", "http://fe-b:8030"));
+        FeMetaService sameConfigService = FeMetaService.acquire(config("user", "http://fe-a:8030"));
+        try {
+            assertEquals("http://fe-b:8030", newService.getFeUrl());
+            // the released service was dropped instead of being initialized again
+            assertNotSame(oldService, sameConfigService);
+            assertTrue(sameConfigService.getLabelStateService().isPresent());
+        } finally {
+            newService.release();
+            sameConfigService.release();
+        }
     }
 }

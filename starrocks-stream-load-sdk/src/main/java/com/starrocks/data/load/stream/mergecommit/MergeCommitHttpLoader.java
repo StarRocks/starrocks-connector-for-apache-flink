@@ -89,9 +89,7 @@ public class MergeCommitHttpLoader extends MergeCommitLoader {
             config.httpServiceConfig = httpConfig;
             config.nodesStateServiceConfig = nodesConfig;
             config.numThreads = properties.getHttpThreadNum();
-            FeMetaService service1 = FeMetaService.getInstance(config);
-            service1.takeRef();
-            feMetaService = service1;
+            feMetaService = FeMetaService.acquire(config);
 
             BackendHttpService.Config backendConfig = new BackendHttpService.Config();
             backendConfig.username = properties.getUsername();
@@ -99,9 +97,7 @@ public class MergeCommitHttpLoader extends MergeCommitLoader {
             backendConfig.maxConnectionsPerRoute = properties.getHttpMaxConnectionsPerRoute();
             backendConfig.totalMaxConnections = properties.getHttpTotalMaxConnections();
             backendConfig.idleConnectionTimeoutMs = properties.getHttpIdleConnectionTimeoutMs();
-            BackendHttpService service2 = BackendHttpService.getInstance(backendConfig);
-            service2.takeRef();
-            backendService = service2;
+            backendService = BackendHttpService.acquire(backendConfig);
             this.backendDirectConnection = properties.isBackendDirectConnection();
 
             this.executorService = new ScheduledThreadPoolExecutor(
@@ -118,11 +114,11 @@ public class MergeCommitHttpLoader extends MergeCommitLoader {
             LOG.info("Start merge commit loader");
         } catch (Throwable e) {
             if (feMetaService != null) {
-                feMetaService.releaseRef();
+                feMetaService.release();
                 feMetaService = null;
             }
             if (backendService != null) {
-                backendService.releaseRef();
+                backendService.release();
                 backendService = null;
             }
             throw new RuntimeException("Failed to start merge commit loader", e);
@@ -136,11 +132,11 @@ public class MergeCommitHttpLoader extends MergeCommitLoader {
             executorService = null;
         }
         if (feMetaService != null) {
-            feMetaService.releaseRef();
+            feMetaService.release();
             feMetaService = null;
         }
         if (backendService != null) {
-            backendService.releaseRef();
+            backendService.release();
             backendService = null;
         }
         LOG.info("Close merge commit loader");

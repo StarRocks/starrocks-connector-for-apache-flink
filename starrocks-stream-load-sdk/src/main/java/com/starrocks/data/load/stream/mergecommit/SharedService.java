@@ -62,7 +62,8 @@ public abstract class SharedService {
         }
     }
 
-    public void releaseRef() {
+    // Returns the reference count after the release
+    public int releaseRef() {
         int newCount;
         lock.writeLock().lock();
         try {
@@ -76,5 +77,6 @@ public abstract class SharedService {
         if (getLogger() != null) {
             getLogger().info("Release reference, count: {}", newCount);
         }
+        return newCount;
     }
 }
