@@ -68,6 +68,11 @@ public class Table {
     private final ReentrantLock lock;
     private final Condition flushCondition;
     private volatile ScheduledFuture<?> timer;
+    // Guarded by lock. Set when the flush interval of the active chunk elapses but the chunk
+    // cannot be flushed without waiting for a request slot. loadFinish flushes it later.
+    private boolean delayFlushPending;
+    // Guarded by lock. Number of switched chunks waiting in flushChunk for a request slot.
+    private int numChunksWaitingForSlot;
     private final AtomicReference<Throwable> tableThrowable;
     private final Map<String, String> loadParameters;
     private final boolean mergeCommitAsync;
@@ -151,8 +156,9 @@ public class Table {
             if (!wait) {
                 return;
             }
-            // wait until all inflight requests finished
-            waitInflightRequests(1);
+            // Wait until all inflight requests finished, and also the chunks that other threads
+            // switched out and that still wait for a request slot, for example in cacheEvict()
+            waitInflightRequests(1, true);
         } finally {
             lock.unlock();
         }
@@ -164,7 +170,17 @@ public class Table {
             if (activeChunk == null || activeChunk.getChunkId() != chunkId) {
                 return;
             }
-            switchChunk(FlushChunkReason.CHUNK_DELAY);
+            // The timer runs on the loader's executor, which also completes the inflight requests,
+            // so it must not wait for a request slot. Keep the chunk active, and loadFinish will
+            // flush it once a slot frees up.
+            if (canFlushWithoutWaiting()) {
+                switchChunk(FlushChunkReason.CHUNK_DELAY);
+            } else {
+                delayFlushPending = true;
+                LOG.debug("Delay flush until a request slot frees up, db: {}, table: {}, chunkId: {}, " +
+                        "inflight requests: {}, chunks waiting for slot: {}", database, table, chunkId,
+                        inflightLoadRequests.size(), numChunksWaitingForSlot);
+            }
         } finally {
             lock.unlock();
         }
@@ -188,7 +204,7 @@ public class Table {
         if (activeChunk == null) {
             activeChunk = new Chunk(properties.getDataFormat(), chunkIdGenerator.incrementAndGet());
             if (timer != null) {
-                timer.cancel(true);
+                timer.cancel(false);
             }
             timer = mergeCommitLoader.scheduleFlush(this, activeChunk.getChunkId(), flushIntervalMs);
         }
@@ -203,17 +219,60 @@ public class Table {
 
         Chunk inactiveChunk = activeChunk;
         activeChunk = null;
+        delayFlushPending = false;
         if (timer != null) {
-            timer.cancel(true);
+            // Do not interrupt. For CHUNK_DELAY, the timer is the task running this method.
+            timer.cancel(false);
             timer = null;
         }
         if (inactiveChunk.numRows() > 0) {
-            flushChunk(inactiveChunk, reason);
+            try {
+                flushChunk(inactiveChunk, reason);
+            } catch (Throwable e) {
+                // The chunk is no longer active and may not be inflight, so fail the table instead
+                // of losing the chunk silently
+                failTable(inactiveChunk, reason, e);
+                throw e;
+            }
         }
     }
 
+    // Whether a chunk switched now is sent without waiting: a request slot is free, and no
+    // earlier chunk is waiting for one, which keeps the chunks in order
+    private boolean canFlushWithoutWaiting() {
+        return numChunksWaitingForSlot == 0
+                && inflightLoadRequests.size() < maxConcurrentRequests
+                && tableThrowable.get() == null;
+    }
+
+    // Called with the lock held after a request slot frees up
+    private void flushDelayedChunk() {
+        if (!delayFlushPending || !canFlushWithoutWaiting()) {
+            return;
+        }
+        try {
+            switchChunk(FlushChunkReason.CHUNK_DELAY);
+        } catch (Throwable e) {
+            // switchChunk has failed the table. Do not throw into the completion of another request.
+        }
+    }
+
+    private void failTable(Chunk chunk, FlushChunkReason reason, Throwable throwable) {
+        tableThrowable.compareAndSet(null, throwable);
+        // wake up the threads waiting in waitInflightRequests() to fail them
+        flushCondition.signalAll();
+        manager.onTableFailure(this, throwable);
+        LOG.error("Fail to flush chunk, db: {}, table: {}, chunkId: {}, rows: {}, bytes: {}, reason: {}",
+                database, table, chunk.getChunkId(), chunk.numRows(), chunk.rowBytes(), reason, throwable);
+    }
+
     private void flushChunk(Chunk chunk, FlushChunkReason reason) {
-        waitInflightRequests(maxConcurrentRequests);
+        numChunksWaitingForSlot++;
+        try {
+            waitInflightRequests(maxConcurrentRequests, false);
+        } finally {
+            numChunksWaitingForSlot--;
+        }
         LoadRequest request = new LoadRequest(this, chunk, maxRetries, retryIntervalInMs);
         inflightLoadRequests.put(chunk.getChunkId(), request);
         manager.onLoadStart(this, chunk.rowBytes(), chunk.numRows());
@@ -223,23 +282,27 @@ public class Table {
                 database, table, chunk.getChunkId(), chunk.numRows(), chunk.rowBytes(), reason);
     }
 
-    private void waitInflightRequests(int threshold) {
+    // Waits until fewer than threshold requests are inflight. If waitSwitchedChunks is true, also waits
+    // until no switched chunk waits for a request slot.
+    private void waitInflightRequests(int threshold, boolean waitSwitchedChunks) {
         final long startTimeMs = System.currentTimeMillis();
         final long startTimeNs = System.nanoTime();
         final long timeoutNs = loadTimeoutMs >= 0
                 ? TimeUnit.MILLISECONDS.toNanos(loadTimeoutMs)
                 : Long.MAX_VALUE;
         final long awakeTimeoutNs = TimeUnit.SECONDS.toNanos(10);
-        while (inflightLoadRequests.size() >= threshold && tableThrowable.get() == null) {
+        while ((inflightLoadRequests.size() >= threshold || (waitSwitchedChunks && numChunksWaitingForSlot > 0))
+                && tableThrowable.get() == null) {
             try {
                 long elapsedNs = System.nanoTime() - startTimeNs;
                 long remainingNs = timeoutNs - elapsedNs;
                 if (remainingNs <= 0) {
                     RuntimeException timeoutEx = new RuntimeException(String.format(
                             "Flush timeout when waiting inflight requests, db: %s, table: %s, " +
-                                    "elapsed: %d ms, timeout: %d ms, current inflight requests: %d, target size: %d",
+                                    "elapsed: %d ms, timeout: %d ms, current inflight requests: %d, target size: %d, " +
+                                    "chunks waiting for slot: %d",
                             database, table, System.currentTimeMillis() - startTimeMs, loadTimeoutMs,
-                            inflightLoadRequests.size(), threshold));
+                            inflightLoadRequests.size(), threshold, numChunksWaitingForSlot));
                     tableThrowable.compareAndSet(null, timeoutEx);
                     throw timeoutEx;
                 }
@@ -247,9 +310,9 @@ public class Table {
                 long notElapsedNs = flushCondition.awaitNanos(Math.min(awakeTimeoutNs, remainingNs));
                 if (notElapsedNs <= 0) {
                     LOG.info("Waiting inflight requests, db: {}, table: {}, current inflight requests: {}," +
-                            " target size: {}, elapsed: {} ms, timeout: {} ms, {}", database, table,
-                            inflightLoadRequests.size(), threshold, System.currentTimeMillis() - startTimeMs,
-                            loadTimeoutMs, loadRequestsSummary());
+                            " target size: {}, chunks waiting for slot: {}, elapsed: {} ms, timeout: {} ms, {}",
+                            database, table, inflightLoadRequests.size(), threshold, numChunksWaitingForSlot,
+                            System.currentTimeMillis() - startTimeMs, loadTimeoutMs, loadRequestsSummary());
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -330,6 +393,7 @@ public class Table {
         try {
             inflightLoadRequests.remove(request.getChunk().getChunkId());
             flushCondition.signalAll();
+            flushDelayedChunk();
         } finally {
             lock.unlock();
         }

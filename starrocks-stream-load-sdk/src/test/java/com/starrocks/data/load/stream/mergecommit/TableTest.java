@@ -52,6 +52,7 @@ import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
@@ -834,6 +835,8 @@ public class TableTest {
         writeThread.interrupt();
         writeThread.join(60000);
         assertNotNull(writeThrowable.get());
+        // The manager fails the following writes
+        verify(manager).onTableFailure(eq(table), any());
 
         completeRequest(sendLoadSpy.get(0));
         try {
