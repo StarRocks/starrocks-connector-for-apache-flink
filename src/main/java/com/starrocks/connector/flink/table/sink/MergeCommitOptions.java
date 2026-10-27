@@ -50,9 +50,7 @@ public class MergeCommitOptions {
     public static final ConfigOption<Integer> MAX_CONCURRENT_REQUESTS =
             ConfigOptions.key(MERGE_COMMIT_PREFIX + "max-concurrent-requests").intType().defaultValue(Integer.MAX_VALUE)
                     .withDeprecatedKeys(MERGE_COMMIT_PREFIX + "max-inflight-requests")
-                    .withDescription("The maximum number of concurrent stream load requests that a sink subtask " +
-                            "sends to a table. 0 sends them one at a time, which keeps the load order and is useful " +
-                            "for primary key tables. A negative value means no limit.");
+                    .withDescription("non-positive value ensures the order which is useful for primary key table");
     public static final ConfigOption<Integer> HTTP_THREAD_NUM =
             ConfigOptions.key(MERGE_COMMIT_PREFIX + "http.thread.num").intType().defaultValue(3);
     public static final ConfigOption<Integer> HTTP_MAX_CONNECTIONS =
@@ -105,13 +103,12 @@ public class MergeCommitOptions {
             if (!streamLoadProperties.containsKey(MERGE_COMMIT_ASYNC)) {
                 streamLoadProperties.put(MERGE_COMMIT_ASYNC, "true");
             }
-            int maxConcurrentRequests = options.get(MergeCommitOptions.MAX_CONCURRENT_REQUESTS);
+            int maxInflightRequests = options.get(MergeCommitOptions.MAX_CONCURRENT_REQUESTS);
             Optional<Long> optionalChunkSize = options.getOptional(MergeCommitOptions.CHUNK_SIZE);
             if (optionalChunkSize.isPresent()) {
                 defaultTablePropertiesBuilder.chunkLimit(optionalChunkSize.get());
             } else {
-                // only 0 loads in order, a negative value means unlimited concurrency
-                long chunkSize = maxConcurrentRequests == 0 ? DEFAULT_CHUNK_SIZE_FOR_IN_ORDER : DEFAULT_CHUNK_SIZE_FOR_OUT_OF_ORDER;
+                long chunkSize = maxInflightRequests <= 0 ? DEFAULT_CHUNK_SIZE_FOR_IN_ORDER : DEFAULT_CHUNK_SIZE_FOR_OUT_OF_ORDER;
                 defaultTablePropertiesBuilder.chunkLimit(chunkSize);
             }
 

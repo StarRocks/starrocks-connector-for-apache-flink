@@ -22,7 +22,6 @@ package com.starrocks.data.load.stream.mergecommit.be;
 
 import com.starrocks.data.load.stream.mergecommit.Pair;
 import com.starrocks.data.load.stream.mergecommit.SharedService;
-import com.starrocks.data.load.stream.mergecommit.SharedServiceRegistry;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.impl.client.CloseableHttpClient;
@@ -34,8 +33,6 @@ import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Arrays;
-import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -43,29 +40,26 @@ public class BackendHttpService extends SharedService {
 
     private static final Logger LOG = LoggerFactory.getLogger(BackendHttpService.class);
 
-    // Loaders with equal connection settings share a service, so that they share the connections
-    private static final SharedServiceRegistry<Key, BackendHttpService> REGISTRY = new SharedServiceRegistry<>();
+    private static volatile BackendHttpService INSTANCE;
 
     private final Config config;
-    private final Key key;
     private CloseableHttpClient httpClient;
     private IdleConnectionEvictor idleConnectionEvictor;
     private volatile String currentUuid;
 
-    private BackendHttpService(Config config, Key key) {
+    public BackendHttpService(Config config) {
         this.config = config;
-        this.key = key;
     }
 
-    // Takes a reference to the service of the config, which is shared with equal connection settings.
-    // Call release() to give it back.
-    public static BackendHttpService acquire(Config config) throws Exception {
-        Key key = new Key(config);
-        return REGISTRY.acquire(key, () -> new BackendHttpService(config, key));
-    }
-
-    public void release() {
-        REGISTRY.release(key, this);
+    public static BackendHttpService getInstance(Config config) {
+        if (INSTANCE == null) {
+            synchronized (BackendHttpService.class) {
+                if (INSTANCE == null) {
+                    INSTANCE = new BackendHttpService(config);
+                }
+            }
+        }
+        return INSTANCE;
     }
 
     @Override
@@ -129,27 +123,5 @@ public class BackendHttpService extends SharedService {
         public int validateAfterInactivityMs = 2000;
         public String username;
         public String password;
-    }
-
-    // The connection settings that the service uses. Configs with equal settings share a service.
-    // The credentials are not part of it, because each request carries its own Authorization header.
-    private static final class Key {
-
-        private final List<Integer> values;
-
-        Key(Config config) {
-            this.values = Arrays.asList(config.maxConnectionsPerRoute, config.totalMaxConnections,
-                    config.idleConnectionTimeoutMs, config.validateAfterInactivityMs);
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            return o instanceof Key && values.equals(((Key) o).values);
-        }
-
-        @Override
-        public int hashCode() {
-            return values.hashCode();
-        }
     }
 }

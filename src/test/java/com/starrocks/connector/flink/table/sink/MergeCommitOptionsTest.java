@@ -153,38 +153,4 @@ public class MergeCommitOptionsTest {
         // -1 should override the default 10000
         assertEquals(-1, props.getPublishTimeoutMs());
     }
-
-    private static long defaultChunkSize(Integer maxConcurrentRequests) {
-        Configuration options = new Configuration();
-        if (maxConcurrentRequests != null) {
-            options.setInteger(MergeCommitOptions.MAX_CONCURRENT_REQUESTS, maxConcurrentRequests);
-        }
-        Map<String, String> streamLoadProperties = new HashMap<>();
-        streamLoadProperties.put("enable_merge_commit", "true");
-
-        StreamLoadTableProperties.Builder tablePropsBuilder = StreamLoadTableProperties.builder()
-                .database("test_db")
-                .table("test_table");
-        StreamLoadProperties.Builder propsBuilder = StreamLoadProperties.builder()
-                .loadUrls("http://localhost:8030")
-                .username("root")
-                .password("");
-
-        MergeCommitOptions.buildMergeCommitOptions(options, streamLoadProperties, tablePropsBuilder, propsBuilder);
-        return tablePropsBuilder.build().getChunkLimit();
-    }
-
-    @Test
-    public void testChunkSizeDefaultForSerialLoading() {
-        // 0 loads one request at a time, so a larger chunk keeps the throughput
-        assertEquals(500L * 1024 * 1024, defaultChunkSize(0));
-    }
-
-    @Test
-    public void testChunkSizeDefaultForConcurrentLoading() {
-        assertEquals(20L * 1024 * 1024, defaultChunkSize(null));
-        assertEquals(20L * 1024 * 1024, defaultChunkSize(2));
-        // a negative value means unlimited concurrency, not serial loading
-        assertEquals(20L * 1024 * 1024, defaultChunkSize(-1));
-    }
 }
