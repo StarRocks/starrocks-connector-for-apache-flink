@@ -205,7 +205,8 @@ public class StarRocksSinkOptions implements Serializable {
                     "transaction that is not lingering.");
 
     public static final ConfigOption<Boolean> SINK_IGNORE_COMMIT_ERROR = ConfigOptions.key("sink.exactly-once.ignore-commit-error")
-            .booleanType().defaultValue(false).withDescription("Only available when using exactly-once. Whether to log and " +
+            .booleanType().defaultValue(false).withDescription("Only available when using exactly-once with the unified " +
+                    "sink api (sink.use.new-sink-api, always on Flink 2.x). Whether to log and " +
                     "skip a transaction that still fails to commit after sink.max-retries, instead of failing the job. Only " +
                     "use it to recover a job whose checkpointed transactions have expired, for example when restoring from " +
                     "an old checkpoint: the data of a skipped transaction is lost.");

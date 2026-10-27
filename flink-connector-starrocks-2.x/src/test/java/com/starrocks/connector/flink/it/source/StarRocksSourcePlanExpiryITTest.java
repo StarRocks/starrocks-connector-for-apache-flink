@@ -66,7 +66,7 @@ public class StarRocksSourcePlanExpiryITTest extends StarRocksITTestBase {
             "tablet_rowset_stale_sweep_time_sec", "min_garbage_sweep_interval", "max_garbage_sweep_interval"};
 
     @Test
-    public void testSplitWithAnExpiredPlanIsReadWithANewPlan() throws Exception {
+    public void testSplitWithAnExpiredPlanIsReadWithANewPlanOnlyWhenAsked() throws Exception {
         assumeTrue("needs UPDATE information_schema.be_configs", isStarRocksVersionAtLeast(3, 5));
         String tableName = "plan_expiry_" + genRandomUuid();
         executeSrSQL(String.format("CREATE TABLE `%s`.`%s` (c0 INT) ENGINE = OLAP DUPLICATE KEY(c0) " +
@@ -103,14 +103,16 @@ public class StarRocksSourcePlanExpiryITTest extends StarRocksITTestBase {
 
         Callable<QueryPlan> planner = () -> StarRocksSourceCommonFunc.getQueryInfo(options, sql).getQueryPlan();
         try {
-            readSplit(new StarRocksSplitReader(options(tableName, 0), columnRichInfos, selectColumns, planner), split);
-            fail("without retries the split must fail on its expired plan");
+            readSplit(new StarRocksSplitReader(options, columnRichInfos, selectColumns, planner), split);
+            fail("by default the split must fail on its expired plan");
         } catch (IOException expected) {
+            assertTrue(expected.getMessage(), expected.getMessage().contains("restart the job without state"));
             assertTrue(expected.getCause().getMessage(), expected.getCause().getMessage().contains("compacted"));
         }
 
         // the new plan reads the table as it is now, including the batches written after the first plan
-        Set<Integer> rows = readSplit(new StarRocksSplitReader(options, columnRichInfos, selectColumns, planner), split);
+        Set<Integer> rows = readSplit(
+                new StarRocksSplitReader(options(tableName, true), columnRichInfos, selectColumns, planner), split);
         assertEquals(BATCHES * BATCH_ROWS, rows.size());
     }
 
@@ -184,12 +186,12 @@ public class StarRocksSourcePlanExpiryITTest extends StarRocksITTestBase {
     }
 
     private static StarRocksSourceOptions options(String tableName) {
-        return options(tableName, StarRocksSourceOptions.SCAN_MAX_RETRIES.defaultValue());
+        return options(tableName, false);
     }
 
-    private static StarRocksSourceOptions options(String tableName, int maxRetries) {
+    private static StarRocksSourceOptions options(String tableName, boolean replanOnFailure) {
         Configuration conf = new Configuration();
-        conf.set(StarRocksSourceOptions.SCAN_MAX_RETRIES, maxRetries);
+        conf.set(StarRocksSourceOptions.SCAN_REPLAN_ON_FAILURE, replanOnFailure);
         conf.set(StarRocksSourceOptions.SCAN_URL, getHttpUrls());
         conf.set(StarRocksSourceOptions.JDBC_URL, getJdbcUrl());
         conf.set(StarRocksSourceOptions.USERNAME, USERNAME);

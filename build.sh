@@ -54,10 +54,10 @@ else
   mvn_skip_flag="-DskipTests=false"
 fi
 
-# common must always be in -pl: it is compiled against the target flink version
-# and shaded in; a stale copy must never resolve from the local repository
+# the root project runs the license check. common must always be in -pl: it is compiled against the target
+# flink version and shaded in; a stale copy must never resolve from the local repository
 ${MVN_CMD} clean package ${mvn_skip_flag} \
-  -pl flink-connector-starrocks-common,${module},flink-connector-starrocks-tests \
+  -pl .,flink-connector-starrocks-common,${module},flink-connector-starrocks-tests \
   -Dflink.major=${flink_minor_version%%.*} \
   -Dflink.minor.version=${flink_minor_version} \
   -Dflink.version=${flink_version} \
