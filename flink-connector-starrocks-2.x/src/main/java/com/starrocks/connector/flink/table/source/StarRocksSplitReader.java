@@ -74,7 +74,7 @@ public class StarRocksSplitReader implements SplitReader<GenericRowData, StarRoc
             List<ColumnRichInfo> columnRichInfos,
             SelectColumn[] selectColumns,
             Callable<QueryPlan> planner) {
-        this(planner, sourceOptions.getScanMaxRetries(), RETRY_DELAY_MS, (beNode, tabletIds, opaquedQueryPlan) -> {
+        this(planner, replanRetries(sourceOptions), RETRY_DELAY_MS, (beNode, tabletIds, opaquedQueryPlan) -> {
             StarRocksSourceBeReader beReader = new StarRocksSourceBeReader(
                     beNode, columnRichInfos, selectColumns, sourceOptions);
             try {
@@ -93,6 +93,10 @@ public class StarRocksSplitReader implements SplitReader<GenericRowData, StarRoc
         this.maxRetries = maxRetries;
         this.retryDelayMs = retryDelayMs;
         this.scanOpener = scanOpener;
+    }
+
+    private static int replanRetries(StarRocksSourceOptions sourceOptions) {
+        return sourceOptions.isScanReplanOnFailure() ? sourceOptions.getScanMaxRetries() : 0;
     }
 
     @Override
@@ -146,8 +150,15 @@ public class StarRocksSplitReader implements SplitReader<GenericRowData, StarRoc
                 return true;
             } catch (Exception e) {
                 if (retry >= maxRetries) {
-                    throw new IOException(String.format("Failed to open split %s on BE %s after %d retries with " +
-                            "a new query plan (scan.max-retries)", currentSplit.splitId(), scan.getBeNode(), retry), e);
+                    String message = retry == 0
+                            ? String.format("Failed to open split %s on BE %s. If the BE dropped the tablet versions " +
+                                    "of its query plan, which it keeps for tablet_rowset_stale_sweep_time_sec after " +
+                                    "compaction, restart the job without state, or set scan.replan-on-failure, with " +
+                                    "scan.max-retries above 0, to read the split with a new query plan",
+                                    currentSplit.splitId(), scan.getBeNode())
+                            : String.format("Failed to open split %s on BE %s after %d retries with a new query plan " +
+                                    "(scan.max-retries)", currentSplit.splitId(), scan.getBeNode(), retry);
+                    throw new IOException(message, e);
                 }
                 // the plan pins tablet versions only once a scanner is open, and BEs drop stale versions after a while
                 LOG.warn("Failed to open split {} on BE {}, retrying with a new query plan ({} of {})",

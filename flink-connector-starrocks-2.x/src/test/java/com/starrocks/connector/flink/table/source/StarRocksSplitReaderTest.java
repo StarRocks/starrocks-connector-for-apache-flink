@@ -125,6 +125,7 @@ public class StarRocksSplitReaderTest {
             readAll(reader, "split-0");
             fail("the split must fail");
         } catch (IOException e) {
+            assertTrue(e.getMessage(), e.getMessage().contains("restart the job without state"));
             assertEquals(0, plans.get());
         }
     }

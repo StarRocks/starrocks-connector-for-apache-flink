@@ -84,6 +84,12 @@ public class StarRocksSourceOptions implements Serializable {
     public static final ConfigOption<Integer> SCAN_MAX_RETRIES = ConfigOptions.key("scan.max-retries")
             .intType().defaultValue(1).withDescription("Max request retry times.");
 
+    public static final ConfigOption<Boolean> SCAN_REPLAN_ON_FAILURE = ConfigOptions.key("scan.replan-on-failure")
+            .booleanType().defaultValue(false).withDescription("Only on Flink 2.x. Whether to read a split that fails " +
+                    "to open with a new query plan, up to scan.max-retries times, for example after the BE dropped the " +
+                    "tablet versions of the first plan. The rows of that split can then be newer than the rows of the " +
+                    "splits read before.");
+
     public static final ConfigOption<String> SCAN_COLUMNS = ConfigOptions.key("scan.columns")
             .stringType().defaultValue("").withDescription("SQL columns");
 
@@ -213,6 +219,10 @@ public class StarRocksSourceOptions implements Serializable {
 
     public int getScanMaxRetries() {
         return tableOptions.get(SCAN_MAX_RETRIES).intValue();
+    }
+
+    public boolean isScanReplanOnFailure() {
+        return tableOptions.get(SCAN_REPLAN_ON_FAILURE);
     }
 
     public String getColumns() {
