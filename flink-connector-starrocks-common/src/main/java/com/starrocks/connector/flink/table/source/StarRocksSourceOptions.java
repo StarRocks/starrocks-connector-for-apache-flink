@@ -90,6 +90,10 @@ public class StarRocksSourceOptions implements Serializable {
                     "tablet versions of the first plan. The rows of that split can then be newer than the rows of the " +
                     "splits read before.");
 
+    public static final ConfigOption<Integer> SCAN_PARALLELISM = ConfigOptions.key("scan.parallelism")
+            .intType().noDefaultValue().withDescription("Only on Flink 2.x. The parallelism of the source in SQL. " +
+                    "If not set, the source takes the parallelism of the job.");
+
     public static final ConfigOption<String> SCAN_COLUMNS = ConfigOptions.key("scan.columns")
             .stringType().defaultValue("").withDescription("SQL columns");
 
@@ -223,6 +227,10 @@ public class StarRocksSourceOptions implements Serializable {
 
     public boolean isScanReplanOnFailure() {
         return tableOptions.get(SCAN_REPLAN_ON_FAILURE);
+    }
+
+    public Integer getScanParallelism() {
+        return tableOptions.getOptional(SCAN_PARALLELISM).orElse(null);
     }
 
     public String getColumns() {

@@ -28,6 +28,7 @@ import org.apache.flink.table.catalog.Column;
 import org.apache.flink.table.catalog.ObjectIdentifier;
 import org.apache.flink.table.catalog.ResolvedCatalogTable;
 import org.apache.flink.table.catalog.ResolvedSchema;
+import org.apache.flink.table.connector.ParallelismProvider;
 import org.apache.flink.table.factories.FactoryUtil;
 
 import org.junit.Test;
@@ -37,6 +38,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.Assert.assertEquals;
 
@@ -51,6 +53,29 @@ public class StarRocksDynamicTableSourceFactoryTest {
         ResolvedSchema resolvedSchema = new ResolvedSchema(
                 Arrays.asList(metadata, physical), Collections.emptyList(), null);
 
+        StarRocksDynamicTableSource source = createSource(resolvedSchema, requiredOptions());
+
+        Field field = StarRocksDynamicTableSource.class.getDeclaredField("flinkSchema");
+        field.setAccessible(true);
+        ResolvedSchema schema = (ResolvedSchema) field.get(source);
+        assertEquals(Collections.singletonList(physical), schema.getColumns());
+    }
+
+    @Test
+    public void testScanParallelismSetsTheSourceParallelism() {
+        ResolvedSchema schema = ResolvedSchema.of(Column.physical("c1", DataTypes.INT()));
+        Map<String, String> options = requiredOptions();
+        assertEquals(Optional.empty(), sourceParallelism(createSource(schema, options)));
+
+        options.put("scan.parallelism", "4");
+        assertEquals(Optional.of(4), sourceParallelism(createSource(schema, options)));
+    }
+
+    private static Optional<Integer> sourceParallelism(StarRocksDynamicTableSource source) {
+        return ((ParallelismProvider) source.getScanRuntimeProvider(null)).getParallelism();
+    }
+
+    private static Map<String, String> requiredOptions() {
         Map<String, String> options = new HashMap<>();
         options.put("connector", "starrocks");
         options.put("scan-url", "127.0.0.1:8030");
@@ -59,6 +84,10 @@ public class StarRocksDynamicTableSourceFactoryTest {
         options.put("password", "");
         options.put("database-name", "test_db");
         options.put("table-name", "test_table");
+        return options;
+    }
+
+    private static StarRocksDynamicTableSource createSource(ResolvedSchema resolvedSchema, Map<String, String> options) {
         CatalogTable catalogTable = CatalogTable.newBuilder()
                 .schema(Schema.newBuilder().fromResolvedSchema(resolvedSchema).build())
                 .options(options)
@@ -70,13 +99,6 @@ public class StarRocksDynamicTableSourceFactoryTest {
                 new Configuration(),
                 Thread.currentThread().getContextClassLoader(),
                 false);
-
-        StarRocksDynamicTableSource source = (StarRocksDynamicTableSource)
-                new StarRocksDynamicTableSourceFactory().createDynamicTableSource(context);
-
-        Field field = StarRocksDynamicTableSource.class.getDeclaredField("flinkSchema");
-        field.setAccessible(true);
-        ResolvedSchema schema = (ResolvedSchema) field.get(source);
-        assertEquals(Collections.singletonList(physical), schema.getColumns());
+        return (StarRocksDynamicTableSource) new StarRocksDynamicTableSourceFactory().createDynamicTableSource(context);
     }
 }

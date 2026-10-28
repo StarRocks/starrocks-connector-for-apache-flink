@@ -117,6 +117,7 @@ Follow these steps to deploy the Flink connector:
 | scan.params.mem-limit-byte  | No       | STRING    | The maximum amount of memory allowed per query on each BE. Unit: bytes. Default value: `1073741824`, equal to 1 GB. |
 | scan.max-retries            | No       | STRING    | The maximum number of times that the read task can be retried upon failures. Default value: `1`. If the number of times that the read task is retried exceeds this limit, the read task returns errors. On Flink 2.x with `scan.replan-on-failure` enabled, a split that fails to open is also retried up to this many times, each time with a new query plan. |
 | scan.replan-on-failure      | No       | BOOLEAN   | Supported since 1.2.17, on Flink 2.x only. Whether to read a split that fails to open with a new query plan, retried up to `scan.max-retries` times. Default value: `false`. The rows of that split can then be newer than the rows of the splits read before. See [Checkpoints and restore on Flink 2.x](#checkpoints-and-restore-on-flink-2x). |
+| scan.parallelism            | No       | INT       | Supported since 1.2.17, on Flink 2.x only. The parallelism of the source. If not set, the source takes the parallelism of the job. Set it to the number of BEs to read every BE at once without changing the parallelism of the rest of the job. See [Checkpoints and restore on Flink 2.x](#checkpoints-and-restore-on-flink-2x). |
 
 The following parameters apply only to reading data by using DataStream API.
 
@@ -349,7 +350,8 @@ When you read data by using Flink SQL, take note of the following points:
 
 On Flink 2.x the source plans the scan once and hands out one split per BE and group of tablets. Each reader reads one
 split at a time, so the source parallelism decides how many BEs are read concurrently: to read every BE at once, as
-Flink 1.x does, set it to the number of BEs, which gives one split per BE. A checkpoint records the splits that are
+Flink 1.x does, set it to the number of BEs, which gives one split per BE. In Flink SQL, set it with `scan.parallelism`
+to leave the parallelism of the rest of the job unchanged. A checkpoint records the splits that are
 not assigned yet, and each reader records the split it is reading.
 
 - After a restore, a split that was being read is read again from its start, so its rows can be emitted twice

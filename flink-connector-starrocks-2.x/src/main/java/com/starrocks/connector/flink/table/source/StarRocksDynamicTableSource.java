@@ -63,7 +63,7 @@ public class StarRocksDynamicTableSource implements ScanTableSource, LookupTable
             this.pushDownHolder.getLimit(),
             this.pushDownHolder.getSelectColumns(),
             this.pushDownHolder.getQueryType());
-        return SourceProvider.of(starRocksSource);
+        return SourceProvider.of(starRocksSource, options.getScanParallelism());
     }
 
     @Override
