@@ -25,6 +25,7 @@ import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -39,6 +40,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BooleanSupplier;
@@ -58,6 +60,7 @@ import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -581,12 +584,16 @@ public class TableTest {
     }
 
     private Table createSerialTable(String tableName, int flushIntervalMs) {
+        // bound the wait for a request slot if a regression blocks it
+        return createSerialTable(tableName, flushIntervalMs, 30);
+    }
+
+    private Table createSerialTable(String tableName, int flushIntervalMs, int loadTimeoutSeconds) {
         StreamLoadTableProperties props = StreamLoadTableProperties.builder()
                 .database("test_db")
                 .table(tableName)
                 .streamLoadDataFormat(StreamLoadDataFormat.JSON)
-                // bound the wait for a request slot if a regression blocks it
-                .addProperty("timeout", "30")
+                .addProperty("timeout", String.valueOf(loadTimeoutSeconds))
                 .build();
         return new Table(
                 "test_db", tableName, manager, loader, props,
@@ -607,6 +614,28 @@ public class TableTest {
                 lock.unlock();
             }
         }, "Timeout waiting for " + numWaiters + " waiters on flushCondition");
+    }
+
+    private static int numWaitersOnFlushCondition(Table table) {
+        ReentrantLock lock = table.getFlushLockForTest();
+        lock.lock();
+        try {
+            return lock.getWaitQueueLength(table.getFlushConditionForTest());
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    // Wakes up the thread that has waited longest on flushCondition, as the periodic wakeup in
+    // waitInflightRequests() does. If the thread still has to wait, it queues again behind the others.
+    private static void wakeUpOldestWaiterOnFlushCondition(Table table) {
+        ReentrantLock lock = table.getFlushLockForTest();
+        lock.lock();
+        try {
+            table.getFlushConditionForTest().signal();
+        } finally {
+            lock.unlock();
+        }
     }
 
     private static byte[] row(String value) {
@@ -639,6 +668,20 @@ public class TableTest {
             assertTrue(message, System.currentTimeMillis() < deadlineMs);
             Thread.sleep(10);
         }
+    }
+
+    // Starts flush(false) in another thread, which waits there while no request slot is free
+    private static Thread startFlushThread(Table table, AtomicReference<Throwable> flushThrowable) {
+        Thread flushThread = new Thread(() -> {
+            try {
+                table.flush(false);
+            } catch (Throwable t) {
+                flushThrowable.set(t);
+            }
+        });
+        flushThread.setDaemon(true);
+        flushThread.start();
+        return flushThread;
     }
 
     // Runs flush(true) in another thread, so that a regression fails the test instead of hanging it
@@ -747,7 +790,8 @@ public class TableTest {
     @Test
     public void testDelayedFlushDoesNotOvertakeWaitingChunk() throws Exception {
         ScheduledExecutorService executor = Executors.newScheduledThreadPool(2);
-        Thread evictThread = null;
+        AtomicReference<Throwable> flushThrowable = new AtomicReference<>();
+        Thread flushThread = null;
         try {
             FlushTimers timers = new FlushTimers();
             timers.install(loader, executor);
@@ -758,11 +802,9 @@ public class TableTest {
             table.flush(false);
             assertEquals(1, sendLoadSpy.size());
 
-            // Cache eviction switches out row2, which waits for the slot
+            // A flush in another thread switches out row2, which waits for the slot
             table.write(row("row2"));
-            evictThread = new Thread(table::cacheEvict);
-            evictThread.setDaemon(true);
-            evictThread.start();
+            flushThread = startFlushThread(table, flushThrowable);
             waitForWaitersOnFlushCondition(table, 1);
 
             // The timer of row3 fires while row2 is waiting
@@ -774,8 +816,9 @@ public class TableTest {
             completeRequest(sendLoadSpy.get(0));
             waitUntil(() -> sendLoadSpy.size() >= 2, "The next chunk was not sent");
             assertEquals(Collections.singletonList("row2"), rowsOf(sendLoadSpy.get(1)));
-            evictThread.join(60000);
-            assertFalse(evictThread.isAlive());
+            flushThread.join(60000);
+            assertFalse(flushThread.isAlive());
+            assertNull(flushThrowable.get());
 
             // Then to row3
             completeRequest(sendLoadSpy.get(1));
@@ -785,8 +828,8 @@ public class TableTest {
             flushWithTimeout(table, 10000);
         } finally {
             executor.shutdownNow();
-            if (evictThread != null) {
-                evictThread.interrupt();
+            if (flushThread != null) {
+                flushThread.interrupt();
             }
         }
     }
@@ -858,11 +901,10 @@ public class TableTest {
         flushThread.start();
         waitForWaitersOnFlushCondition(table, 1);
 
-        // Meanwhile, cache eviction switches out row2, which waits for the slot
+        // Meanwhile, a flush in another thread switches out row2, which waits for the slot
         table.write(row("row2"));
-        Thread evictThread = new Thread(table::cacheEvict);
-        evictThread.setDaemon(true);
-        evictThread.start();
+        AtomicReference<Throwable> switchThrowable = new AtomicReference<>();
+        Thread switchThread = startFlushThread(table, switchThrowable);
         waitForWaitersOnFlushCondition(table, 2);
 
         // Completing row1 wakes up flush(true) first, and then hands the slot to row2
@@ -873,6 +915,143 @@ public class TableTest {
         completeRequest(sendLoadSpy.get(1));
         assertTrue("flush(true) did not return", flushReturned.await(10, TimeUnit.SECONDS));
         assertNull(flushThrowable.get());
+        switchThread.join(10000);
+        assertNull(switchThrowable.get());
+    }
+
+    /**
+     * Regression test: cache eviction must not wait for a request slot. One cache monitor thread evicts
+     * all tables, so waiting for the slot of one serial table would stop the eviction of the others.
+     * The evicted chunk stays active instead, and loadFinish flushes it once the slot frees up.
+     */
+    @Test
+    public void testCacheEvictDoesNotWaitForRequestSlot() throws Exception {
+        // the flush timers never run, see setUp()
+        Table table = createSerialTable("test_tbl", 100);
+
+        // row1 takes the only request slot
+        table.write(row("row1"));
+        table.flush(false);
+        assertEquals(1, sendLoadSpy.size());
+
+        table.write(row("row2"));
+        AtomicLong evictedBytes = new AtomicLong(-1);
+        Thread evictThread = new Thread(() -> evictedBytes.set(table.cacheEvict()));
+        evictThread.setDaemon(true);
+        try {
+            evictThread.start();
+            evictThread.join(10000);
+            assertFalse("cacheEvict() waited for the request slot", evictThread.isAlive());
+        } finally {
+            evictThread.interrupt();
+        }
+        // Nothing is evicted until the slot frees up
+        assertEquals(0, evictedBytes.get());
+        assertEquals(1, sendLoadSpy.size());
+
+        // Freeing the slot flushes row2
+        completeRequest(sendLoadSpy.get(0));
+        assertEquals(2, sendLoadSpy.size());
+        assertEquals(Collections.singletonList("row2"), rowsOf(sendLoadSpy.get(1)));
+        completeRequest(sendLoadSpy.get(1));
+        flushWithTimeout(table, 10000);
+        assertEquals(2, sendLoadSpy.size());
+    }
+
+    /**
+     * Regression test: with max-concurrent-requests = 0, rows that cache eviction switched out must be
+     * loaded before the rows of a later flush, otherwise older rows overwrite newer ones in a primary
+     * key table.
+     *
+     * Before the fix, cache eviction waited in flushChunk for the request slot. That wait wakes up every
+     * 10 seconds and then queues again behind the later waiters, so a later flush could take the slot
+     * first. The test emulates the wakeup with a signal.
+     */
+    @Test
+    public void testEvictedRowsAreNotOvertakenByLaterFlush() throws Exception {
+        // the flush timers never run, see setUp()
+        Table table = createSerialTable("test_tbl", 100);
+        AtomicReference<Throwable> flushThrowable = new AtomicReference<>();
+        Thread evictThread = new Thread(table::cacheEvict);
+        evictThread.setDaemon(true);
+        Thread flushThread = null;
+        try {
+            // row1 takes the only request slot
+            table.write(row("row1"));
+            table.flush(false);
+            assertEquals(1, sendLoadSpy.size());
+
+            // Cache eviction of row2 while the slot is taken
+            table.write(row("row2"));
+            evictThread.start();
+            waitUntil(() -> !evictThread.isAlive() || numWaitersOnFlushCondition(table) >= 1,
+                    "cacheEvict() neither returned nor waited for the request slot");
+
+            // Then a checkpoint flushes row3, which waits for the slot
+            table.write(row("row3"));
+            flushThread = startFlushThread(table, flushThrowable);
+            int numWaiters = evictThread.isAlive() ? 2 : 1;
+            waitForWaitersOnFlushCondition(table, numWaiters);
+
+            // The oldest waiter wakes up, as it does every 10 seconds, and waits again
+            wakeUpOldestWaiterOnFlushCondition(table);
+            waitForWaitersOnFlushCondition(table, numWaiters);
+
+            // Freeing the slot must load row2 no later than row3
+            completeRequest(sendLoadSpy.get(0));
+            waitUntil(() -> sendLoadSpy.size() >= 2, "The next chunk was not sent");
+            assertEquals(Arrays.asList("row2", "row3"), rowsOf(sendLoadSpy.get(1)));
+            completeRequest(sendLoadSpy.get(1));
+            flushThread.join(10000);
+            assertFalse(flushThread.isAlive());
+            assertNull(flushThrowable.get());
+            assertEquals(2, sendLoadSpy.size());
+        } finally {
+            evictThread.interrupt();
+            if (flushThread != null) {
+                flushThread.interrupt();
+            }
+        }
+    }
+
+    /**
+     * A delayed flush must fail the table if no request slot frees up within the load timeout, for example
+     * because the inflight request hangs. Otherwise the table stops loading, and once the cache is full the
+     * writer waits forever.
+     */
+    @Test
+    public void testDelayedFlushFailsTableAfterLoadTimeout() throws Exception {
+        ScheduledExecutorService executor = Executors.newScheduledThreadPool(2);
+        try {
+            FlushTimers timers = new FlushTimers();
+            timers.install(loader, executor);
+            Table table = createSerialTable("test_tbl", 100, 2);
+
+            // row1 takes the only request slot, and its request never completes
+            table.write(row("row1"));
+            table.flush(false);
+            assertEquals(1, sendLoadSpy.size());
+
+            // The timer of row2 fires while the slot is taken
+            table.write(row("row2"));
+            timers.awaitRun(1);
+            verify(manager, never()).onTableFailure(any(), any());
+
+            // The table fails once the load timeout elapses
+            ArgumentCaptor<Throwable> failure = ArgumentCaptor.forClass(Throwable.class);
+            verify(manager, timeout(10000)).onTableFailure(eq(table), failure.capture());
+            String message = failure.getValue().getMessage();
+            assertTrue(message, message.startsWith("Flush timeout when waiting for a request slot"));
+            assertEquals(1, sendLoadSpy.size());
+            try {
+                table.flush(true);
+                fail("flush should fail after the delayed flush timed out");
+            } catch (RuntimeException e) {
+                // expected
+            }
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     /**

@@ -68,9 +68,12 @@ public class Table {
     private final ReentrantLock lock;
     private final Condition flushCondition;
     private volatile ScheduledFuture<?> timer;
-    // Guarded by lock. Set when the flush interval of the active chunk elapses but the chunk
-    // cannot be flushed without waiting for a request slot. loadFinish flushes it later.
-    private boolean delayFlushPending;
+    // Guarded by lock. Set when the active chunk should be flushed, because its flush interval elapsed
+    // (CHUNK_DELAY) or the cache monitor evicted it (CACHE_EVICT), but it cannot be flushed without
+    // waiting for a request slot. loadFinish flushes it later.
+    private FlushChunkReason delayedFlushReason;
+    // Guarded by lock. When the flush of the active chunk was delayed, from System.nanoTime().
+    private long delayedFlushStartNs;
     // Guarded by lock. Number of switched chunks waiting in flushChunk for a request slot.
     private int numChunksWaitingForSlot;
     private final AtomicReference<Throwable> tableThrowable;
@@ -156,8 +159,8 @@ public class Table {
             if (!wait) {
                 return;
             }
-            // Wait until all inflight requests finished, and also the chunks that other threads
-            // switched out and that still wait for a request slot, for example in cacheEvict()
+            // Wait until all inflight requests finished, and also the chunks that other writer threads
+            // switched out and that still wait for a request slot
             waitInflightRequests(1, true);
         } finally {
             lock.unlock();
@@ -180,10 +183,11 @@ public class Table {
             if (canFlushWithoutWaiting()) {
                 switchChunk(FlushChunkReason.CHUNK_DELAY);
             } else {
-                delayFlushPending = true;
+                delayFlush(FlushChunkReason.CHUNK_DELAY);
                 LOG.debug("Delay flush until a request slot frees up, db: {}, table: {}, chunkId: {}, " +
                         "inflight requests: {}, chunks waiting for slot: {}", database, table, chunkId,
                         inflightLoadRequests.size(), numChunksWaitingForSlot);
+                checkDelayedFlushTimeout(chunkId);
             }
         } finally {
             lock.unlock();
@@ -194,6 +198,14 @@ public class Table {
         lock.lock();
         try {
             if (activeChunk == null || activeChunk.numRows() == 0) {
+                return 0;
+            }
+            // One cache monitor thread evicts all tables, so it must not wait for a request slot of this
+            // table. Keep the chunk active, and loadFinish will flush it once a slot frees up. Then only
+            // writers wait for a slot, and nothing else takes a slot ahead of them, which keeps serial
+            // tables in order.
+            if (!canFlushWithoutWaiting()) {
+                delayFlush(FlushChunkReason.CACHE_EVICT);
                 return 0;
             }
             long size = activeChunk.rowBytes();
@@ -223,7 +235,7 @@ public class Table {
 
         Chunk inactiveChunk = activeChunk;
         activeChunk = null;
-        delayFlushPending = false;
+        delayedFlushReason = null;
         if (timer != null) {
             // Do not interrupt: when called from checkFlushInterval(), the timer is the task running this method.
             timer.cancel(false);
@@ -255,14 +267,41 @@ public class Table {
         return inflightLoadRequests.size() < limit;
     }
 
+    // Called with the lock held when the active chunk should be flushed for the reason, but cannot be
+    // without waiting for a request slot
+    private void delayFlush(FlushChunkReason reason) {
+        if (delayedFlushReason == null) {
+            delayedFlushReason = reason;
+            delayedFlushStartNs = System.nanoTime();
+        }
+    }
+
+    // Called with the lock held by the timer of the delayed active chunk. No thread waits for the slot of a
+    // delayed chunk, so the timer fires again at the load timeout, and fails the table if no slot has freed
+    // up by then, for example because the inflight request hangs, as waitInflightRequests() does for writers.
+    private void checkDelayedFlushTimeout(long chunkId) {
+        if (loadTimeoutMs < 0 || tableThrowable.get() != null) {
+            return;
+        }
+        long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - delayedFlushStartNs);
+        if (elapsedMs < loadTimeoutMs) {
+            timer = mergeCommitLoader.scheduleFlush(this, chunkId, (int) (loadTimeoutMs - elapsedMs));
+            return;
+        }
+        RuntimeException timeoutEx = new RuntimeException(String.format(
+                "Flush timeout when waiting for a request slot, db: %s, table: %s, elapsed: %d ms, " +
+                        "timeout: %d ms, %s", database, table, elapsedMs, loadTimeoutMs, loadRequestsSummary()));
+        failTable(activeChunk, delayedFlushReason, timeoutEx);
+    }
+
     // Called with the lock held after a request slot frees up
     private void flushDelayedChunk() {
         // On shutdown, the loader's executor is gone, and sending would only log a misleading failure
-        if (!delayFlushPending || manager.isClosed() || !canFlushWithoutWaiting()) {
+        if (delayedFlushReason == null || manager.isClosed() || !canFlushWithoutWaiting()) {
             return;
         }
         try {
-            switchChunk(FlushChunkReason.CHUNK_DELAY);
+            switchChunk(delayedFlushReason);
         } catch (Throwable e) {
             // switchChunk has failed the table. Do not throw into the completion of another request.
         }
