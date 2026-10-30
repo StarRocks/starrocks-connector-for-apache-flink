@@ -241,8 +241,14 @@ public class MergeCommitManager implements StreamLoadManager, Serializable {
         return exception.get();
     }
 
+    public boolean isClosed() {
+        return closed != null && closed.get();
+    }
+
     @Override
     public void flush() {
+        // Like write(), fail at once if a table has failed, before flushing the healthy tables
+        checkException();
         long totalTriggerTime = 0;
         long maxTriggerTime = Long.MIN_VALUE;
         long minTriggerTime = Long.MAX_VALUE;

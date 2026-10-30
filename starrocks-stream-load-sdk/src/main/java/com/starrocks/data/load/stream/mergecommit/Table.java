@@ -170,6 +170,10 @@ public class Table {
             if (activeChunk == null || activeChunk.getChunkId() != chunkId) {
                 return;
             }
+            // The next write() or flush() reports a failed table, and a closed loader cannot send
+            if (tableThrowable.get() != null || manager.isClosed()) {
+                return;
+            }
             // The timer runs on the loader's executor, which also completes the inflight requests,
             // so it must not wait for a request slot. Keep the chunk active, and loadFinish will
             // flush it once a slot frees up.
@@ -221,7 +225,7 @@ public class Table {
         activeChunk = null;
         delayFlushPending = false;
         if (timer != null) {
-            // Do not interrupt. For CHUNK_DELAY, the timer is the task running this method.
+            // Do not interrupt: when called from checkFlushInterval(), the timer is the task running this method.
             timer.cancel(false);
             timer = null;
         }
@@ -241,13 +245,20 @@ public class Table {
     // earlier chunk is waiting for one, which keeps the chunks in order
     private boolean canFlushWithoutWaiting() {
         return numChunksWaitingForSlot == 0
-                && inflightLoadRequests.size() < maxConcurrentRequests
+                && hasFreeSlot(maxConcurrentRequests)
                 && tableThrowable.get() == null;
+    }
+
+    // Whether fewer than limit requests are inflight. canFlushWithoutWaiting() and the wait in flushChunk()
+    // must use the same test, or the timer or loadFinish() could block on the loader's executor again.
+    private boolean hasFreeSlot(int limit) {
+        return inflightLoadRequests.size() < limit;
     }
 
     // Called with the lock held after a request slot frees up
     private void flushDelayedChunk() {
-        if (!delayFlushPending || !canFlushWithoutWaiting()) {
+        // On shutdown, the loader's executor is gone, and sending would only log a misleading failure
+        if (!delayFlushPending || manager.isClosed() || !canFlushWithoutWaiting()) {
             return;
         }
         try {
@@ -258,12 +269,21 @@ public class Table {
     }
 
     private void failTable(Chunk chunk, FlushChunkReason reason, Throwable throwable) {
+        // A timeout in waitInflightRequests() has already set tableThrowable to the thrown exception
+        Throwable previous = tableThrowable.get();
         tableThrowable.compareAndSet(null, throwable);
         // wake up the threads waiting in waitInflightRequests() to fail them
         flushCondition.signalAll();
         manager.onTableFailure(this, throwable);
-        LOG.error("Fail to flush chunk, db: {}, table: {}, chunkId: {}, rows: {}, bytes: {}, reason: {}",
-                database, table, chunk.getChunkId(), chunk.numRows(), chunk.rowBytes(), reason, throwable);
+        if (previous != null && previous != throwable) {
+            // The table failed before, and waitInflightRequests() has logged the cause
+            LOG.warn("Fail to flush chunk because the table has failed, db: {}, table: {}, chunkId: {}, " +
+                    "rows: {}, bytes: {}, reason: {}", database, table, chunk.getChunkId(), chunk.numRows(),
+                    chunk.rowBytes(), reason);
+        } else {
+            LOG.error("Fail to flush chunk, db: {}, table: {}, chunkId: {}, rows: {}, bytes: {}, reason: {}",
+                    database, table, chunk.getChunkId(), chunk.numRows(), chunk.rowBytes(), reason, throwable);
+        }
     }
 
     private void flushChunk(Chunk chunk, FlushChunkReason reason) {
@@ -291,7 +311,7 @@ public class Table {
                 ? TimeUnit.MILLISECONDS.toNanos(loadTimeoutMs)
                 : Long.MAX_VALUE;
         final long awakeTimeoutNs = TimeUnit.SECONDS.toNanos(10);
-        while ((inflightLoadRequests.size() >= threshold || (waitSwitchedChunks && numChunksWaitingForSlot > 0))
+        while ((!hasFreeSlot(threshold) || (waitSwitchedChunks && numChunksWaitingForSlot > 0))
                 && tableThrowable.get() == null) {
             try {
                 long elapsedNs = System.nanoTime() - startTimeNs;

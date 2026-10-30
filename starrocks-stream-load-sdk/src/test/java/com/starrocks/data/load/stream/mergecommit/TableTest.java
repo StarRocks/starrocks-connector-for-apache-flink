@@ -57,6 +57,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -257,27 +258,6 @@ public class TableTest {
         return t;
     }
 
-    /**
-     * Wait until there is a waiter on the flushCondition, indicating a thread is blocked.
-     */
-    private void waitForWaiterOnFlushCondition(Table table, long timeoutMs) throws Exception {
-        ReentrantLock lock = table.getFlushLockForTest();
-
-        long startTime = System.currentTimeMillis();
-        while (System.currentTimeMillis() - startTime < timeoutMs) {
-            lock.lock();
-            try {
-                if (lock.hasWaiters(table.getFlushConditionForTest())) {
-                    return;
-                }
-            } finally {
-                lock.unlock();
-            }
-            Thread.sleep(10);
-        }
-        throw new AssertionError("Timeout waiting for waiter on flushCondition");
-    }
-
     // ==================== Basic property tests ====================
 
     @Test
@@ -446,7 +426,7 @@ public class TableTest {
         assertTrue(secondWriteStarted.await(60, TimeUnit.SECONDS));
 
         // Wait until the second write thread is blocked on flushCondition
-        waitForWaiterOnFlushCondition(table, 60000);
+        waitForWaitersOnFlushCondition(table, 1);
 
         // Verify only 1 request sent so far
         assertEquals(1, sendLoadSpy.size());
@@ -498,7 +478,7 @@ public class TableTest {
         assertTrue(thirdWriteStarted.await(1, TimeUnit.SECONDS));
 
         // Wait until the third write thread is blocked on flushCondition
-        waitForWaiterOnFlushCondition(table, 60000);
+        waitForWaitersOnFlushCondition(table, 1);
 
         // Verify only 2 requests sent so far
         assertEquals(2, sendLoadSpy.size());
@@ -549,7 +529,7 @@ public class TableTest {
         assertTrue(flushThreadStarted.await(10, TimeUnit.SECONDS));
 
         // Ensure flush thread is actually waiting on the condition.
-        waitForWaiterOnFlushCondition(table, 60000);
+        waitForWaitersOnFlushCondition(table, 1);
         assertTrue(flushThread.isAlive());
 
         // Complete inflight request; flush(true) should return.
@@ -783,7 +763,7 @@ public class TableTest {
             evictThread = new Thread(table::cacheEvict);
             evictThread.setDaemon(true);
             evictThread.start();
-            waitForWaiterOnFlushCondition(table, 60000);
+            waitForWaitersOnFlushCondition(table, 1);
 
             // The timer of row3 fires while row2 is waiting
             table.write(row("row3"));
@@ -831,7 +811,7 @@ public class TableTest {
             }
         });
         writeThread.start();
-        waitForWaiterOnFlushCondition(table, 60000);
+        waitForWaitersOnFlushCondition(table, 1);
         writeThread.interrupt();
         writeThread.join(60000);
         assertNotNull(writeThrowable.get());
@@ -893,5 +873,34 @@ public class TableTest {
         completeRequest(sendLoadSpy.get(1));
         assertTrue("flush(true) did not return", flushReturned.await(10, TimeUnit.SECONDS));
         assertNull(flushThrowable.get());
+    }
+
+    /**
+     * After the manager is closed, a completed request must not flush the delayed chunk. The loader's
+     * executor is shut down, and sending would only log a misleading failure.
+     */
+    @Test
+    public void testDelayedFlushSkippedAfterManagerClosed() throws Exception {
+        ScheduledExecutorService executor = Executors.newScheduledThreadPool(2);
+        try {
+            FlushTimers timers = new FlushTimers();
+            timers.install(loader, executor);
+            Table table = createSerialTable("test_tbl", 100);
+
+            // row1 takes the only request slot, and the timer of row2 fires while it is taken
+            table.write(row("row1"));
+            table.flush(false);
+            table.write(row("row2"));
+            timers.awaitRun(1);
+            assertEquals(1, sendLoadSpy.size());
+
+            // The manager is closed before the request completes
+            doReturn(true).when(manager).isClosed();
+            completeRequest(sendLoadSpy.get(0));
+            assertEquals(1, sendLoadSpy.size());
+            verify(manager, never()).onTableFailure(any(), any());
+        } finally {
+            executor.shutdownNow();
+        }
     }
 }
