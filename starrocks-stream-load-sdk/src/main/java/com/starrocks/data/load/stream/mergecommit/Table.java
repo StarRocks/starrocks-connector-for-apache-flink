@@ -219,9 +219,7 @@ public class Table {
     private Chunk getActiveChunk() {
         if (activeChunk == null) {
             activeChunk = new Chunk(properties.getDataFormat(), chunkIdGenerator.incrementAndGet());
-            if (timer != null) {
-                timer.cancel(false);
-            }
+            // switchChunk() has cancelled the timer of the previous chunk
             timer = mergeCommitLoader.scheduleFlush(this, activeChunk.getChunkId(), flushIntervalMs);
         }
         return activeChunk;
@@ -376,23 +374,26 @@ public class Table {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 LOG.error("Fail to wait inflight requests, db: {}, table: {}, current inflight requests: {}," +
-                            " target size: {}, elapsed: {} ms, {}", database, table, inflightLoadRequests.size(),
-                                System.currentTimeMillis() - startTimeMs, threshold, loadRequestsSummary(), e);
+                        " target size: {}, chunks waiting for slot: {}, elapsed: {} ms, {}", database, table,
+                        inflightLoadRequests.size(), threshold, numChunksWaitingForSlot,
+                        System.currentTimeMillis() - startTimeMs, loadRequestsSummary(), e);
                 throw new RuntimeException(String.format("Fail to wait inflight requests, db: %s, table: %s", database, table), e);
             } catch (RuntimeException e) {
                 throw e;
             } catch (Exception e) {
                 LOG.error("Fail to wait inflight requests, db: {}, table: {}, current inflight requests: {}," +
-                                " target size: {}, elapsed: {} ms, {}", database, table, inflightLoadRequests.size(),
-                        System.currentTimeMillis() - startTimeMs, threshold, loadRequestsSummary(), e);
+                        " target size: {}, chunks waiting for slot: {}, elapsed: {} ms, {}", database, table,
+                        inflightLoadRequests.size(), threshold, numChunksWaitingForSlot,
+                        System.currentTimeMillis() - startTimeMs, loadRequestsSummary(), e);
                 throw new RuntimeException(String.format(
                         "Fail to wait inflight requests, db: %s, table: %s", database, table), e);
             }
         }
         if (tableThrowable.get() != null) {
             LOG.error("Fail to wait inflight requests, db: {}, table: {}, current inflight requests: {}," +
-                            " target size: {}, elapsed: {} ms, {}", database, table, inflightLoadRequests.size(),
-                    System.currentTimeMillis() - startTimeMs, threshold, loadRequestsSummary(), tableThrowable.get());
+                    " target size: {}, chunks waiting for slot: {}, elapsed: {} ms, {}", database, table,
+                    inflightLoadRequests.size(), threshold, numChunksWaitingForSlot,
+                    System.currentTimeMillis() - startTimeMs, loadRequestsSummary(), tableThrowable.get());
             throw new RuntimeException(
                     String.format("Exception happened when waiting inflight requests db: %s, table: %s",
                             database, table), tableThrowable.get());
