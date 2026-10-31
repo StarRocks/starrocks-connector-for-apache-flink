@@ -224,12 +224,31 @@ public class MergeCommitManager implements StreamLoadManager, Serializable {
         LOG.debug("Receive load failure, db: {}, table: {}", table.getDatabase(), table.getTable(), throwable);
     }
 
+    // The table failed outside a load request, for example it could not flush a chunk.
+    // Fail the following write() and flush() so that the job recovers from the last checkpoint.
+    public void onTableFailure(Table table, Throwable throwable) {
+        this.exception.compareAndSet(null, throwable);
+        lock.lock();
+        try {
+            writable.signal();
+        } finally {
+            lock.unlock();
+        }
+        LOG.debug("Receive table failure, db: {}, table: {}", table.getDatabase(), table.getTable(), throwable);
+    }
+
     public Throwable getException() {
         return exception.get();
     }
 
+    public boolean isClosed() {
+        return closed != null && closed.get();
+    }
+
     @Override
     public void flush() {
+        // Like write(), fail at once if a table has failed, before flushing the healthy tables
+        checkException();
         long totalTriggerTime = 0;
         long maxTriggerTime = Long.MIN_VALUE;
         long minTriggerTime = Long.MAX_VALUE;
