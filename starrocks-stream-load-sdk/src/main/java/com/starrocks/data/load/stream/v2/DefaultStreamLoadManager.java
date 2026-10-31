@@ -2040,6 +2040,13 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
     public void callback(Throwable e) {
         LOG.error("Stream load failed", e);
         this.e = e;
+        // Transport failures have no server response, but must still reach the failure metrics.
+        this.loadMetrics.updateFailedLoad();
+        if (streamLoadListener != null) {
+            StreamLoadResponse response = new StreamLoadResponse();
+            response.setException(e instanceof Exception ? (Exception) e : new RuntimeException(e));
+            streamLoadListener.onResponse(response);
+        }
     }
 
     public Throwable getException() {
