@@ -27,6 +27,8 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.nio.charset.StandardCharsets;
+
 public class StreamLoadManagerMultiTableTest {
 
     private static final String USERNAME = "root";
@@ -1924,6 +1926,37 @@ public class StreamLoadManagerMultiTableTest {
             }
             // The partition-aware path is unaffected.
             manager.write(0, "test", "orders", "{\"id\":2}");
+            manager.setCommitAllowed(0, true);
+            manager.flush();
+            Assert.assertNull("No exception expected after flush", manager.getException());
+        } finally {
+            manager.close();
+        }
+    }
+
+    /**
+     * Partition-less writeBytes(uniqueKey, ...) in multi-table mode cannot be flushed or
+     * committed (it never receives a txnEnd, so its bytes sit in the cache forever,
+     * invisible to the unflushable-bytes accounting that lets the writer past the
+     * cap). The manager must reject such binary writes up front instead of hanging later.
+     */
+    @Test(timeout = 10000)
+    public void testLegacyWriteBytesRejectedInMultiTableMode() throws Exception {
+        StreamLoadProperties properties = buildMultiTableProperties(60000);
+        StreamLoadManagerV2 manager = new StreamLoadManagerV2(properties, true);
+        manager.init();
+        try {
+            try {
+                byte[] row = "{\"id\":1}".getBytes(StandardCharsets.UTF_8);
+                manager.writeBytes(null, "test", "orders", row);
+                Assert.fail("Expected IllegalStateException for a partition-less writeBytes in multi-table mode");
+            } catch (IllegalStateException e) {
+                Assert.assertTrue("Message should point at the partition-aware writeBytes: " + e.getMessage(),
+                        e.getMessage().contains("writeBytes(partition"));
+            }
+            // The partition-aware binary path is unaffected.
+            byte[] row2 = "{\"id\":2}".getBytes(StandardCharsets.UTF_8);
+            manager.writeBytes(0, "test", "orders", row2);
             manager.setCommitAllowed(0, true);
             manager.flush();
             Assert.assertNull("No exception expected after flush", manager.getException());

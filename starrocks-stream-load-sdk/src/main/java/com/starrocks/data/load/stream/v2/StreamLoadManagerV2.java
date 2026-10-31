@@ -69,6 +69,16 @@ public class StreamLoadManagerV2 implements StreamLoadManager, Serializable {
     }
 
     @Override
+    public void writeBytes(String uniqueKey, String database, String table, byte[]... rows) {
+        delegateManager.writeBytes(uniqueKey, database, table, rows);
+    }
+
+    @Override
+    public void writeBytes(int partition, String database, String table, byte[]... rows) {
+        delegateManager.writeBytes(partition, database, table, rows);
+    }
+
+    @Override
     public void callback(StreamLoadResponse response) {
         delegateManager.callback(response);
     }
