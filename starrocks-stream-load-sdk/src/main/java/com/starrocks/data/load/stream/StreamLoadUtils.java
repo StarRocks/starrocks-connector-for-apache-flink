@@ -22,6 +22,8 @@ package com.starrocks.data.load.stream;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.starrocks.data.load.stream.auth.Credentials;
+import com.starrocks.data.load.stream.auth.CredentialsProvider;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpHeaders;
 import org.apache.http.client.config.RequestConfig;
@@ -66,6 +68,24 @@ public class StreamLoadUtils {
                 "/" +
                 table +
                 "/_stream_load";
+    }
+
+    /**
+     * Asks the provider for credentials once and builds the Basic {@code Authorization} header value.
+     *
+     * @throws IllegalStateException if the provider returns {@code null}
+     */
+    public static String getBasicAuthHeader(CredentialsProvider credentialsProvider) {
+        Credentials credentials = credentialsProvider.getCredentials();
+        if (credentials == null) {
+            throw new IllegalStateException(
+                    "CredentialsProvider " + credentialsProvider.getClass().getName() + " returned null credentials");
+        }
+        return getBasicAuthHeader(credentials);
+    }
+
+    public static String getBasicAuthHeader(Credentials credentials) {
+        return getBasicAuthHeader(credentials.getUsername(), credentials.getPassword());
     }
 
     public static String getBasicAuthHeader(String username, String password) {

@@ -78,8 +78,9 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
     }
 
     protected void initTxHeaders(StreamLoadProperties properties) {
+        // Authorization is not cached here: it is built per request from the credentials
+        // provider, so that rotated credentials take effect on the next request.
         Map<String, String> headers = new HashMap<>();
-        headers.put(HttpHeaders.AUTHORIZATION, StreamLoadUtils.getBasicAuthHeader(properties.getUsername(), properties.getPassword()));
         this.defaultTxnHeaders = headers.entrySet().stream()
                 .map(entry -> new BasicHeader(entry.getKey(), entry.getValue()))
                 .toArray(Header[]::new);
@@ -188,6 +189,7 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
 
         HttpPost httpPost = new HttpPost(beginUrl);
         httpPost.setHeaders(beginTxnHeader);
+        httpPost.addHeader(HttpHeaders.AUTHORIZATION, getAuthorizationHeader());
         httpPost.addHeader("label", label);
         httpPost.addHeader("db", database);
         if (table != null) {
@@ -247,6 +249,7 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
 
         HttpPost httpPost = new HttpPost(prepareUrl);
         httpPost.setHeaders(preparedTxnHeader);
+        httpPost.addHeader(HttpHeaders.AUTHORIZATION, getAuthorizationHeader());
         httpPost.addHeader("label", transaction.getLabel());
         httpPost.addHeader("db", transaction.getDatabase());
         if (transaction.isMultiTable()) {
@@ -323,6 +326,7 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
 
         HttpPost httpPost = new HttpPost(commitUrl);
         httpPost.setHeaders(defaultTxnHeaders);
+        httpPost.addHeader(HttpHeaders.AUTHORIZATION, getAuthorizationHeader());
         httpPost.addHeader("label", transaction.getLabel());
         httpPost.addHeader("db", transaction.getDatabase());
         if (transaction.isMultiTable()) {
@@ -490,6 +494,7 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
 
         HttpPost httpPost = new HttpPost(rollbackUrl);
         httpPost.setHeaders(defaultTxnHeaders);
+        httpPost.addHeader(HttpHeaders.AUTHORIZATION, getAuthorizationHeader());
         httpPost.addHeader("label", transaction.getLabel());
         httpPost.addHeader("db", transaction.getDatabase());
         if (transaction.isMultiTable()) {

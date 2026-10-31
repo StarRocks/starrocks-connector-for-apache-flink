@@ -93,6 +93,12 @@ public class SinkFunctionFactory {
         } else {
             throw new UnsupportedOperationException("Unsupported sink type " + sinkTypeOption);
         }
+        if (sinkVersion == SinkVersion.V1 && sinkOptions.getCredentialsProvider() != null) {
+            throw new UnsupportedOperationException(
+                    "A credentials provider is only supported by sink version V2, but sink version V1 was chosen. " +
+                    "Set 'sink.version' to 'V2'; with 'AUTO', V1 is chosen for exactly-once when the transaction " +
+                    "stream load probe fails.");
+        }
         LOG.info("Choose sink version {}", sinkVersion.name());
         return sinkVersion;
     }
