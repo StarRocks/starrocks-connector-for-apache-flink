@@ -34,7 +34,7 @@ resolve_repo() {
   fi
   [ -n "$root" ] && [ -f "$root/pom.xml" ] \
     || die "Cannot find the connector repo. Run from inside it, or set CONNECTOR_REPO=/path/to/starrocks-connector-for-apache-flink"
-  grep -q "<artifactId>flink-connector-starrocks</artifactId>" "$root/pom.xml" \
+  grep -q "<artifactId>flink-connector-starrocks-parent</artifactId>" "$root/pom.xml" \
     || die "$root/pom.xml is not flink-connector-starrocks — set CONNECTOR_REPO to the right repo"
   printf '%s' "$root"
 }
@@ -45,9 +45,113 @@ pom_srfc_version() {
   grep -m1 -oE '<srfc.version>[^<]+' "$1/pom.xml" | sed 's/.*>//'
 }
 
-# Is the root pom's project <version> still a -SNAPSHOT? 0 = yes (snapshot), 1 = no (release)
+# The module poms. Each inherits the root (parent) version in its <parent>; the 1.x and 2.x modules
+# publish the connector as <srfc.version>_flink-<minor>, and the tests module depends on that version.
+MODULE_POMS=(
+  flink-connector-starrocks-common/pom.xml
+  flink-connector-starrocks-1.x/pom.xml
+  flink-connector-starrocks-2.x/pom.xml
+  flink-connector-starrocks-tests/pom.xml
+)
+
+# The root (parent) project version, e.g. 1.2.15-SNAPSHOT — the line right after its artifactId.
+pom_parent_version() {
+  awk '/<artifactId>flink-connector-starrocks-parent<\/artifactId>/ {
+         getline
+         if (match($0, /<version>[^<]+/)) { print substr($0, RSTART + 9, RLENGTH - 9) }
+         exit
+       }' "$1/pom.xml"
+}
+
+# Is any project version still a -SNAPSHOT? 0 = yes (snapshot), 1 = no (release)
 pom_is_snapshot() {
-  grep -qE '<version>\$\{srfc.version\}_flink-\$\{flink.minor.version\}-SNAPSHOT</version>' "$1/pom.xml"
+  local root="$1"
+  case "$(pom_parent_version "$root")" in *-SNAPSHOT) return 0;; esac
+  grep -qF '_flink-${flink.minor.version}-SNAPSHOT</version>' "${MODULE_POMS[@]/#/$root/}"
+}
+
+# Rewrite files with a sed expression; portable across GNU and BSD sed.
+sed_in_place() {
+  local expr="$1" f; shift
+  for f in "$@"; do
+    sed -e "$expr" "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+  done
+}
+
+# Set every project version to the release <version>: srfc.version and the parent version in the root
+# pom, the <parent> version in each module pom, and drop -SNAPSHOT from the connector version (the
+# version modules, and the tests module that depends on it). Verifies the result.
+set_release_version() {
+  local root="$1" version="$2" parent parent_re f
+  parent="$(pom_parent_version "$root")"
+  [ -n "$parent" ] || die "could not read the parent <version> from pom.xml"
+  parent_re="$(printf '%s' "$parent" | sed 's/[.[\*^$#]/\\&/g')"
+  # the parent version must appear exactly once per pom, so no dependency version is rewritten by accident
+  for f in pom.xml "${MODULE_POMS[@]}"; do
+    [ "$(grep -cF "<version>${parent}</version>" "$root/$f")" = 1 ] \
+      || die "$f: expected exactly one <version>${parent}</version> — inspect it before releasing"
+  done
+  sed_in_place "s#<srfc.version>[^<]*</srfc.version>#<srfc.version>${version}</srfc.version>#" "$root/pom.xml"
+  sed_in_place "s#<version>${parent_re}</version>#<version>${version}</version>#" \
+    "$root/pom.xml" "${MODULE_POMS[@]/#/$root/}"
+  sed_in_place 's#_flink-${flink.minor.version}-SNAPSHOT</version>#_flink-${flink.minor.version}</version>#' \
+    "${MODULE_POMS[@]/#/$root/}"
+
+  [ "$(pom_srfc_version "$root")" = "$version" ] || die "failed to set srfc.version to $version"
+  [ "$(pom_parent_version "$root")" = "$version" ] || die "failed to set the parent version to $version"
+  for f in "${MODULE_POMS[@]}"; do
+    grep -qF "<version>${version}</version>" "$root/$f" || die "$f: <parent> version was not set to $version"
+  done
+  pom_is_snapshot "$root" && die "a -SNAPSHOT project version is still present after the edit"
+  return 0
+}
+
+# The shaded connector jar build.sh / deploy.sh produce for <minor>, under the module for its major.
+connector_jar() {
+  local root="$1" minor="$2" version="$3" module
+  module="$(bash "$root/common.sh" module-for-version "$minor")" || die "no connector module for flink $minor"
+  printf '%s' "$root/$module/target/flink-connector-starrocks-${version}_flink-${minor}.jar"
+}
+
+# Each Flink version is released on exactly the JDK it targets (common.sh required-jdk: 8 for Flink 1.x,
+# 11 for Flink 2.x). The poms compile with -source/-target, not --release, so a newer javac links against
+# its own class library — e.g. ByteBuffer.flip() in the bundled SDK becomes flip()Ljava/nio/ByteBuffer;,
+# which throws NoSuchMethodError on a Java 8 runtime. The build still succeeds (only warnings), and a
+# published jar can never be fixed. JAVA8_HOME / JAVA11_HOME point at those JDKs; the stages set
+# JAVA_HOME from them per version.
+release_jdk() {
+  bash "$1/common.sh" required-jdk "$2"
+}
+
+# The Java major version of a JDK installation, e.g. 8 or 11.
+java_major() {
+  local v
+  v="$("$1/bin/java" -version 2>&1 | awk -F'"' '/version/ {print $2; exit}')"
+  case "$v" in
+    1.*) v="${v#1.}"; printf '%s' "${v%%.*}";;
+    *)   printf '%s' "${v%%.*}";;
+  esac
+}
+
+# Print the JAVA_HOME to release <minor> with; dies unless JAVA<n>_HOME is set and really is JDK <n>.
+release_java_home() {
+  local root="$1" minor="$2" jdk var home
+  jdk="$(release_jdk "$root" "$minor")" || die "no JDK requirement for flink $minor in common.sh"
+  var="JAVA${jdk}_HOME"
+  home="${!var:-}"
+  [ -n "$home" ] && [ -x "$home/bin/java" ] \
+    || die "flink $minor is released on JDK $jdk: set $var to a JDK $jdk installation"
+  [ "$(java_major "$home")" = "$jdk" ] || die "$var ($home) is Java $(java_major "$home"), not $jdk"
+  printf '%s' "$home"
+}
+
+# The SDK is shaded into every connector jar, so it is built on the oldest release JDK.
+sdk_java_home() {
+  local root="$1" m oldest
+  oldest="$(for m in $(supported_minor_versions "$root"); do printf '%s %s\n' "$(release_jdk "$root" "$m")" "$m"; done \
+    | sort -n | head -1 | cut -d' ' -f2)"
+  [ -n "$oldest" ] || die "no Flink versions resolved from common.sh"
+  release_java_home "$root" "$oldest"
 }
 
 # The user docs that carry a per-release "Version requirements" table row.

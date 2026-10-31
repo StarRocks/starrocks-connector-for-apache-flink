@@ -32,15 +32,20 @@ flink_minor_version=$1
 check_flink_version_supported $flink_minor_version
 flink_version="$(get_flink_version $flink_minor_version)"
 kafka_connector_version="$(get_kafka_connector_version $flink_minor_version)"
+module="$(get_module_for_version $flink_minor_version)"
+check_jdk_for_version "$flink_minor_version"
 
+# the root runs the license check and common is built for shading only; the publishing plugin excludes both
 ${MVN_CMD} clean deploy -Prelease -DskipTests \
+  -pl .,flink-connector-starrocks-common,${module} \
+  -Dflink.major=${flink_minor_version%%.*} \
   -Dflink.minor.version=${flink_minor_version} \
   -Dflink.version=${flink_version} \
   -Dkafka.connector.version=${kafka_connector_version}
 
 echo "*********************************************************************"
 echo "Successfully deploy Flink StarRocks Connector for Flink $flink_minor_version"
-echo "You can find the connector jar under the \"target\" directory"
+echo "You can find the connector jar under the \"${module}/target\" directory"
 echo "*********************************************************************"
 
 exit 0

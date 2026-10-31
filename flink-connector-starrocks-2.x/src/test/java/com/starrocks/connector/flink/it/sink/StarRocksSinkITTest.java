@@ -1,0 +1,1144 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.starrocks.connector.flink.it.sink;
+
+import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.common.typeinfo.Types;
+import org.apache.flink.api.java.typeutils.RowTypeInfo;
+import org.apache.flink.api.common.functions.OpenContext;
+import org.apache.flink.configuration.CheckpointingOptions;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.Schema;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+import org.apache.flink.table.connector.ChangelogMode;
+import org.apache.flink.types.Row;
+import org.apache.flink.types.RowKind;
+import org.apache.flink.util.CloseableIterator;
+
+import com.starrocks.connector.flink.it.StarRocksITTestBase;
+import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
+import org.junit.Test;
+
+import javax.annotation.Nullable;
+
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.StringJoiner;
+import java.util.function.Function;
+
+import static com.starrocks.connector.flink.it.sink.StarRocksTableUtils.scanTable;
+import static com.starrocks.connector.flink.it.sink.StarRocksTableUtils.verifyResult;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeTrue;
+
+// sink.version=V1 is rejected and sink.use.new-sink-api is ignored on Flink 2.x, so every case runs once on V2
+public class StarRocksSinkITTest extends StarRocksITTestBase {
+
+    @Test
+    public void testDupKeyWriteFullColumnsInOrder() throws Exception {
+        String ddl = "c0 INT, c1 FLOAT, c2 STRING";
+        List<Row> testData = new ArrayList<>();
+        testData.add(Row.of(1, 10.1f, "abc"));
+        testData.add(Row.of(2, 20.2f, "def"));
+        RowTypeInfo rowTypeInfo = new RowTypeInfo(
+                new TypeInformation[]{Types.INT, Types.FLOAT, Types.STRING},
+                new String[]{"c0", "c1", "c2"});
+        List<List<Object>> expectedData = Arrays.asList(
+                Arrays.asList(1, 10.1f, "abc"),
+                Arrays.asList(2, 20.2f, "def")
+        );
+        testDupKeyWriteBase(ddl, rowTypeInfo, testData, expectedData);
+    }
+
+    @Test
+    public void testDupKeyWriteFullColumnsOutOfOrder() throws Exception {
+        String ddl = "c2 STRING, c1 FLOAT, c0 INT";
+        List<Row> testData = new ArrayList<>();
+        testData.add(Row.of("abc", 10.1f, 1));
+        testData.add(Row.of("def", 20.2f, 2));
+        RowTypeInfo rowTypeInfo = new RowTypeInfo(
+                new TypeInformation[]{Types.STRING, Types.FLOAT, Types.INT},
+                new String[]{"c2", "c1", "c0"});
+        List<List<Object>> expectedData = Arrays.asList(
+                Arrays.asList(1, 10.1f, "abc"),
+                Arrays.asList(2, 20.2f, "def")
+        );
+        testDupKeyWriteBase(ddl, rowTypeInfo, testData, expectedData);
+    }
+
+    @Test
+    public void testDupKeyWritePartialColumnsInOrder() throws Exception {
+        String ddl = "c0 INT, c2 STRING";
+        List<Row> testData = new ArrayList<>();
+        testData.add(Row.of(1, "abc"));
+        testData.add(Row.of(2, "def"));
+        RowTypeInfo rowTypeInfo = new RowTypeInfo(
+                new TypeInformation[]{Types.INT, Types.STRING},
+                new String[]{"c0", "c2"});
+        List<List<Object>> expectedData = Arrays.asList(
+                Arrays.asList(1, null, "abc"),
+                Arrays.asList(2, null, "def")
+        );
+        testDupKeyWriteBase(ddl, rowTypeInfo, testData, expectedData);
+    }
+
+    @Test
+    public void testDupKeyWritePartialColumnsOutOfOrder() throws Exception {
+        String ddl = "c2 STRING, c0 INT";
+        List<Row> testData = new ArrayList<>();
+        testData.add(Row.of("abc", 1));
+        testData.add(Row.of("def", 2));
+        RowTypeInfo rowTypeInfo = new RowTypeInfo(
+                new TypeInformation[]{Types.STRING, Types.INT},
+                new String[]{"c2", "c0"});
+        List<List<Object>> expectedData = Arrays.asList(
+                Arrays.asList(1, null, "abc"),
+                Arrays.asList(2, null, "def")
+        );
+        testDupKeyWriteBase(ddl, rowTypeInfo, testData, expectedData);
+    }
+
+    private void testDupKeyWriteBase(String flinkDDL,  RowTypeInfo rowTypeInfo,
+                                     List<Row> testData, List<List<Object>> expectedData) throws Exception {
+        String tableName = createDupTable("testDupKeyWriteBase");
+        StarRocksSinkOptions sinkOptions = StarRocksSinkOptions.builder()
+                .withProperty("jdbc-url", getJdbcUrl())
+                .withProperty("load-url", getHttpUrls())
+                .withProperty("database-name", DB_NAME)
+                .withProperty("table-name", tableName)
+                .withProperty("username", "root")
+                .withProperty("password", "")
+                .build();
+
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        StreamTableEnvironment tEnv;
+        tEnv = StreamTableEnvironment.create(env);
+        String createSQL = "CREATE TABLE sink(" + flinkDDL +
+                ") WITH ( " +
+                "'connector' = 'starrocks'," +
+                "'jdbc-url'='" + sinkOptions.getJdbcUrl() + "'," +
+                "'load-url'='" + String.join(";", sinkOptions.getLoadUrlList()) + "'," +
+                "'sink.version' = '" + "V2" + "'," +
+                "'database-name' = '" + DB_NAME + "'," +
+                "'table-name' = '" + sinkOptions.getTableName() + "'," +
+                "'username' = '" + sinkOptions.getUsername() + "'," +
+                "'password' = '" + sinkOptions.getPassword() + "'" +
+                ")";
+        tEnv.executeSql(createSQL);
+        DataStream<Row> srcDs = env.fromCollection(testData).returns(rowTypeInfo);
+        Table in = tEnv.fromDataStream(srcDs);
+        tEnv.createTemporaryView("src", in);
+        tEnv.executeSql("INSERT INTO sink SELECT * FROM src").await();
+        List<List<Object>> actualData = scanTable(DB_CONNECTION, DB_NAME, tableName);
+        verifyResult(expectedData, actualData);
+    }
+
+    @Test
+    public void testColumnsFromFlinkSchemaLetsDefaultFire() throws Exception {
+        // The Flink table omits c1, which carries a DEFAULT. With the option on, c1 is left off the
+        // columns header so the server fills its default instead of storing NULL over it.
+        String tableName = createDefaultValueTable("testColumnsFromFlinkSchemaLetsDefaultFire");
+        List<Row> testData = Arrays.asList(Row.of(1, "abc"), Row.of(2, "def"));
+        RowTypeInfo rowTypeInfo = new RowTypeInfo(
+                new TypeInformation[]{Types.INT, Types.STRING},
+                new String[]{"c0", "c2"});
+        List<List<Object>> expectedData = Arrays.asList(
+                Arrays.asList(1, 99, "abc"),
+                Arrays.asList(2, 99, "def"));
+
+        testColumnsFromFlinkSchemaBase(tableName, "c0 INT, c2 STRING", rowTypeInfo, testData, expectedData, true);
+    }
+
+    @Test
+    public void testWithoutTheOptionTheDefaultIsOverwritten() throws Exception {
+        // Same job with the option off, to pin the behavior the option exists to change: the omitted
+        // column is declared by the server and stored as NULL, losing its DEFAULT.
+        // V2 only: with the option off, V1 still rejects a Flink schema whose field count differs
+        // from the table's, so it cannot reach the load at all.
+        String tableName = createDefaultValueTable("testWithoutTheOptionTheDefaultIsOverwritten");
+        List<Row> testData = Arrays.asList(Row.of(1, "abc"));
+        RowTypeInfo rowTypeInfo = new RowTypeInfo(
+                new TypeInformation[]{Types.INT, Types.STRING},
+                new String[]{"c0", "c2"});
+        List<List<Object>> expectedData = Arrays.asList(Arrays.asList(1, null, "abc"));
+
+        testColumnsFromFlinkSchemaBase(tableName, "c0 INT, c2 STRING", rowTypeInfo, testData, expectedData, false);
+    }
+
+    @Test
+    public void testColumnsFromFlinkSchemaWithAllColumnsDeclared() throws Exception {
+        // Declaring the defaulted column means the job supplies it, so the value it sends wins.
+        String tableName = createDefaultValueTable("testColumnsFromFlinkSchemaAllColumns");
+        List<Row> testData = Arrays.asList(Row.of(1, 7, "abc"));
+        RowTypeInfo rowTypeInfo = new RowTypeInfo(
+                new TypeInformation[]{Types.INT, Types.INT, Types.STRING},
+                new String[]{"c0", "c1", "c2"});
+        List<List<Object>> expectedData = Arrays.asList(Arrays.asList(1, 7, "abc"));
+
+        testColumnsFromFlinkSchemaBase(tableName, "c0 INT, c1 INT, c2 STRING", rowTypeInfo, testData,
+                expectedData, true);
+    }
+
+    private void testColumnsFromFlinkSchemaBase(String tableName, String flinkDDL, RowTypeInfo rowTypeInfo,
+                                                List<Row> testData, List<List<Object>> expectedData,
+                                                boolean columnsFromFlinkSchema) throws Exception {
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
+        String createSQL = "CREATE TABLE sink(" + flinkDDL +
+                ") WITH ( " +
+                "'connector' = 'starrocks'," +
+                "'jdbc-url'='" + getJdbcUrl() + "'," +
+                "'load-url'='" + getHttpUrls() + "'," +
+                "'sink.version' = '" + "V2" + "'," +
+                "'sink.properties.format' = 'json'," +
+                // The V2 path sets strip_outer_array for json itself; V1 does not, and it sends the
+                // batch as a json array, so it has to be set here for the V1 parameter to load at all.
+                "'sink.properties.strip_outer_array' = 'true'," +
+                "'sink.json.columns-from-flink-schema' = '" + columnsFromFlinkSchema + "'," +
+                "'database-name' = '" + DB_NAME + "'," +
+                "'table-name' = '" + tableName + "'," +
+                "'username' = 'root'," +
+                "'password' = ''" +
+                ")";
+        tEnv.executeSql(createSQL);
+        DataStream<Row> srcDs = env.fromCollection(testData).returns(rowTypeInfo);
+        tEnv.createTemporaryView("src", tEnv.fromDataStream(srcDs));
+        tEnv.executeSql("INSERT INTO sink SELECT * FROM src").await();
+
+        List<List<Object>> actualData = scanTable(DB_CONNECTION, DB_NAME, tableName);
+        verifyResult(expectedData, actualData);
+    }
+
+    private String createDefaultValueTable(String tablePrefix) throws Exception {
+        String tableName = tablePrefix + "_" + genRandomUuid();
+        String createStarRocksTable =
+                String.format(
+                        "CREATE TABLE `%s`.`%s` (" +
+                                "c0 INT," +
+                                "c1 INT DEFAULT \"99\"," +
+                                "c2 STRING" +
+                                ") ENGINE = OLAP " +
+                                "DUPLICATE KEY(c0) " +
+                                "DISTRIBUTED BY HASH (c0) BUCKETS 8 " +
+                                "PROPERTIES (" +
+                                "\"replication_num\" = \"1\"" +
+                                ")",
+                        DB_NAME, tableName);
+        executeSrSQL(createStarRocksTable);
+        return tableName;
+    }
+
+    private String createDupTable(String tablePrefix) throws Exception {
+        String tableName = tablePrefix + "_" + genRandomUuid();
+        String createStarRocksTable =
+                String.format(
+                        "CREATE TABLE `%s`.`%s` (" +
+                                "c0 INT," +
+                                "c1 FLOAT," +
+                                "c2 STRING NOT NULL" +
+                                ") ENGINE = OLAP " +
+                                "DUPLICATE KEY(c0) " +
+                                "DISTRIBUTED BY HASH (c0) BUCKETS 8 " +
+                                "PROPERTIES (" +
+                                "\"replication_num\" = \"1\"" +
+                                ")",
+                        DB_NAME, tableName);
+        executeSrSQL(createStarRocksTable);
+        return tableName;
+    }
+
+    @Test
+    public void testPkWriteFullColumnsInOrder() throws Exception {
+        String ddl = "c0 INT, c1 FLOAT, c2 STRING";
+        List<Row> testData = new ArrayList<>();
+        testData.add(Row.of(1, 10.1f, "abc"));
+        testData.add(Row.of(2, 20.2f, "def"));
+        RowTypeInfo rowTypeInfo = new RowTypeInfo(
+                new TypeInformation[]{Types.INT, Types.FLOAT, Types.STRING},
+                new String[]{"c0", "c1", "c2"});
+        List<List<Object>> expectedData = Arrays.asList(
+                Arrays.asList(1, 10.1f, "abc"),
+                Arrays.asList(2, 20.2f, "def")
+        );
+        testPkWriteForBase(ddl, rowTypeInfo, testData, expectedData);
+    }
+
+    @Test
+    public void testPkWriteFullColumnsOutOfOrder() throws Exception {
+        String ddl = "c2 STRING, c1 FLOAT, c0 INT";
+        List<Row> testData = new ArrayList<>();
+        testData.add(Row.of("abc", 10.1f, 1));
+        testData.add(Row.of("def", 20.2f, 2));
+        RowTypeInfo rowTypeInfo = new RowTypeInfo(
+                new TypeInformation[]{Types.STRING, Types.FLOAT, Types.INT},
+                new String[]{"c2", "c1", "c0"});
+        List<List<Object>> expectedData = Arrays.asList(
+                Arrays.asList(1, 10.1f, "abc"),
+                Arrays.asList(2, 20.2f, "def")
+        );
+        testPkWriteForBase(ddl, rowTypeInfo, testData, expectedData);
+    }
+
+    @Test
+    public void testPkWritePartialColumnsInOrder() throws Exception {
+        String ddl = "c0 INT, c2 STRING";
+        List<Row> testData = new ArrayList<>();
+        testData.add(Row.of(1, "abc"));
+        testData.add(Row.of(2, "def"));
+        RowTypeInfo rowTypeInfo = new RowTypeInfo(
+                new TypeInformation[]{Types.INT, Types.STRING},
+                new String[]{"c0", "c2"});
+        List<List<Object>> expectedData = Arrays.asList(
+                Arrays.asList(1, null, "abc"),
+                Arrays.asList(2, null, "def")
+        );
+        testPkWriteForBase(ddl, rowTypeInfo, testData, expectedData);
+    }
+
+    @Test
+    public void testPkWritePartialColumnsOutOfOrder() throws Exception {
+        String ddl = "c2 STRING, c0 INT";
+        List<Row> testData = new ArrayList<>();
+        testData.add(Row.of("abc", 1));
+        testData.add(Row.of("def", 2));
+        RowTypeInfo rowTypeInfo = new RowTypeInfo(
+                new TypeInformation[]{Types.STRING, Types.INT},
+                new String[]{"c2", "c0"});
+        List<List<Object>> expectedData = Arrays.asList(
+                Arrays.asList(1, null, "abc"),
+                Arrays.asList(2, null, "def")
+        );
+        testPkWriteForBase(ddl, rowTypeInfo, testData, expectedData);
+    }
+
+    private void testPkWriteForBase(String flinkDDL,  RowTypeInfo rowTypeInfo,
+                                    List<Row> testData, List<List<Object>> expectedData) throws Exception {
+        String tableName = createPkTable("testPkWriteForBase");
+        StarRocksSinkOptions sinkOptions = StarRocksSinkOptions.builder()
+                .withProperty("jdbc-url", getJdbcUrl())
+                .withProperty("load-url", getHttpUrls())
+                .withProperty("database-name", DB_NAME)
+                .withProperty("table-name", tableName)
+                .withProperty("username", "root")
+                .withProperty("password", "")
+                .build();
+
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        StreamTableEnvironment tEnv;
+        tEnv = StreamTableEnvironment.create(env);
+        String createSQL = "CREATE TABLE sink(" + flinkDDL +
+                ", PRIMARY KEY (`c0`) NOT ENFORCED" +
+                ") WITH ( " +
+                "'connector' = 'starrocks'," +
+                "'jdbc-url'='" + sinkOptions.getJdbcUrl() + "'," +
+                "'load-url'='" + String.join(";", sinkOptions.getLoadUrlList()) + "'," +
+                "'sink.version' = '" + "V2" + "'," +
+                "'database-name' = '" + DB_NAME + "'," +
+                "'table-name' = '" + sinkOptions.getTableName() + "'," +
+                "'username' = '" + sinkOptions.getUsername() + "'," +
+                "'password' = '" + sinkOptions.getPassword() + "'" +
+                ")";
+        tEnv.executeSql(createSQL);
+        DataStream<Row> srcDs = env.fromCollection(testData).returns(rowTypeInfo);
+        Table in = tEnv.fromDataStream(srcDs);
+        tEnv.createTemporaryView("src", in);
+        tEnv.executeSql("INSERT INTO sink SELECT * FROM src").await();
+        List<List<Object>> actualData = scanTable(DB_CONNECTION, DB_NAME, tableName);
+        verifyResult(expectedData, actualData);
+    }
+
+    @Test
+    public void testPKUpsertAndDelete() throws Exception {
+        String tableName = createPkTable("testPKUpsertAndDelete");
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        StreamTableEnvironment tEnv;
+        tEnv = StreamTableEnvironment.create(env);
+        DataStream<Row> dataStream =
+                env.fromElements(
+                        Row.ofKind(RowKind.INSERT, 1, 1.0f, "row1"),
+                        Row.ofKind(RowKind.INSERT, 2, 2.0f, "row2"),
+                        Row.ofKind(RowKind.UPDATE_AFTER, 1, 3.0f, "row3"),
+                        Row.ofKind(RowKind.UPDATE_AFTER, 3, 3.0f, "row3"),
+                        Row.ofKind(RowKind.DELETE, 2, 2.0f, "row2"));
+        Table table = tEnv.fromChangelogStream(dataStream, Schema.newBuilder().primaryKey("f0").build(), ChangelogMode.all());
+        tEnv.createTemporaryView("src", table);
+
+        StarRocksSinkOptions sinkOptions = StarRocksSinkOptions.builder()
+                .withProperty("jdbc-url", getJdbcUrl())
+                .withProperty("load-url", getHttpUrls())
+                .withProperty("database-name", DB_NAME)
+                .withProperty("table-name", tableName)
+                .withProperty("username", "root")
+                .withProperty("password", "")
+                .build();
+
+        String createSQL = "CREATE TABLE sink(" +
+                "c0 INT," +
+                "c1 FLOAT," +
+                "c2 STRING," +
+                "PRIMARY KEY (`c0`) NOT ENFORCED" +
+                ") WITH ( " +
+                "'connector' = 'starrocks'," +
+                "'jdbc-url'='" + sinkOptions.getJdbcUrl() + "'," +
+                "'load-url'='" + String.join(";", sinkOptions.getLoadUrlList()) + "'," +
+                "'sink.version' = '" + "V2" + "'," +
+                "'database-name' = '" + DB_NAME + "'," +
+                "'table-name' = '" + sinkOptions.getTableName() + "'," +
+                "'username' = '" + sinkOptions.getUsername() + "'," +
+                "'password' = '" + sinkOptions.getPassword() + "'" +
+                ")";
+        tEnv.executeSql(createSQL);
+        tEnv.executeSql("INSERT INTO sink SELECT * FROM src").await();
+
+        List<List<Object>> expectedData = Arrays.asList(
+            Arrays.asList(1, 3.0f, "row3"),
+            Arrays.asList(3, 3.0f, "row3")
+        );
+        List<List<Object>> actualData = scanTable(DB_CONNECTION, DB_NAME, tableName);
+        verifyResult(expectedData, actualData);
+    }
+
+    @Test
+    public void testPKPartialUpdateDelete() throws Exception {
+        String tableName = createPkTable("testPKPartialUpdateDelete");
+        executeSrSQL(String.format("INSERT INTO `%s`.`%s` VALUES (1, 1.0, '1'), (2, 2.0, '2')", DB_NAME, tableName));
+        verifyResult(Arrays.asList(Arrays.asList(1, 1.0f, "1"), Arrays.asList(2, 2.0f, "2")),
+                scanTable(DB_CONNECTION, DB_NAME, tableName));
+
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        StreamTableEnvironment tEnv;
+        tEnv = StreamTableEnvironment.create(env);
+        DataStream<Row> dataStream = env.fromElements(
+                Row.ofKind(RowKind.DELETE, 1, "1"),
+                Row.ofKind(RowKind.UPDATE_AFTER, 2, "22"),
+                Row.ofKind(RowKind.INSERT, 3, "3"));
+        Table table = tEnv.fromChangelogStream(dataStream, Schema.newBuilder().primaryKey("f0").build(), ChangelogMode.all());
+        tEnv.createTemporaryView("src", table);
+
+        StarRocksSinkOptions sinkOptions = StarRocksSinkOptions.builder()
+                .withProperty("jdbc-url", getJdbcUrl())
+                .withProperty("load-url", getHttpUrls())
+                .withProperty("database-name", DB_NAME)
+                .withProperty("table-name", tableName)
+                .withProperty("username", "root")
+                .withProperty("password", "")
+                .build();
+
+        String createSQL = "CREATE TABLE sink(" +
+                "c0 INT," +
+                "c2 STRING," +
+                "PRIMARY KEY (`c0`) NOT ENFORCED" +
+                ") WITH ( " +
+                "'connector' = 'starrocks'," +
+                "'jdbc-url'='" + sinkOptions.getJdbcUrl() + "'," +
+                "'load-url'='" + String.join(";", sinkOptions.getLoadUrlList()) + "'," +
+                "'sink.version' = '" + "V2" + "'," +
+                "'database-name' = '" + DB_NAME + "'," +
+                "'table-name' = '" + sinkOptions.getTableName() + "'," +
+                "'username' = '" + sinkOptions.getUsername() + "'," +
+                "'password' = '" + sinkOptions.getPassword() + "'," +
+                "'sink.properties.partial_update' = 'true'" +
+                ")";
+        tEnv.executeSql(createSQL);
+        tEnv.executeSql("INSERT INTO sink SELECT * FROM src").await();
+
+        List<List<Object>> expectedData = Arrays.asList(
+                Arrays.asList(2, 2.0, "22"),
+                Arrays.asList(3, null, "3")
+        );
+        List<List<Object>> actualData = scanTable(DB_CONNECTION, DB_NAME, tableName);
+        verifyResult(expectedData, actualData);
+    }
+
+    /**
+     * Conditional update via sink.properties.merge_condition.
+     * Update takes effect only when the new score >= existing score.
+     */
+    @Test
+    public void testConditionalUpdateMergeCondition() throws Exception {
+        String tableName = "testMergeCondition_" + genRandomUuid();
+        String createStarRocksTable =
+                String.format(
+                        "CREATE TABLE `%s`.`%s` (" +
+                                "id INT," +
+                                "name STRING," +
+                                "score INT" +
+                                ") ENGINE = OLAP " +
+                                "PRIMARY KEY(id) " +
+                                "DISTRIBUTED BY HASH (id) BUCKETS 1 " +
+                                "PROPERTIES (" +
+                                "\"replication_num\" = \"1\"" +
+                                ")",
+                        DB_NAME, tableName);
+        executeSrSQL(createStarRocksTable);
+        executeSrSQL(String.format(
+                "INSERT INTO `%s`.`%s` VALUES (1, 'starrocks', 100), (2, 'flink', 100)",
+                DB_NAME, tableName));
+
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
+
+        List<Row> testData = Arrays.asList(
+                Row.of(1, "starrocks-update", 99),
+                Row.of(2, "flink-update", 101));
+        RowTypeInfo rowTypeInfo = new RowTypeInfo(
+                new TypeInformation[]{Types.INT, Types.STRING, Types.INT},
+                new String[]{"id", "name", "score"});
+        DataStream<Row> srcDs = env.fromCollection(testData).returns(rowTypeInfo);
+        tEnv.createTemporaryView("src", tEnv.fromDataStream(srcDs));
+
+        String createSQL = "CREATE TABLE sink(" +
+                "id INT," +
+                "name STRING," +
+                "score INT," +
+                "PRIMARY KEY (`id`) NOT ENFORCED" +
+                ") WITH ( " +
+                "'connector' = 'starrocks'," +
+                "'jdbc-url'='" + getJdbcUrl() + "'," +
+                "'load-url'='" + getHttpUrls() + "'," +
+                "'sink.version' = '" + "V2" + "'," +
+                "'database-name' = '" + DB_NAME + "'," +
+                "'table-name' = '" + tableName + "'," +
+                "'username' = 'root'," +
+                "'password' = ''," +
+                "'sink.properties.merge_condition' = 'score'" +
+                ")";
+        tEnv.executeSql(createSQL);
+        tEnv.executeSql("INSERT INTO sink SELECT * FROM src").await();
+
+        // id=1: score 99 < 100 → rejected; id=2: score 101 >= 100 → applied
+        List<List<Object>> expectedData = Arrays.asList(
+                Arrays.asList(1, "starrocks", 100),
+                Arrays.asList(2, "flink-update", 101)
+        );
+        List<List<Object>> actualData = scanTable(DB_CONNECTION, DB_NAME, tableName);
+        verifyResult(expectedData, actualData);
+    }
+
+    @Test
+    public void testAtLeastOnceWithTransaction() throws Exception {
+        testConfigurationBase(Collections.emptyMap(), env -> null);
+    }
+
+    @Test
+    public void testAtLeastOnceWithoutTransaction() throws Exception {
+        testConfigurationBase(
+                Collections.singletonMap("sink.at-least-once.use-transaction-stream-load", "false"), env -> null);
+    }
+
+    @Test
+    public void testExactlyOnce() throws Exception {
+        Map<String, String> options = new HashMap<>();
+        options.put("sink.at-least-once.use-transaction-stream-load", "false");
+        options.put("sink.semantic", "exactly-once");
+        String checkpointDir = temporaryFolder.newFolder().toURI().toString();
+        testConfigurationBase(options,
+            env -> {
+                env.enableCheckpointing(1000);
+                Configuration config = new Configuration();
+                config.set(CheckpointingOptions.CHECKPOINTS_DIRECTORY, checkpointDir);
+                config.set(CheckpointingOptions.ENABLE_CHECKPOINTS_AFTER_TASKS_FINISH, true);
+                env.configure(config);
+                return null;
+            }
+        );
+    }
+
+    @Test
+    public void testEnableExactlyOnceLabelGen() throws Exception {
+        Map<String, String> options = new HashMap<>();
+        options.put("sink.semantic", "exactly-once");
+        options.put("sink.label-prefix", "test_label");
+        options.put("sink.exactly-once.enable-label-gen", "true");
+        String checkpointDir = temporaryFolder.newFolder().toURI().toString();
+        testConfigurationBase(options,
+                env -> {
+                    env.enableCheckpointing(1000);
+                    Configuration config = new Configuration();
+                    config.set(CheckpointingOptions.CHECKPOINTS_DIRECTORY, checkpointDir);
+                    config.set(CheckpointingOptions.ENABLE_CHECKPOINTS_AFTER_TASKS_FINISH, true);
+                    env.configure(config);
+                    return null;
+                }
+        );
+    }
+
+    @Test
+    public void testAbortLingeringTransactions() throws Exception {
+        Map<String, String> options = new HashMap<>();
+        options.put("sink.semantic", "exactly-once");
+        options.put("sink.label-prefix", "test_label");
+        String checkpointDir = temporaryFolder.newFolder().toURI().toString();
+        testConfigurationBase(options,
+                env -> {
+                    env.enableCheckpointing(1000);
+                    Configuration config = new Configuration();
+                    config.set(CheckpointingOptions.CHECKPOINTS_DIRECTORY, checkpointDir);
+                    config.set(CheckpointingOptions.ENABLE_CHECKPOINTS_AFTER_TASKS_FINISH, true);
+                    env.configure(config);
+                    return null;
+                }
+        );
+    }
+
+    @Test
+    public void testAbortLingeringTransactionsWithCheckNum() throws Exception {
+        Map<String, String> options = new HashMap<>();
+        options.put("sink.semantic", "exactly-once");
+        options.put("sink.label-prefix", "test_label");
+        options.put("sink.exactly-once.check-num-lingering-txn", "10");
+        String checkpointDir = temporaryFolder.newFolder().toURI().toString();
+        testConfigurationBase(options,
+                env -> {
+                    env.enableCheckpointing(1000);
+                    Configuration config = new Configuration();
+                    config.set(CheckpointingOptions.CHECKPOINTS_DIRECTORY, checkpointDir);
+                    config.set(CheckpointingOptions.ENABLE_CHECKPOINTS_AFTER_TASKS_FINISH, true);
+                    env.configure(config);
+                    return null;
+                }
+        );
+    }
+
+    @Test
+    public void testCsvFormatWithColumnSeparatorAndRowDelimiter() throws Exception {
+        Map<String, String> map = new HashMap<>();
+        map.put("sink.properties.column_separator", "\\x01");
+        map.put("sink.properties.row_delimiter", "\\0x2");
+        testConfigurationBase(map, env -> null);
+    }
+
+    @Test
+    public void testJsonFormat() throws Exception {
+        testConfigurationBase(
+                Collections.singletonMap("sink.properties.format", "json"), env -> null);
+    }
+
+    @Test
+    public void testAtLeastOncePreparedTimeout() throws Exception {
+        testPreparedTimeoutBase("at-least-once", null, "180");
+        testPreparedTimeoutBase("at-least-once", "60", "60");
+    }
+
+    @Test
+    public void testExactlyOncePreparedTimeout() throws Exception {
+        String starrocksFeTimeout = getStarRocksFeConfigure("prepared_transaction_default_timeout_second");
+        testPreparedTimeoutBase("exactly-once", null, starrocksFeTimeout);
+        testPreparedTimeoutBase("exactly-once", "600", "600");
+    }
+
+    private void testPreparedTimeoutBase(String sinkSemantic, @Nullable String configuredPreparedTimeout,
+                                         String expectedPreparedTimeout) throws Exception {
+        String labelPrefix = "prepared_timeout_" + genRandomUuid();
+        Map<String, String> options = new HashMap<>();
+        options.put("sink.semantic", sinkSemantic);
+        options.put("sink.label-prefix", labelPrefix);
+        if (configuredPreparedTimeout != null) {
+            options.put("sink.properties.prepared_timeout", configuredPreparedTimeout);
+        }
+        String checkpointDir = temporaryFolder.newFolder().toURI().toString();
+        testConfigurationBase(options,
+                env -> {
+                    env.enableCheckpointing(1000);
+                    Configuration config = new Configuration();
+                    config.set(CheckpointingOptions.CHECKPOINTS_DIRECTORY, checkpointDir);
+                    config.set(CheckpointingOptions.ENABLE_CHECKPOINTS_AFTER_TASKS_FINISH, true);
+                    env.configure(config);
+                    return null;
+                }
+        );
+        List<TransactionInfo> transactionInfos = getFinishedTransactionInfo(labelPrefix);
+        assertFalse(transactionInfos.isEmpty());
+        for (TransactionInfo transactionInfo : transactionInfos) {
+            assertEquals(expectedPreparedTimeout, Objects.toString(transactionInfo.preparedTimeoutMs / 1000));
+        }
+    }
+
+    private void testConfigurationBase(Map<String, String> options, Function<StreamExecutionEnvironment, Void> setFlinkEnv) throws Exception {
+        String tableName = createPkTable("testConfigurationBase");
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        setFlinkEnv.apply(env);
+
+        StreamTableEnvironment tEnv;
+        tEnv = StreamTableEnvironment.create(env);
+
+        StringJoiner joiner = new StringJoiner(",\n");
+        for (Map.Entry<String, String> entry : options.entrySet()) {
+            joiner.add(String.format("'%s' = '%s'", entry.getKey(), entry.getValue()));
+        }
+        String optionStr = joiner.toString();
+        String createSQL = "CREATE TABLE sink(" +
+                "c0 INT," +
+                "c1 FLOAT," +
+                "c2 STRING," +
+                "PRIMARY KEY (`c0`) NOT ENFORCED" +
+                ") WITH ( " +
+                "'connector' = 'starrocks'," +
+                "'jdbc-url'='" + getJdbcUrl() + "'," +
+                "'load-url'='" + String.join(";", getHttpUrls()) + "'," +
+                "'sink.version' = '" + "V2" + "'," +
+                "'database-name' = '" + DB_NAME + "'," +
+                "'table-name' = '" + tableName + "'," +
+                "'username' = 'root'," +
+                "'password' = ''" +
+                (optionStr.isEmpty() ? "" : "," + optionStr) +
+                ")";
+        tEnv.executeSql(createSQL);
+        tEnv.executeSql("INSERT INTO sink VALUES (1, 1.0, '1')").await();
+        List<List<Object>> actualData = scanTable(DB_CONNECTION, DB_NAME, tableName);
+        verifyResult(Collections.singletonList(Arrays.asList(1, 1.0, '1')), actualData);
+    }
+
+    private String createPkTable(String tablePrefix) throws Exception {
+        String tableName = tablePrefix + "_" + genRandomUuid();
+        String createStarRocksTable =
+                String.format(
+                        "CREATE TABLE `%s`.`%s` (" +
+                                "c0 INT," +
+                                "c1 FLOAT," +
+                                "c2 STRING" +
+                                ") ENGINE = OLAP " +
+                                "PRIMARY KEY(c0) " +
+                                "DISTRIBUTED BY HASH (c0) BUCKETS 8 " +
+                                "PROPERTIES (" +
+                                "\"replication_num\" = \"1\"" +
+                                ")",
+                        DB_NAME, tableName);
+        executeSrSQL(createStarRocksTable);
+        return tableName;
+    }
+
+    @Test
+    public void testUnalignedTypes() throws Exception {
+        String tableName = "testUnalignedTypes_" + genRandomUuid();
+        String createStarRocksTable =
+                String.format(
+                        "CREATE TABLE `%s`.`%s` (" +
+                                "c0 INT," +
+                                "c1 LARGEINT," +
+                                "c2 JSON" +
+                                ") ENGINE = OLAP " +
+                                "PRIMARY KEY(c0) " +
+                                "DISTRIBUTED BY HASH (c0) BUCKETS 8 " +
+                                "PROPERTIES (" +
+                                "\"replication_num\" = \"1\"" +
+                                ")",
+                        DB_NAME, tableName);
+        executeSrSQL(createStarRocksTable);
+
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
+
+        StarRocksSinkOptions sinkOptions = StarRocksSinkOptions.builder()
+                .withProperty("jdbc-url", getJdbcUrl())
+                .withProperty("load-url", getHttpUrls())
+                .withProperty("database-name", DB_NAME)
+                .withProperty("table-name", tableName)
+                .withProperty("username", "root")
+                .withProperty("password", "")
+                .build();
+
+        String createSQL = "CREATE TABLE sink(" +
+                    "c0 INT," +
+                    "c1 STRING," +
+                    "c2 STRING," +
+                    "PRIMARY KEY (`c0`) NOT ENFORCED" +
+                ") WITH ( " +
+                    "'connector' = 'starrocks'," +
+                    "'jdbc-url'='" + sinkOptions.getJdbcUrl() + "'," +
+                    "'load-url'='" + String.join(";", sinkOptions.getLoadUrlList()) + "'," +
+                    "'sink.version' = '" + "V2" + "'," +
+                    "'database-name' = '" + DB_NAME + "'," +
+                    "'table-name' = '" + sinkOptions.getTableName() + "'," +
+                    "'username' = '" + sinkOptions.getUsername() + "'," +
+                    "'password' = '" + sinkOptions.getPassword() + "'" +
+                ")";
+
+        tEnv.executeSql(createSQL);
+        tEnv.executeSql("INSERT INTO sink VALUES (1, '123', '{\"key\": 1, \"value\": 2}')").await();
+        List<List<Object>> actualData = scanTable(DB_CONNECTION, DB_NAME, tableName);
+        verifyResult(Collections.singletonList(Arrays.asList(1, "123", "{\"key\": 1, \"value\": 2}")), actualData);
+    }
+
+    @Test
+    public void testJsonType() throws Exception {
+        String tableName = createJsonTable("testJsonType");
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        StreamTableEnvironment tEnv;
+        tEnv = StreamTableEnvironment.create(env);
+        DataStream<Row> dataStream =
+                env.fromElements(
+                        Row.ofKind(RowKind.INSERT, 1, 1.0, "{\"a\": 1, \"b\": true}"),
+                        Row.ofKind(RowKind.INSERT, 2, 2.0, "{\"a\": 2, \"b\": false}"),
+                        Row.ofKind(RowKind.INSERT, 3, 3.0, ""));
+        Table table = tEnv.fromChangelogStream(dataStream, Schema.newBuilder().primaryKey("f0").build(), ChangelogMode.all());
+        tEnv.createTemporaryView("src", table);
+
+        StarRocksSinkOptions sinkOptions = StarRocksSinkOptions.builder()
+                .withProperty("jdbc-url", getJdbcUrl())
+                .withProperty("load-url", getHttpUrls())
+                .withProperty("database-name", DB_NAME)
+                .withProperty("table-name", tableName)
+                .withProperty("username", "root")
+                .withProperty("password", "")
+                .build();
+
+        String createSinkSQL = "CREATE TABLE sink(" +
+                "c0 INT," +
+                "c1 DOUBLE," +
+                "c2 STRING," +
+                "PRIMARY KEY (`c0`) NOT ENFORCED" +
+                ") WITH ( " +
+                "'connector' = 'starrocks'," +
+                "'jdbc-url'='" + sinkOptions.getJdbcUrl() + "'," +
+                "'load-url'='" + String.join(";", sinkOptions.getLoadUrlList()) + "'," +
+                "'sink.version' = '" + "V2" + "'," +
+                "'database-name' = '" + DB_NAME + "'," +
+                "'table-name' = '" + sinkOptions.getTableName() + "'," +
+                "'username' = '" + sinkOptions.getUsername() + "'," +
+                "'password' = '" + sinkOptions.getPassword() + "'" +
+                ")";
+        tEnv.executeSql(createSinkSQL);
+        tEnv.executeSql("INSERT INTO sink SELECT * FROM src").await();
+
+        String createSrcSQL = "CREATE TABLE sr_src(" +
+                "c0 INT," +
+                "c1 DOUBLE," +
+                "c2 STRING," +
+                "PRIMARY KEY (`c0`) NOT ENFORCED" +
+                ") WITH ( " +
+                "'connector' = 'starrocks'," +
+                "'jdbc-url'='" + sinkOptions.getJdbcUrl() + "'," +
+                "'scan-url'='" + String.join(";", sinkOptions.getLoadUrlList()) + "'," +
+                "'database-name' = '" + DB_NAME + "'," +
+                "'table-name' = '" + sinkOptions.getTableName() + "'," +
+                "'username' = '" + sinkOptions.getUsername() + "'," +
+                "'password' = '" + sinkOptions.getPassword() + "'" +
+                ")";
+        tEnv.executeSql(createSrcSQL);
+        List<List<Object>> actualData;
+        try (CloseableIterator<Row> result = tEnv.executeSql("SELECT * FROM sr_src").collect()) {
+            actualData = collectResult(result);
+        }
+
+        List<List<Object>> expectedData = Arrays.asList(
+                Arrays.asList(1, 1.0, "{\"a\": 1, \"b\": true}"),
+                Arrays.asList(2, 2.0, "{\"a\": 2, \"b\": false}"),
+                Arrays.asList(3, 3.0, "\"\"")
+        );
+
+        verifyResult(expectedData, actualData);
+    }
+
+    private List<List<Object>> collectResult(CloseableIterator<Row> result) {
+        List<List<Object>> data = new ArrayList<>();
+        while (result.hasNext()) {
+            Row row = result.next();
+            List<Object> list = new ArrayList<>();
+            for (int i = 0; i < row.getArity(); i++) {
+                list.add(row.getField(i).toString());
+            }
+            data.add(list);
+        }
+        return data;
+    }
+
+    private String createJsonTable(String tablePrefix) throws Exception {
+        String tableName = tablePrefix + "_" + genRandomUuid();
+        String createStarRocksTable =
+                String.format(
+                        "CREATE TABLE `%s`.`%s` (" +
+                                "c0 INT," +
+                                "c1 DOUBLE," +
+                                "c2 JSON" +
+                                ") ENGINE = OLAP " +
+                                "PRIMARY KEY(c0) " +
+                                "DISTRIBUTED BY HASH (c0) BUCKETS 8 " +
+                                "PROPERTIES (" +
+                                "\"replication_num\" = \"1\"" +
+                                ")",
+                        DB_NAME, tableName);
+        executeSrSQL(createStarRocksTable);
+        return tableName;
+    }
+
+    @Test
+    public void testJsonLz4Compression() throws Exception {
+        Map<String, String> map = new HashMap<>();
+        map.put("sink.properties.format", "json");
+        map.put("sink.properties.strip_outer_array", "true");
+        map.put("sink.properties.compression", "lz4_frame");
+        testConfigurationBase(map, env -> null);
+
+        map.put("sink.at-least-once.use-transaction-stream-load", "false");
+        testConfigurationBase(map, env -> null);
+    }
+
+    @Test
+    public void testCsvLz4Compression() throws Exception {
+        Map<String, String> map = new HashMap<>();
+        map.put("sink.properties.compression", "lz4_frame");
+        testConfigurationBase(map, env -> null);
+
+        map.put("sink.properties.format", "csv");
+        testConfigurationBase(map, env -> null);
+
+        map.put("sink.at-least-once.use-transaction-stream-load", "false");
+        testConfigurationBase(map, env -> null);
+    }
+
+    @Test
+    public void testTimestampType() throws Exception {
+        String tableName = createDatetimeTable("testTimestampType");
+        StarRocksSinkOptions sinkOptions = StarRocksSinkOptions.builder()
+                .withProperty("jdbc-url", getJdbcUrl())
+                .withProperty("load-url", getHttpUrls())
+                .withProperty("database-name", DB_NAME)
+                .withProperty("table-name", tableName)
+                .withProperty("username", "root")
+                .withProperty("password", "")
+                .build();
+
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        StreamTableEnvironment tEnv;
+        tEnv = StreamTableEnvironment.create(env);
+        String createSQL = "CREATE TABLE sink(" +
+                "c0 INT," +
+                "c1 TIMESTAMP" +
+                ", PRIMARY KEY (`c0`) NOT ENFORCED" +
+                ") WITH ( " +
+                "'connector' = 'starrocks'," +
+                "'jdbc-url'='" + sinkOptions.getJdbcUrl() + "'," +
+                "'load-url'='" + String.join(";", sinkOptions.getLoadUrlList()) + "'," +
+                "'sink.version' = '" + "V2" + "'," +
+                "'database-name' = '" + DB_NAME + "'," +
+                "'table-name' = '" + sinkOptions.getTableName() + "'," +
+                "'username' = '" + sinkOptions.getUsername() + "'," +
+                "'password' = '" + sinkOptions.getPassword() + "'" +
+                ")";
+        tEnv.executeSql(createSQL);
+        tEnv.executeSql("INSERT INTO sink VALUES " +
+                "(0, CAST('2024-09-19 14:00:00' AS TIMESTAMP(9)))," +
+                "(1, CAST('2024-09-19 14:01:00.123' AS TIMESTAMP(9)))," +
+                "(2, CAST('2024-09-19 14:02:00.123456' AS TIMESTAMP(9)))," +
+                "(3, CAST('2024-09-19 14:03:00.123456789' AS TIMESTAMP(9)))"
+            ).await();
+        List<List<Object>> expectedData = Arrays.asList(
+                Arrays.asList(0, Timestamp.valueOf("2024-09-19 14:00:00")),
+                Arrays.asList(1, Timestamp.valueOf("2024-09-19 14:01:00.123")),
+                Arrays.asList(2, Timestamp.valueOf("2024-09-19 14:02:00.123456")),
+                Arrays.asList(3, Timestamp.valueOf("2024-09-19 14:03:00.123456"))
+        );
+        List<List<Object>> actualData = scanTable(DB_CONNECTION, DB_NAME, tableName);
+        verifyResult(expectedData, actualData);
+    }
+
+    private String createDatetimeTable(String tablePrefix) throws Exception {
+        String tableName = tablePrefix + "_" + genRandomUuid();
+        String createStarRocksTable =
+                String.format(
+                        "CREATE TABLE `%s`.`%s` (" +
+                                "c0 INT," +
+                                "c1 DATETIME" +
+                                ") ENGINE = OLAP " +
+                                "PRIMARY KEY(c0) " +
+                                "DISTRIBUTED BY HASH (c0) BUCKETS 8 " +
+                                "PROPERTIES (" +
+                                "\"replication_num\" = \"1\"" +
+                                ")",
+                        DB_NAME, tableName);
+        executeSrSQL(createStarRocksTable);
+        return tableName;
+    }
+
+    @Test
+    public void testErrorLog() {
+        testErrorLogBase(false);
+        testErrorLogBase(true);
+    }
+
+    private void testErrorLogBase(boolean enableMergeCommit) {
+        try {
+            String tableName = createMergeCommitTable("testErroLogBase", false);
+            StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+            env.setParallelism(1);
+            StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
+            String sinkDdl = "CREATE TABLE sink(" +
+                                "c0 INT," +
+                                "c1 FLOAT," +
+                                "c2 STRING" +
+                            ") WITH ( " +
+                                "'connector' = 'starrocks'," +
+                                "'jdbc-url'='" + getJdbcUrl() + "'," +
+                                "'load-url'='" + getHttpUrls() + "'," +
+                                "'database-name' = '" + DB_NAME + "'," +
+                                "'table-name' = '" + tableName + "'," +
+                                "'username' = 'root'," +
+                                "'password' = ''," +
+                                "'sink.buffer-flush.interval-ms' = '500'," +
+                                "'sink.properties.enable_merge_commit' = '" + enableMergeCommit + "'," +
+                                "'sink.properties.merge_commit_interval_ms' = '1000'" +
+                            ")";
+            tEnv.executeSql(sinkDdl);
+
+            List<Row> testData = new ArrayList<>();
+            testData.add(Row.of(1, 10.1f, null));
+            testData.add(Row.of(2, 20.2f, null));
+            RowTypeInfo rowTypeInfo = new RowTypeInfo(
+                    new TypeInformation[] {Types.INT, Types.FLOAT, Types.STRING},
+                    new String[] {"c0", "c1", "c2"});
+            DataStream<Row> srcDs = env.fromCollection(testData).returns(rowTypeInfo);
+            Table in = tEnv.fromDataStream(srcDs);
+            tEnv.createTemporaryView("src", in);
+            tEnv.executeSql("INSERT INTO sink SELECT * FROM src").await();
+            fail("the job should fail because of data quality");
+        } catch (Exception e) {
+            StringWriter sw = new StringWriter();
+            e.printStackTrace(new PrintWriter(sw));
+            assertTrue(sw.toString().contains(
+                    "errorLog: Error: NULL value in non-nullable column 'c2'. Row: [1, 10.1, NULL]\n" +
+                            "Error: NULL value in non-nullable column 'c2'. Row: [2, 20.2, NULL]"));
+        }
+    }
+
+    @Test
+    public void testMergeCommitAsync() throws Exception {
+        for (boolean async : Arrays.asList(false, true)) {
+            Map<String, String> options = new HashMap<>();
+            options.put("sink.properties.merge_commit_async", String.valueOf(async));
+            testMergeCommitBase(false, options);
+            testMergeCommitBase(true, options);
+        }
+    }
+
+    @Test
+    public void testMergeCommitBackendDirectConnection() throws Exception {
+        for (boolean directConnection : Arrays.asList(false, true)) {
+            Map<String, String> options = new HashMap<>();
+            options.put("sink.merge-commit.backend-direct-connection", String.valueOf(directConnection));
+            testMergeCommitBase(false, options);
+            testMergeCommitBase(true, options);
+        }
+    }
+
+    @Test
+    public void testMergeCommitInOrder() throws Exception {
+        Map<String, String> options = new HashMap<>();
+        options.put("sink.merge-commit.max-inflight-requests", String.valueOf(0));
+        testMergeCommitBase(false, options);
+        testMergeCommitBase(true, options);
+    }
+
+    private void testMergeCommitBase(boolean isPrimaryKey, Map<String, String> options) throws Exception {
+        String tableName = createMergeCommitTable("testMergeCommitBase", isPrimaryKey);
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
+        String sinkDdl = buildMergeCommitSinkDdl(tableName, isPrimaryKey, options);
+        tEnv.executeSql(sinkDdl);
+
+        List<Row> testData = new ArrayList<>();
+        testData.add(Row.of(1, 10.1f, "abc"));
+        testData.add(Row.of(2, 20.2f, "def"));
+        RowTypeInfo rowTypeInfo = new RowTypeInfo(
+                new TypeInformation[]{Types.INT, Types.FLOAT, Types.STRING},
+                new String[]{"c0", "c1", "c2"});
+        List<List<Object>> expectedData = Arrays.asList(
+                Arrays.asList(1, 10.1f, "abc"),
+                Arrays.asList(2, 20.2f, "def")
+        );
+        DataStream<Row> srcDs = env.fromCollection(testData).returns(rowTypeInfo);
+        Table in = tEnv.fromDataStream(srcDs);
+        tEnv.createTemporaryView("src", in);
+        tEnv.executeSql("INSERT INTO sink SELECT * FROM src").await();
+        List<List<Object>> actualData = scanTable(DB_CONNECTION, DB_NAME, tableName);
+        verifyResult(expectedData, actualData);
+    }
+
+    private String buildMergeCommitSinkDdl(String tableName, boolean isPrimaryKey, Map<String, String> options) {
+        StringBuilder builder = new StringBuilder();
+        builder.append(
+                "CREATE TABLE sink(" +
+                        "c0 INT," +
+                        "c1 FLOAT," +
+                        "c2 STRING" +
+                        (!isPrimaryKey ? "" : ", PRIMARY KEY (`c0`) NOT ENFORCED") +
+                        ") WITH ( " +
+                        "'connector' = 'starrocks'," +
+                        "'jdbc-url'='" + getJdbcUrl() + "'," +
+                        "'load-url'='" + getHttpUrls() + "'," +
+                        "'database-name' = '" + DB_NAME + "'," +
+                        "'table-name' = '" + tableName + "'," +
+                        "'username' = 'root'," +
+                        "'password' = ''," +
+                        "'sink.buffer-flush.interval-ms' = '500'," +
+                        "'sink.properties.enable_merge_commit' = 'true'," +
+                        "'sink.properties.merge_commit_interval_ms' = '1000'"
+                );
+        for (Map.Entry<String, String> entry : options.entrySet()) {
+            builder.append(",\n");
+            builder.append(String.format("'%s' = '%s'", entry.getKey(), entry.getValue()));
+        }
+        builder.append(")");
+        return builder.toString();
+    }
+
+    private String createMergeCommitTable(String tablePrefix, boolean isPrimaryKey) throws Exception {
+        String tableName = tablePrefix + "_" + genRandomUuid();
+        String createStarRocksTable =
+                String.format(
+                        "CREATE TABLE `%s`.`%s` (" +
+                                "c0 INT," +
+                                "c1 FLOAT," +
+                                "c2 STRING NOT NULL" +
+                                ") ENGINE = OLAP " +
+                                (isPrimaryKey ? "PRIMARY KEY(`c0`)" : "DUPLICATE KEY(`c0`)") +
+                                "DISTRIBUTED BY HASH (c0) BUCKETS 8 " +
+                                "PROPERTIES (" +
+                                "\"replication_num\" = \"1\"" +
+                                ")",
+                        DB_NAME, tableName);
+        executeSrSQL(createStarRocksTable);
+        return tableName;
+    }
+}
