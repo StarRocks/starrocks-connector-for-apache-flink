@@ -22,6 +22,7 @@ package com.starrocks.data.load.stream;
 
 import org.junit.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -52,6 +53,30 @@ public class ChunkTest {
     @Test
     public void testEmptyJsonChunk() {
         testEmptyChunkBase(StreamLoadDataFormat.JSON);
+    }
+
+    @Test
+    public void testFirstRowTimeIsSetByFirstRowOnly() throws Exception {
+        Chunk chunk = new Chunk(StreamLoadDataFormat.JSON, 1);
+        assertEquals(-1L, chunk.getFirstRowTimeMs());
+
+        long before = System.currentTimeMillis();
+        chunk.addRow("{\"a\":1}".getBytes(StandardCharsets.UTF_8));
+        long after = System.currentTimeMillis();
+        long firstRowTimeMs = chunk.getFirstRowTimeMs();
+        assertTrue(firstRowTimeMs >= before && firstRowTimeMs <= after);
+
+        Thread.sleep(5);
+        chunk.addRow("{\"a\":2}".getBytes(StandardCharsets.UTF_8));
+        assertEquals("later rows must not move the first-row time", firstRowTimeMs, chunk.getFirstRowTimeMs());
+    }
+
+    @Test
+    public void testFirstRowTimeSetBeforeRowsIsKept() {
+        Chunk chunk = new Chunk(StreamLoadDataFormat.JSON, 1);
+        chunk.setFirstRowTimeMs(12345L);
+        chunk.addRow("{\"a\":1}".getBytes(StandardCharsets.UTF_8));
+        assertEquals(12345L, chunk.getFirstRowTimeMs());
     }
 
     private void testEmptyChunkBase(StreamLoadDataFormat format) {

@@ -64,6 +64,9 @@ public class StarRocksStreamLoadListener implements StreamLoadListener, MetricLi
     private transient AtomicLong numInflightRows;
     private transient AtomicLong numInflightBytes;
 
+    // multi-table transaction mode only, null otherwise
+    private transient Histogram sharedTxnLatencyMs;
+
     public StarRocksStreamLoadListener(MetricGroup metricGroup, StarRocksSinkOptions sinkOptions) {
         totalFlushBytes = metricGroup.counter(COUNTER_TOTAL_FLUSH_BYTES);
         totalFlushRows = metricGroup.counter(COUNTER_TOTAL_FLUSH_ROWS);
@@ -100,6 +103,18 @@ public class StarRocksStreamLoadListener implements StreamLoadListener, MetricLi
         metricGroup.gauge(GAUGE_NUM_INFLIGHT_LOADS, () -> numInflightLoads.get());
         metricGroup.gauge(GAUGE_NUM_INFLIGHT_ROWS, () -> numInflightRows.get());
         metricGroup.gauge(GAUGE_NUM_INFLIGHT_BYTES, () -> numInflightBytes.get());
+
+        if (sinkOptions.isMultiTableTransactionEnabled()) {
+            sharedTxnLatencyMs = metricGroup.histogram(HISTOGRAM_SHARED_TXN_LATENCY_MS,
+                    new DescriptiveStatisticsHistogram(sinkOptions.getSinkHistogramWindowSize()));
+        }
+    }
+
+    @Override
+    public void onSharedTransactionCommitted(String label, long firstRowTimeMs, long latencyMs) {
+        if (sharedTxnLatencyMs != null) {
+            sharedTxnLatencyMs.update(latencyMs);
+        }
     }
 
     @Override
@@ -190,6 +205,8 @@ public class StarRocksStreamLoadListener implements StreamLoadListener, MetricLi
     private static final String GAUGE_NUM_INFLIGHT_LOADS = "numInflightLoads";
     private static final String GAUGE_NUM_INFLIGHT_ROWS = "numInflightRows";
     private static final String GAUGE_NUM_INFLIGHT_BYTES = "numInflightBytes";
+    // time from the earliest row of a shared transaction entering the sink buffer until it committed
+    private static final String HISTOGRAM_SHARED_TXN_LATENCY_MS = "sharedTxnLatencyMs";
 
     // merge commit metrics =============================
 
