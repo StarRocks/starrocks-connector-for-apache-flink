@@ -19,6 +19,7 @@
 package com.starrocks.data.load.stream.mergecommit.fe;
 
 import com.starrocks.data.load.stream.StreamLoadUtils;
+import com.starrocks.data.load.stream.auth.CredentialsProvider;
 import com.starrocks.data.load.stream.mergecommit.Pair;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -98,7 +99,7 @@ public class DefaultFeHttpService implements FeHttpService, Closeable {
     public Pair<Integer, String> getNodes(String db, String table, Map<String, String> headers) throws Exception {
         String url = String.format(NODES_URL_PATTERN, getHost(), db, table);
         HttpGet httpGet = new HttpGet(url);
-        httpGet.addHeader("Authorization", StreamLoadUtils.getBasicAuthHeader(config.username, config.password));
+        httpGet.addHeader("Authorization", getAuthorizationHeader());
         headers.forEach(httpGet::addHeader);
         try (CloseableHttpResponse response = httpClient.execute(httpGet)) {
             int code = response.getStatusLine().getStatusCode();
@@ -110,12 +111,19 @@ public class DefaultFeHttpService implements FeHttpService, Closeable {
     public Pair<Integer, String> getLabelState(String db, String label) throws Exception {
         String url = String.format(LABEL_STATE_URL_PATTERN, getHost(), db, label);
         HttpGet httpGet = new HttpGet(url);
-        httpGet.addHeader("Authorization", StreamLoadUtils.getBasicAuthHeader(config.username, config.password));
+        httpGet.addHeader("Authorization", getAuthorizationHeader());
         try (CloseableHttpResponse response = httpClient.execute(httpGet)) {
             int code = response.getStatusLine().getStatusCode();
             String content = EntityUtils.toString(response.getEntity());
             return Pair.of(code, content);
         }
+    }
+
+    private String getAuthorizationHeader() {
+        if (config.credentialsProvider != null) {
+            return StreamLoadUtils.getBasicAuthHeader(config.credentialsProvider);
+        }
+        return StreamLoadUtils.getBasicAuthHeader(config.username, config.password);
     }
 
     private String getHost() {
@@ -130,6 +138,8 @@ public class DefaultFeHttpService implements FeHttpService, Closeable {
         public int validateAfterInactivityMs = 2000;
         public String username;
         public String password;
+        // Asked for credentials on every request; takes precedence over username and password.
+        public CredentialsProvider credentialsProvider;
         public List<String> candidateHosts;
     }
 
