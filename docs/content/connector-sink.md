@@ -280,6 +280,7 @@ The Flink connector provides the following metrics to monitor loading.
 | totalFlushSucceededTimes | counter | number of times that the data-batch been successfully flushed.  |
 | totalFlushFailedTimes    | counter | number of times that the flushing been failed.                  |
 | totalFilteredRows        | counter | number of rows filtered which is also included in totalFlushRows.    |
+| sharedTxnLatencyMs       | histogram | multi-table transaction mode only: time in ms from when the earliest row of a shared transaction entered the sink buffer until the transaction committed. |
 
 ### Flink CDC Synchronization (Schema Change Support)
 

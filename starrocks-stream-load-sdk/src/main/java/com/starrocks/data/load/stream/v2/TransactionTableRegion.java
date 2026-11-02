@@ -415,8 +415,12 @@ public class TransactionTableRegion implements TableRegion {
             // (lastSwitchedChunkId at cut time) always covers the whole frozen
             // transaction and a later chunk can never sit ahead of an earlier
             // one in the queue.
+            // Every piece keeps the frozen chunk's first-row time: re-cutting
+            // must not make the rows look as if they arrived at switch time.
+            long frozenFirstRowTimeMs = frozen.getFirstRowTimeMs();
             int pieces = 0;
             Chunk piece = new Chunk(properties.getDataFormat(), chunkIdGenerator.getAndIncrement());
+            piece.setFirstRowTimeMs(frozenFirstRowTimeMs);
             for (byte[] row : frozen.rows()) {
                 if (piece.numRows() > 0
                         && (piece.estimateChunkSize(row) > pieceLimit || piece.numRows() >= maxRows)) {
@@ -424,6 +428,7 @@ public class TransactionTableRegion implements TableRegion {
                     inactiveChunks.add(piece);
                     pieces++;
                     piece = new Chunk(properties.getDataFormat(), chunkIdGenerator.getAndIncrement());
+                    piece.setFirstRowTimeMs(frozenFirstRowTimeMs);
                 }
                 piece.addRow(row);
             }
@@ -1077,6 +1082,7 @@ public class TransactionTableRegion implements TableRegion {
         cacheRows.addAndGet(-chunk.numRows());
         response.setFlushBytes(chunk.rowBytes());
         response.setFlushRows(chunk.numRows());
+        response.setFirstRowTimeMs(chunk.getFirstRowTimeMs());
         manager.callback(response);
         synchronized (this) {
             numRetries = 0;

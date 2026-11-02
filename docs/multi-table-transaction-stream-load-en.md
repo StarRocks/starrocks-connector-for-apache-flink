@@ -708,6 +708,7 @@ still switched).
 Recommended metrics:
 - **Flink**: Checkpoint success rate, checkpoint duration, sink flush/commit latency
 - **StarRocks**: Running/prepared txn count, txn timeout occurrences, label conflicts
+- **Connector**: The `sharedTxnLatencyMs` histogram, the time from when the earliest row of a shared transaction entered the sink buffer until the transaction committed. Each commit also logs it per label: `[MultiTxn] SharedTransaction committed successfully: label=<label>, firstRowTimeMs=<epoch ms>, latencyMs=<ms>` (both `-1` when unknown)
 
 Common issues:
 

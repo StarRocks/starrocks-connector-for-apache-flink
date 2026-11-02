@@ -27,6 +27,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
+import java.util.function.Supplier;
 
 /**
  * Coordinates a single StarRocks transaction across multiple table regions.
@@ -42,6 +43,10 @@ import java.util.Collection;
  *
  * <p>The coordinator does not own any data buffers; data management remains in
  * {@link TransactionTableRegion}.
+ *
+ * <p>It also tracks the earliest time a row committed in the current shared
+ * transaction entered the sink buffer, and reports it with the commit latency
+ * when the transaction commits.
  */
 public class SharedTransactionCoordinator {
 
@@ -49,6 +54,8 @@ public class SharedTransactionCoordinator {
 
     private final StreamLoader streamLoader;
     private final LabelGeneratorFactory labelGeneratorFactory;
+    /** Returns the listener to notify when a shared transaction commits; may return null. */
+    private final Supplier<StreamLoadListener> listenerSupplier;
 
     private String sharedLabel;
     private String database;
@@ -60,10 +67,18 @@ public class SharedTransactionCoordinator {
     /** Timestamp (millis) when the current shared transaction was opened. */
     private long beginTimeMs;
 
+    /**
+     * Earliest time (epoch millis) a row loaded under the current shared label
+     * entered the sink buffer, or -1 if no completed load has reported one yet.
+     */
+    private long firstRowTimeMs = -1L;
+
     public SharedTransactionCoordinator(StreamLoader streamLoader,
-                                        LabelGeneratorFactory labelGeneratorFactory) {
+                                        LabelGeneratorFactory labelGeneratorFactory,
+                                        Supplier<StreamLoadListener> listenerSupplier) {
         this.streamLoader = streamLoader;
         this.labelGeneratorFactory = labelGeneratorFactory;
+        this.listenerSupplier = listenerSupplier;
     }
 
     /**
@@ -106,6 +121,7 @@ public class SharedTransactionCoordinator {
         this.database = database;
         this.table = anyTable;
         this.dataLoaded = false;
+        this.firstRowTimeMs = -1L;
         this.beginTimeMs = System.currentTimeMillis();
     }
 
@@ -114,6 +130,7 @@ public class SharedTransactionCoordinator {
         this.database = null;
         this.table = null;
         this.dataLoaded = false;
+        this.firstRowTimeMs = -1L;
     }
 
     /**
@@ -129,6 +146,30 @@ public class SharedTransactionCoordinator {
      */
     public synchronized boolean hasDataLoaded() {
         return dataLoaded;
+    }
+
+    /**
+     * Records the first-row time of a chunk that finished loading. Called from
+     * the load callback. Every load of a shared transaction completes before
+     * the transaction commits, so the earliest recorded time is the earliest
+     * row of exactly the data that the commit makes visible.
+     *
+     * @param label the label the load used, or {@code null} if unknown. A load
+     *              for a different label, such as a late response after a
+     *              rollback, is ignored.
+     * @param chunkFirstRowTimeMs epoch millis when the chunk's first row entered
+     *                            the sink buffer; negative if unknown
+     */
+    public synchronized void recordLoadedChunk(String label, long chunkFirstRowTimeMs) {
+        if (sharedLabel == null || chunkFirstRowTimeMs < 0) {
+            return;
+        }
+        if (label != null && !label.equals(sharedLabel)) {
+            return;
+        }
+        if (firstRowTimeMs < 0 || chunkFirstRowTimeMs < firstRowTimeMs) {
+            firstRowTimeMs = chunkFirstRowTimeMs;
+        }
     }
 
     /**
@@ -150,26 +191,56 @@ public class SharedTransactionCoordinator {
      * <p>Must be called after all regions have completed their HTTP loads.
      * Uses any table from the database (StarRocks resolves by label).
      *
+     * <p>On success, logs the first-row time and the latency (from the earliest
+     * row entering the sink buffer until the commit returned; both -1 if
+     * unknown), and passes them to the listener.
+     *
      * @param anyTable any table in the database
      */
-    public synchronized void prepareAndCommit(String anyTable) {
-        StreamLoadSnapshot.Transaction txn =
-                new StreamLoadSnapshot.Transaction(database, anyTable, sharedLabel, true);
+    public void prepareAndCommit(String anyTable) {
+        String committedLabel;
+        long committedFirstRowTimeMs;
+        long latencyMs;
+        synchronized (this) {
+            StreamLoadSnapshot.Transaction txn =
+                    new StreamLoadSnapshot.Transaction(database, anyTable, sharedLabel, true);
 
-        // Skip prepare for multi-table transactions — StarRocks does not
-        // support TXN_PREPARE in multi-table transaction mode. Go directly
-        // to commit.
-        LOG.info("[MultiTxn] SharedTransaction commit (skip prepare): label={}", sharedLabel);
-        if (!streamLoader.commit(txn)) {
-            throw new StreamLoadFailException(
-                    "Failed to commit shared transaction, label: " + sharedLabel);
+            // Skip prepare for multi-table transactions — StarRocks does not
+            // support TXN_PREPARE in multi-table transaction mode. Go directly
+            // to commit.
+            LOG.info("[MultiTxn] SharedTransaction commit (skip prepare): label={}", sharedLabel);
+            if (!streamLoader.commit(txn)) {
+                throw new StreamLoadFailException(
+                        "Failed to commit shared transaction, label: " + sharedLabel);
+            }
+
+            committedLabel = sharedLabel;
+            committedFirstRowTimeMs = firstRowTimeMs;
+            // The wall clock can step back; never report a negative latency.
+            latencyMs = firstRowTimeMs < 0
+                    ? -1L
+                    : Math.max(0L, System.currentTimeMillis() - firstRowTimeMs);
+            LOG.info("[MultiTxn] SharedTransaction committed successfully: label={}, firstRowTimeMs={}, "
+                    + "latencyMs={}", committedLabel, committedFirstRowTimeMs, latencyMs);
+            clearState();
         }
+        // Notify outside the lock. The transaction is already committed, so a
+        // failing listener must not fail the commit path.
+        if (latencyMs >= 0) {
+            notifyCommitted(committedLabel, committedFirstRowTimeMs, latencyMs);
+        }
+    }
 
-        LOG.info("[MultiTxn] SharedTransaction committed successfully: label={}", sharedLabel);
-        this.sharedLabel = null;
-        this.database = null;
-        this.table = null;
-        this.dataLoaded = false;
+    private void notifyCommitted(String label, long firstRowTimeMs, long latencyMs) {
+        StreamLoadListener listener = listenerSupplier.get();
+        if (listener == null) {
+            return;
+        }
+        try {
+            listener.onSharedTransactionCommitted(label, firstRowTimeMs, latencyMs);
+        } catch (RuntimeException ex) {
+            LOG.warn("[MultiTxn] Listener failed for committed shared transaction, label={}", label, ex);
+        }
     }
 
     public synchronized String getSharedLabel() {
@@ -219,9 +290,6 @@ public class SharedTransactionCoordinator {
                         sharedLabel, ex);
             }
         }
-        this.sharedLabel = null;
-        this.database = null;
-        this.table = null;
-        this.dataLoaded = false;
+        clearState();
     }
 }

@@ -246,7 +246,8 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
      */
     private transient AtomicBoolean writeTriggerFlush;
     private transient LoadMetrics loadMetrics;
-    private transient StreamLoadListener streamLoadListener;
+    // volatile: read by the manager thread at commit time, may be set after init()
+    private transient volatile StreamLoadListener streamLoadListener;
     private transient LabelGeneratorFactory labelGeneratorFactory;
 
     public DefaultStreamLoadManager(StreamLoadProperties properties, boolean enableAutoCommit) {
@@ -699,7 +700,9 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
             streamLoader.start(properties, this);
 
             if (multiTableTransactionEnabled) {
-                this.txnCoordinator = new SharedTransactionCoordinator(streamLoader, labelGeneratorFactory);
+                // Read the listener at commit time, so a listener set after init() is still used.
+                this.txnCoordinator = new SharedTransactionCoordinator(
+                        streamLoader, labelGeneratorFactory, () -> streamLoadListener);
                 LOG.info("[MultiTxn] Multi-table transaction mode enabled, bufferSize={}, writeBlockCap={}, "
                                 + "maxTxnBytes={}", maxCacheBytes, maxWriteBlockCacheBytes,
                         maxTxnBytes <= 0 ? "unlimited" : String.valueOf(maxTxnBytes));
@@ -2025,6 +2028,15 @@ public class DefaultStreamLoadManager implements StreamLoadManager, Serializable
             this.loadMetrics.updateFailedLoad();
         } else {
             this.loadMetrics.updateSuccessLoad(response);
+        }
+
+        // Multi-table mode: count the loaded chunk toward the shared transaction
+        // it was loaded under. This runs before the region leaves FLUSHING, and
+        // the commit waits for that, so every chunk is counted before its commit.
+        if (txnCoordinator != null && response.getException() == null
+                && response.getFirstRowTimeMs() != null) {
+            String loadLabel = response.getBody() != null ? response.getBody().getLabel() : null;
+            txnCoordinator.recordLoadedChunk(loadLabel, response.getFirstRowTimeMs());
         }
 
         if (streamLoadListener != null) {
