@@ -130,7 +130,7 @@ public class MockedStarRocksHttpServer {
     private final HttpServer server;
     private final InetSocketAddress bindAddress;
     private final boolean enforceAuth;
-    private final String basicAuthHeaderValue;
+    private volatile String basicAuthHeaderValue;
 
     private final ConcurrentMap<LabelKey, LabelInfo> labels = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, String> errorLogs = new ConcurrentHashMap<>();
@@ -149,6 +149,7 @@ public class MockedStarRocksHttpServer {
     private final AtomicInteger loadCount = new AtomicInteger(0);
     private final AtomicInteger prepareCount = new AtomicInteger(0);
     private final AtomicInteger commitCount = new AtomicInteger(0);
+    private final AtomicInteger streamLoadCount = new AtomicInteger(0);
 
     // ---- per-(label, table) channel concurrency simulation & recording ----
     // Mirrors the server-side constraint: the FE multi-statement task serves a
@@ -169,8 +170,7 @@ public class MockedStarRocksHttpServer {
         this.server = HttpServer.create(this.bindAddress, 0);
         this.enforceAuth = enforceAuth;
         if (enforceAuth) {
-            String token = Base64.getEncoder().encodeToString((username + ":" + password).getBytes(StandardCharsets.UTF_8));
-            this.basicAuthHeaderValue = "Basic " + token;
+            this.basicAuthHeaderValue = basicAuthHeaderValue(username, password);
         } else {
             this.basicAuthHeaderValue = null;
         }
@@ -206,6 +206,22 @@ public class MockedStarRocksHttpServer {
     }
 
     // Configuration helpers for tests
+    /**
+     * Changes the credentials accepted from now on, as when a StarRocks password is rotated.
+     * Requests that carry the previous credentials are rejected with 401 afterwards.
+     */
+    public void setCredentials(String username, String password) {
+        if (!enforceAuth) {
+            throw new IllegalStateException("setCredentials requires enforceAuth");
+        }
+        this.basicAuthHeaderValue = basicAuthHeaderValue(username, password);
+    }
+
+    private static String basicAuthHeaderValue(String username, String password) {
+        String token = Base64.getEncoder().encodeToString((username + ":" + password).getBytes(StandardCharsets.UTF_8));
+        return "Basic " + token;
+    }
+
     public void setBeginOverride(ResponseOverride override) { this.beginOverride = override; }
 
     public void setTxnLoadOverride(ResponseOverride override) { this.txnLoadOverride = override; }
@@ -222,12 +238,15 @@ public class MockedStarRocksHttpServer {
     public int getLoadCount() { return loadCount.get(); }
     public int getPrepareCount() { return prepareCount.get(); }
     public int getCommitCount() { return commitCount.get(); }
+    /** Number of non-transactional /api/{db}/{table}/_stream_load requests that passed authentication. */
+    public int getStreamLoadCount() { return streamLoadCount.get(); }
 
     public void resetCounters() {
         beginCount.set(0);
         loadCount.set(0);
         prepareCount.set(0);
         commitCount.set(0);
+        streamLoadCount.set(0);
         maxChannelConcurrency.set(0);
         channelInflight.clear();
         txnLoadBodies.clear();
@@ -722,6 +741,11 @@ public class MockedStarRocksHttpServer {
                     handleGetLoadState(exchange, db);
                     return;
                 }
+                if (segments.size() == 4 && "_cancel".equals(segments.get(3))) {
+                    // /api/{db}/{table}/_cancel
+                    sendJson(exchange, 200, toJson(mapOf("Status", StreamLoadConstants.RESULT_STATUS_OK)));
+                    return;
+                }
                 if (segments.size() == 4 && "_stream_load".equals(segments.get(3))) {
                     // /api/{db}/{table}/_stream_load
                     handleStreamLoad(exchange, db, segments.get(2));
@@ -776,6 +800,7 @@ public class MockedStarRocksHttpServer {
 
             // consume body
             readBody(exchange);
+            streamLoadCount.incrementAndGet();
 
             ResponseOverride override = streamLoadOverride;
             if (override != null) {

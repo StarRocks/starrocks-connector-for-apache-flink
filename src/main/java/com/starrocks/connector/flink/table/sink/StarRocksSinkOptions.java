@@ -26,6 +26,7 @@ import org.apache.flink.util.Preconditions;
 import com.starrocks.connector.flink.manager.StarRocksSinkTable;
 import com.starrocks.connector.flink.row.sink.StarRocksDelimiterParser;
 import com.starrocks.data.load.stream.StreamLoadDataFormat;
+import com.starrocks.data.load.stream.auth.CredentialsProvider;
 import com.starrocks.data.load.stream.mergecommit.LoadParameters;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
@@ -211,6 +212,16 @@ public class StarRocksSinkOptions implements Serializable {
                     "in the coming 2.0. Note that it's not compatible after changing the flag, that's, you can't recover from " +
                     "the previous job after changing the flag.");
 
+    public static final ConfigOption<String> SINK_CREDENTIALS_PROVIDER_CLASS = ConfigOptions.key("sink.credentials-provider.class")
+            .stringType()
+            .noDefaultValue()
+            .withDescription("Fully qualified name of a class implementing " +
+                    "com.starrocks.data.load.stream.auth.CredentialsProvider, with a public no-argument constructor. " +
+                    "It is instantiated on the task managers and asked for the user name and password on every " +
+                    "stream load request, so credentials can be rotated without restarting the job. " +
+                    "'username' and 'password' are still used to read table metadata whenever the job graph is built. " +
+                    "Only supported by sink.version V2.");
+
     public static final ConfigOption<Boolean> SINK_BLACKHOLE = ConfigOptions.key("sink.blackhole").booleanType().defaultValue(false);
 
     public static final ConfigOption<Integer> SINK_PARALLELISM = FactoryUtil.SINK_PARALLELISM;
@@ -254,6 +265,9 @@ public class StarRocksSinkOptions implements Serializable {
     private boolean supportTransactionStreamLoad = false;
 
     private final List<StreamLoadTableProperties> tablePropertiesList = new ArrayList<>();
+
+    @Nullable
+    private CredentialsProvider credentialsProvider;
 
     public StarRocksSinkOptions(ReadableConfig options, Map<String, String> optionsMap) {
         this.tableOptions = options;
@@ -338,6 +352,22 @@ public class StarRocksSinkOptions implements Serializable {
 
     public String getPassword() {
         return tableOptions.get(PASSWORD);
+    }
+
+    /**
+     * Returns the provider asked for credentials on every stream load request, or {@code null} to
+     * use {@link #getUsername()} and {@link #getPassword()}. A provider set with
+     * {@link Builder#withCredentialsProvider(CredentialsProvider)} takes precedence over
+     * {@link #SINK_CREDENTIALS_PROVIDER_CLASS}.
+     */
+    @Nullable
+    public CredentialsProvider getCredentialsProvider() {
+        if (credentialsProvider != null) {
+            return credentialsProvider;
+        }
+        return tableOptions.getOptional(SINK_CREDENTIALS_PROVIDER_CLASS)
+                .map(ClassNameCredentialsProvider::new)
+                .orElse(null);
     }
 
     public String getSinkVersion() {
@@ -682,6 +712,8 @@ public class StarRocksSinkOptions implements Serializable {
      */
     public static final class Builder {
         private final Configuration conf;
+        private CredentialsProvider credentialsProvider;
+
         public Builder() {
             conf = new Configuration();
         }
@@ -691,8 +723,24 @@ public class StarRocksSinkOptions implements Serializable {
             return this;
         }
 
+        /**
+         * Sets the provider asked for credentials on every stream load request, so credentials can
+         * be rotated without restarting the job. The provider is serialized with the job and must
+         * be thread-safe. Cannot be combined with {@link #SINK_CREDENTIALS_PROVIDER_CLASS}.
+         */
+        public Builder withCredentialsProvider(CredentialsProvider credentialsProvider) {
+            this.credentialsProvider = credentialsProvider;
+            return this;
+        }
+
         public StarRocksSinkOptions build() {
-            return new StarRocksSinkOptions(conf, conf.toMap());
+            if (credentialsProvider != null && conf.getOptional(SINK_CREDENTIALS_PROVIDER_CLASS).isPresent()) {
+                throw new IllegalArgumentException("Set either a credentials provider or '" +
+                        SINK_CREDENTIALS_PROVIDER_CLASS.key() + "', not both.");
+            }
+            StarRocksSinkOptions options = new StarRocksSinkOptions(conf, conf.toMap());
+            options.credentialsProvider = credentialsProvider;
+            return options;
         }
     }
 
@@ -900,6 +948,7 @@ public class StarRocksSinkOptions implements Serializable {
                 .labelPrefix(getLabelPrefix())
                 .username(getUsername())
                 .password(getPassword())
+                .credentialsProvider(getCredentialsProvider())
                 .version(sinkTable.getVersion())
                 .expectDelayTime(getSinkMaxFlushInterval())
                 // Retries are enabled only in multi-table transaction mode, where the
