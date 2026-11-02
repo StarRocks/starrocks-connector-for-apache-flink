@@ -63,6 +63,8 @@ limitations under the License.
         <shading.prefix>com.starrocks.shade</shading.prefix>
         <alibaba-fastjson.version>1.2.83</alibaba-fastjson.version>
         <jmockit.version>1.49</jmockit.version>
+        <!-- 1.21.4 is the first 1.x release that works with Docker Engine 29, which rejects the API 1.32 of earlier releases -->
+        <testcontainers.version>1.21.4</testcontainers.version>
     </properties>
 
     <dependencies>
@@ -218,21 +220,21 @@ limitations under the License.
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>kafka</artifactId>
-            <version>1.18.3</version>
+            <version>${testcontainers.version}</version>
             <scope>test</scope>
         </dependency>
 
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers</artifactId>
-            <version>1.18.3</version>
+            <version>${testcontainers.version}</version>
             <scope>test</scope>
         </dependency>
 
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>1.18.3</version>
+            <version>${testcontainers.version}</version>
             <scope>test</scope>
         </dependency>
 
