@@ -765,9 +765,7 @@ public class StarRocksSinkOptions implements Serializable {
         }
         StreamLoadTableProperties.Builder overrideBuilder = StreamLoadTableProperties.builder()
                 .copyFrom(tableProperties)
-                // copyFrom carries neither the unique key nor the per table headers. The key is what
-                // registers this entry, and the headers can carry load semantics, so losing either
-                // would quietly change how the table is written.
+                // Keep the registration key when overriding columns.
                 .uniqueKey(tableProperties.getUniqueKey())
                 .database(tableProperties.getDatabase())
                 .table(tableProperties.getTable())
