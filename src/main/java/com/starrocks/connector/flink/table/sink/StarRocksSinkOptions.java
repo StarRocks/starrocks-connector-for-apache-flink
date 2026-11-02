@@ -26,6 +26,7 @@ import org.apache.flink.util.Preconditions;
 import com.starrocks.connector.flink.manager.StarRocksSinkTable;
 import com.starrocks.connector.flink.row.sink.StarRocksDelimiterParser;
 import com.starrocks.data.load.stream.StreamLoadDataFormat;
+import com.starrocks.data.load.stream.StreamLoadUtils;
 import com.starrocks.data.load.stream.mergecommit.LoadParameters;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
@@ -37,6 +38,7 @@ import javax.annotation.Nullable;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -237,6 +239,10 @@ public class StarRocksSinkOptions implements Serializable {
     // wild stream load properties' prefix
     public static final String SINK_PROPERTIES_PREFIX = "sink.properties.";
     public static final String COLUMNS_KEY = "columns";
+
+    /** The csv headers that decide the dialect the server parses the loaded bytes with. */
+    private static final List<String> CSV_DIALECT_HEADERS =
+            Arrays.asList("column_separator", "row_delimiter", "enclose", "escape");
     /** Raised wherever the Flink schema is needed to derive the header and there is none. */
     public static final String COLUMNS_FROM_FLINK_SCHEMA_NEEDS_SCHEMA_MESSAGE =
             "sink.json.columns-from-flink-schema=true needs a Flink schema, which this sink does not have. "
@@ -785,6 +791,85 @@ public class StarRocksSinkOptions implements Serializable {
     }
 
     /**
+     * The csv dialect a load of this sink's own table would send, plus whether that table is served
+     * by the sdk merge commit loader.
+     *
+     * <p>Both are read together because the two loaders disagree about where a table's csv headers
+     * come from. The merge commit loader builds the headers of a table from that table's own maps
+     * alone, see {@code LoadParameters#getParameters}, so a registered entry that leaves a dialect
+     * header out sends none and the server parses the bytes with its own default. The ordinary V2
+     * loader starts from the sink level headers, so the same entry keeps the sink level value.
+     *
+     * <p>Mirrors {@code StreamLoadProperties#getTableProperties}: the sdk keys the entries by unique
+     * key and the last registration wins. Nothing here queries the frontend.
+     */
+    public TableCsvDialect getTableCsvDialect() {
+        StreamLoadTableProperties entry = findTablePropertiesEntry();
+        // Mirrors how the sdk selects its loader (`StreamLoadManagerV2`): a sink level header turns
+        // merge commit on for the whole sink, so it serves this table as well. A per table entry only
+        // carries load parameters, such as the timeout, to its own load, never the loader selection.
+        boolean mergeCommit = "true".equalsIgnoreCase(streamLoadProps.get(LoadParameters.ENABLE_MERGE_COMMIT));
+        Map<String, String> registered = new HashMap<>();
+        Map<String, String> load = new HashMap<>();
+        for (String header : CSV_DIALECT_HEADERS) {
+            if (entry == null) {
+                // Without an entry the sdk loads the default table properties, whose common map is the
+                // sink level one, so the sink level header is what reaches the server.
+                String sinkValue = streamLoadProps.get(header);
+                if (sinkValue != null) {
+                    load.put(header, sinkValue);
+                }
+                continue;
+            }
+            // The merge commit loader builds the headers of the table from that entry alone, so both
+            // of its maps count, see `LoadParameters#getParameters`. The ordinary V2 loader starts
+            // from the sink level headers and reads the per table map only, so the common map of the
+            // entry is ignored: a dialect header set there never reaches the server and the sink
+            // level value keeps applying.
+            String value = mergeCommit
+                    ? headerValue(entry, header)
+                    : lookupIgnoreCase(entry.getProperties(), header);
+            if (value != null) {
+                registered.put(header, value);
+                load.put(header, value);
+            }
+        }
+        return new TableCsvDialect(mergeCommit, registered, load);
+    }
+
+    /** The registered entry, if any, the sdk would load this sink's own table with. */
+    private StreamLoadTableProperties findTablePropertiesEntry() {
+        if (getDatabaseName() == null || getTableName() == null) {
+            return null;
+        }
+        String uniqueKey = StreamLoadUtils.getTableUniqueKey(getDatabaseName(), getTableName());
+        StreamLoadTableProperties entry = null;
+        for (StreamLoadTableProperties candidate : tablePropertiesList) {
+            if (uniqueKey.equals(candidate.getUniqueKey())) {
+                entry = candidate;
+            }
+        }
+        if (entry == null) {
+            return null;
+        }
+        // Mirrors {@code StreamLoadProperties#getTableProperties}: the sdk looks the entry up by unique
+        // key and, when its database and table differ from the requested ones, remaps it onto the table
+        // with {@code copyFrom}. copyFrom carries neither the unique key nor the per table headers, so
+        // those headers are dropped for the load. The key is `database + "-" + table`, so the names can
+        // differ while the key matches: `a-b`.`c` and `a`.`b-c` both key to `a-b-c`. Reading the raw
+        // entry here would report a dialect the load never sends, so reproduce the remap. copyFrom
+        // builds a new entry, so the registered one is left untouched.
+        if (!getDatabaseName().equals(entry.getDatabase()) || !getTableName().equals(entry.getTable())) {
+            return StreamLoadTableProperties.builder()
+                    .copyFrom(entry)
+                    .database(getDatabaseName())
+                    .table(getTableName())
+                    .build();
+        }
+        return entry;
+    }
+
+    /**
      * Reads the effective value of a per table header. Two maps can carry one: the per table map and
      * the common map, and the sdk merges the common map first so the per table map wins. Both are
      * searched, in that precedence, or a header set through addCommonProperties would look absent.
@@ -808,6 +893,48 @@ public class StarRocksSinkOptions implements Serializable {
             }
         }
         return null;
+    }
+
+    /**
+     * The csv dialect a load of one table sends. An immutable snapshot: reading it again queries
+     * neither the sink options nor the frontend.
+     */
+    public static final class TableCsvDialect implements Serializable {
+
+        private static final long serialVersionUID = 1L;
+
+        private final boolean mergeCommit;
+        private final Map<String, String> registeredHeaders;
+        private final Map<String, String> loadHeaders;
+
+        TableCsvDialect(boolean mergeCommit,
+                        Map<String, String> registeredHeaders,
+                        Map<String, String> loadHeaders) {
+            this.mergeCommit = mergeCommit;
+            this.registeredHeaders = Collections.unmodifiableMap(new HashMap<>(registeredHeaders));
+            this.loadHeaders = Collections.unmodifiableMap(new HashMap<>(loadHeaders));
+        }
+
+        /** Whether the sdk serves this table with the merge commit loader. */
+        public boolean isMergeCommit() {
+            return mergeCommit;
+        }
+
+        /**
+         * The value the per table properties registered for this table set for {@code header}, or null
+         * when no entry is registered for the table or the entry leaves the header out.
+         */
+        public String getRegisteredHeader(String header) {
+            return registeredHeaders.get(header);
+        }
+
+        /**
+         * The value the load of this table sends for {@code header}, or null when it sends none at all,
+         * so that the server applies its own default for the header.
+         */
+        public String getLoadHeader(String header) {
+            return loadHeaders.get(header);
+        }
     }
 
     public StreamLoadProperties getProperties(@Nullable StarRocksSinkTable table) {
