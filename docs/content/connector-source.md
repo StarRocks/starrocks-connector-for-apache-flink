@@ -22,10 +22,18 @@ Unlike the JDBC connector provided by Flink, the Flink connector of StarRocks su
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.17    | 2.0,2.1,2.2,2.3               | 2.1 and later| 11   | 2.12      |
+| 1.2.17    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later| 8    | 2.11,2.12 |
 | 1.2.16    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later| 8    | 2.11,2.12 |
 | 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later| 8    | 2.11,2.12 |
 | 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later| 8    | 2.11,2.12 |
 | 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later| 8    | 2.11,2.12 |
+
+> **NOTE**
+>
+> Since 1.2.17 the connector also supports Flink 2.0+. It is still published as
+> `com.starrocks:flink-connector-starrocks`; the `_flink-<version>` suffix of the version selects the
+> build for your Flink version, as before. Flink 2.x builds need Java 11+.
 
 ## Prerequisites
 
@@ -107,7 +115,9 @@ Follow these steps to deploy the Flink connector:
 | scan.params.keep-alive-min  | No       | STRING    | The maximum amount of time during which the read task keeps alive. The keep-alive time is checked on a regular basis by using a polling mechanism. Unit: minutes. Default value: `10`. We recommend that you set this parameter to a value that is greater than or equal to `5`. |
 | scan.params.query-timeout-s | No       | STRING    | The maximum amount of time after which the read task times out. The timeout duration is checked during task execution. Unit: seconds. Default value: `600`. If no read result is returned after the time duration elapses, the read task stops. |
 | scan.params.mem-limit-byte  | No       | STRING    | The maximum amount of memory allowed per query on each BE. Unit: bytes. Default value: `1073741824`, equal to 1 GB. |
-| scan.max-retries            | No       | STRING    | The maximum number of times that the read task can be retried upon failures. Default value: `1`. If the number of times that the read task is retried exceeds this limit, the read task returns errors. |
+| scan.max-retries            | No       | STRING    | The maximum number of times that the read task can be retried upon failures. Default value: `1`. If the number of times that the read task is retried exceeds this limit, the read task returns errors. On Flink 2.x with `scan.replan-on-failure` enabled, a split that fails to open is also retried up to this many times, each time with a new query plan. |
+| scan.replan-on-failure      | No       | BOOLEAN   | Supported since 1.2.17, on Flink 2.x only. Whether to read a split that fails to open with a new query plan, retried up to `scan.max-retries` times. Default value: `false`. The rows of that split can then be newer than the rows of the splits read before. See [Checkpoints and restore on Flink 2.x](#checkpoints-and-restore-on-flink-2x). |
+| scan.parallelism            | No       | INT       | Supported since 1.2.17, on Flink 2.x only. The parallelism of the source. If not set, the source takes the parallelism of the job. Set it to the number of BEs to read every BE at once without changing the parallelism of the rest of the job. See [Checkpoints and restore on Flink 2.x](#checkpoints-and-restore-on-flink-2x). |
 
 The following parameters apply only to reading data by using DataStream API.
 
@@ -274,30 +284,29 @@ When you read data by using Flink SQL, take note of the following points:
 
 ### Read data using Flink DataStream
 
-1. Add the following dependencies to the `pom.xml` file:
+1. Add the Flink connector as a dependency to the `pom.xml` file according to your Flink version:
 
-   ```SQL
-   <dependency>
-       <groupId>com.starrocks</groupId>
-       <artifactId>flink-connector-starrocks</artifactId>
-       <!-- for Apache Flink® 1.15 -->
-       <version>x.x.x_flink-1.15</version>
-       <!-- for Apache Flink® 1.14 -->
-       <version>x.x.x_flink-1.14_2.11</version>
-       <version>x.x.x_flink-1.14_2.12</version>
-       <!-- for Apache Flink® 1.13 -->
-       <version>x.x.x_flink-1.13_2.11</version>
-       <version>x.x.x_flink-1.13_2.12</version>
-       <!-- for Apache Flink® 1.12 -->
-       <version>x.x.x_flink-1.12_2.11</version>
-       <version>x.x.x_flink-1.12_2.12</version>
-       <!-- for Apache Flink® 1.11 -->
-       <version>x.x.x_flink-1.11_2.11</version>
-       <version>x.x.x_flink-1.11_2.12</version>
-   </dependency>
-   ```
+   - For Apache Flink® 1.15 and later, including Flink 2.x
 
-   You must replace `x.x.x` in the preceding code example with the latest Flink connector version that you are using. See [Version information](https://search.maven.org/search?q=g:com.starrocks).
+     ```xml
+     <dependency>
+         <groupId>com.starrocks</groupId>
+         <artifactId>flink-connector-starrocks</artifactId>
+         <version>${connector_version}_flink-${flink_version}</version>
+     </dependency>
+     ```
+
+   - In versions earlier than Apache Flink® 1.15
+
+     ```xml
+     <dependency>
+         <groupId>com.starrocks</groupId>
+         <artifactId>flink-connector-starrocks</artifactId>
+         <version>${connector_version}_flink-${flink_version}_${scala_version}</version>
+     </dependency>
+     ```
+
+   Replace `connector_version`, `flink_version`, and `scala_version` with the versions you use. See [Version information](https://search.maven.org/search?q=g:com.starrocks).
 
 2. Call the Flink connector to read data from StarRocks:
 
@@ -330,6 +339,31 @@ When you read data by using Flink SQL, take note of the following points:
 
        }
    ```
+
+   > **NOTE**
+   >
+   > This example targets Flink 1.x. On Flink 2.x, build a `ResolvedSchema` instead of a `TableSchema` and add
+   > the source with `env.fromSource(StarRocksSource.source(schema, options), WatermarkStrategy.noWatermarks(), "StarRocks Source")`,
+   > because Flink 2.x removed `TableSchema` and `addSource`.
+
+### Checkpoints and restore on Flink 2.x
+
+On Flink 2.x the source plans the scan once and hands out one split per BE and group of tablets. Each reader reads one
+split at a time, so the source parallelism decides how many BEs are read concurrently: to read every BE at once, as
+Flink 1.x does, set it to the number of BEs, which gives one split per BE. In Flink SQL, set it with `scan.parallelism`
+to leave the parallelism of the rest of the job unchanged. A checkpoint records the splits that are
+not assigned yet, and each reader records the split it is reading.
+
+- After a restore, a split that was being read is read again from its start, so its rows can be emitted twice
+  (at-least-once, as on Flink 1.x). Splits that were finished are not read again, and the scan is not planned again.
+- The query plan pins tablet versions only when a split is opened, and BEs drop old tablet versions after
+  `tablet_rowset_stale_sweep_time_sec` (30 minutes by default). If the table is written and compacted while the job
+  runs, a split opened later, or a split restored from an old checkpoint, can find its versions gone, and the job
+  fails: restart it without state. With the parallelism set to the number of BEs, every split is opened at the start.
+- If `scan.replan-on-failure` is `true`, the reader instead plans the scan again and reads that split with the new
+  plan, so its rows can be newer than the rows of the splits read before. A split that fails to open for any reason is
+  then retried this way up to `scan.max-retries` times, on another replica if its BE failed. If its tablets are no
+  longer in the table, for example because their partition was dropped, the job fails: restart it without state.
 
 ## What's next
 

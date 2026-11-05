@@ -21,21 +21,56 @@
 
 set -eo pipefail
 
-SUPPORTED_MINOR_VERSION=("1.16" "1.17" "1.18" "1.19" "1.20")
-# version formats are different among flink versions
-SUPPORTED_KAFKA_CONNECTOR_VERSION=("1.16.0" "1.17.0" "3.0.1-1.18" "3.2.0-1.19" "3.4.0-1.20")
+SUPPORTED_MINOR_VERSION=("1.16" "1.17" "1.18" "1.19" "1.20" "2.0" "2.1" "2.2" "2.3")
+# flink 2.2.0 jars are Java 17 class files by mistake; 2.2.1 is back on Java 11
+SUPPORTED_FLINK_VERSION=("1.16.0" "1.17.0" "1.18.0" "1.19.0" "1.20.0" "2.0.0" "2.1.0" "2.2.1" "2.3.0")
+# version formats are different among flink versions; kafka connector is
+# test-only, 2.1/2.3 have no dedicated release yet so the nearest is used
+SUPPORTED_KAFKA_CONNECTOR_VERSION=("1.16.0" "1.17.0" "3.0.1-1.18" "3.2.0-1.19" "3.4.0-1.20" "4.0.1-2.0" "4.0.1-2.0" "5.0.0-2.2" "5.0.0-2.2")
+# test-only; must match the relocated guava package the flink version references
+SUPPORTED_FLINK_SHADED_GUAVA_VERSION=("30.1.1-jre-15.0" "30.1.1-jre-16.1" "31.1-jre-17.0" "31.1-jre-17.0" "31.1-jre-17.0" "32.1.3-jre-19.0" "33.4.0-jre-20.0" "33.4.0-jre-20.0" "33.5.0-jre-21.0")
+# minimum JDK per flink version
+REQUIRED_JDK_VERSION=("8" "8" "8" "8" "8" "11" "11" "11" "11")
 VERSION_MESSAGE=$(IFS=, ; echo "${SUPPORTED_MINOR_VERSION[*]}")
 
 function print_supported_minor_versions() {
   echo "${SUPPORTED_MINOR_VERSION[*]}"
 }
 
+function get_module_for_version() {
+  local FLINK_MINOR_VERSION=$1
+  case "$FLINK_MINOR_VERSION" in
+    1.*) echo "flink-connector-starrocks-1.x" ;;
+    2.*) echo "flink-connector-starrocks-2.x" ;;
+    *)
+      echo "Error: cannot map flink version $FLINK_MINOR_VERSION to a module" >&2
+      exit 1
+      ;;
+  esac
+}
+
+function get_required_jdk_version() {
+  local FLINK_MINOR_VERSION=$1
+  for ((i=0; i<${#SUPPORTED_MINOR_VERSION[@]}; i++)); do
+      if [ "${SUPPORTED_MINOR_VERSION[i]}" = "$FLINK_MINOR_VERSION" ]; then
+          echo "${REQUIRED_JDK_VERSION[i]}"
+          return
+      fi
+  done
+  echo "Error: unsupported flink version $FLINK_MINOR_VERSION" >&2
+  exit 1
+}
+
 # Allow tooling to query metadata without requiring maven, e.g.:
 #   bash common.sh supported-minor-versions
+#   bash common.sh module-for-version 2.2
+#   bash common.sh required-jdk 2.2
 # (kept above the maven check so it stays usable on machines without maven)
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     case "${1:-}" in
         supported-minor-versions) print_supported_minor_versions; exit 0 ;;
+        module-for-version) get_module_for_version "${2:-}"; exit 0 ;;
+        required-jdk) get_required_jdk_version "${2:-}"; exit 0 ;;
     esac
 fi
 
@@ -61,7 +96,35 @@ function check_flink_version_supported() {
 
 function get_flink_version() {
   local FLINK_MINOR_VERSION=$1
-  echo "${FLINK_MINOR_VERSION}.0"
+  for ((i=0; i<${#SUPPORTED_MINOR_VERSION[@]}; i++)); do
+      if [ "${SUPPORTED_MINOR_VERSION[i]}" = "$FLINK_MINOR_VERSION" ]; then
+          echo "${SUPPORTED_FLINK_VERSION[i]}"
+          return
+      fi
+  done
+  echo "Can't find flink version for flink-${FLINK_MINOR_VERSION}"
+  exit 1
+}
+
+# fail fast when the JDK is too old for the target flink version
+function check_jdk_for_version() {
+  local FLINK_MINOR_VERSION=$1
+  local REQUIRED
+  REQUIRED="$(get_required_jdk_version "$FLINK_MINOR_VERSION")"
+  local JAVA_BIN="java"
+  if [[ -n "${JAVA_HOME:-}" ]]; then
+    JAVA_BIN="${JAVA_HOME}/bin/java"
+  fi
+  local RAW_VERSION
+  RAW_VERSION=$("${JAVA_BIN}" -version 2>&1 | awk -F'"' '/version/ {print $2; exit}')
+  local MAJOR=${RAW_VERSION%%.*}
+  if [[ "$MAJOR" == "1" ]]; then
+    MAJOR=$(echo "$RAW_VERSION" | cut -d. -f2)
+  fi
+  if [[ -z "$MAJOR" || "$MAJOR" -lt "$REQUIRED" ]]; then
+    echo "Error: building for Flink ${FLINK_MINOR_VERSION} requires JDK ${REQUIRED}+, found java version ${RAW_VERSION:-unknown}"
+    exit 1
+  fi
 }
 
 function get_kafka_connector_version() {
@@ -82,4 +145,16 @@ function get_kafka_connector_version() {
     echo "Can't find kafka connector version for flink-${FLINK_MINOR_VERSION}"
     exit 1
   fi
+}
+
+function get_flink_shaded_guava_version() {
+  local FLINK_MINOR_VERSION=$1
+  for ((i=0; i<${#SUPPORTED_MINOR_VERSION[@]}; i++)); do
+      if [ "${SUPPORTED_MINOR_VERSION[i]}" = "$FLINK_MINOR_VERSION" ]; then
+          echo "${SUPPORTED_FLINK_SHADED_GUAVA_VERSION[i]}"
+          return
+      fi
+  done
+  echo "Can't find flink-shaded-guava version for flink-${FLINK_MINOR_VERSION}"
+  exit 1
 }
