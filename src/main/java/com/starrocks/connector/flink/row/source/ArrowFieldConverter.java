@@ -43,6 +43,8 @@ import org.apache.arrow.vector.Float8Vector;
 import org.apache.arrow.vector.IntVector;
 import org.apache.arrow.vector.SmallIntVector;
 import org.apache.arrow.vector.TinyIntVector;
+import org.apache.arrow.vector.DateDayVector;
+import org.apache.arrow.vector.TimeStampMicroTZVector;
 import org.apache.arrow.vector.VarCharVector;
 import org.apache.arrow.vector.complex.ListVector;
 import org.apache.arrow.vector.complex.MapVector;
@@ -242,7 +244,7 @@ public interface ArrowFieldConverter {
         }
     }
 
-    // Convert from arrow varchar to flink date
+    // Convert from arrow varchar or dateday (StarRocks 3.3+) to flink date
     class DateConverter implements ArrowFieldConverter {
 
         private static final String DATE_FORMAT = "yyyy-MM-dd";
@@ -255,6 +257,14 @@ public interface ArrowFieldConverter {
 
         @Override
         public Object convert(FieldVector vector, int rowIndex) {
+            if (vector instanceof DateDayVector) {
+                DateDayVector dateDayVector = (DateDayVector) vector;
+                if (dateDayVector.isNull(rowIndex)) {
+                    checkNullable(isNullable, null);
+                    return null;
+                }
+                return dateDayVector.get(rowIndex);
+            }
             VarCharVector varCharVector = (VarCharVector) vector;
             String value = varCharVector.isNull(rowIndex) ? null : new String(varCharVector.get(rowIndex));
             checkNullable(isNullable, value);
@@ -266,7 +276,7 @@ public interface ArrowFieldConverter {
         }
     }
 
-    // Convert from arrow varchar to flink timestamp-related type
+    // Convert from arrow varchar or timestampmicrotz (StarRocks 3.3+) to flink timestamp
     class TimestampConverter implements ArrowFieldConverter {
 
         private static final DateTimeFormatter DATETIME_FORMATTER =
@@ -280,6 +290,18 @@ public interface ArrowFieldConverter {
 
         @Override
         public Object convert(FieldVector vector, int rowIndex) {
+            if (vector instanceof TimeStampMicroTZVector) {
+                TimeStampMicroTZVector tsVector = (TimeStampMicroTZVector) vector;
+                if (tsVector.isNull(rowIndex)) {
+                    checkNullable(isNullable, null);
+                    return null;
+                }
+                // value is microseconds since epoch
+                long micros = tsVector.get(rowIndex);
+                long millis = micros / 1000;
+                int nanos = (int) ((micros % 1000) * 1000);
+                return TimestampData.fromEpochMillis(millis, nanos);
+            }
             VarCharVector varCharVector = (VarCharVector) vector;
             String value = varCharVector.isNull(rowIndex) ? null : new String(varCharVector.get(rowIndex));
             checkNullable(isNullable, value);
@@ -413,6 +435,17 @@ public interface ArrowFieldConverter {
         }
 
         Types.MinorType actualMinorType = Types.getMinorTypeForArrowType(field.getType());
+        // StarRocks 3.3+ returns DATE as DATEDAY and TIMESTAMP as TIMESTAMPMICROTZ instead of VARCHAR
+        if (flinkType.getTypeRoot() == LogicalTypeRoot.DATE
+                && actualMinorType == Types.MinorType.DATEDAY) {
+            return;
+        }
+        if ((flinkType.getTypeRoot() == LogicalTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE
+                || flinkType.getTypeRoot() == LogicalTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE
+                || flinkType.getTypeRoot() == LogicalTypeRoot.TIMESTAMP_WITH_TIME_ZONE)
+                && actualMinorType == Types.MinorType.TIMESTAMPMICROTZ) {
+            return;
+        }
         if (expectMinorType != actualMinorType) {
             throw new IllegalStateException(String.format(
                     "Flink %s should be mapped to arrow %s, but is arrow %s",
