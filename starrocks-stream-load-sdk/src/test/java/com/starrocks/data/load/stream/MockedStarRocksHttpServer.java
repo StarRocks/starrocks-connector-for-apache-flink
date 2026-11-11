@@ -17,7 +17,9 @@
 
 package com.starrocks.data.load.stream;
 
+import com.sun.net.httpserver.Filter;
 import com.sun.net.httpserver.Headers;
+import com.sun.net.httpserver.HttpContext;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
@@ -34,6 +36,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -41,6 +44,8 @@ import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -63,6 +68,7 @@ public class MockedStarRocksHttpServer {
         private boolean enforceAuth = false;
         private String username = "";
         private String password = "";
+        private int handlerThreads = 0;
 
         public Builder port(int port) {
             this.port = port;
@@ -76,8 +82,21 @@ public class MockedStarRocksHttpServer {
             return this;
         }
 
+        /**
+         * Handles requests on this many threads, so that requests on different connections run at the
+         * same time. By default the server handles one request at a time.
+         */
+        public Builder handlerThreads(int handlerThreads) {
+            this.handlerThreads = handlerThreads;
+            return this;
+        }
+
         public MockedStarRocksHttpServer build() throws IOException {
-            return new MockedStarRocksHttpServer(port, enforceAuth, username, password);
+            MockedStarRocksHttpServer server = new MockedStarRocksHttpServer(port, enforceAuth, username, password);
+            if (handlerThreads > 0) {
+                server.useHandlerThreads(handlerThreads);
+            }
+            return server;
         }
     }
 
@@ -164,6 +183,14 @@ public class MockedStarRocksHttpServer {
     private final AtomicInteger maxChannelConcurrency = new AtomicInteger(0);
     private final ConcurrentMap<String, StringBuffer> txnLoadBodies = new ConcurrentHashMap<>();
 
+    // ---- connection reuse & overall concurrency recording ----
+    /** The client port of every request in arrival order. Requests sent on one connection share a port. */
+    private final List<Integer> clientPorts = Collections.synchronizedList(new ArrayList<>());
+    private final AtomicInteger txnLoadInflight = new AtomicInteger(0);
+    private final AtomicInteger maxTxnLoadConcurrency = new AtomicInteger(0);
+    // Set by Builder#handlerThreads; null means the server handles one request at a time
+    private ExecutorService handlerExecutor;
+
     private MockedStarRocksHttpServer(int port, boolean enforceAuth, String username, String password) throws IOException {
         this.bindAddress = new InetSocketAddress("127.0.0.1", port);
         this.server = HttpServer.create(this.bindAddress, 0);
@@ -176,13 +203,30 @@ public class MockedStarRocksHttpServer {
         }
 
         // register handlers
-        server.createContext("/api/transaction/begin", new BeginHandler());
-        server.createContext("/api/transaction/load", new TransactionLoadHandler());
-        server.createContext("/api/transaction/prepare", new PrepareHandler());
-        server.createContext("/api/transaction/commit", new CommitHandler());
-        server.createContext("/api/transaction/rollback", new RollbackHandler());
-        server.createContext("/api", new ApiRootHandler()); // for /api/{db}/{table}/_stream_load and /api/{db}/get_load_state
-        server.createContext("/errors", new ErrorLogHandler());
+        List<HttpContext> contexts = new ArrayList<>();
+        contexts.add(server.createContext("/api/transaction/begin", new BeginHandler()));
+        contexts.add(server.createContext("/api/transaction/load", new TransactionLoadHandler()));
+        contexts.add(server.createContext("/api/transaction/prepare", new PrepareHandler()));
+        contexts.add(server.createContext("/api/transaction/commit", new CommitHandler()));
+        contexts.add(server.createContext("/api/transaction/rollback", new RollbackHandler()));
+        // for /api/{db}/{table}/_stream_load and /api/{db}/get_load_state
+        contexts.add(server.createContext("/api", new ApiRootHandler()));
+        contexts.add(server.createContext("/errors", new ErrorLogHandler()));
+        Filter recordClientPort = new Filter() {
+            @Override
+            public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
+                clientPorts.add(exchange.getRemoteAddress().getPort());
+                chain.doFilter(exchange);
+            }
+
+            @Override
+            public String description() {
+                return "records the client port of every request";
+            }
+        };
+        for (HttpContext context : contexts) {
+            context.getFilters().add(recordClientPort);
+        }
     }
 
     public static Builder builder() {
@@ -195,6 +239,18 @@ public class MockedStarRocksHttpServer {
 
     public void stop() {
         server.stop(0);
+        if (handlerExecutor != null) {
+            handlerExecutor.shutdownNow();
+        }
+    }
+
+    private void useHandlerThreads(int threads) {
+        handlerExecutor = Executors.newFixedThreadPool(threads, r -> {
+            Thread thread = new Thread(r, "mocked-starrocks-http-handler");
+            thread.setDaemon(true);
+            return thread;
+        });
+        server.setExecutor(handlerExecutor);
     }
 
     public int getPort() {
@@ -231,6 +287,25 @@ public class MockedStarRocksHttpServer {
         maxChannelConcurrency.set(0);
         channelInflight.clear();
         txnLoadBodies.clear();
+        clientPorts.clear();
+        maxTxnLoadConcurrency.set(0);
+    }
+
+    /** The client port of every request so far, in arrival order. Requests sent on one connection share a port. */
+    public List<Integer> getClientPorts() {
+        synchronized (clientPorts) {
+            return new ArrayList<>(clientPorts);
+        }
+    }
+
+    /** The number of connections the requests so far arrived on. */
+    public int getConnectionCount() {
+        return new HashSet<>(getClientPorts()).size();
+    }
+
+    /** Peak number of /api/transaction/load requests in flight at once, over all labels and tables. */
+    public int getMaxTxnLoadConcurrency() {
+        return maxTxnLoadConcurrency.get();
     }
 
     /**
@@ -491,6 +566,7 @@ public class MockedStarRocksHttpServer {
             String channelKey = db + "|" + table + "|" + label;
             AtomicInteger inflight = channelInflight.computeIfAbsent(channelKey, k -> new AtomicInteger());
             int concurrent = inflight.incrementAndGet();
+            maxTxnLoadConcurrency.accumulateAndGet(txnLoadInflight.incrementAndGet(), Math::max);
             try {
                 maxChannelConcurrency.accumulateAndGet(concurrent, Math::max);
                 if (concurrent > 1 && simulateChannelBusy) {
@@ -513,6 +589,7 @@ public class MockedStarRocksHttpServer {
                 handleTxnLoadAccepted(exchange, db, table, label, channelKey);
             } finally {
                 inflight.decrementAndGet();
+                txnLoadInflight.decrementAndGet();
             }
         }
 
