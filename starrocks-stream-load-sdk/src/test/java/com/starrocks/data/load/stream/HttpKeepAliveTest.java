@@ -17,6 +17,7 @@
 
 package com.starrocks.data.load.stream;
 
+import com.starrocks.data.load.stream.exception.StreamLoadFailException;
 import com.starrocks.data.load.stream.http.StreamLoadEntityMeta;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
@@ -60,6 +61,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
@@ -332,6 +334,117 @@ public class HttpKeepAliveTest {
     }
 
     @Test(timeout = 60_000)
+    public void testConnectionIdleForLongerThanTheIdleTimeoutIsNotReusedBeforeItIsClosed() throws Exception {
+        // The idle connections are looked for only once a minute here, so it is the pool that does not
+        // lease the connection idle for longer than the 300 ms idle timeout.
+        RawHttpServer fe = RawHttpServer.answeringOk(0);
+        closeables.add(fe);
+        KeepAliveHttpClient client = new KeepAliveHttpClient(2, 3000, 300L, 1000, 60_000L,
+                DefaultStreamLoader.redirectAnyMethod());
+        closeables.add(client);
+
+        Assert.assertEquals(200, begin(client, fe));
+        Assert.assertEquals(1, client.getTotalStats().getAvailable());
+        Thread.sleep(600);
+        Assert.assertEquals(200, begin(client, fe));
+
+        Assert.assertEquals("the second request should open a new connection",
+                2, fe.getRequestsByConnection().size());
+    }
+
+    @Test(timeout = 60_000)
+    public void testShorterKeepAliveTimeoutOfTheServerIsKept() throws Exception {
+        // The server keeps an idle connection for 1 s, less than the idle timeout of 60 s
+        RawHttpServer fe = RawHttpServer.responding(
+                target -> RawHttpServer.json(RawHttpServer.OK_BODY, "Keep-Alive: timeout=1"));
+        closeables.add(fe);
+        KeepAliveHttpClient client = new KeepAliveHttpClient(2, 3000, 60_000L, 1000,
+                DefaultStreamLoader.redirectAnyMethod());
+        closeables.add(client);
+
+        Assert.assertEquals(200, begin(client, fe));
+        Thread.sleep(1300);
+        Assert.assertEquals(200, begin(client, fe));
+
+        Assert.assertEquals("the second request should open a new connection",
+                2, fe.getRequestsByConnection().size());
+    }
+
+    /** Sends a begin through {@code client}, reads the whole response and returns its status code. */
+    private static int begin(KeepAliveHttpClient client, RawHttpServer fe) throws IOException {
+        return client.execute(new HttpPost(fe.getBaseUrl() + "/api/transaction/begin"), response -> {
+            EntityUtils.consume(response.getEntity());
+            return response.getStatusLine().getStatusCode();
+        });
+    }
+
+    @Test(timeout = 60_000)
+    public void testResentCommitThatIsNotAnsweredOkIsReconciled() throws Exception {
+        // The FE takes the commit, but the connection fails before the reply arrives. The commit has no
+        // body, so it is sent again, and the FE answers the second one while the first one still runs.
+        // That answer is not the FE's decision on the transaction, so the label state is polled, as for
+        // a lost reply, until the transaction is visible.
+        AtomicInteger commits = new AtomicInteger();
+        AtomicInteger stateQueries = new AtomicInteger();
+        RawHttpServer fe = RawHttpServer.responding(target -> {
+            if (target.startsWith("/api/transaction/commit")) {
+                return commits.incrementAndGet() == 1 ? null : RawHttpServer.json(COMMIT_REFUSED);
+            }
+            if (target.contains("/get_load_state")) {
+                String state = stateQueries.incrementAndGet() == 1 ? "PREPARED" : "VISIBLE";
+                return RawHttpServer.json(labelState(state));
+            }
+            return RawHttpServer.json(RawHttpServer.OK_BODY);
+        });
+        closeables.add(fe);
+        TransactionStreamLoader loader = startedLoader(properties(fe.getBaseUrl(), true).build());
+        String label = "label-resent-commit";
+
+        Assert.assertTrue(loader.beginTransaction(label, DB));
+        // Sent on the connection of the begin
+        Assert.assertTrue(loader.commit(new StreamLoadSnapshot.Transaction(DB, null, label, true)));
+
+        Assert.assertEquals(2, commits.get());
+        Assert.assertEquals("the label state should be polled until the transaction is visible", 2, stateQueries.get());
+    }
+
+    @Test(timeout = 60_000)
+    public void testCommitSentOnceAndNotAnsweredOkFailsFast() throws Exception {
+        // The same answer to a commit that was sent once is the FE's decision: the label state is checked
+        // once, not polled.
+        AtomicInteger stateQueries = new AtomicInteger();
+        RawHttpServer fe = RawHttpServer.responding(target -> {
+            if (target.startsWith("/api/transaction/commit")) {
+                return RawHttpServer.json(COMMIT_REFUSED);
+            }
+            if (target.contains("/get_load_state")) {
+                stateQueries.incrementAndGet();
+                return RawHttpServer.json(labelState("PREPARED"));
+            }
+            return RawHttpServer.json(RawHttpServer.OK_BODY);
+        });
+        closeables.add(fe);
+        TransactionStreamLoader loader = startedLoader(properties(fe.getBaseUrl(), true).build());
+        String label = "label-commit-refused";
+
+        Assert.assertTrue(loader.beginTransaction(label, DB));
+        try {
+            loader.commit(new StreamLoadSnapshot.Transaction(DB, null, label, true));
+            Assert.fail("a refused commit should fail");
+        } catch (StreamLoadFailException expected) {
+            // expected
+        }
+        Assert.assertEquals(1, stateQueries.get());
+    }
+
+    private static final String COMMIT_REFUSED =
+            "{\"Status\":\"FAILED\",\"Message\":\"the transaction is being committed\"}";
+
+    private static String labelState(String state) {
+        return "{\"Status\":\"OK\",\"state\":\"" + state + "\"}";
+    }
+
+    @Test(timeout = 60_000)
     public void testConnectionClosedByTheServerWhileIdleIsNotUsed() throws Exception {
         // The server closes every connection after its response, without saying so in the response, so
         // the pool keeps the connection. The check before reusing a connection idle for over 2 s finds
@@ -545,14 +658,13 @@ public class HttpKeepAliveTest {
     private static final class RawHttpServer implements Closeable {
 
         private static final String OK_BODY = "{\"Status\":\"OK\",\"Message\":\"\"}";
-        private static final String OK_RESPONSE = "HTTP/1.1 200 OK\r\n"
-                + "Content-Type: application/json\r\n"
-                + "Content-Length: " + OK_BODY.length() + "\r\n"
-                + "\r\n"
-                + OK_BODY;
+        private static final String OK_RESPONSE = json(OK_BODY);
 
         private final ServerSocket serverSocket;
-        /** The full response to a request, from its target (path and query). */
+        /**
+         * The full response to a request, from its target (path and query), or null to close the
+         * connection without one, as when the server took the request and the reply was lost.
+         */
         private final Function<String, String> responder;
         private final boolean closeAfterResponse;
         private final long responseDelayMs;
@@ -584,6 +696,20 @@ public class HttpKeepAliveTest {
         /** Answers every request with {@code Status: OK} after {@code delayMs}, keeping the connection open. */
         static RawHttpServer answeringOk(long delayMs) throws IOException {
             return new RawHttpServer(path -> OK_RESPONSE, false, delayMs);
+        }
+
+        /** Answers each request with what {@code responder} returns for its target, see {@link #responder}. */
+        static RawHttpServer responding(Function<String, String> responder) throws IOException {
+            return new RawHttpServer(responder, false, 0);
+        }
+
+        /** A 200 response with a JSON body, and the given header lines. */
+        static String json(String body, String... headers) {
+            StringBuilder response = new StringBuilder("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n");
+            for (String header : headers) {
+                response.append(header).append("\r\n");
+            }
+            return response.append("Content-Length: ").append(body.length()).append("\r\n\r\n").append(body).toString();
         }
 
         private RawHttpServer(Function<String, String> responder, boolean closeAfterResponse, long responseDelayMs)
@@ -650,7 +776,11 @@ public class HttpKeepAliveTest {
                     if (responseDelayMs > 0) {
                         Thread.sleep(responseDelayMs);
                     }
-                    out.write(responder.apply(parts[1]).getBytes(StandardCharsets.ISO_8859_1));
+                    String response = responder.apply(parts[1]);
+                    if (response == null) {
+                        return;
+                    }
+                    out.write(response.getBytes(StandardCharsets.ISO_8859_1));
                     out.flush();
                     if (closeAfterResponse) {
                         return;

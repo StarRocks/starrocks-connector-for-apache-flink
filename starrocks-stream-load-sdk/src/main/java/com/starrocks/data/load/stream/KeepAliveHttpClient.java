@@ -30,9 +30,11 @@ import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpRequestBase;
 import org.apache.http.client.protocol.HttpClientContext;
+import org.apache.http.conn.ConnectionKeepAliveStrategy;
 import org.apache.http.impl.client.BasicCookieStore;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.DefaultClientConnectionReuseStrategy;
+import org.apache.http.impl.client.DefaultConnectionKeepAliveStrategy;
 import org.apache.http.impl.client.DefaultHttpRequestRetryHandler;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.client.IdleConnectionEvictor;
@@ -62,17 +64,18 @@ import java.util.concurrent.TimeUnit;
  *       which the final response arrived before the request body was sent is closed, not reused.</li>
  *   <li><b>Idle connections dropped in between.</b> A load balancer can forget an idle connection
  *       without telling either end, and reset it when it is used again. An AWS Network Load Balancer
- *       does so after 350 seconds by default. Connections idle for longer than the idle timeout are
- *       closed, so it must be shorter than that of any load balancer in between. A connection idle for
- *       more than {@link #VALIDATE_AFTER_INACTIVITY_MS} is also checked before it is reused, so that
- *       one the server closed in the meantime is not used.</li>
+ *       does so after 350 seconds by default. A connection idle for longer than the idle timeout is not
+ *       reused, and is closed, so the idle timeout must be shorter than that of any load balancer in
+ *       between. A connection idle for more than {@link #VALIDATE_AFTER_INACTIVITY_MS} is also checked
+ *       before it is reused, so that one the server closed in the meantime is not used.</li>
  *   <li><b>Idle connections closed by the server just before they are reused.</b> nginx closes all
  *       its idle connections on a reload, and a connection idle for less than
  *       {@link #VALIDATE_AFTER_INACTIVITY_MS} is not checked, so the next requests fail without a
  *       response. HttpClient does not resend a request it has sent, such as a commit, which has no
  *       body. When a reused connection fails, the other idle connections are closed too, and the
  *       request is sent again on a new connection where that is safe, see
- *       {@link KeepAliveRetryHandler}.</li>
+ *       {@link KeepAliveRetryHandler}. A caller learns that a request was sent again from
+ *       {@link #executeForReply}.</li>
  *   <li><b>Socket timeouts left over from an earlier request.</b> HttpClient sets the socket timeout
  *       of a connection only for a request that specifies one, so a request without one would keep the
  *       timeout of the request the connection served before. Such a request gets no timeout, which is
@@ -106,6 +109,12 @@ final class KeepAliveHttpClient implements Closeable {
     /** Context attribute that is {@code true} when the request is sent on a connection that served earlier requests. */
     static final String CONNECTION_REUSED = "starrocks.connection-reused";
 
+    /**
+     * Context attribute that is {@code true} when a request without a body was sent again after the reused
+     * connection it went out on failed, so the server may have taken it twice.
+     */
+    static final String REQUEST_RESENT = "starrocks.request-resent";
+
     private final int maxConnectionsPerHost;
     private final long idleTimeoutMs;
     private final int connectionRequestTimeoutMs;
@@ -116,13 +125,21 @@ final class KeepAliveHttpClient implements Closeable {
     /**
      * @param maxConnectionsPerHost the most connections to one host, in use and idle together
      * @param waitForContinueTimeoutMs how long to wait for {@code 100 Continue} before sending a body
-     * @param idleTimeoutMs a connection idle for longer than this is closed
+     * @param idleTimeoutMs a connection idle for longer than this is not reused, and is closed
      * @param connectionRequestTimeoutMs how long a request waits for a connection when all of its
      *        host's connections are in use
      * @param redirectStrategy which redirects to follow
      */
     KeepAliveHttpClient(int maxConnectionsPerHost, int waitForContinueTimeoutMs, long idleTimeoutMs,
                         int connectionRequestTimeoutMs, RedirectStrategy redirectStrategy) {
+        this(maxConnectionsPerHost, waitForContinueTimeoutMs, idleTimeoutMs, connectionRequestTimeoutMs,
+                Math.max(MIN_IDLE_CHECK_INTERVAL_MS, Math.min(idleTimeoutMs, MAX_IDLE_CHECK_INTERVAL_MS)),
+                redirectStrategy);
+    }
+
+    /** As above, with the interval at which idle connections are looked for and closed. */
+    KeepAliveHttpClient(int maxConnectionsPerHost, int waitForContinueTimeoutMs, long idleTimeoutMs,
+                        int connectionRequestTimeoutMs, long idleCheckIntervalMs, RedirectStrategy redirectStrategy) {
         this.maxConnectionsPerHost = maxConnectionsPerHost;
         this.idleTimeoutMs = idleTimeoutMs;
         this.connectionRequestTimeoutMs = connectionRequestTimeoutMs;
@@ -134,12 +151,12 @@ final class KeepAliveHttpClient implements Closeable {
                 .setConnectionManager(connectionManager)
                 .setRequestExecutor(new KeepAliveRequestExecutor(waitForContinueTimeoutMs))
                 .setConnectionReuseStrategy(new KeepAliveReuseStrategy())
+                .setKeepAliveStrategy(new IdleTimeoutKeepAliveStrategy(idleTimeoutMs))
                 .setRetryHandler(new KeepAliveRetryHandler(connectionManager))
                 .setRedirectStrategy(redirectStrategy)
                 .build();
-        long checkIntervalMs = Math.max(MIN_IDLE_CHECK_INTERVAL_MS, Math.min(idleTimeoutMs, MAX_IDLE_CHECK_INTERVAL_MS));
         this.idleConnectionEvictor = new IdleConnectionEvictor(connectionManager,
-                checkIntervalMs, TimeUnit.MILLISECONDS, idleTimeoutMs, TimeUnit.MILLISECONDS);
+                idleCheckIntervalMs, TimeUnit.MILLISECONDS, idleTimeoutMs, TimeUnit.MILLISECONDS);
         idleConnectionEvictor.start();
     }
 
@@ -149,6 +166,15 @@ final class KeepAliveHttpClient implements Closeable {
      * response was read to the end and the connection can be reused, and closes it otherwise.
      */
     <T> T execute(HttpRequestBase request, DefaultStreamLoader.ResponseReader<T> reader) throws IOException {
+        return executeForReply(request, reader).getValue();
+    }
+
+    /**
+     * As {@link #execute}, and also tells whether the request was sent again although the server may have
+     * taken the first one, in which case the response may answer the second of two requests it took.
+     */
+    <T> DefaultStreamLoader.Reply<T> executeForReply(HttpRequestBase request,
+                                                     DefaultStreamLoader.ResponseReader<T> reader) throws IOException {
         RequestConfig config = request.getConfig();
         if (config == null || config.getConnectionRequestTimeout() <= 0) {
             // The pool has a connection for every thread that sends requests, so no request should wait for
@@ -161,7 +187,8 @@ final class KeepAliveHttpClient implements Closeable {
         // Cookies last for one request and its redirects, as with the client built per request before
         context.setCookieStore(new BasicCookieStore());
         try (CloseableHttpResponse response = client.execute(request, context)) {
-            return reader.read(response);
+            T value = reader.read(response);
+            return new DefaultStreamLoader.Reply<>(value, Boolean.TRUE.equals(context.getAttribute(REQUEST_RESENT)));
         }
     }
 
@@ -246,10 +273,13 @@ final class KeepAliveHttpClient implements Closeable {
      * once, on a new connection in two cases:
      * <ul>
      *   <li>Its body was not sent, so the server cannot have taken it.</li>
-     *   <li>It has no body: begin, prepare, commit and rollback. Such a request can have reached the
-     *       server when the connection was reset while it waited for the response. Sending it again is
-     *       then still safe: a commit sent twice is checked against the label state, and a begin sent
-     *       twice fails on the existing label, just as the begin whose response was lost would have.</li>
+     *   <li>It has no body: begin, prepare, commit and rollback. Such a request can have reached the server
+     *       whole, also when the connection failed while it was being sent, so the one sent again is marked
+     *       with {@link #REQUEST_RESENT}. Each of them then ends no worse than if the first response had been
+     *       lost: a rollback sent twice is answered that the transaction is already aborted; a begin or a
+     *       prepare whose response was lost fails, and one sent twice fails at worst; a commit sent twice
+     *       and not answered OK is checked against the label state as one whose response was lost, see
+     *       {@link TransactionStreamLoader#commit}.</li>
      * </ul>
      * A request whose body was sent, a load, is not sent again. Everything else is left to the default
      * handler, which resends a request only if it was not sent completely.
@@ -270,9 +300,14 @@ final class KeepAliveHttpClient implements Closeable {
                 LOG.warn("A reused HTTP connection failed ({}), closing the idle connections", exception.toString());
                 connectionManager.closeIdleConnections(0, TimeUnit.MILLISECONDS);
                 HttpClientContext clientContext = HttpClientContext.adapt(context);
-                if (executionCount == 1
-                        && (!hasEntity(clientContext.getRequest()) || !clientContext.isRequestSent())) {
-                    return true;
+                if (executionCount == 1) {
+                    if (!hasEntity(clientContext.getRequest())) {
+                        context.setAttribute(REQUEST_RESENT, Boolean.TRUE);
+                        return true;
+                    }
+                    if (!clientContext.isRequestSent()) {
+                        return true;
+                    }
                 }
             }
             return super.retryRequest(exception, executionCount, context);
@@ -281,6 +316,28 @@ final class KeepAliveHttpClient implements Closeable {
         private static boolean hasEntity(HttpRequest request) {
             return request instanceof HttpEntityEnclosingRequest
                     && ((HttpEntityEnclosingRequest) request).getEntity() != null;
+        }
+    }
+
+    /**
+     * Keeps a connection for at most the idle timeout after its last response, or for less when the
+     * server asks so with a positive {@code Keep-Alive} timeout. The pool does not lease a connection whose
+     * time is up, so a connection idle for longer than the idle timeout is not reused even before the idle
+     * connection evictor closes it.
+     */
+    static final class IdleTimeoutKeepAliveStrategy implements ConnectionKeepAliveStrategy {
+
+        private final long idleTimeoutMs;
+
+        IdleTimeoutKeepAliveStrategy(long idleTimeoutMs) {
+            this.idleTimeoutMs = idleTimeoutMs;
+        }
+
+        @Override
+        public long getKeepAliveDuration(HttpResponse response, HttpContext context) {
+            // -1 when the server does not say
+            long serverMs = DefaultConnectionKeepAliveStrategy.INSTANCE.getKeepAliveDuration(response, context);
+            return serverMs > 0 ? Math.min(serverMs, idleTimeoutMs) : idleTimeoutMs;
         }
     }
 }

@@ -97,7 +97,7 @@ public class StreamLoadProperties implements Serializable {
      */
     private final boolean enableHttpKeepAlive;
     /**
-     * ms. A kept-alive connection that has been idle for longer than this is closed.
+     * ms. A kept-alive connection that has been idle for longer than this is not reused, and is closed.
      */
     private final int httpKeepAliveIdleTimeoutMs;
 

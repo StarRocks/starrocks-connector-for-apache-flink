@@ -180,6 +180,30 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
         T read(CloseableHttpResponse response) throws IOException;
     }
 
+    /** What a {@link ResponseReader} read, and whether the request was sent twice to get it. */
+    protected static final class Reply<T> {
+        private final T value;
+        private final boolean resent;
+
+        Reply(T value, boolean resent) {
+            this.value = value;
+            this.resent = resent;
+        }
+
+        public T getValue() {
+            return value;
+        }
+
+        /**
+         * Whether the request was sent again after the reused connection it went out on failed, although the
+         * server may have taken it. The server may then have taken both, and the response is the one to the
+         * second.
+         */
+        public boolean isResent() {
+            return resent;
+        }
+    }
+
     /**
      * Sends {@code request} and returns what {@code reader} reads from the response, which is closed
      * afterwards. With HTTP keep-alive on, the request goes through the connection pool of this loader.
@@ -187,13 +211,19 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
      * which closes its connection when done.
      */
     protected <T> T execute(HttpRequestBase request, ResponseReader<T> reader) throws IOException {
+        return executeForReply(request, reader).getValue();
+    }
+
+    /** As {@link #execute}, and also tells whether the request was sent twice, see {@link Reply#isResent()}. */
+    protected <T> Reply<T> executeForReply(HttpRequestBase request, ResponseReader<T> reader) throws IOException {
         KeepAliveHttpClient client = keepAliveClient;
         if (client != null) {
-            return client.execute(request, reader);
+            return client.executeForReply(request, reader);
         }
         try (CloseableHttpClient oneOffClient = clientBuilder.build();
              CloseableHttpResponse response = oneOffClient.execute(request)) {
-            return reader.read(response);
+            // Its default retry handler resends a POST or a PUT only if it was not sent completely
+            return new Reply<>(reader.read(response), false);
         }
     }
 

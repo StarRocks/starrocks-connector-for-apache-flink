@@ -104,10 +104,9 @@ public class StarRocksSinkOptions implements Serializable {
                     "sink.version V2. Set it to false to open a new connection for every request, as before 1.2.17.");
     public static final ConfigOption<Integer> SINK_HTTP_KEEP_ALIVE_IDLE_TIMEOUT = ConfigOptions.key("sink.http.keep-alive.idle-timeout-ms")
             .intType().defaultValue(60000).withDescription("Timeout in milliseconds after which an idle kept-alive HTTP " +
-                    "connection is closed; idle connections are looked for every 10 seconds at most, so one is closed " +
-                    "within 10 seconds after the timeout. It must be shorter than the idle timeout of any proxy or load " +
-                    "balancer between Flink and StarRocks. For example, an AWS Network Load Balancer drops connections " +
-                    "idle for 350 seconds by default.");
+                    "connection is no longer reused; it is closed within 10 seconds after the timeout. It must be " +
+                    "shorter than the idle timeout of any proxy or load balancer between Flink and StarRocks. For " +
+                    "example, an AWS Network Load Balancer drops connections idle for 350 seconds by default.");
 
     public static final ConfigOption<Long> SINK_CHUNK_LIMIT = ConfigOptions.key("sink.chunk-limit")
             .longType().defaultValue(3 * GIGA_BYTES_SCALE).withDescription("Data chunk size in a http request for stream load");

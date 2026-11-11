@@ -326,10 +326,15 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
         log.info("Transaction commit, label: {}, request : {}", transaction.getLabel(), httpPost);
 
         StreamLoadResponse.StreamLoadResponseBody streamLoadBody;
+        String responseBody;
+        boolean resent;
         try {
-            String responseBody = execute(httpPost, response -> parseHttpResponse("commit transaction",
+            Reply<String> reply = executeForReply(httpPost, response -> parseHttpResponse("commit transaction",
                     transaction.getDatabase(), transaction.getTable(), transaction.getLabel(), response));
-            log.info("Transaction committed, label: {}, body : {}", transaction.getLabel(), responseBody);
+            responseBody = reply.getValue();
+            resent = reply.isResent();
+            log.info("Transaction committed, label: {}, resent: {}, body : {}", transaction.getLabel(), resent,
+                    responseBody);
             streamLoadBody = objectMapper.readValue(responseBody, StreamLoadResponse.StreamLoadResponseBody.class);
             if (streamLoadBody == null || streamLoadBody.getStatus() == null) {
                 // Syntactically valid JSON that carries no FE status — e.g. `{}` or a bare `null`
@@ -358,6 +363,18 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
             streamLoadResponse.setBody(streamLoadBody);
             manager.callback(streamLoadResponse);
             return true;
+        }
+
+        if (resent) {
+            // The commit was sent again because the reused connection it went out on failed, so the FE may
+            // have taken the first one as well. This status can then be the FE's answer to the second
+            // commit while the first one is still running, not its decision on the transaction: reconcile
+            // the label state as for a lost reply, which waits for a commit in progress for up to about
+            // 45 s for each configured FE.
+            return reconcileLostCommit(host, transaction, new StreamLoadFailException(String.format(
+                    "Commit transaction was sent again after its connection failed, and the second one was " +
+                    "answered with status %s. db: %s, table: %s, label: %s, response body: %s", status,
+                    transaction.getDatabase(), transaction.getTable(), transaction.getLabel(), responseBody)));
         }
 
         // Definitive non-OK FE status. Double-check the label state once (a non-OK response can
