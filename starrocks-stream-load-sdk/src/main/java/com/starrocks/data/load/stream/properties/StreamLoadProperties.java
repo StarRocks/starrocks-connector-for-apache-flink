@@ -22,6 +22,8 @@ package com.starrocks.data.load.stream.properties;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.starrocks.data.load.stream.StarRocksVersion;
+import com.starrocks.data.load.stream.auth.CredentialsProvider;
+import com.starrocks.data.load.stream.auth.StaticCredentialsProvider;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,6 +46,8 @@ public class StreamLoadProperties implements Serializable {
     private final String username;
     @JsonIgnore
     private final String password;
+    @JsonIgnore
+    private final CredentialsProvider credentialsProvider;
     private final String version;
     // can be null
     private final StarRocksVersion starRocksVersion;
@@ -130,6 +134,9 @@ public class StreamLoadProperties implements Serializable {
         this.loadUrls = builder.loadUrls;
         this.username = builder.username;
         this.password = builder.password;
+        this.credentialsProvider = builder.credentialsProvider != null
+                ? builder.credentialsProvider
+                : new StaticCredentialsProvider(builder.username, builder.password);
         this.version = builder.version;
         this.starRocksVersion = StarRocksVersion.parse(version);
 
@@ -217,12 +224,31 @@ public class StreamLoadProperties implements Serializable {
         return loadUrls;
     }
 
+    /**
+     * Returns the user name set with {@link Builder#username(String)}. Requests are authenticated
+     * with {@link #getCredentialsProvider()}, which differs from this value when a custom provider
+     * is configured.
+     */
     public String getUsername() {
         return username;
     }
 
+    /**
+     * Returns the password set with {@link Builder#password(String)}. Requests are authenticated
+     * with {@link #getCredentialsProvider()}, which differs from this value when a custom provider
+     * is configured.
+     */
     public String getPassword() {
         return password;
+    }
+
+    /**
+     * Returns the provider that supplies the credentials for every request. Unless one was set
+     * with {@link Builder#credentialsProvider(CredentialsProvider)}, this is a
+     * {@link StaticCredentialsProvider} over {@link #getUsername()} and {@link #getPassword()}.
+     */
+    public CredentialsProvider getCredentialsProvider() {
+        return credentialsProvider;
     }
 
     public String getVersion() {
@@ -377,6 +403,7 @@ public class StreamLoadProperties implements Serializable {
         private String[] loadUrls;
         private String username;
         private String password;
+        private CredentialsProvider credentialsProvider;
         private String version;
 
         private boolean enableTransaction;
@@ -450,6 +477,16 @@ public class StreamLoadProperties implements Serializable {
 
         public Builder password(String password) {
             this.password = password;
+            return this;
+        }
+
+        /**
+         * Sets the provider asked for credentials on every request, which lets credentials change
+         * while the loader runs. When set, it takes precedence over {@link #username(String)} and
+         * {@link #password(String)} for authenticating requests.
+         */
+        public Builder credentialsProvider(CredentialsProvider credentialsProvider) {
+            this.credentialsProvider = credentialsProvider;
             return this;
         }
 
