@@ -28,11 +28,13 @@ import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpHeaders;
+import org.apache.http.client.RedirectStrategy;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
+import org.apache.http.client.methods.HttpRequestBase;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.DefaultRedirectStrategy;
 import org.apache.http.impl.client.HttpClientBuilder;
@@ -43,6 +45,7 @@ import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.io.Serializable;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -69,6 +72,8 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
     private StreamLoadManager manager;
 
     private HttpClientBuilder clientBuilder;
+    // Sends every request while the loader is started with HTTP keep-alive on; null otherwise
+    private transient volatile KeepAliveHttpClient keepAliveClient;
     private Header[] defaultHeaders;
 
     private ScheduledExecutorService executorService;
@@ -101,12 +106,12 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
 
             this.clientBuilder  = HttpClients.custom()
                     .setRequestExecutor(new HttpRequestExecutor(properties.getWaitForContinueTimeoutMs()))
-                    .setRedirectStrategy(new DefaultRedirectStrategy() {
-                        @Override
-                        protected boolean isRedirectable(String method) {
-                            return true;
-                        }
-                    });
+                    .setRedirectStrategy(redirectAnyMethod());
+            if (properties.isEnableHttpKeepAlive()) {
+                this.keepAliveClient = new KeepAliveHttpClient(maxConnectionsPerHost(properties),
+                        properties.getWaitForContinueTimeoutMs(), properties.getHttpKeepAliveIdleTimeoutMs(),
+                        redirectAnyMethod());
+            }
             this.executorService = new ScheduledThreadPoolExecutor(
                     properties.getIoThreadCount(),
                     r -> {
@@ -130,6 +135,9 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
 
             log.info("Default Stream Loader start, properties : {}, defaultHeaders : {}",
                     propertiesStr, headerStr);
+            if (keepAliveClient != null) {
+                log.info("HTTP keep-alive is on, {}", keepAliveClient);
+            }
         }
     }
 
@@ -137,8 +145,61 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
     public void close() {
         if (start.compareAndSet(true, false)) {
             executorService.shutdownNow();
+            KeepAliveHttpClient client = keepAliveClient;
+            if (client != null) {
+                // Requests sent from now on get a client of their own, see execute()
+                keepAliveClient = null;
+                client.close();
+            }
             log.info("Default Stream loader closed");
         }
+    }
+
+    /** Follows redirects for every method: the FE redirects loads and transaction requests to a BE or CN. */
+    static RedirectStrategy redirectAnyMethod() {
+        return new DefaultRedirectStrategy() {
+            @Override
+            protected boolean isRedirectable(String method) {
+                return true;
+            }
+        };
+    }
+
+    /**
+     * The most connections the loader keeps to one host: one for the loads of each I/O thread, and two
+     * for transaction requests (begin, prepare, commit, rollback), which the stream load manager's thread
+     * and the caller's thread send. No more requests than that run at once, so none waits for a connection.
+     */
+    static int maxConnectionsPerHost(StreamLoadProperties properties) {
+        return properties.getIoThreadCount() + 2;
+    }
+
+    /** Reads what the caller needs from a response. */
+    @FunctionalInterface
+    protected interface ResponseReader<T> {
+        T read(CloseableHttpResponse response) throws IOException;
+    }
+
+    /**
+     * Sends {@code request} and returns what {@code reader} reads from the response, which is closed
+     * afterwards. With HTTP keep-alive on, the request goes through the connection pool of this loader.
+     * Otherwise, and after the loader is closed, it goes through a client built for this request alone,
+     * which closes its connection when done.
+     */
+    protected <T> T execute(HttpRequestBase request, ResponseReader<T> reader) throws IOException {
+        KeepAliveHttpClient client = keepAliveClient;
+        if (client != null) {
+            return client.execute(request, reader);
+        }
+        try (CloseableHttpClient oneOffClient = clientBuilder.build();
+             CloseableHttpResponse response = oneOffClient.execute(request)) {
+            return reader.read(response);
+        }
+    }
+
+    /** The connection pool while HTTP keep-alive is on and the loader is started, otherwise null. */
+    KeepAliveHttpClient getKeepAliveClient() {
+        return keepAliveClient;
     }
 
     @Override
@@ -329,12 +390,10 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
             httpPut.addHeader("label", label);
 
             log.info("Stream loading, label : {}, region : {}, request : {}", label, region.getUniqueKey(), httpPut);
-            try (CloseableHttpClient client = clientBuilder.build()) {
+            try {
                 long startNanoTime = System.nanoTime();
-                String responseBody;
-                try (CloseableHttpResponse response = client.execute(httpPut)) {
-                    responseBody = parseHttpResponse("load", region.getDatabase(), region.getTable(), label, response);
-                }
+                String responseBody = execute(httpPut,
+                        response -> parseHttpResponse("load", region.getDatabase(), region.getTable(), label, response));
 
                 log.info("Stream load completed, label : {}, database : {}, table : {}, body : {}",
                         label, region.getDatabase(), region.getTable(), responseBody);

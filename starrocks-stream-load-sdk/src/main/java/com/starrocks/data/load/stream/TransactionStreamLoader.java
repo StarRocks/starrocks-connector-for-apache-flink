@@ -26,12 +26,7 @@ import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import org.apache.http.Header;
 import org.apache.http.HttpHeaders;
 import org.apache.http.client.config.RequestConfig;
-import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.DefaultRedirectStrategy;
-import org.apache.http.impl.client.HttpClientBuilder;
-import org.apache.http.impl.client.HttpClients;
 import org.apache.http.message.BasicHeader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -68,8 +63,6 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
     private Header[] defaultTxnHeaders;
     private Header[] beginTxnHeader;
     private Header[] preparedTxnHeader;
-
-    private HttpClientBuilder clientBuilder;
 
     private StreamLoadManager manager;
 
@@ -117,13 +110,6 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
         this.manager = manager;
         enableTransaction();
         initTxHeaders(properties);
-        clientBuilder = HttpClients.custom()
-                .setRedirectStrategy(new DefaultRedirectStrategy() {
-                    @Override
-                    protected boolean isRedirectable(String method) {
-                        return true;
-                    }
-                });
     }
 
     @Override
@@ -205,11 +191,9 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
 
         log.info("Transaction start, db: {}, table: {}, label: {}, request : {}", database, table, label, httpPost);
 
-        try (CloseableHttpClient client = clientBuilder.build()) {
-            String responseBody;
-            try (CloseableHttpResponse response = client.execute(httpPost)) {
-                responseBody = parseHttpResponse("begin transaction", database, table, label, response);
-            }
+        try {
+            String responseBody = execute(httpPost,
+                    response -> parseHttpResponse("begin transaction", database, table, label, response));
             log.info("Transaction started, db: {}, table: {}, label: {}, body : {}", database, table, label, responseBody);
 
             JsonNode node = objectMapper.readTree(responseBody);
@@ -264,12 +248,9 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
 
         log.info("Transaction prepare, label : {}, request : {}", transaction.getLabel(), httpPost);
 
-        try (CloseableHttpClient client = clientBuilder.build()) {
-            String responseBody;
-            try (CloseableHttpResponse response = client.execute(httpPost)) {
-                responseBody = parseHttpResponse("prepare transaction", transaction.getDatabase(), transaction.getTable(),
-                        transaction.getLabel(), response);
-            }
+        try {
+            String responseBody = execute(httpPost, response -> parseHttpResponse("prepare transaction",
+                    transaction.getDatabase(), transaction.getTable(), transaction.getLabel(), response));
             log.info("Transaction prepared, label : {}, body : {}", transaction.getLabel(), responseBody);
 
             StreamLoadResponse streamLoadResponse = new StreamLoadResponse();
@@ -345,12 +326,9 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
         log.info("Transaction commit, label: {}, request : {}", transaction.getLabel(), httpPost);
 
         StreamLoadResponse.StreamLoadResponseBody streamLoadBody;
-        try (CloseableHttpClient client = clientBuilder.build()) {
-            String responseBody;
-            try (CloseableHttpResponse response = client.execute(httpPost)) {
-                responseBody = parseHttpResponse("commit transaction", transaction.getDatabase(), transaction.getTable(),
-                        transaction.getLabel(), response);
-            }
+        try {
+            String responseBody = execute(httpPost, response -> parseHttpResponse("commit transaction",
+                    transaction.getDatabase(), transaction.getTable(), transaction.getLabel(), response));
             log.info("Transaction committed, label: {}, body : {}", transaction.getLabel(), responseBody);
             streamLoadBody = objectMapper.readValue(responseBody, StreamLoadResponse.StreamLoadResponseBody.class);
             if (streamLoadBody == null || streamLoadBody.getStatus() == null) {
@@ -502,12 +480,9 @@ public class TransactionStreamLoader extends DefaultStreamLoader {
                         .setConnectTimeout(properties.getConnectTimeout())
                         .build());
 
-        try (CloseableHttpClient client = clientBuilder.build()) {
-            String responseBody;
-            try (CloseableHttpResponse response = client.execute(httpPost)) {
-                responseBody = parseHttpResponse("abort transaction", transaction.getDatabase(), transaction.getTable(),
-                        transaction.getLabel(), response);
-            }
+        try {
+            String responseBody = execute(httpPost, response -> parseHttpResponse("abort transaction",
+                    transaction.getDatabase(), transaction.getTable(), transaction.getLabel(), response));
             log.info("Transaction rollback, label: {}, body : {}", transaction.getLabel(), responseBody);
 
             JsonNode node = objectMapper.readTree(responseBody);

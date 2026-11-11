@@ -81,6 +81,8 @@ public class StarRocksDynamicTableSinkFactory implements DynamicTableSinkFactory
         optionalOptions.add(StarRocksSinkOptions.SINK_SOCKET_TIMEOUT);
         optionalOptions.add(StarRocksSinkOptions.SINK_WAIT_FOR_CONTINUE_TIMEOUT);
         optionalOptions.add(StarRocksSinkOptions.SINK_IO_THREAD_COUNT);
+        optionalOptions.add(StarRocksSinkOptions.SINK_HTTP_KEEP_ALIVE_ENABLED);
+        optionalOptions.add(StarRocksSinkOptions.SINK_HTTP_KEEP_ALIVE_IDLE_TIMEOUT);
         optionalOptions.add(StarRocksSinkOptions.SINK_CHUNK_LIMIT);
         optionalOptions.add(StarRocksSinkOptions.SINK_SCAN_FREQUENCY);
         optionalOptions.add(StarRocksSinkOptions.SINK_IGNORE_UPDATE_BEFORE);

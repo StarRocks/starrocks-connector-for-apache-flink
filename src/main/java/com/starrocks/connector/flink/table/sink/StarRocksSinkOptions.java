@@ -98,6 +98,15 @@ public class StarRocksSinkOptions implements Serializable {
             .intType().defaultValue(30000).withDescription("Timeout in millisecond to wait for 100-continue response for http client.");
     public static final ConfigOption<Integer> SINK_IO_THREAD_COUNT = ConfigOptions.key("sink.io.thread-count")
             .intType().defaultValue(2).withDescription("Stream load thread count");
+    public static final ConfigOption<Boolean> SINK_HTTP_KEEP_ALIVE_ENABLED = ConfigOptions.key("sink.http.keep-alive.enabled")
+            .booleanType().defaultValue(true).withDescription("Whether stream loads and transaction requests reuse HTTP " +
+                    "connections (keep-alive) instead of opening a new connection for every request. Takes effect with " +
+                    "sink.version V2. Set it to false to open a new connection for every request, as before 1.2.17.");
+    public static final ConfigOption<Integer> SINK_HTTP_KEEP_ALIVE_IDLE_TIMEOUT = ConfigOptions.key("sink.http.keep-alive.idle-timeout-ms")
+            .intType().defaultValue(60000).withDescription("Timeout in milliseconds after which an idle kept-alive HTTP " +
+                    "connection is closed. It must be shorter than the idle timeout of any proxy or load balancer between " +
+                    "Flink and StarRocks. For example, an AWS Network Load Balancer drops connections idle for 350 seconds " +
+                    "by default.");
 
     public static final ConfigOption<Long> SINK_CHUNK_LIMIT = ConfigOptions.key("sink.chunk-limit")
             .longType().defaultValue(3 * GIGA_BYTES_SCALE).withDescription("Data chunk size in a http request for stream load");
@@ -396,6 +405,14 @@ public class StarRocksSinkOptions implements Serializable {
         return tableOptions.get(SINK_IO_THREAD_COUNT);
     }
 
+    public boolean isHttpKeepAliveEnabled() {
+        return tableOptions.get(SINK_HTTP_KEEP_ALIVE_ENABLED);
+    }
+
+    public int getHttpKeepAliveIdleTimeoutMs() {
+        return tableOptions.get(SINK_HTTP_KEEP_ALIVE_IDLE_TIMEOUT);
+    }
+
     public long getChunkLimit() {
         return tableOptions.get(SINK_CHUNK_LIMIT);
     }
@@ -584,6 +601,13 @@ public class StarRocksSinkOptions implements Serializable {
                 throw new ValidationException(
                         String.format("Unsupported value '%d' for '%s'. Supported value range: [300000, Long.MAX_VALUE].",
                                 val, SINK_BATCH_OFFER_TIMEOUT.key()));
+            }
+        });
+        tableOptions.getOptional(SINK_HTTP_KEEP_ALIVE_IDLE_TIMEOUT).ifPresent(val -> {
+            if (val <= 0) {
+                throw new ValidationException(
+                        String.format("Unsupported value '%d' for '%s'. Supported value range: [1, Integer.MAX_VALUE].",
+                                val, SINK_HTTP_KEEP_ALIVE_IDLE_TIMEOUT.key()));
             }
         });
     }
@@ -896,6 +920,8 @@ public class StarRocksSinkOptions implements Serializable {
                 .waitForContinueTimeoutMs(getWaitForContinueTimeout())
                 .socketTimeout(getSocketTimeout())
                 .ioThreadCount(getIoThreadCount())
+                .enableHttpKeepAlive(isHttpKeepAliveEnabled())
+                .httpKeepAliveIdleTimeoutMs(getHttpKeepAliveIdleTimeoutMs())
                 .scanningFrequency(getScanFrequency())
                 .labelPrefix(getLabelPrefix())
                 .username(getUsername())
