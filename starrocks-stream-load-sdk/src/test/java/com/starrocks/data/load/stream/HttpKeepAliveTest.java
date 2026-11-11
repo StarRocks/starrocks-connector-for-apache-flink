@@ -22,11 +22,14 @@ import com.starrocks.data.load.stream.http.StreamLoadEntityMeta;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
 import com.starrocks.data.load.stream.v2.StreamLoadManagerV2;
+import org.apache.http.HttpClientConnection;
 import org.apache.http.HttpEntity;
+import org.apache.http.HttpRequest;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
+import org.apache.http.client.protocol.HttpClientContext;
 import org.apache.http.conn.ConnectionPoolTimeoutException;
 import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.entity.ContentType;
@@ -35,11 +38,15 @@ import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.apache.http.pool.PoolStats;
+import org.apache.http.protocol.BasicHttpContext;
+import org.apache.http.protocol.HttpContext;
+import org.apache.http.protocol.HttpCoreContext;
 import org.apache.http.util.EntityUtils;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import java.io.BufferedReader;
 import java.io.Closeable;
@@ -49,6 +56,7 @@ import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -538,6 +546,76 @@ public class HttpKeepAliveTest {
     }
 
     @Test(timeout = 60_000)
+    public void testLoadWhoseBodyFailedPartOfTheWayIsNotSentAgain() throws Exception {
+        // The CN appends the body of a transaction load to the transaction as it arrives, and keeps what it took
+        // when the connection fails. A load whose body failed part of the way is not sent again, although the
+        // request does not count as sent and its connection was reused: the server may have taken part of it.
+        AtomicInteger loads = new AtomicInteger();
+        RawHttpServer fe = RawHttpServer.responding(target ->
+                target.startsWith("/api/transaction/load") && loads.incrementAndGet() == 1
+                        ? RawHttpServer.RESET_AFTER_PART_OF_THE_BODY : RawHttpServer.OK_RESPONSE);
+        closeables.add(fe);
+        KeepAliveHttpClient client = new KeepAliveHttpClient(2, 3000, 60_000L, 1000,
+                DefaultStreamLoader.redirectAnyMethod());
+        closeables.add(client);
+        Assert.assertEquals(200, begin(client, fe));
+
+        HttpPut load = new HttpPut(fe.getBaseUrl() + "/api/transaction/load");
+        load.setConfig(RequestConfig.custom().setExpectContinueEnabled(true).build());
+        // Larger than the socket buffers, so that the reset arrives while the body is being written
+        load.setEntity(new ByteArrayEntity(new byte[32 << 20], ContentType.APPLICATION_OCTET_STREAM));
+        try {
+            int status = client.execute(load, response -> response.getStatusLine().getStatusCode());
+            Assert.fail("the load should have failed, got " + status + ": " + fe.getRequestsByConnection());
+        } catch (IOException expected) {
+            // expected
+        }
+        Assert.assertEquals("the load should not have been sent again: " + fe.getRequestsByConnection(),
+                1, loads.get());
+    }
+
+    @Test
+    public void testOnlyARequestWithABodyStartsToSendIt() throws Exception {
+        // A commit is a POST without a body, which also goes through sendRequestEntity() and sends nothing
+        KeepAliveHttpClient.KeepAliveRequestExecutor executor = new KeepAliveHttpClient.KeepAliveRequestExecutor(3000);
+        HttpClientConnection conn = Mockito.mock(HttpClientConnection.class);
+
+        HttpContext commit = new BasicHttpContext();
+        executor.doSendRequest(new HttpPost("http://127.0.0.1/api/transaction/commit"), conn, commit);
+        Assert.assertEquals(Boolean.FALSE, commit.getAttribute(KeepAliveHttpClient.REQUEST_BODY_STARTED));
+
+        HttpPut put = new HttpPut("http://127.0.0.1/api/transaction/load");
+        put.setEntity(jsonRow());
+        HttpContext load = new BasicHttpContext();
+        executor.doSendRequest(put, conn, load);
+        Assert.assertEquals(Boolean.TRUE, load.getAttribute(KeepAliveHttpClient.REQUEST_BODY_STARTED));
+    }
+
+    @Test
+    public void testDefaultRetriesOnANewConnectionExceptForALoadWhoseBodyStarted() {
+        // On a new connection the default handler decides, which resends a request that was not sent completely
+        KeepAliveHttpClient.KeepAliveRetryHandler handler =
+                new KeepAliveHttpClient.KeepAliveRetryHandler(new PoolingHttpClientConnectionManager());
+        HttpPut load = new HttpPut("http://127.0.0.1/api/transaction/load");
+        load.setEntity(jsonRow());
+        SocketException reset = new SocketException("Connection reset");
+
+        Assert.assertFalse(handler.retryRequest(reset, 1, failedBeforeSent(load, true)));
+        Assert.assertTrue(handler.retryRequest(reset, 1, failedBeforeSent(load, false)));
+        Assert.assertTrue(handler.retryRequest(reset, 1,
+                failedBeforeSent(new HttpPost("http://127.0.0.1/api/transaction/commit"), false)));
+    }
+
+    /** The context of a request that failed before it counted as sent, on a new connection. */
+    private static HttpContext failedBeforeSent(HttpRequest request, boolean bodyStarted) {
+        HttpClientContext context = HttpClientContext.create();
+        context.setAttribute(HttpCoreContext.HTTP_REQUEST, request);
+        context.setAttribute(HttpCoreContext.HTTP_REQ_SENT, Boolean.FALSE);
+        context.setAttribute(KeepAliveHttpClient.REQUEST_BODY_STARTED, bodyStarted);
+        return context;
+    }
+
+    @Test(timeout = 60_000)
     public void testRequestsSurviveTheServerClosingItsIdleConnections() throws Exception {
         // What nginx does on a reload. With several closed connections in the pool, sending the failed
         // request again would land on another closed one, so they are all dropped first.
@@ -733,11 +811,17 @@ public class HttpKeepAliveTest {
         private static final String OK_BODY = "{\"Status\":\"OK\",\"Message\":\"\"}";
         private static final String OK_RESPONSE = json(OK_BODY);
         private static final String CONTENT_LENGTH = "Content-Length:";
+        /**
+         * A response that is no response: the server answers 100 Continue, reads part of the body and resets
+         * the connection, as when the connection fails while the body is on its way.
+         */
+        private static final String RESET_AFTER_PART_OF_THE_BODY = "reset after part of the body";
 
         private final ServerSocket serverSocket;
         /**
-         * The full response to a request, from its target (path and query), or null to close the
-         * connection without one, as when the server took the request and the reply was lost.
+         * The full response to a request, from its target (path and query), null to close the connection
+         * without one, as when the server took the request and the reply was lost, or
+         * {@link #RESET_AFTER_PART_OF_THE_BODY}.
          */
         private final Function<String, String> responder;
         private final boolean closeAfterResponse;
@@ -885,6 +969,20 @@ public class HttpKeepAliveTest {
                     }
                     String response = responder.apply(parts[1]);
                     if (response == null) {
+                        return;
+                    }
+                    if (RESET_AFTER_PART_OF_THE_BODY.equals(response)) {
+                        out.write("HTTP/1.1 100 Continue\r\n\r\n".getBytes(StandardCharsets.ISO_8859_1));
+                        out.flush();
+                        char[] part = new char[64 * 1024];
+                        for (int read = 0; read < part.length; ) {
+                            int n = in.read(part, read, part.length - read);
+                            if (n < 0) {
+                                break;
+                            }
+                            read += n;
+                        }
+                        connection.setSoLinger(true, 0);
                         return;
                     }
                     out.write(response.getBytes(StandardCharsets.ISO_8859_1));

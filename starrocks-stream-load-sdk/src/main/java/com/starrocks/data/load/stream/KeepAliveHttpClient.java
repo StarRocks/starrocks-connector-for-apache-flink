@@ -113,6 +113,13 @@ final class KeepAliveHttpClient implements Closeable {
      */
     static final String REQUEST_BODY_SKIPPED = "starrocks.request-body-skipped";
 
+    /**
+     * Context attribute that is {@code true} once the body of a request has started to go out. The server can
+     * have taken part of it then, even when sending it failed: the CN appends the body of a transaction load to
+     * the transaction as it arrives, and keeps what it took when the connection fails.
+     */
+    static final String REQUEST_BODY_STARTED = "starrocks.request-body-started";
+
     /** Context attribute that is {@code true} when the request is sent on a connection that served earlier requests. */
     static final String CONNECTION_REUSED = "starrocks.connection-reused";
 
@@ -226,10 +233,10 @@ final class KeepAliveHttpClient implements Closeable {
     }
 
     /**
-     * Records whether the connection served earlier requests and whether the server answered before the
-     * request body was sent, gives a request without a socket timeout no timeout, instead of the one its
-     * connection was left with, and does not send a body into a connection the server closed while the
-     * request waited for {@code 100 Continue}.
+     * Records whether the connection served earlier requests, whether the body of the request started to go
+     * out and whether the server answered before it was sent, gives a request without a socket timeout no
+     * timeout, instead of the one its connection was left with, and does not send a body into a connection the
+     * server closed while the request waited for {@code 100 Continue}.
      */
     static final class KeepAliveRequestExecutor extends HttpRequestExecutor {
 
@@ -265,6 +272,7 @@ final class KeepAliveHttpClient implements Closeable {
                 throws IOException, HttpException {
             context.setAttribute(HttpCoreContext.HTTP_CONNECTION, conn);
             context.setAttribute(HttpCoreContext.HTTP_REQ_SENT, Boolean.FALSE);
+            context.setAttribute(REQUEST_BODY_STARTED, Boolean.FALSE);
             HttpResponse response = null;
             conn.sendRequestHeader(request);
             if (request instanceof HttpEntityEnclosingRequest) {
@@ -294,6 +302,8 @@ final class KeepAliveHttpClient implements Closeable {
                     }
                 }
                 if (sendEntity) {
+                    // A POST without a body, such as a commit, also gets here, and sends nothing
+                    context.setAttribute(REQUEST_BODY_STARTED, entityRequest.getEntity() != null);
                     conn.sendRequestEntity(entityRequest);
                 }
             }
@@ -326,8 +336,8 @@ final class KeepAliveHttpClient implements Closeable {
      * idle connections are closed, since they are likely closed as well, and the request is sent again,
      * once, on a new connection in two cases:
      * <ul>
-     *   <li>Its body was not sent, so the server cannot have taken it, for example a load whose connection the
-     *       server closed while it waited for {@code 100 Continue}, see
+     *   <li>Its body did not start to go out, so the server cannot have taken any of it, for example a load whose
+     *       connection the server closed while it waited for {@code 100 Continue}, see
      *       {@link KeepAliveRequestExecutor#doSendRequest}.</li>
      *   <li>It has no body: begin, prepare, commit and rollback. Such a request can have reached the server
      *       whole, also when the connection failed while it was being sent, so the one sent again is marked
@@ -337,8 +347,10 @@ final class KeepAliveHttpClient implements Closeable {
      *       and not answered OK is checked against the label state as one whose response was lost, see
      *       {@link TransactionStreamLoader#commit}.</li>
      * </ul>
-     * A request whose body was sent, a load, is not sent again. Everything else is left to the default
-     * handler, which resends a request only if it was not sent completely.
+     * A request whose body started to go out, a load, is not sent again, on any connection, also when sending
+     * the body failed and the request does not count as sent: the server may have taken part of the body, see
+     * {@link #REQUEST_BODY_STARTED}, and the load would then add rows to its transaction twice. Everything else is
+     * left to the default handler, which resends a request only if it was not sent completely.
      */
     static final class KeepAliveRetryHandler extends DefaultHttpRequestRetryHandler {
 
@@ -350,8 +362,10 @@ final class KeepAliveHttpClient implements Closeable {
 
         @Override
         public boolean retryRequest(IOException exception, int executionCount, HttpContext context) {
-            // Removed, so that a later attempt that fails before it is sent is not taken as one on a reused connection
+            // Removed, so that a later attempt that fails before it is sent is not taken as one on a reused connection,
+            // or as one whose body started to go out
             boolean reused = Boolean.TRUE.equals(context.removeAttribute(CONNECTION_REUSED));
+            boolean bodyStarted = Boolean.TRUE.equals(context.removeAttribute(REQUEST_BODY_STARTED));
             if (reused && !(exception instanceof InterruptedIOException)) {
                 LOG.warn("A reused HTTP connection failed ({}), closing the idle connections", exception.toString());
                 connectionManager.closeIdleConnections(0, TimeUnit.MILLISECONDS);
@@ -361,12 +375,13 @@ final class KeepAliveHttpClient implements Closeable {
                         context.setAttribute(REQUEST_RESENT, Boolean.TRUE);
                         return true;
                     }
-                    if (!clientContext.isRequestSent()) {
+                    if (!bodyStarted) {
                         return true;
                     }
                 }
             }
-            return super.retryRequest(exception, executionCount, context);
+            // The default handler resends a request whose body failed part of the way: it does not count as sent
+            return !bodyStarted && super.retryRequest(exception, executionCount, context);
         }
 
         private static boolean hasEntity(HttpRequest request) {
