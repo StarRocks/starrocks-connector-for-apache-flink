@@ -51,6 +51,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -298,8 +300,8 @@ public class HttpKeepAliveTest {
     @Test(timeout = 60_000)
     public void testConnectionClosedByTheServerWhileIdleIsNotUsed() throws Exception {
         // The server closes every connection after its response, without saying so in the response, so
-        // the pool keeps the connection. Sent on it, a begin would fail: a POST that has been sent is not
-        // retried. The check before reusing an idle connection finds that it was closed.
+        // the pool keeps the connection. The check before reusing a connection idle for over 2 s finds
+        // that it was closed.
         RawHttpServer fe = RawHttpServer.closingAfterEachResponse();
         closeables.add(fe);
         TransactionStreamLoader loader = startedLoader(properties(fe.getBaseUrl(), true).build());
@@ -309,6 +311,58 @@ public class HttpKeepAliveTest {
         Assert.assertTrue(loader.beginTransaction("label-closed-2", DB));
 
         Assert.assertEquals(2, fe.getRequestsByConnection().size());
+    }
+
+    @Test(timeout = 60_000)
+    public void testRequestOnAConnectionTheServerJustClosedIsSentAgain() throws Exception {
+        // As above, but the second begin follows at once, so the connection is not checked before it is
+        // reused. The begin fails on it without a response, and a POST that has been sent is not resent
+        // by HttpClient. It has no body, so the server cannot have taken it, and it is sent again.
+        RawHttpServer fe = RawHttpServer.closingAfterEachResponse();
+        closeables.add(fe);
+        TransactionStreamLoader loader = startedLoader(properties(fe.getBaseUrl(), true).build());
+
+        Assert.assertTrue(loader.beginTransaction("label-just-closed-1", DB));
+        Assert.assertTrue(loader.beginTransaction("label-just-closed-2", DB));
+
+        List<List<String>> requestsByConnection = fe.getRequestsByConnection();
+        Assert.assertEquals("each begin should have reached the server once, on its own connection: "
+                + requestsByConnection, 2, requestsByConnection.size());
+        for (List<String> requests : requestsByConnection) {
+            Assert.assertEquals(1, requests.size());
+        }
+    }
+
+    @Test(timeout = 60_000)
+    public void testRequestsSurviveTheServerClosingItsIdleConnections() throws Exception {
+        // What nginx does on a reload. With several closed connections in the pool, sending the failed
+        // request again would land on another closed one, so they are all dropped first.
+        RawHttpServer fe = RawHttpServer.answeringOk(300);
+        closeables.add(fe);
+        TransactionStreamLoader loader = startedLoader(properties(fe.getBaseUrl(), true).build());
+
+        // Three begins at once leave three idle connections in the pool
+        ExecutorService threads = Executors.newFixedThreadPool(3);
+        try {
+            List<Future<Boolean>> begins = new ArrayList<>();
+            for (int i = 0; i < 3; i++) {
+                String label = "label-reload-" + i;
+                begins.add(threads.submit(() -> loader.beginTransaction(label, DB)));
+            }
+            for (Future<Boolean> begin : begins) {
+                Assert.assertTrue(begin.get(30, TimeUnit.SECONDS));
+            }
+        } finally {
+            threads.shutdownNow();
+        }
+        Assert.assertEquals(3, loader.getKeepAliveClient().getTotalStats().getAvailable());
+
+        fe.closeAllConnections();
+        Thread.sleep(200);
+
+        for (int i = 0; i < 3; i++) {
+            Assert.assertTrue(loader.beginTransaction("label-after-reload-" + i, DB));
+        }
     }
 
     @Test(timeout = 60_000)
@@ -456,16 +510,25 @@ public class HttpKeepAliveTest {
      */
     private static final class RawHttpServer implements Closeable {
 
+        private static final String OK_BODY = "{\"Status\":\"OK\",\"Message\":\"\"}";
+        private static final String OK_RESPONSE = "HTTP/1.1 200 OK\r\n"
+                + "Content-Type: application/json\r\n"
+                + "Content-Length: " + OK_BODY.length() + "\r\n"
+                + "\r\n"
+                + OK_BODY;
+
         private final ServerSocket serverSocket;
         /** The full response to a request, from its target (path and query). */
         private final Function<String, String> responder;
         private final boolean closeAfterResponse;
+        private final long responseDelayMs;
         private final ExecutorService executor = Executors.newCachedThreadPool(runnable -> {
             Thread thread = new Thread(runnable, "raw-http-server");
             thread.setDaemon(true);
             return thread;
         });
         private final List<List<String>> requestsByConnection = new CopyOnWriteArrayList<>();
+        private final Set<Socket> openConnections = ConcurrentHashMap.newKeySet();
 
         /**
          * Redirects every request to {@code target} with a 307 and keeps the connection open, as the FE
@@ -476,24 +539,33 @@ public class HttpKeepAliveTest {
                     + "Location: " + target + path + "\r\n"
                     + "Content-Length: 0\r\n"
                     + "Connection: keep-alive\r\n"
-                    + "\r\n", false);
+                    + "\r\n", false, 0);
         }
 
         /** Answers every request with {@code Status: OK} and then closes the connection without saying so. */
         static RawHttpServer closingAfterEachResponse() throws IOException {
-            String body = "{\"Status\":\"OK\",\"Message\":\"\"}";
-            return new RawHttpServer(path -> "HTTP/1.1 200 OK\r\n"
-                    + "Content-Type: application/json\r\n"
-                    + "Content-Length: " + body.length() + "\r\n"
-                    + "\r\n"
-                    + body, true);
+            return new RawHttpServer(path -> OK_RESPONSE, true, 0);
         }
 
-        private RawHttpServer(Function<String, String> responder, boolean closeAfterResponse) throws IOException {
+        /** Answers every request with {@code Status: OK} after {@code delayMs}, keeping the connection open. */
+        static RawHttpServer answeringOk(long delayMs) throws IOException {
+            return new RawHttpServer(path -> OK_RESPONSE, false, delayMs);
+        }
+
+        private RawHttpServer(Function<String, String> responder, boolean closeAfterResponse, long responseDelayMs)
+                throws IOException {
             this.serverSocket = new ServerSocket(0, 50, InetAddress.getLoopbackAddress());
             this.responder = responder;
             this.closeAfterResponse = closeAfterResponse;
+            this.responseDelayMs = responseDelayMs;
             executor.execute(this::acceptConnections);
+        }
+
+        /** Closes every open connection, as nginx closes its idle connections on a reload. */
+        void closeAllConnections() throws IOException {
+            for (Socket socket : openConnections) {
+                socket.close();
+            }
         }
 
         String getBaseUrl() {
@@ -525,6 +597,7 @@ public class HttpKeepAliveTest {
         }
 
         private void serve(Socket socket, List<String> requests) {
+            openConnections.add(socket);
             try (Socket connection = socket;
                  BufferedReader in = new BufferedReader(
                          new InputStreamReader(connection.getInputStream(), StandardCharsets.ISO_8859_1))) {
@@ -540,14 +613,19 @@ public class HttpKeepAliveTest {
                     if (parts.length < 2) {
                         return;
                     }
+                    if (responseDelayMs > 0) {
+                        Thread.sleep(responseDelayMs);
+                    }
                     out.write(responder.apply(parts[1]).getBytes(StandardCharsets.ISO_8859_1));
                     out.flush();
                     if (closeAfterResponse) {
                         return;
                     }
                 }
-            } catch (IOException e) {
-                // the client closed the connection
+            } catch (IOException | InterruptedException e) {
+                // the client closed the connection, or the server is shutting down
+            } finally {
+                openConnections.remove(socket);
             }
         }
 

@@ -21,6 +21,7 @@
 package com.starrocks.data.load.stream;
 
 import org.apache.http.HttpClientConnection;
+import org.apache.http.HttpEntityEnclosingRequest;
 import org.apache.http.HttpException;
 import org.apache.http.HttpRequest;
 import org.apache.http.HttpResponse;
@@ -31,6 +32,7 @@ import org.apache.http.client.protocol.HttpClientContext;
 import org.apache.http.impl.client.BasicCookieStore;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.DefaultClientConnectionReuseStrategy;
+import org.apache.http.impl.client.DefaultHttpRequestRetryHandler;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.client.IdleConnectionEvictor;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
@@ -42,6 +44,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.io.InterruptedIOException;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -49,7 +52,7 @@ import java.util.concurrent.TimeUnit;
  * sends its loads and transaction requests through one of these, instead of opening a new TCP (and
  * TLS) connection for every request.
  *
- * <p>Reusing connections brings three problems, which this class takes care of:
+ * <p>Reusing connections brings four problems, which this class takes care of:
  * <ul>
  *   <li><b>Requests whose body was not sent.</b> A load is a PUT with {@code Expect: 100-continue}.
  *       The FE answers a transaction load with a 307 redirect before the body is sent and keeps the
@@ -62,6 +65,13 @@ import java.util.concurrent.TimeUnit;
  *       closed, so it must be shorter than that of any load balancer in between. A connection idle for
  *       more than {@link #VALIDATE_AFTER_INACTIVITY_MS} is also checked before it is reused, so that
  *       one the server closed in the meantime is not used.</li>
+ *   <li><b>Idle connections closed by the server just before they are reused.</b> nginx closes all
+ *       its idle connections on a reload, and a connection idle for less than
+ *       {@link #VALIDATE_AFTER_INACTIVITY_MS} is not checked, so the next requests fail without a
+ *       response. HttpClient does not resend a request it has sent, such as a commit, which has no
+ *       body. When a reused connection fails, the other idle connections are closed too, and the
+ *       request is sent again on a new connection if the server cannot have taken it, see
+ *       {@link KeepAliveRetryHandler}.</li>
  *   <li><b>Socket timeouts left over from an earlier request.</b> HttpClient sets the socket timeout
  *       of a connection only for a request that specifies one, so a request without one would keep the
  *       timeout of the request the connection served before. Such a request gets no timeout, which is
@@ -91,6 +101,9 @@ final class KeepAliveHttpClient implements Closeable {
      */
     static final String REQUEST_BODY_SKIPPED = "starrocks.request-body-skipped";
 
+    /** Context attribute that is {@code true} when the request is sent on a connection that served earlier requests. */
+    static final String CONNECTION_REUSED = "starrocks.connection-reused";
+
     private final int maxConnectionsPerHost;
     private final long idleTimeoutMs;
     private final PoolingHttpClientConnectionManager connectionManager;
@@ -115,6 +128,7 @@ final class KeepAliveHttpClient implements Closeable {
                 .setConnectionManager(connectionManager)
                 .setRequestExecutor(new KeepAliveRequestExecutor(waitForContinueTimeoutMs))
                 .setConnectionReuseStrategy(new KeepAliveReuseStrategy())
+                .setRetryHandler(new KeepAliveRetryHandler(connectionManager))
                 .setRedirectStrategy(redirectStrategy)
                 .build();
         long checkIntervalMs = Math.max(MIN_IDLE_CHECK_INTERVAL_MS, Math.min(idleTimeoutMs, MAX_IDLE_CHECK_INTERVAL_MS));
@@ -163,8 +177,9 @@ final class KeepAliveHttpClient implements Closeable {
     }
 
     /**
-     * Records whether the server answered before the request body was sent, and gives a request
-     * without a socket timeout no timeout, instead of the one its connection was left with.
+     * Records whether the connection served earlier requests and whether the server answered before the
+     * request body was sent, and gives a request without a socket timeout no timeout, instead of the one
+     * its connection was left with.
      */
     static final class KeepAliveRequestExecutor extends HttpRequestExecutor {
 
@@ -175,6 +190,7 @@ final class KeepAliveHttpClient implements Closeable {
         @Override
         public HttpResponse execute(HttpRequest request, HttpClientConnection conn, HttpContext context)
                 throws IOException, HttpException {
+            context.setAttribute(CONNECTION_REUSED, conn.getMetrics().getRequestCount() > 0);
             if (HttpClientContext.adapt(context).getRequestConfig().getSocketTimeout() < 0) {
                 // HttpClient leaves the socket timeout alone for -1. A new connection starts with 0 (none).
                 conn.setSocketTimeout(0);
@@ -199,10 +215,50 @@ final class KeepAliveHttpClient implements Closeable {
 
         @Override
         public boolean keepAlive(HttpResponse response, HttpContext context) {
+            // A response arrived, so this attempt did not fail; a redirect starts a new one
+            context.removeAttribute(CONNECTION_REUSED);
             if (Boolean.TRUE.equals(context.getAttribute(REQUEST_BODY_SKIPPED))) {
                 return false;
             }
             return super.keepAlive(response, context);
+        }
+    }
+
+    /**
+     * Handles a request that fails on a reused connection, other than by a timeout: the server most
+     * likely closed the connection while it was idle in the pool. The other idle connections are
+     * closed, since they are likely closed as well, and the request is sent again, once, on a new
+     * connection if the server cannot have taken it: it has no body (begin, prepare, commit, rollback),
+     * or its body was not sent. A request whose body was sent is not sent again. Everything else is left
+     * to the default handler, which resends a request only if it was not sent completely.
+     */
+    static final class KeepAliveRetryHandler extends DefaultHttpRequestRetryHandler {
+
+        private final PoolingHttpClientConnectionManager connectionManager;
+
+        KeepAliveRetryHandler(PoolingHttpClientConnectionManager connectionManager) {
+            this.connectionManager = connectionManager;
+        }
+
+        @Override
+        public boolean retryRequest(IOException exception, int executionCount, HttpContext context) {
+            // Removed, so that a later attempt that fails before it is sent is not taken as one on a reused connection
+            boolean reused = Boolean.TRUE.equals(context.removeAttribute(CONNECTION_REUSED));
+            if (reused && !(exception instanceof InterruptedIOException)) {
+                LOG.warn("A reused HTTP connection failed ({}), closing the idle connections", exception.toString());
+                connectionManager.closeIdleConnections(0, TimeUnit.MILLISECONDS);
+                HttpClientContext clientContext = HttpClientContext.adapt(context);
+                if (executionCount == 1
+                        && (!hasEntity(clientContext.getRequest()) || !clientContext.isRequestSent())) {
+                    return true;
+                }
+            }
+            return super.retryRequest(exception, executionCount, context);
+        }
+
+        private static boolean hasEntity(HttpRequest request) {
+            return request instanceof HttpEntityEnclosingRequest
+                    && ((HttpEntityEnclosingRequest) request).getEntity() != null;
         }
     }
 }
