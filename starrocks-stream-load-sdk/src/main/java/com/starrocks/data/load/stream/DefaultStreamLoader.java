@@ -110,7 +110,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
             if (properties.isEnableHttpKeepAlive()) {
                 this.keepAliveClient = new KeepAliveHttpClient(maxConnectionsPerHost(properties),
                         properties.getWaitForContinueTimeoutMs(), properties.getHttpKeepAliveIdleTimeoutMs(),
-                        redirectAnyMethod());
+                        properties.getConnectTimeout(), redirectAnyMethod());
             }
             this.executorService = new ScheduledThreadPoolExecutor(
                     properties.getIoThreadCount(),

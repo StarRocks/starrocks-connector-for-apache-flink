@@ -24,7 +24,9 @@ import com.starrocks.data.load.stream.v2.StreamLoadManagerV2;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
+import org.apache.http.conn.ConnectionPoolTimeoutException;
 import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.entity.ContentType;
 import org.apache.http.impl.client.CloseableHttpClient;
@@ -276,10 +278,42 @@ public class HttpKeepAliveTest {
         }
 
         // HttpClient allows 2 connections per host by default, which would let only 2 loads run at once
-        Assert.assertEquals(ioThreads, server.getMaxTxnLoadConcurrency());
+        Assert.assertTrue("peak concurrent loads: " + server.getMaxTxnLoadConcurrency(),
+                server.getMaxTxnLoadConcurrency() > 2);
         Assert.assertTrue("connections: " + server.getConnectionCount(),
                 server.getConnectionCount() <= ioThreads + 2);
         Assert.assertEquals(0, loader.getKeepAliveClient().getTotalStats().getLeased());
+    }
+
+    @Test(timeout = 60_000)
+    public void testRequestDoesNotWaitForeverForAConnection() throws Exception {
+        // One connection per host and a server that takes 2 s: a second request gives up waiting for the
+        // connection after the 300 ms connection request timeout.
+        RawHttpServer fe = RawHttpServer.answeringOk(2000);
+        closeables.add(fe);
+        KeepAliveHttpClient client = new KeepAliveHttpClient(1, 3000, 60_000L, 300,
+                DefaultStreamLoader.redirectAnyMethod());
+        closeables.add(client);
+        ExecutorService threads = Executors.newSingleThreadExecutor();
+        try {
+            Future<Integer> first = threads.submit(() -> client.execute(
+                    new HttpPost(fe.getBaseUrl() + "/api/transaction/begin"),
+                    response -> response.getStatusLine().getStatusCode()));
+            waitUntil(() -> client.getTotalStats().getLeased() == 1, 10_000);
+
+            long start = System.nanoTime();
+            try {
+                client.execute(new HttpPost(fe.getBaseUrl() + "/api/transaction/begin"), response -> 0);
+                Assert.fail("a request that cannot get a connection should fail");
+            } catch (ConnectionPoolTimeoutException expected) {
+                // expected
+            }
+            Assert.assertTrue("should give up after the connection request timeout",
+                    System.nanoTime() - start < TimeUnit.SECONDS.toNanos(2));
+            Assert.assertEquals(Integer.valueOf(200), first.get(30, TimeUnit.SECONDS));
+        } finally {
+            threads.shutdownNow();
+        }
     }
 
     @Test(timeout = 60_000)

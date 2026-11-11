@@ -26,6 +26,7 @@ import org.apache.http.HttpException;
 import org.apache.http.HttpRequest;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.RedirectStrategy;
+import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpRequestBase;
 import org.apache.http.client.protocol.HttpClientContext;
@@ -70,7 +71,7 @@ import java.util.concurrent.TimeUnit;
  *       {@link #VALIDATE_AFTER_INACTIVITY_MS} is not checked, so the next requests fail without a
  *       response. HttpClient does not resend a request it has sent, such as a commit, which has no
  *       body. When a reused connection fails, the other idle connections are closed too, and the
- *       request is sent again on a new connection if the server cannot have taken it, see
+ *       request is sent again on a new connection where that is safe, see
  *       {@link KeepAliveRetryHandler}.</li>
  *   <li><b>Socket timeouts left over from an earlier request.</b> HttpClient sets the socket timeout
  *       of a connection only for a request that specifies one, so a request without one would keep the
@@ -86,10 +87,11 @@ final class KeepAliveHttpClient implements Closeable {
     static final int VALIDATE_AFTER_INACTIVITY_MS = 2000;
 
     /**
-     * Idle connections are kept for at most this many hosts. When the pool is full, a request to yet
-     * another host closes the idle connection that was used least recently instead of waiting.
+     * Idle connections are kept for at most this many hosts. Loads sent to the FE are redirected to
+     * a BE or CN, which can differ from one transaction to the next. When the pool is full, a request to
+     * yet another host closes the idle connection that was used least recently instead of waiting.
      */
-    static final int MAX_HOSTS = 8;
+    static final int MAX_HOSTS = 32;
 
     /** Bounds of the interval at which idle connections are looked for and closed. */
     private static final long MIN_IDLE_CHECK_INTERVAL_MS = 100L;
@@ -106,6 +108,7 @@ final class KeepAliveHttpClient implements Closeable {
 
     private final int maxConnectionsPerHost;
     private final long idleTimeoutMs;
+    private final int connectionRequestTimeoutMs;
     private final PoolingHttpClientConnectionManager connectionManager;
     private final CloseableHttpClient client;
     private final IdleConnectionEvictor idleConnectionEvictor;
@@ -114,12 +117,15 @@ final class KeepAliveHttpClient implements Closeable {
      * @param maxConnectionsPerHost the most connections to one host, in use and idle together
      * @param waitForContinueTimeoutMs how long to wait for {@code 100 Continue} before sending a body
      * @param idleTimeoutMs a connection idle for longer than this is closed
+     * @param connectionRequestTimeoutMs how long a request waits for a connection when all of its
+     *        host's connections are in use
      * @param redirectStrategy which redirects to follow
      */
     KeepAliveHttpClient(int maxConnectionsPerHost, int waitForContinueTimeoutMs, long idleTimeoutMs,
-                        RedirectStrategy redirectStrategy) {
+                        int connectionRequestTimeoutMs, RedirectStrategy redirectStrategy) {
         this.maxConnectionsPerHost = maxConnectionsPerHost;
         this.idleTimeoutMs = idleTimeoutMs;
+        this.connectionRequestTimeoutMs = connectionRequestTimeoutMs;
         this.connectionManager = new PoolingHttpClientConnectionManager();
         connectionManager.setDefaultMaxPerRoute(maxConnectionsPerHost);
         connectionManager.setMaxTotal(maxConnectionsPerHost * MAX_HOSTS);
@@ -143,6 +149,14 @@ final class KeepAliveHttpClient implements Closeable {
      * response was read to the end and the connection can be reused, and closes it otherwise.
      */
     <T> T execute(HttpRequestBase request, DefaultStreamLoader.ResponseReader<T> reader) throws IOException {
+        RequestConfig config = request.getConfig();
+        if (config == null || config.getConnectionRequestTimeout() <= 0) {
+            // The pool has a connection for every thread that sends requests, so no request should wait for
+            // one. Should one ever have to, it fails after this time instead of waiting without end.
+            request.setConfig(RequestConfig.copy(config == null ? RequestConfig.DEFAULT : config)
+                    .setConnectionRequestTimeout(connectionRequestTimeoutMs)
+                    .build());
+        }
         HttpClientContext context = HttpClientContext.create();
         // Cookies last for one request and its redirects, as with the client built per request before
         context.setCookieStore(new BasicCookieStore());
@@ -173,7 +187,8 @@ final class KeepAliveHttpClient implements Closeable {
 
     @Override
     public String toString() {
-        return "maxConnectionsPerHost=" + maxConnectionsPerHost + ", idleTimeoutMs=" + idleTimeoutMs;
+        return "maxConnectionsPerHost=" + maxConnectionsPerHost + ", idleTimeoutMs=" + idleTimeoutMs
+                + ", connectionRequestTimeoutMs=" + connectionRequestTimeoutMs;
     }
 
     /**
@@ -225,12 +240,19 @@ final class KeepAliveHttpClient implements Closeable {
     }
 
     /**
-     * Handles a request that fails on a reused connection, other than by a timeout: the server most
-     * likely closed the connection while it was idle in the pool. The other idle connections are
-     * closed, since they are likely closed as well, and the request is sent again, once, on a new
-     * connection if the server cannot have taken it: it has no body (begin, prepare, commit, rollback),
-     * or its body was not sent. A request whose body was sent is not sent again. Everything else is left
-     * to the default handler, which resends a request only if it was not sent completely.
+     * Handles a request that fails on a reused connection, other than by a timeout: most likely the
+     * server closed the connection while it was idle in the pool, and did not see the request. The other
+     * idle connections are closed, since they are likely closed as well, and the request is sent again,
+     * once, on a new connection in two cases:
+     * <ul>
+     *   <li>Its body was not sent, so the server cannot have taken it.</li>
+     *   <li>It has no body: begin, prepare, commit and rollback. Such a request can have reached the
+     *       server when the connection was reset while it waited for the response. Sending it again is
+     *       then still safe: a commit sent twice is checked against the label state, and a begin sent
+     *       twice fails on the existing label, just as the begin whose response was lost would have.</li>
+     * </ul>
+     * A request whose body was sent, a load, is not sent again. Everything else is left to the default
+     * handler, which resends a request only if it was not sent completely.
      */
     static final class KeepAliveRetryHandler extends DefaultHttpRequestRetryHandler {
 
