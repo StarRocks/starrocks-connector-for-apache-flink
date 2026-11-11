@@ -30,6 +30,7 @@ import org.apache.http.client.methods.HttpPut;
 import org.apache.http.conn.ConnectionPoolTimeoutException;
 import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.entity.ContentType;
+import org.apache.http.entity.HttpEntityWrapper;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
@@ -481,6 +482,62 @@ public class HttpKeepAliveTest {
     }
 
     @Test(timeout = 60_000)
+    public void testLoadOnAConnectionTheServerClosesBeforeTheBodyIsSentAgain() throws Exception {
+        // The server closes the connection of the begin when the load on it arrives, after reading the
+        // request headers and without a response. The load waits for 100 Continue and finds the connection
+        // closed. Were its body sent into the closed connection, the load would count as sent, and a load
+        // that was sent is not sent again. Its body was not sent, so it is sent again on a new connection.
+        AtomicInteger loads = new AtomicInteger();
+        RawHttpServer fe = RawHttpServer.responding(target ->
+                target.startsWith("/api/transaction/load") && loads.incrementAndGet() == 1
+                        ? null : RawHttpServer.OK_RESPONSE);
+        closeables.add(fe);
+        TransactionStreamLoader loader = startedLoader(properties(fe.getBaseUrl(), true).build());
+        String label = "label-closed-before-body";
+
+        Assert.assertTrue(loader.beginTransaction(label, DB));
+        LoadRegion region = new LoadRegion(label);
+        loader.sendToSR(region);
+
+        region.assertCompleted();
+        // The server answers the load sent again before its body, so the body was not sent at all, and in
+        // particular not into the closed connection
+        Assert.assertEquals(0, region.getBodyWrites());
+        List<List<String>> requestsByConnection = fe.getRequestsByConnection();
+        Assert.assertEquals("the load should have been sent again on a new connection: " + requestsByConnection,
+                2, requestsByConnection.size());
+        Assert.assertEquals(2, requestsByConnection.get(0).size());
+        Assert.assertEquals(1, requestsByConnection.get(1).size());
+        Assert.assertTrue(requestsByConnection.get(1).get(0).startsWith("PUT /api/transaction/load"));
+    }
+
+    @Test(timeout = 60_000)
+    public void testBodyIsSentToAServerThatDoesNotAnswerTheRequestHeaders() throws Exception {
+        // A server that waits for the body without answering the request headers with 100 Continue gets the
+        // body once the wait for 100 Continue is over, also on a reused connection: a connection that is
+        // still open is not taken for one the server closed.
+        RawHttpServer fe = RawHttpServer.answeringOkAfterTheBody();
+        closeables.add(fe);
+        KeepAliveHttpClient client = new KeepAliveHttpClient(2, 200, 60_000L, 1000,
+                DefaultStreamLoader.redirectAnyMethod());
+        closeables.add(client);
+
+        for (int i = 0; i < 2; i++) {
+            HttpPut load = new HttpPut(fe.getBaseUrl() + "/api/transaction/load");
+            load.setConfig(RequestConfig.custom().setExpectContinueEnabled(true).build());
+            load.setEntity(jsonRow());
+            int status = client.execute(load, response -> {
+                EntityUtils.consume(response.getEntity());
+                return response.getStatusLine().getStatusCode();
+            });
+            Assert.assertEquals(200, status);
+        }
+
+        Assert.assertEquals(1, fe.getRequestsByConnection().size());
+        Assert.assertEquals(Collections.nCopies(2, "{\"order_id\":1}"), fe.getBodies());
+    }
+
+    @Test(timeout = 60_000)
     public void testRequestsSurviveTheServerClosingItsIdleConnections() throws Exception {
         // What nginx does on a reload. With several closed connections in the pool, sending the failed
         // request again would land on another closed one, so they are all dropped first.
@@ -592,11 +649,15 @@ public class HttpKeepAliveTest {
         }
     }
 
-    /** A region with one JSON row to load under {@code label}, which records how its load ended. */
+    /**
+     * A region with one JSON row to load under {@code label}, which records how its load ended and how often
+     * the body was sent.
+     */
     private static final class LoadRegion implements TableRegion {
         private final String label;
         private final AtomicReference<StreamLoadResponse> completed = new AtomicReference<>();
         private final AtomicReference<Throwable> failed = new AtomicReference<>();
+        private final AtomicInteger bodyWrites = new AtomicInteger();
 
         LoadRegion(String label) {
             this.label = label;
@@ -608,6 +669,10 @@ public class HttpKeepAliveTest {
                 throw new AssertionError("the load failed", failure);
             }
             Assert.assertNotNull("the load did not complete", completed.get());
+        }
+
+        int getBodyWrites() {
+            return bodyWrites.get();
         }
 
         @Override public StreamLoadTableProperties getProperties() { return null; }
@@ -647,18 +712,27 @@ public class HttpKeepAliveTest {
         @Override public Future<?> getResult() { return null; }
         @Override public boolean isReadable() { return false; }
         @Override public boolean isFlushing() { return true; }
-        @Override public HttpEntity getHttpEntity() { return jsonRow(); }
+        @Override public HttpEntity getHttpEntity() {
+            return new HttpEntityWrapper(jsonRow()) {
+                @Override
+                public void writeTo(OutputStream out) throws IOException {
+                    bodyWrites.incrementAndGet();
+                    super.writeTo(out);
+                }
+            };
+        }
     }
 
     /**
      * A bare HTTP/1.1 server for behavior the JDK server does not let a test control. It answers each
-     * request as soon as it has read the request headers, without reading a body, and records the
-     * request line of every request, per connection.
+     * request as soon as it has read the request headers, without reading a body unless it is made to,
+     * and records the request line of every request, per connection.
      */
     private static final class RawHttpServer implements Closeable {
 
         private static final String OK_BODY = "{\"Status\":\"OK\",\"Message\":\"\"}";
         private static final String OK_RESPONSE = json(OK_BODY);
+        private static final String CONTENT_LENGTH = "Content-Length:";
 
         private final ServerSocket serverSocket;
         /**
@@ -668,6 +742,8 @@ public class HttpKeepAliveTest {
         private final Function<String, String> responder;
         private final boolean closeAfterResponse;
         private final long responseDelayMs;
+        /** Whether to read the body of each request, without answering 100 Continue, before the response. */
+        private final boolean readBody;
         private final ExecutorService executor = Executors.newCachedThreadPool(runnable -> {
             Thread thread = new Thread(runnable, "raw-http-server");
             thread.setDaemon(true);
@@ -675,6 +751,7 @@ public class HttpKeepAliveTest {
         });
         private final List<List<String>> requestsByConnection = new CopyOnWriteArrayList<>();
         private final Set<Socket> openConnections = ConcurrentHashMap.newKeySet();
+        private final List<String> bodies = new CopyOnWriteArrayList<>();
 
         /**
          * Redirects every request to {@code target} with a 307 and keeps the connection open, as the FE
@@ -685,22 +762,30 @@ public class HttpKeepAliveTest {
                     + "Location: " + target + path + "\r\n"
                     + "Content-Length: 0\r\n"
                     + "Connection: keep-alive\r\n"
-                    + "\r\n", false, 0);
+                    + "\r\n", false, 0, false);
         }
 
         /** Answers every request with {@code Status: OK} and then closes the connection without saying so. */
         static RawHttpServer closingAfterEachResponse() throws IOException {
-            return new RawHttpServer(path -> OK_RESPONSE, true, 0);
+            return new RawHttpServer(path -> OK_RESPONSE, true, 0, false);
         }
 
         /** Answers every request with {@code Status: OK} after {@code delayMs}, keeping the connection open. */
         static RawHttpServer answeringOk(long delayMs) throws IOException {
-            return new RawHttpServer(path -> OK_RESPONSE, false, delayMs);
+            return new RawHttpServer(path -> OK_RESPONSE, false, delayMs, false);
         }
 
         /** Answers each request with what {@code responder} returns for its target, see {@link #responder}. */
         static RawHttpServer responding(Function<String, String> responder) throws IOException {
-            return new RawHttpServer(responder, false, 0);
+            return new RawHttpServer(responder, false, 0, false);
+        }
+
+        /**
+         * Reads the body of each request, without answering the request headers with 100 Continue, and then
+         * answers with {@code Status: OK}, keeping the connection open.
+         */
+        static RawHttpServer answeringOkAfterTheBody() throws IOException {
+            return new RawHttpServer(path -> OK_RESPONSE, false, 0, true);
         }
 
         /** A 200 response with a JSON body, and the given header lines. */
@@ -712,12 +797,13 @@ public class HttpKeepAliveTest {
             return response.append("Content-Length: ").append(body.length()).append("\r\n\r\n").append(body).toString();
         }
 
-        private RawHttpServer(Function<String, String> responder, boolean closeAfterResponse, long responseDelayMs)
-                throws IOException {
+        private RawHttpServer(Function<String, String> responder, boolean closeAfterResponse, long responseDelayMs,
+                              boolean readBody) throws IOException {
             this.serverSocket = new ServerSocket(0, 50, InetAddress.getLoopbackAddress());
             this.responder = responder;
             this.closeAfterResponse = closeAfterResponse;
             this.responseDelayMs = responseDelayMs;
+            this.readBody = readBody;
             executor.execute(this::acceptConnections);
         }
 
@@ -730,6 +816,11 @@ public class HttpKeepAliveTest {
 
         String getBaseUrl() {
             return "http://127.0.0.1:" + serverSocket.getLocalPort();
+        }
+
+        /** The bodies read, in the order they arrived, when the server reads them. */
+        List<String> getBodies() {
+            return new ArrayList<>(bodies);
         }
 
         /** The request lines that arrived on each connection, in the order the connections were accepted. */
@@ -765,13 +856,29 @@ public class HttpKeepAliveTest {
                 String requestLine;
                 while ((requestLine = in.readLine()) != null) {
                     requests.add(requestLine);
+                    int contentLength = 0;
                     String header;
                     do {
                         header = in.readLine();
+                        if (header != null
+                                && header.regionMatches(true, 0, CONTENT_LENGTH, 0, CONTENT_LENGTH.length())) {
+                            contentLength = Integer.parseInt(header.substring(CONTENT_LENGTH.length()).trim());
+                        }
                     } while (header != null && !header.isEmpty());
                     String[] parts = requestLine.split(" ");
                     if (parts.length < 2) {
                         return;
+                    }
+                    if (readBody) {
+                        char[] body = new char[contentLength];
+                        for (int read = 0; read < contentLength; ) {
+                            int n = in.read(body, read, contentLength - read);
+                            if (n < 0) {
+                                return;
+                            }
+                            read += n;
+                        }
+                        bodies.add(new String(body));
                     }
                     if (responseDelayMs > 0) {
                         Thread.sleep(responseDelayMs);

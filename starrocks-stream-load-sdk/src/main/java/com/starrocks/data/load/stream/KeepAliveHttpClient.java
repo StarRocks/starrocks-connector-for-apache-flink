@@ -25,6 +25,10 @@ import org.apache.http.HttpEntityEnclosingRequest;
 import org.apache.http.HttpException;
 import org.apache.http.HttpRequest;
 import org.apache.http.HttpResponse;
+import org.apache.http.HttpStatus;
+import org.apache.http.HttpVersion;
+import org.apache.http.NoHttpResponseException;
+import org.apache.http.ProtocolException;
 import org.apache.http.client.RedirectStrategy;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -41,6 +45,7 @@ import org.apache.http.impl.client.IdleConnectionEvictor;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.apache.http.pool.PoolStats;
 import org.apache.http.protocol.HttpContext;
+import org.apache.http.protocol.HttpCoreContext;
 import org.apache.http.protocol.HttpRequestExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,9 +77,11 @@ import java.util.concurrent.TimeUnit;
  *       its idle connections on a reload, and a connection idle for less than
  *       {@link #VALIDATE_AFTER_INACTIVITY_MS} is not checked, so the next requests fail without a
  *       response. HttpClient does not resend a request it has sent, such as a commit, which has no
- *       body. When a reused connection fails, the other idle connections are closed too, and the
- *       request is sent again on a new connection where that is safe, see
- *       {@link KeepAliveRetryHandler}. A caller learns that a request was sent again from
+ *       body. Nor does it notice that the server closed the connection while a load waited for
+ *       {@code 100 Continue}: it sends the body into the closed connection, and the load then counts as
+ *       sent. Such a load fails here before its body is sent. When a reused connection fails, the other
+ *       idle connections are closed too, and the request is sent again on a new connection where that
+ *       is safe, see {@link KeepAliveRetryHandler}. A caller learns that a request was sent again from
  *       {@link #executeForReply}.</li>
  *   <li><b>Socket timeouts left over from an earlier request.</b> HttpClient sets the socket timeout
  *       of a connection only for a request that specifies one, so a request without one would keep the
@@ -220,13 +227,17 @@ final class KeepAliveHttpClient implements Closeable {
 
     /**
      * Records whether the connection served earlier requests and whether the server answered before the
-     * request body was sent, and gives a request without a socket timeout no timeout, instead of the one
-     * its connection was left with.
+     * request body was sent, gives a request without a socket timeout no timeout, instead of the one its
+     * connection was left with, and does not send a body into a connection the server closed while the
+     * request waited for {@code 100 Continue}.
      */
     static final class KeepAliveRequestExecutor extends HttpRequestExecutor {
 
+        private final int waitForContinueTimeoutMs;
+
         KeepAliveRequestExecutor(int waitForContinueTimeoutMs) {
             super(waitForContinueTimeoutMs);
+            this.waitForContinueTimeoutMs = waitForContinueTimeoutMs;
         }
 
         @Override
@@ -240,13 +251,56 @@ final class KeepAliveHttpClient implements Closeable {
             return super.execute(request, conn, context);
         }
 
+        /**
+         * As {@link HttpRequestExecutor#doSendRequest}, except when the server closes the connection while
+         * the request waits for {@code 100 Continue}, as when it closes an idle connection just as a request
+         * goes out on it. No response arrives then either, and the superclass takes the closed connection for
+         * a server that does not answer with {@code 100 Continue}: it sends the body into the closed
+         * connection, after which the request counts as sent, and a load that was sent is not sent again.
+         * Here the request fails before its body is sent instead, so that {@link KeepAliveRetryHandler} sends
+         * it again on a new connection.
+         */
         @Override
         protected HttpResponse doSendRequest(HttpRequest request, HttpClientConnection conn, HttpContext context)
                 throws IOException, HttpException {
-            HttpResponse response = super.doSendRequest(request, conn, context);
-            // The superclass returns a response only when a final response arrived while it waited for
-            // 100 Continue, in which case it did not send the body. Redirects reuse the context, and each
-            // hop sets the attribute again.
+            context.setAttribute(HttpCoreContext.HTTP_CONNECTION, conn);
+            context.setAttribute(HttpCoreContext.HTTP_REQ_SENT, Boolean.FALSE);
+            HttpResponse response = null;
+            conn.sendRequestHeader(request);
+            if (request instanceof HttpEntityEnclosingRequest) {
+                HttpEntityEnclosingRequest entityRequest = (HttpEntityEnclosingRequest) request;
+                boolean sendEntity = true;
+                if (entityRequest.expectContinue()
+                        && !request.getRequestLine().getProtocolVersion().lessEquals(HttpVersion.HTTP_1_0)) {
+                    conn.flush();
+                    if (conn.isResponseAvailable(waitForContinueTimeoutMs)) {
+                        response = conn.receiveResponseHeader();
+                        if (canResponseHaveBody(request, response)) {
+                            conn.receiveResponseEntity(response);
+                        }
+                        int status = response.getStatusLine().getStatusCode();
+                        if (status < HttpStatus.SC_OK) {
+                            if (status != HttpStatus.SC_CONTINUE) {
+                                throw new ProtocolException("Unexpected response: " + response.getStatusLine());
+                            }
+                            response = null;
+                        } else {
+                            sendEntity = false;
+                        }
+                    } else if (conn.isStale()) {
+                        // Not a timeout: the server closed the connection, and 100 Continue will not come
+                        throw new NoHttpResponseException(
+                                "The server closed the connection before it answered the request headers");
+                    }
+                }
+                if (sendEntity) {
+                    conn.sendRequestEntity(entityRequest);
+                }
+            }
+            conn.flush();
+            context.setAttribute(HttpCoreContext.HTTP_REQ_SENT, Boolean.TRUE);
+            // A response here is a final response that arrived while the request waited for 100 Continue, in
+            // which case the body was not sent. Redirects reuse the context, and each hop sets the attribute again.
             context.setAttribute(REQUEST_BODY_SKIPPED, response != null);
             return response;
         }
@@ -272,7 +326,9 @@ final class KeepAliveHttpClient implements Closeable {
      * idle connections are closed, since they are likely closed as well, and the request is sent again,
      * once, on a new connection in two cases:
      * <ul>
-     *   <li>Its body was not sent, so the server cannot have taken it.</li>
+     *   <li>Its body was not sent, so the server cannot have taken it, for example a load whose connection the
+     *       server closed while it waited for {@code 100 Continue}, see
+     *       {@link KeepAliveRequestExecutor#doSendRequest}.</li>
      *   <li>It has no body: begin, prepare, commit and rollback. Such a request can have reached the server
      *       whole, also when the connection failed while it was being sent, so the one sent again is marked
      *       with {@link #REQUEST_RESENT}. Each of them then ends no worse than if the first response had been
