@@ -59,26 +59,26 @@ public class StarRocksSinkOptionsHttpKeepAliveTest {
     }
 
     @Test
-    public void testKeepAliveIsOnByDefault() {
+    public void testKeepAliveIsOffByDefault() {
         StarRocksSinkOptions options = base().build();
-        assertTrue(options.isHttpKeepAliveEnabled());
+        assertFalse(options.isHttpKeepAliveEnabled());
         assertEquals(60000, options.getHttpKeepAliveIdleTimeoutMs());
 
         StreamLoadProperties properties = streamLoadProperties(options);
-        assertTrue(properties.isEnableHttpKeepAlive());
+        assertFalse(properties.isEnableHttpKeepAlive());
         assertEquals(60000, properties.getHttpKeepAliveIdleTimeoutMs());
     }
 
     @Test
     public void testOptionsReachTheStreamLoadProperties() {
         StarRocksSinkOptions options = base()
-                .withProperty("sink.http.keep-alive.enabled", "false")
+                .withProperty("sink.http.keep-alive.enabled", "true")
                 .withProperty("sink.http.keep-alive.idle-timeout-ms", "15000")
                 .build();
-        assertFalse(options.isHttpKeepAliveEnabled());
+        assertTrue(options.isHttpKeepAliveEnabled());
 
         StreamLoadProperties properties = streamLoadProperties(options);
-        assertFalse(properties.isEnableHttpKeepAlive());
+        assertTrue(properties.isEnableHttpKeepAlive());
         assertEquals(15000, properties.getHttpKeepAliveIdleTimeoutMs());
     }
 

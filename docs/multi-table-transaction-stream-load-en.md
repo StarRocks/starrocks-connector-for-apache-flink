@@ -47,6 +47,7 @@ Typical scenarios:
 | `database-name` | `*` | Wildcard to enable dynamic multi-table routing |
 | `table-name` | `*` | Wildcard to enable dynamic multi-table routing |
 | `sink.buffer-flush.interval-ms` | `1000` | Controls the commit cycle (set to 1000 for ~1s freshness) |
+| `sink.http.keep-alive.enabled` | `true` | Recommended. Loads and BEGIN / PREPARE / COMMIT / ROLLBACK reuse HTTP connections instead of opening a new connection for every request. Off by default (see Best Practices 6) |
 | `sink.properties.format` | `json` | Data format |
 | `sink.properties.strip_outer_array` | `true` | JSON array parsing |
 
@@ -339,6 +340,7 @@ public class WriteMultipleTablesWithTransaction {
                 .withProperty("sink.semantic", "at-least-once")
                 .withProperty("sink.transaction.multi-table.enabled", "true")  // Enable multi-table txn
                 .withProperty("sink.buffer-flush.interval-ms", "1000")         // ~1s data freshness
+                .withProperty("sink.http.keep-alive.enabled", "true")          // Recommended: reuse HTTP connections
                 .withProperty("sink.properties.format", "json")
                 .withProperty("sink.properties.strip_outer_array", "true")
                 .build();
@@ -737,3 +739,5 @@ Common issues:
 4. **Keep routing strategies stable**: Avoid single transactions writing to an excessive number of distinct tables, which increases transaction duration and failure probability.
 
 5. **Fault injection testing before production**: Kill TaskManagers / introduce network jitter and verify data correctness after checkpoint recovery.
+
+6. **Enable HTTP keep-alive**: Set `sink.http.keep-alive.enabled=true`. A shared transaction sends a BEGIN, many loads and a COMMIT, and without keep-alive each of them opens a new TCP (and TLS) connection. A connection that fails during any of these requests fails the whole shared transaction, which rolls back every table in it and fails the job over, so fewer new connections means fewer such failures, for example behind a load balancer that can reset new connections. With keep-alive on, a request on a reused connection that the server or a load balancer closed is sent again on a new connection where that cannot write data twice. Keep `sink.http.keep-alive.idle-timeout-ms` (default 60000) shorter than the idle timeout of every proxy or load balancer between Flink and StarRocks; an AWS Network Load Balancer drops connections idle for 350 seconds by default.

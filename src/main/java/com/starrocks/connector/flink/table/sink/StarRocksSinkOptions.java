@@ -99,9 +99,9 @@ public class StarRocksSinkOptions implements Serializable {
     public static final ConfigOption<Integer> SINK_IO_THREAD_COUNT = ConfigOptions.key("sink.io.thread-count")
             .intType().defaultValue(2).withDescription("Stream load thread count");
     public static final ConfigOption<Boolean> SINK_HTTP_KEEP_ALIVE_ENABLED = ConfigOptions.key("sink.http.keep-alive.enabled")
-            .booleanType().defaultValue(true).withDescription("Whether stream loads and transaction requests reuse HTTP " +
+            .booleanType().defaultValue(false).withDescription("Whether stream loads and transaction requests reuse HTTP " +
                     "connections (keep-alive) instead of opening a new connection for every request. Takes effect with " +
-                    "sink.version V2. Set it to false to open a new connection for every request, as before 1.2.17.");
+                    "sink.version V2. Off by default: every request opens a new connection unless this is set to true.");
     public static final ConfigOption<Integer> SINK_HTTP_KEEP_ALIVE_IDLE_TIMEOUT = ConfigOptions.key("sink.http.keep-alive.idle-timeout-ms")
             .intType().defaultValue(60000).withDescription("Timeout in milliseconds after which an idle kept-alive HTTP " +
                     "connection is no longer reused; it is closed within 10 seconds after the timeout. It must be " +
