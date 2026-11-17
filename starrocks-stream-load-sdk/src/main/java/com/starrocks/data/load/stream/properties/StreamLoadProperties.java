@@ -91,6 +91,15 @@ public class StreamLoadProperties implements Serializable {
     private final int socketTimeout;
     private final int waitForContinueTimeoutMs;
     private final int ioThreadCount;
+    /**
+     * Whether loads and transaction requests reuse HTTP connections (keep-alive) instead of opening
+     * a new connection for every request.
+     */
+    private final boolean enableHttpKeepAlive;
+    /**
+     * ms. A kept-alive connection that has been idle for longer than this is not reused, and is closed.
+     */
+    private final int httpKeepAliveIdleTimeoutMs;
 
     // default strategy settings
     /**
@@ -153,6 +162,8 @@ public class StreamLoadProperties implements Serializable {
         this.socketTimeout = builder.socketTimeout;
         this.waitForContinueTimeoutMs = builder.waitForContinueTimeoutMs;
         this.ioThreadCount = builder.ioThreadCount;
+        this.enableHttpKeepAlive = builder.enableHttpKeepAlive;
+        this.httpKeepAliveIdleTimeoutMs = builder.httpKeepAliveIdleTimeoutMs;
 
         this.writingThreshold = builder.writingThreshold;
         this.regionBufferRatio = builder.regionBufferRatio;
@@ -288,6 +299,14 @@ public class StreamLoadProperties implements Serializable {
         return ioThreadCount;
     }
 
+    public boolean isEnableHttpKeepAlive() {
+        return enableHttpKeepAlive;
+    }
+
+    public int getHttpKeepAliveIdleTimeoutMs() {
+        return httpKeepAliveIdleTimeoutMs;
+    }
+
     public long getWritingThreshold() {
         return writingThreshold;
     }
@@ -400,6 +419,11 @@ public class StreamLoadProperties implements Serializable {
         private int socketTimeout = -1;
         private int waitForContinueTimeoutMs = DEFAULT_WAIT_FOR_CONTINUE;
         private int ioThreadCount = Runtime.getRuntime().availableProcessors();
+        // Off by default, so that programs using the SDK directly keep opening a connection per request
+        // unless they opt in. The Flink connector sets it from `sink.http.keep-alive.enabled`.
+        private boolean enableHttpKeepAlive = false;
+        // Matches the merge-commit default (`sink.merge-commit.http.idle-connection-timeout-ms`)
+        private int httpKeepAliveIdleTimeoutMs = 60000;
 
         private long writingThreshold = 50L;
         private float regionBufferRatio = 0.6F;
@@ -564,6 +588,20 @@ public class StreamLoadProperties implements Serializable {
                 throw new IllegalArgumentException("ioThreadCount `" + ioThreadCount + "` set failed, must greater to 0");
             }
             this.ioThreadCount = ioThreadCount;
+            return this;
+        }
+
+        public Builder enableHttpKeepAlive(boolean enableHttpKeepAlive) {
+            this.enableHttpKeepAlive = enableHttpKeepAlive;
+            return this;
+        }
+
+        public Builder httpKeepAliveIdleTimeoutMs(int httpKeepAliveIdleTimeoutMs) {
+            if (httpKeepAliveIdleTimeoutMs <= 0) {
+                throw new IllegalArgumentException("httpKeepAliveIdleTimeoutMs `" + httpKeepAliveIdleTimeoutMs +
+                        "ms` set failed, must be greater than 0");
+            }
+            this.httpKeepAliveIdleTimeoutMs = httpKeepAliveIdleTimeoutMs;
             return this;
         }
 
