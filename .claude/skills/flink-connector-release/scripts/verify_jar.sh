@@ -75,6 +75,19 @@ case "$list" in
   *)                   no  "SDK classes ($SDK_CLASS_PATH) not found in jar" ;;
 esac
 
+# --- build JDK ---------------------------------------------------------------
+# The release must be built on JDK 8 (see require_jdk8 in lib.sh). Maven's archiver records the JDK it
+# ran on as `Build-Jdk` in the MANIFEST (`Build-Jdk-Spec` is a different key and does not count). A jar
+# without the entry cannot prove it was built on JDK 8, so that fails too. sed keeps the first match
+# and quits, and a missing MANIFEST reads as empty, so nothing here can trip `set -e`/`pipefail`.
+manifest="$(unzip -p "$JAR" META-INF/MANIFEST.MF 2>/dev/null || true)"
+build_jdk="$(printf '%s\n' "$manifest" | tr -d '\r' | sed -n '/^Build-Jdk:/{s/^Build-Jdk: *//p;q;}')"
+case "$build_jdk" in
+  1.8.*) yes "built on JDK 8 (Build-Jdk: $build_jdk)" ;;
+  "")    no  "MANIFEST has no Build-Jdk — cannot prove the jar was built on JDK 8" ;;
+  *)     no  "built with Build-Jdk: $build_jdk, not 1.8 — rebuild on JDK 8 (export JAVA_HOME=/path/to/jdk8)" ;;
+esac
+
 # --- optional exact version --------------------------------------------------
 if [ -n "$EXPECTED_VERSION" ]; then
   if [ "${conn_ver:-}" = "$EXPECTED_VERSION" ]; then yes "version == $EXPECTED_VERSION"
