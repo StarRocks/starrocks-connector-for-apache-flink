@@ -149,6 +149,31 @@ resolve_versions() {
   if [ "$#" -gt 0 ]; then printf '%s\n' "$@"; else supported_minor_versions "$root" | tr ' ' '\n' | grep -v '^$'; fi
 }
 
+# ---- JDK 8 gate ------------------------------------------------------------
+# The release must be built on JDK 8: the pom compiles with -source/-target 1.8, not --release 8, so a
+# newer javac links against its own class library and the jar can break on a Java 8 runtime (see 00).
+# Maven compiles on the JDK it runs on (JAVA_HOME), so ask `mvn -v` — the same command build.sh and
+# deploy.sh run: ${CUSTOM_MVN:-mvn}, which may carry args (the repo's CI uses `mvn -B -ntp`).
+
+# Print the Java version Maven runs on (e.g. 1.8.0_512), or nothing when it cannot be read. sed quits
+# on the first match instead of piping into head, so no stage of the pipeline is killed by SIGPIPE.
+mvn_java_version() {
+  local -a mvn=(${CUSTOM_MVN:-mvn})
+  { "${mvn[@]}" -v 2>/dev/null || true; } | sed -n '/[Jj]ava version:/{s/.*[Jj]ava version: *\([^, ]*\).*/\1/p;q;}'
+}
+
+# Die unless Maven runs on JDK 8. Stage 00 checks this once, but an agent's shell may not keep
+# JAVA_HOME between commands, so every stage that runs Maven (02, 03, 04) checks it again first.
+require_jdk8() {
+  local stage="$1" v
+  v="$(mvn_java_version)"
+  case "$v" in
+    1.8.*) pass "Maven runs on Java $v" ;;
+    "")    die "$stage: could not determine the Java version from '${CUSTOM_MVN:-mvn} -v' — the release must be built on JDK 8" ;;
+    *)     die "$stage: Maven runs on Java $v, not 1.8 — export JAVA_HOME=/path/to/jdk8 on this stage's command and re-run" ;;
+  esac
+}
+
 # Read git.commit.id from a properties stream on stdin. ".abbrev" is a different
 # key (text after "id" is "." not "="), so this matches exactly one line.
 prop_commit_id()    { sed -n 's/^git\.commit\.id=\(.*\)$/\1/p'; }

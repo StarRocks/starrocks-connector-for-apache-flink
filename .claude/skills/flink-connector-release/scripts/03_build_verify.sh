@@ -18,6 +18,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 REPO_ROOT="$(resolve_repo)"
 cd "$REPO_ROOT"
+require_jdk8 03   # (see lib.sh)
 
 # Must be on the release tag (detached, pom de-SNAPSHOTed). 02 put us here.
 pom_is_snapshot "$REPO_ROOT" && die "pom is still a -SNAPSHOT — checkout the release tag first (run 02_install_sdk.sh)"

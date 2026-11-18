@@ -12,6 +12,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 REPO_ROOT="$(resolve_repo)"
 cd "$REPO_ROOT"
+# deploy.sh rebuilds before publishing, so a lost JAVA_HOME here would publish a jar built on the wrong
+# JDK that only 05 notices, after it is immutable on Central. Check before anything else. (see lib.sh)
+require_jdk8 04
 
 pom_is_snapshot "$REPO_ROOT" && die "pom is still a -SNAPSHOT — you are not on the release tag"
 SRFC="$(pom_srfc_version "$REPO_ROOT")"
