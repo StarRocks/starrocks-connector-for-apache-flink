@@ -174,6 +174,28 @@ require_jdk8() {
   esac
 }
 
+# ---- clean working tree ------------------------------------------------------
+# Stages 01-04 need a clean tree, untracked files included: the build would pick them up (an untracked
+# source file gets compiled into the jar) while git-commit-id still stamps the tag commit. When the tree
+# is dirty, list what is in the way and stop: what to do with those files is the user's decision.
+# Usage: require_clean_tree "$REPO_ROOT" "<why this stage needs a clean tree>"
+require_clean_tree() {
+  local root="$1" reason="$2" st line
+  st="$(git -C "$root" status --porcelain)"
+  if [ -z "$st" ]; then
+    pass "working tree is clean (no modified or untracked files)"
+    return 0
+  fi
+  fail "working tree not clean:"
+  while IFS= read -r line; do
+    case "$line" in
+      '??'*) printf '    untracked: %s\n' "${line:3}" >&2 ;;
+      *)     printf '    modified:  %s\n' "${line:3}" >&2 ;;
+    esac
+  done <<<"$st"
+  die "$reason — ask how to handle these: stash (git stash push -u -- <paths>, git stash pop after the release), commit, remove, or release from a clean clone"
+}
+
 # Read git.commit.id from a properties stream on stdin. ".abbrev" is a different
 # key (text after "id" is "." not "="), so this matches exactly one line.
 prop_commit_id()    { sed -n 's/^git\.commit\.id=\(.*\)$/\1/p'; }

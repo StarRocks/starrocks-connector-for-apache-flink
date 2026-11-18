@@ -29,8 +29,7 @@ EXPECTED_COMMIT="$(git rev-parse HEAD)"
 verify_head_is_tag "$REPO_ROOT" "$SRFC"
 # The build must come from the clean tagged tree: git-commit-id stamps HEAD, so a dirty worktree
 # would ship uncommitted bytes while the fingerprints still read the tag commit (undetectable later).
-[ -z "$(git status --porcelain)" ] \
-  || die "working tree not clean (uncommitted or untracked files) — 03 must verify the clean tagged build; commit/stash/clean first"
+require_clean_tree "$REPO_ROOT" "03 must verify the clean tagged build"
 info "Building & verifying ${SRFC} at commit $EXPECTED_COMMIT"
 
 mapfile -t VERSIONS < <(resolve_versions "$REPO_ROOT" "$@")
