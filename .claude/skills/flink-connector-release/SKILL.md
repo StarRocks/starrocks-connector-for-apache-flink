@@ -35,7 +35,7 @@ user-facing release guide.
 - The release machine needs: JDK 8, Maven, a GPG signing key, and a `<server><id>central</id>`
   entry in `~/.m2/settings.xml` (Central Portal user token). Stage 00 checks all of this.
 - Maven must run on **JDK 8**: `mvn -v` must show `Java version: 1.8…`. Stages 00, 02, 03 and 04
-  refuse to run otherwise, and `verify_jar.sh` rejects a jar whose MANIFEST `Build-Jdk` is not 1.8.
+  refuse to run otherwise, and `verify_jar.sh` rejects a jar whose MANIFEST does not show JDK 8.
   If the default JDK is newer, `export JAVA_HOME=/path/to/jdk8` and keep it set for every stage; an
   agent's shell may not keep env between commands, so an agent should set it on each stage's command.
 - You don't need to pre-set `srfc.version` on `main`: stage 01 sets it to the version you pass
@@ -120,7 +120,8 @@ Given a jar and the expected tag commit it asserts:
 3. `stream-load-sdk-git.properties` is present (proves the SDK was shaded in) and its
    `git.commit.id` **==** the tag commit (catches a wrong/stale bundled SDK).
 4. SDK classes (`com/starrocks/data/load/stream/`) are actually in the jar.
-5. MANIFEST `Build-Jdk` starts with `1.8` — the jar was built on JDK 8 (a jar without the entry fails).
+5. The MANIFEST shows JDK 8: `Build-Jdk` starts with `1.8`, or — when the jar plugin writes only
+   `Build-Jdk-Spec` (maven-jar-plugin 3.2+, Maven 3.9's default) — that is `1.8`. A jar with neither fails.
 6. (optional) the version equals the expected `1.2.15_flink-<minor>`.
 
 Any failure makes it exit non-zero with a clear `DO NOT DEPLOY` message.
@@ -159,8 +160,10 @@ Any failure makes it exit non-zero with a clear `DO NOT DEPLOY` message.
 - **A dirty working tree is the user's call.** Stages 01–04 stop when `git status --porcelain` is not
   empty — untracked files count — and list the paths. Show the user that list and ask (use
   AskUserQuestion) how to handle it: stash (`git stash push -u -- <paths>`, then `git stash pop` after
-  the release), commit, remove, or release from a separate clean clone (`CONNECTOR_REPO=...`). Never
-  stash, commit or delete them on your own judgment; announcing what you are about to do is not asking.
+  the release), remove, or release from a separate clean clone (`CONNECTOR_REPO=...`). Do not suggest
+  committing them: from 02 on, HEAD is the release branch or the detached release tag, and 02's checkout
+  of the tag drops such a commit from the tree. Never stash or delete them on your own judgment;
+  announcing what you are about to do is not asking.
 - `scripts/04_deploy.sh` is outward-facing and irreversible. Do not bypass its confirmation;
   if running non-interactively, the user must explicitly set `CONFIRM_DEPLOY=<version>`.
 - `scripts/06_upload_release.sh` only creates a **draft** GitHub release — never publish it; a
