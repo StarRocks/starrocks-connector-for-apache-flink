@@ -34,10 +34,10 @@ user-facing release guide.
 - Run from inside the connector repo (or set `CONNECTOR_REPO=/path/to/repo`).
 - The release machine needs: JDK 8, Maven, a GPG signing key, and a `<server><id>central</id>`
   entry in `~/.m2/settings.xml` (Central Portal user token). Stage 00 checks all of this.
-- Maven must run on **JDK 8**: `mvn -v` must show `Java version: 1.8…`, or stage 00 hard-fails.
-  If the default JDK is newer, `export JAVA_HOME=/path/to/jdk8` and keep it set for every stage.
-  Only stage 00 checks it, and an agent's shell may not keep env between commands, so an agent
-  should set it on each stage's command.
+- Maven must run on **JDK 8**: `mvn -v` must show `Java version: 1.8…`. Stages 00, 02, 03 and 04
+  refuse to run otherwise, and `verify_jar.sh` rejects a jar whose MANIFEST `Build-Jdk` is not 1.8.
+  If the default JDK is newer, `export JAVA_HOME=/path/to/jdk8` and keep it set for every stage; an
+  agent's shell may not keep env between commands, so an agent should set it on each stage's command.
 - You don't need to pre-set `srfc.version` on `main`: stage 01 sets it to the version you pass
   (on the release branch only), so you can cut an RC or any version that differs from `main`
   without a prior bump+merge. `main` is never modified by the release.
@@ -59,7 +59,7 @@ scripts/03_build_verify.sh            # build each version via build.sh + STRICT
 git push origin v1.2.15               # push the tag ONLY after 03 passes
 scripts/04_deploy.sh                  # IRREVERSIBLE publish via deploy.sh (gated on 03 + confirmation)
 scripts/05_verify_central.sh 1.2.15   # download from Maven Central, re-verify every jar
-scripts/06_upload_release.sh RELEASE_NOTES.md   # upload your notes + jars as a DRAFT; do NOT publish
+scripts/06_upload_release.sh .release/RELEASE_NOTES-1.2.15.md   # upload your notes + jars as a DRAFT; do NOT publish
 ```
 
 Why this order matters:
@@ -90,7 +90,8 @@ Why this order matters:
 
 **Writing the notes is not scripted** — you (the agent running this) compose them from the template;
 stage 06 only uploads them. Copy [`assets/release-note-template.md`](assets/release-note-template.md)
-to a file (e.g. `RELEASE_NOTES.md`) and fill it in: `## What's Changed` grouped into **Features** /
+to a file under `.release/` (e.g. `.release/RELEASE_NOTES-1.2.15.md` — `.release/` is git-ignored, so the
+notes never make the working tree dirty for stages 01–04) and fill it in: `## What's Changed` grouped into **Features** /
 **Enhancements** / **BugFix** / **Doc** / **Tool** / **Other** — one line per PR, `- <desc> [#NNN](pr-url)`;
 the repo's commit-subject prefixes map to these groups as `[Feature]`→Features, `[Enhancement]`→Enhancements,
 `[BugFix]`→BugFix, `[Doc]`→Doc, `[Tool]` / `[Chore]` (build/CI/release/skill tooling)→Tool, and anything
@@ -106,7 +107,7 @@ published per-version jars (versions read from the repo) and creates a **draft**
 notes + jars attached. It never publishes — a maintainer reviews the draft and publishes it.
 
 ```bash
-scripts/06_upload_release.sh RELEASE_NOTES.md      # upload your notes + jars as a DRAFT
+scripts/06_upload_release.sh .release/RELEASE_NOTES-1.2.15.md   # upload your notes + jars as a DRAFT
 ```
 
 ## The validation gate (`scripts/verify_jar.sh`)
@@ -119,7 +120,8 @@ Given a jar and the expected tag commit it asserts:
 3. `stream-load-sdk-git.properties` is present (proves the SDK was shaded in) and its
    `git.commit.id` **==** the tag commit (catches a wrong/stale bundled SDK).
 4. SDK classes (`com/starrocks/data/load/stream/`) are actually in the jar.
-5. (optional) the version equals the expected `1.2.15_flink-<minor>`.
+5. MANIFEST `Build-Jdk` starts with `1.8` — the jar was built on JDK 8 (a jar without the entry fails).
+6. (optional) the version equals the expected `1.2.15_flink-<minor>`.
 
 Any failure makes it exit non-zero with a clear `DO NOT DEPLOY` message.
 
@@ -131,6 +133,10 @@ Any failure makes it exit non-zero with a clear `DO NOT DEPLOY` message.
 - If a deploy fails midway, already-published versions cannot be overwritten. Check the
   Deployments page at <https://central.sonatype.com>, fix the cause, and re-run **only** the
   failed version.
+- 03 runs a failed `build.sh` once more before counting it as `FAIL(build)` (a flaky dependency
+  download is the usual cause); a failed jar check is not retried. 03 writes the marker only when every
+  version it was asked to build passes, and the marker lists just those versions — re-running 03 for
+  one version replaces it. To deploy every version, run 03 for all of them in one go.
 - The verification marker lives at `<repo>/.release/verified-<version>.commit` and is tied to
   a specific commit; it is local scratch state and can be deleted.
 
@@ -150,6 +156,11 @@ Any failure makes it exit non-zero with a clear `DO NOT DEPLOY` message.
   judgment — or telling the user about the skip only after the fact — is a violation. (The user
   may, of course, pre-authorize skipping it in the same breath as the release request; a clear
   "release X even though the docs row is missing" counts as the confirmation.)
+- **A dirty working tree is the user's call.** Stages 01–04 stop when `git status --porcelain` is not
+  empty — untracked files count — and list the paths. Show the user that list and ask (use
+  AskUserQuestion) how to handle it: stash (`git stash push -u -- <paths>`, then `git stash pop` after
+  the release), commit, remove, or release from a separate clean clone (`CONNECTOR_REPO=...`). Never
+  stash, commit or delete them on your own judgment; announcing what you are about to do is not asking.
 - `scripts/04_deploy.sh` is outward-facing and irreversible. Do not bypass its confirmation;
   if running non-interactively, the user must explicitly set `CONFIRM_DEPLOY=<version>`.
 - `scripts/06_upload_release.sh` only creates a **draft** GitHub release — never publish it; a
@@ -157,3 +168,7 @@ Any failure makes it exit non-zero with a clear `DO NOT DEPLOY` message.
 - These scripts wrap the repo's own `build.sh`/`deploy.sh` with strict verification gates and a
   confirmation step; prefer them for releases. Running `build.sh`/`deploy.sh` directly is fine for
   ad-hoc local builds.
+
+## After the release
+
+The connector docs also need to be synced into the StarRocks docs (`StarRocks/starrocks`).
