@@ -43,8 +43,9 @@ pin_local_snapshots
 
 for m in "${VERSIONS[@]}"; do
   info "──────── build flink $m (via build.sh) ────────"
-  if ! bash build.sh "$m"; then
-    fail "build.sh failed for flink $m"; RESULT+=("$m FAIL(build)"); overall=1; continue
+  # Retry the build (not the jar check below) once: a flaky dependency download is the usual cause.
+  if ! retry_once "build.sh for flink $m" bash build.sh "$m"; then
+    fail "build.sh failed twice for flink $m"; RESULT+=("$m FAIL(build)"); overall=1; continue
   fi
 
   jar="target/flink-connector-starrocks-${SRFC}_flink-${m}.jar"

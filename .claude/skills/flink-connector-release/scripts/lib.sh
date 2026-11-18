@@ -207,6 +207,19 @@ require_clean_tree() {
   die "$reason — ask how to handle these: stash (git stash push -u -- <paths>, git stash pop after the release), commit, remove, or release from a clean clone"
 }
 
+# ---- retry -------------------------------------------------------------------
+# Run a command; if it fails, warn and run it once more, returning the second attempt's status. 03 uses it
+# for build.sh: the first build after a dependency bump downloads new jars, and a download cut short by
+# Maven Central fails that build while the code is fine. A real build error fails twice. The first attempt
+# sits on the left of `&&`, so a caller under `set -e` gets the final status back instead of exiting.
+# Usage: retry_once "<what>" <cmd> [args...]
+retry_once() {
+  local what="$1"; shift
+  "$@" && return 0
+  warn "$what failed — retrying once (a flaky dependency download is the usual cause)"
+  "$@"
+}
+
 # Read git.commit.id from a properties stream on stdin. ".abbrev" is a different
 # key (text after "id" is "." not "="), so this matches exactly one line.
 prop_commit_id()    { sed -n 's/^git\.commit\.id=\(.*\)$/\1/p'; }
