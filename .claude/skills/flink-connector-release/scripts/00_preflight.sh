@@ -29,10 +29,9 @@ else fail "maven (${MVN[0]}) not found"; hard=$((hard+1)); fi
 #    NoSuchMethodError on a Java 8 runtime. The build still succeeds (only warnings), and a
 #    published jar can never be fixed. Maven compiles on the JDK it runs on (JAVA_HOME), so ask
 #    `mvn -v`, not the `java` on PATH. Fail closed when the version cannot be read.
-jline="$("${MVN[@]}" -v 2>/dev/null | grep -i 'Java version' || true)"
-jver="$(sed -n 's/.*[Jj]ava version: *\([^, ]*\).*/\1/p' <<<"$jline")"
+jver="$(mvn_java_version)"
 case "$jver" in
-  1.8.*) pass "Java 8 ($jline)";;
+  1.8.*) pass "Java 8 ($jver)";;
   "")    fail "could not determine the Java version from '${MVN[*]} -v' — the release must be built on JDK 8"; hard=$((hard+1));;
   *)     fail "Maven runs on Java $jver, not 1.8 — the release must be built on JDK 8; export JAVA_HOME=/path/to/jdk8 and keep it set for every stage"; hard=$((hard+1));;
 esac

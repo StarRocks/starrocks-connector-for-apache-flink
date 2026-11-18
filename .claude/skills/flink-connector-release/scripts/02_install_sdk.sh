@@ -20,9 +20,10 @@ TAG="v$VERSION"
 MVN=(${CUSTOM_MVN:-mvn})
 MAVEN_REPO="${MAVEN_REPO:-$HOME/.m2/repository}"
 cd "$REPO_ROOT"
+require_jdk8 02   # the SDK installed here is shaded into the release jars (see lib.sh)
 
 git rev-parse -q --verify "refs/tags/$TAG" >/dev/null || die "tag $TAG not found — run 01_tag.sh first"
-[ -z "$(git status --porcelain)" ] || die "working tree dirty — commit/stash before checking out the tag"
+require_clean_tree "$REPO_ROOT" "the tag must be checked out from a clean tree"
 
 info "Checking out $TAG (detached HEAD) so all builds carry the tag's commit"
 git checkout --quiet "$TAG"

@@ -12,6 +12,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 REPO_ROOT="$(resolve_repo)"
 cd "$REPO_ROOT"
+# deploy.sh rebuilds before publishing, so a lost JAVA_HOME here would publish a jar built on the wrong
+# JDK that only 05 notices, after it is immutable on Central. Check before anything else. (see lib.sh)
+require_jdk8 04
 
 pom_is_snapshot "$REPO_ROOT" && die "pom is still a -SNAPSHOT — you are not on the release tag"
 SRFC="$(pom_srfc_version "$REPO_ROOT")"
@@ -39,9 +42,8 @@ marked="$(head -1 "$MARKER")"
 # The commit alone isn't enough: deploy.sh rebuilds from the worktree, and git-commit-id stamps
 # HEAD, so a dirty tree would publish uncommitted bytes that still report the tag commit (05 can't
 # catch it). Require a clean tree so the published bytes equal what 03 verified.
-[ -z "$(git status --porcelain)" ] \
-  || die "working tree not clean (uncommitted or untracked files) — deploy must build the exact verified bytes; commit/stash/clean and re-run 03"
-pass "verification marker matches current commit, and the working tree is clean"
+pass "verification marker matches current commit"
+require_clean_tree "$REPO_ROOT" "deploy must build the exact verified bytes (re-run 03 after cleaning up)"
 
 mapfile -t VERSIONS < <(resolve_versions "$REPO_ROOT" "$@")
 [ "${#VERSIONS[@]}" -gt 0 ] || die "no Flink versions resolved — is common.sh updated to support 'supported-minor-versions'?"

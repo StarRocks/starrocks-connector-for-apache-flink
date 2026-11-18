@@ -18,6 +18,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 REPO_ROOT="$(resolve_repo)"
 cd "$REPO_ROOT"
+require_jdk8 03   # (see lib.sh)
 
 # Must be on the release tag (detached, pom de-SNAPSHOTed). 02 put us here.
 pom_is_snapshot "$REPO_ROOT" && die "pom is still a -SNAPSHOT — checkout the release tag first (run 02_install_sdk.sh)"
@@ -28,8 +29,7 @@ EXPECTED_COMMIT="$(git rev-parse HEAD)"
 verify_head_is_tag "$REPO_ROOT" "$SRFC"
 # The build must come from the clean tagged tree: git-commit-id stamps HEAD, so a dirty worktree
 # would ship uncommitted bytes while the fingerprints still read the tag commit (undetectable later).
-[ -z "$(git status --porcelain)" ] \
-  || die "working tree not clean (uncommitted or untracked files) — 03 must verify the clean tagged build; commit/stash/clean first"
+require_clean_tree "$REPO_ROOT" "03 must verify the clean tagged build"
 info "Building & verifying ${SRFC} at commit $EXPECTED_COMMIT"
 
 mapfile -t VERSIONS < <(resolve_versions "$REPO_ROOT" "$@")
@@ -43,8 +43,9 @@ pin_local_snapshots
 
 for m in "${VERSIONS[@]}"; do
   info "──────── build flink $m (via build.sh) ────────"
-  if ! bash build.sh "$m"; then
-    fail "build.sh failed for flink $m"; RESULT+=("$m FAIL(build)"); overall=1; continue
+  # Retry the build (not the jar check below) once: a flaky dependency download is the usual cause.
+  if ! retry_once "build.sh for flink $m" bash build.sh "$m"; then
+    fail "build.sh failed twice for flink $m"; RESULT+=("$m FAIL(build)"); overall=1; continue
   fi
 
   jar="target/flink-connector-starrocks-${SRFC}_flink-${m}.jar"

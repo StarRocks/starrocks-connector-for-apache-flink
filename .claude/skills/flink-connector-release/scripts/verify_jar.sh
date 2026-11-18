@@ -75,6 +75,31 @@ case "$list" in
   *)                   no  "SDK classes ($SDK_CLASS_PATH) not found in jar" ;;
 esac
 
+# --- build JDK ---------------------------------------------------------------
+# The release must be built on JDK 8 (see require_jdk8 in lib.sh). The MANIFEST records the JDK Maven
+# ran on: maven-jar-plugin < 3.2 (Maven 3.8's default) writes `Build-Jdk: 1.8.0_x`; 3.2 and later
+# (Maven 3.9's default) write only `Build-Jdk-Spec`, the java.specification.version, which is `1.8` on
+# JDK 8. Build-Jdk decides when present; a jar with neither entry cannot prove its JDK and fails.
+# Every stage of these pipelines reads to EOF (no early-exiting `q`/head), so a MANIFEST bigger than a
+# pipe buffer cannot kill a stage with SIGPIPE under `pipefail`; a missing MANIFEST reads as empty.
+manifest="$(unzip -p "$JAR" META-INF/MANIFEST.MF 2>/dev/null | tr -d '\r' || true)"
+mf_value() { printf '%s\n' "$manifest" | sed -n "s/^$1: *//p" | sed -n 1p; }
+build_jdk="$(mf_value Build-Jdk)"
+build_jdk_spec="$(mf_value Build-Jdk-Spec)"
+if [ -n "$build_jdk" ]; then
+  case "$build_jdk" in
+    1.8.*) yes "built on JDK 8 (Build-Jdk: $build_jdk)" ;;
+    *)     no  "built with Build-Jdk: $build_jdk, not 1.8 — rebuild on JDK 8 (export JAVA_HOME=/path/to/jdk8)" ;;
+  esac
+elif [ -n "$build_jdk_spec" ]; then
+  case "$build_jdk_spec" in
+    1.8) yes "built on JDK 8 (Build-Jdk-Spec: $build_jdk_spec)" ;;
+    *)   no  "built with Build-Jdk-Spec: $build_jdk_spec, not 1.8 — rebuild on JDK 8 (export JAVA_HOME=/path/to/jdk8)" ;;
+  esac
+else
+  no "MANIFEST has no Build-Jdk or Build-Jdk-Spec — cannot prove the jar was built on JDK 8"
+fi
+
 # --- optional exact version --------------------------------------------------
 if [ -n "$EXPECTED_VERSION" ]; then
   if [ "${conn_ver:-}" = "$EXPECTED_VERSION" ]; then yes "version == $EXPECTED_VERSION"

@@ -119,17 +119,28 @@ verify_head_is_tag() {
     || die "HEAD ($head) is not the release tag $tag ($tagc) — checkout the tag (run 02_install_sdk.sh) before continuing"
 }
 
+# Print the commit origin's release tag v<version> points at, or nothing when origin has no such tag.
+# ls-remote is read-only; for an annotated tag the ^{} line is the peeled commit, so prefer it and fall
+# back to the direct line for a lightweight tag. Dies when origin cannot be queried at all: "cannot
+# tell" must never read as "no such tag". Used by 01 (the tag must not exist yet) and 04 (it must).
+origin_tag_commit() {
+  local root="$1" version="$2" tag remote rc
+  tag="v$version"
+  remote="$(git -C "$root" ls-remote origin "refs/tags/$tag" "refs/tags/$tag^{}" 2>/dev/null)" \
+    || die "cannot query origin for tag $tag — check network/credentials"
+  rc="$(awk -v t="refs/tags/$tag^{}" '$2==t{print $1}' <<<"$remote")"
+  [ -n "$rc" ] || rc="$(awk -v t="refs/tags/$tag" '$2==t{print $1}' <<<"$remote")"
+  printf '%s' "$rc"
+}
+
 # Assert origin already has the release tag v<version> AND it resolves to <expected> commit. Maven
 # Central artifacts are immutable, so publishing before the public tag is pushed (push skipped or
 # failed), or when origin's tag points at a different commit, would leave Central artifacts with no
-# matching — or a mismatched — GitHub tag. ls-remote is read-only; for an annotated tag the ^{} line
-# is the peeled commit, so prefer it and fall back to the direct line for a lightweight tag.
+# matching — or a mismatched — GitHub tag.
 verify_tag_on_origin() {
-  local root="$1" version="$2" expected="$3" tag remote rc
+  local root="$1" version="$2" expected="$3" tag rc
   tag="v$version"
-  remote="$(git -C "$root" ls-remote origin "refs/tags/$tag" "refs/tags/$tag^{}" 2>/dev/null || true)"
-  rc="$(awk -v t="refs/tags/$tag^{}" '$2==t{print $1}' <<<"$remote")"
-  [ -n "$rc" ] || rc="$(awk -v t="refs/tags/$tag" '$2==t{print $1}' <<<"$remote")"
+  rc="$(origin_tag_commit "$root" "$version")"
   [ -n "$rc" ] || die "tag $tag is not on origin — push it before deploying: git push origin $tag"
   [ "$rc" = "$expected" ] \
     || die "origin's $tag ($rc) != the commit being deployed ($expected) — origin has a different tag; reconcile (re-push or fix the tag) before publishing"
@@ -147,6 +158,70 @@ supported_minor_versions() {
 resolve_versions() {
   local root="$1"; shift
   if [ "$#" -gt 0 ]; then printf '%s\n' "$@"; else supported_minor_versions "$root" | tr ' ' '\n' | grep -v '^$'; fi
+}
+
+# ---- JDK 8 gate ------------------------------------------------------------
+# The release must be built on JDK 8: the pom compiles with -source/-target 1.8, not --release 8, so a
+# newer javac links against its own class library and the jar can break on a Java 8 runtime (see 00).
+# Maven compiles on the JDK it runs on (JAVA_HOME), so ask `mvn -v` — the same command build.sh and
+# deploy.sh run: ${CUSTOM_MVN:-mvn}, which may carry args (the repo's CI uses `mvn -B -ntp`).
+
+# Print the Java version Maven runs on (e.g. 1.8.0_512), or nothing when it cannot be read. sed quits
+# on the first match instead of piping into head, so no stage of the pipeline is killed by SIGPIPE.
+mvn_java_version() {
+  local -a mvn=(${CUSTOM_MVN:-mvn})
+  { "${mvn[@]}" -v 2>/dev/null || true; } | sed -n '/[Jj]ava version:/{s/.*[Jj]ava version: *\([^, ]*\).*/\1/p;q;}'
+}
+
+# Die unless Maven runs on JDK 8. Stage 00 checks this once, but an agent's shell may not keep
+# JAVA_HOME between commands, so every stage that runs Maven (02, 03, 04) checks it again first.
+require_jdk8() {
+  local stage="$1" v
+  v="$(mvn_java_version)"
+  case "$v" in
+    1.8.*) pass "Maven runs on Java $v" ;;
+    "")    die "$stage: could not determine the Java version from '${CUSTOM_MVN:-mvn} -v' — the release must be built on JDK 8" ;;
+    *)     die "$stage: Maven runs on Java $v, not 1.8 — export JAVA_HOME=/path/to/jdk8 on this stage's command and re-run" ;;
+  esac
+}
+
+# ---- clean working tree ------------------------------------------------------
+# Stages 01-04 need a clean tree, untracked files included: the build would pick them up (an untracked
+# source file gets compiled into the jar) while git-commit-id still stamps the tag commit. When the tree
+# is dirty, list what is in the way and stop: what to do with those files is the user's decision.
+# --untracked-files=normal overrides a user's status.showUntrackedFiles=no, which would otherwise hide
+# them; core.quotePath=false prints non-ASCII paths as-is instead of octal escapes. Committing them is
+# deliberately not offered: from 02 on, HEAD is the release branch or the detached release tag, and
+# 02's checkout of the tag drops such a commit from the tree.
+# Usage: require_clean_tree "$REPO_ROOT" "<why this stage needs a clean tree>"
+require_clean_tree() {
+  local root="$1" reason="$2" st line
+  st="$(git -C "$root" -c core.quotePath=false status --porcelain --untracked-files=normal)"
+  if [ -z "$st" ]; then
+    pass "working tree is clean (no modified or untracked files)"
+    return 0
+  fi
+  fail "working tree not clean:"
+  while IFS= read -r line; do
+    case "$line" in
+      '??'*) printf '    untracked: %s\n' "${line:3}" >&2 ;;
+      *)     printf '    modified:  %s\n' "${line:3}" >&2 ;;
+    esac
+  done <<<"$st"
+  die "$reason — ask how to handle these: stash (git stash push -u -- <paths>, git stash pop after the release), remove, or release from a clean clone"
+}
+
+# ---- retry -------------------------------------------------------------------
+# Run a command; if it fails, warn and run it once more, returning the second attempt's status. 03 uses it
+# for build.sh: the first build after a dependency bump downloads new jars, and a download cut short by
+# Maven Central fails that build while the code is fine. A real build error fails twice. The first attempt
+# sits on the left of `&&`, so a caller under `set -e` gets the final status back instead of exiting.
+# Usage: retry_once "<what>" <cmd> [args...]
+retry_once() {
+  local what="$1"; shift
+  "$@" && return 0
+  warn "$what failed — retrying once (a flaky dependency download is the usual cause)"
+  "$@"
 }
 
 # Read git.commit.id from a properties stream on stdin. ".abbrev" is a different
