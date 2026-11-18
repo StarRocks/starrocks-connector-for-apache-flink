@@ -119,17 +119,28 @@ verify_head_is_tag() {
     || die "HEAD ($head) is not the release tag $tag ($tagc) — checkout the tag (run 02_install_sdk.sh) before continuing"
 }
 
+# Print the commit origin's release tag v<version> points at, or nothing when origin has no such tag.
+# ls-remote is read-only; for an annotated tag the ^{} line is the peeled commit, so prefer it and fall
+# back to the direct line for a lightweight tag. Dies when origin cannot be queried at all: "cannot
+# tell" must never read as "no such tag". Used by 01 (the tag must not exist yet) and 04 (it must).
+origin_tag_commit() {
+  local root="$1" version="$2" tag remote rc
+  tag="v$version"
+  remote="$(git -C "$root" ls-remote origin "refs/tags/$tag" "refs/tags/$tag^{}" 2>/dev/null)" \
+    || die "cannot query origin for tag $tag — check network/credentials"
+  rc="$(awk -v t="refs/tags/$tag^{}" '$2==t{print $1}' <<<"$remote")"
+  [ -n "$rc" ] || rc="$(awk -v t="refs/tags/$tag" '$2==t{print $1}' <<<"$remote")"
+  printf '%s' "$rc"
+}
+
 # Assert origin already has the release tag v<version> AND it resolves to <expected> commit. Maven
 # Central artifacts are immutable, so publishing before the public tag is pushed (push skipped or
 # failed), or when origin's tag points at a different commit, would leave Central artifacts with no
-# matching — or a mismatched — GitHub tag. ls-remote is read-only; for an annotated tag the ^{} line
-# is the peeled commit, so prefer it and fall back to the direct line for a lightweight tag.
+# matching — or a mismatched — GitHub tag.
 verify_tag_on_origin() {
-  local root="$1" version="$2" expected="$3" tag remote rc
+  local root="$1" version="$2" expected="$3" tag rc
   tag="v$version"
-  remote="$(git -C "$root" ls-remote origin "refs/tags/$tag" "refs/tags/$tag^{}" 2>/dev/null || true)"
-  rc="$(awk -v t="refs/tags/$tag^{}" '$2==t{print $1}' <<<"$remote")"
-  [ -n "$rc" ] || rc="$(awk -v t="refs/tags/$tag" '$2==t{print $1}' <<<"$remote")"
+  rc="$(origin_tag_commit "$root" "$version")"
   [ -n "$rc" ] || die "tag $tag is not on origin — push it before deploying: git push origin $tag"
   [ "$rc" = "$expected" ] \
     || die "origin's $tag ($rc) != the commit being deployed ($expected) — origin has a different tag; reconcile (re-push or fix the tag) before publishing"
