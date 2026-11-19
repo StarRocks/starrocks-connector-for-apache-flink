@@ -32,6 +32,7 @@ import org.apache.flink.api.java.tuple.Tuple3;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -43,6 +44,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
 public class LingeringTransactionAborterTest {
+
+    // The parallelism of the restored job, in the tests that do not rescale it
+    private static final int NUMBER_OF_SUBTASKS = 10;
 
     @Test
     public void testRestoreWithSnapshot() throws Exception {
@@ -77,7 +81,7 @@ public class LingeringTransactionAborterTest {
         }
 
         LingeringTransactionAborter aborter = new LingeringTransactionAborter(labelPrefix,
-                restoreCheckpointId, subtaskIndex, -1, dbTables, snapshots, streamLoader);
+                restoreCheckpointId, subtaskIndex, NUMBER_OF_SUBTASKS, -1, dbTables, snapshots, streamLoader);
         aborter.execute();
 
         for (TransactionStatus status : streamLoader.getAllStatus().values()) {
@@ -116,7 +120,7 @@ public class LingeringTransactionAborterTest {
         }
 
         LingeringTransactionAborter aborter = new LingeringTransactionAborter(labelPrefix,
-                restoreCheckpointId, subtaskIndex, -1, dbTables, snapshots, streamLoader);
+                restoreCheckpointId, subtaskIndex, NUMBER_OF_SUBTASKS, -1, dbTables, snapshots, streamLoader);
         aborter.execute();
 
         for (TransactionStatus status : streamLoader.getAllStatus().values()) {
@@ -174,7 +178,7 @@ public class LingeringTransactionAborterTest {
         }
 
         LingeringTransactionAborter aborter = new LingeringTransactionAborter(labelPrefix,
-                restoreCheckpointId, subtaskIndex, -1, dbTables, snapshots, streamLoader);
+                restoreCheckpointId, subtaskIndex, NUMBER_OF_SUBTASKS, -1, dbTables, snapshots, streamLoader);
         aborter.execute();
 
         for (TransactionStatus status : streamLoader.getAllStatus().values()) {
@@ -214,7 +218,7 @@ public class LingeringTransactionAborterTest {
         streamLoader.addLabelStatus("db1", "tbl3", label3, TransactionStatus.PREPARED, false);
 
         LingeringTransactionAborter aborter = new LingeringTransactionAborter(labelPrefix,
-                restoreCheckpointId, subtaskIndex, -1, dbTables, snapshots, streamLoader);
+                restoreCheckpointId, subtaskIndex, NUMBER_OF_SUBTASKS, -1, dbTables, snapshots, streamLoader);
         try {
             aborter.execute();
             fail();
@@ -254,7 +258,7 @@ public class LingeringTransactionAborterTest {
         streamLoader.addLabelStatus("db1", "tbl3", label3, TransactionStatus.PREPARED, false);
 
         LingeringTransactionAborter aborter = new LingeringTransactionAborter(labelPrefix,
-                restoreCheckpointId, subtaskIndex, -1, dbTables, snapshots, streamLoader);
+                restoreCheckpointId, subtaskIndex, NUMBER_OF_SUBTASKS, -1, dbTables, snapshots, streamLoader);
         try {
             aborter.execute();
             fail();
@@ -286,7 +290,7 @@ public class LingeringTransactionAborterTest {
                 Collections.singletonList(TransactionStatus.ABORTED));
 
         LingeringTransactionAborter aborter = new LingeringTransactionAborter(labelPrefix,
-                restoreCheckpointId, subtaskIndex, -1, dbTables, snapshots, streamLoader);
+                restoreCheckpointId, subtaskIndex, NUMBER_OF_SUBTASKS, -1, dbTables, snapshots, streamLoader);
         aborter.execute();
         for (TransactionStatus status : streamLoader.getAllStatus().values()) {
             assertEquals(TransactionStatus.ABORTED, status);
@@ -323,7 +327,7 @@ public class LingeringTransactionAborterTest {
                 labelPrefix, "tbl1", subtaskIndex, restoreCheckpointId + 3), TransactionStatus.PREPARED);
 
         LingeringTransactionAborter aborter = new LingeringTransactionAborter(labelPrefix,
-                restoreCheckpointId, subtaskIndex, 4, dbTables, snapshots, streamLoader);
+                restoreCheckpointId, subtaskIndex, NUMBER_OF_SUBTASKS, 4, dbTables, snapshots, streamLoader);
         aborter.execute();
 
         for (TransactionStatus status : streamLoader.getAllStatus().values()) {
@@ -349,7 +353,7 @@ public class LingeringTransactionAborterTest {
         streamLoader.addLabelStatus("db1", "tbl1", label1, TransactionStatus.VISIBLE);
 
         LingeringTransactionAborter aborter = new LingeringTransactionAborter(labelPrefix,
-                restoreCheckpointId, subtaskIndex, -1, dbTables, snapshots, streamLoader);
+                restoreCheckpointId, subtaskIndex, NUMBER_OF_SUBTASKS, -1, dbTables, snapshots, streamLoader);
         try {
             aborter.execute();
             fail();
@@ -375,7 +379,7 @@ public class LingeringTransactionAborterTest {
         streamLoader.addLabelStatus("db1", "tbl1", label1, TransactionStatus.PREPARE, true);
 
         LingeringTransactionAborter aborter = new LingeringTransactionAborter(labelPrefix,
-                restoreCheckpointId, subtaskIndex, -1, dbTables, snapshots, streamLoader);
+                restoreCheckpointId, subtaskIndex, NUMBER_OF_SUBTASKS, -1, dbTables, snapshots, streamLoader);
         aborter.execute();
 
         assertEquals(TransactionStatus.ABORTED, streamLoader.getLoadStatus("db1", "tbl1", label1));
@@ -400,7 +404,7 @@ public class LingeringTransactionAborterTest {
         streamLoader.setCancelBehaviour("db1", "tbl1", label1, true);
 
         LingeringTransactionAborter aborter = new LingeringTransactionAborter(labelPrefix,
-                restoreCheckpointId, subtaskIndex, -1, dbTables, snapshots, streamLoader);
+                restoreCheckpointId, subtaskIndex, NUMBER_OF_SUBTASKS, -1, dbTables, snapshots, streamLoader);
         try {
             aborter.execute();
             fail();
@@ -433,7 +437,7 @@ public class LingeringTransactionAborterTest {
         streamLoader.setStatusTransitionAfterCancel("db1", "tbl1", label1, TransactionStatus.ABORTED);
 
         LingeringTransactionAborter aborter = new LingeringTransactionAborter(labelPrefix,
-                restoreCheckpointId, subtaskIndex, -1, dbTables, snapshots, streamLoader);
+                restoreCheckpointId, subtaskIndex, NUMBER_OF_SUBTASKS, -1, dbTables, snapshots, streamLoader);
         aborter.execute();
 
         assertEquals(TransactionStatus.ABORTED, streamLoader.getLoadStatus("db1", "tbl1", label1));
@@ -460,7 +464,7 @@ public class LingeringTransactionAborterTest {
         streamLoader.setStatusTransitionAfterCancel("db1", "tbl1", label1, TransactionStatus.ABORTED);
 
         LingeringTransactionAborter aborter = new LingeringTransactionAborter(labelPrefix,
-                restoreCheckpointId, subtaskIndex, -1, dbTables, snapshots, streamLoader);
+                restoreCheckpointId, subtaskIndex, NUMBER_OF_SUBTASKS, -1, dbTables, snapshots, streamLoader);
         aborter.execute();
 
         assertEquals(TransactionStatus.ABORTED, streamLoader.getLoadStatus("db1", "tbl1", label1));
@@ -490,12 +494,87 @@ public class LingeringTransactionAborterTest {
         streamLoader.addLabelStatus("db1", "tbl2", label2, TransactionStatus.PREPARE, true);
 
         LingeringTransactionAborter aborter = new LingeringTransactionAborter(labelPrefix,
-                restoreCheckpointId, subtaskIndex, -1, dbTables, snapshots, streamLoader);
+                restoreCheckpointId, subtaskIndex, NUMBER_OF_SUBTASKS, -1, dbTables, snapshots, streamLoader);
         aborter.execute();
 
         assertEquals(TransactionStatus.ABORTED, streamLoader.getLoadStatus("db1", "tbl1", label1));
         assertEquals(TransactionStatus.ABORTED, streamLoader.getLoadStatus("db1", "tbl2", label2));
         assertEquals(1, streamLoader.getNumCancelLoadCalls());
+    }
+
+    // The next three tests restore from checkpoint 5 after scaling down from 3 subtasks to 2.
+    // Subtask 0 gets the snapshots of old subtasks 0 and 1, and subtask 1 gets the snapshot of
+    // old subtask 2. So subtask 1 has no snapshot of its own, and writes from label number 6.
+
+    @Test
+    public void testRescaleKeepsLabelsThatAnotherSubtaskUses() throws Exception {
+        String labelPrefix = "test_label";
+        long restoreCheckpointId = 5;
+        List<Tuple2<String, String>> dbTables = Collections.singletonList(Tuple2.of("db1", "tbl1"));
+        List<ExactlyOnceLabelGeneratorSnapshot> snapshots = Arrays.asList(
+                new ExactlyOnceLabelGeneratorSnapshot(restoreCheckpointId, "db1", "tbl1", labelPrefix, 3, 0, 6),
+                new ExactlyOnceLabelGeneratorSnapshot(restoreCheckpointId, "db1", "tbl1", labelPrefix, 3, 1, 4));
+        MockStreamLoader streamLoader = new MockStreamLoader();
+        // Old subtask 1 left transactions with label numbers 4 and 5
+        String lingeringLabel4 = ExactlyOnceLabelGenerator.genLabel(labelPrefix, "tbl1", 1, 4);
+        String lingeringLabel5 = ExactlyOnceLabelGenerator.genLabel(labelPrefix, "tbl1", 1, 5);
+        streamLoader.addLabelStatus("db1", "tbl1", lingeringLabel4, TransactionStatus.PREPARED);
+        streamLoader.addLabelStatus("db1", "tbl1", lingeringLabel5, TransactionStatus.PREPARED);
+        // Subtask 1 has begun a transaction with label number 6
+        String runningLabel = ExactlyOnceLabelGenerator.genLabel(labelPrefix, "tbl1", 1, 6);
+        streamLoader.addLabelStatus("db1", "tbl1", runningLabel, TransactionStatus.PREPARE);
+
+        LingeringTransactionAborter aborter = new LingeringTransactionAborter(labelPrefix,
+                restoreCheckpointId, 0, 2, -1, dbTables, snapshots, streamLoader);
+        aborter.execute();
+
+        assertEquals(TransactionStatus.ABORTED, streamLoader.getLoadStatus("db1", "tbl1", lingeringLabel4));
+        assertEquals(TransactionStatus.ABORTED, streamLoader.getLoadStatus("db1", "tbl1", lingeringLabel5));
+        assertEquals(TransactionStatus.PREPARE, streamLoader.getLoadStatus("db1", "tbl1", runningLabel));
+    }
+
+    @Test
+    public void testRescaleChecksOwnLabelsWithoutOwnSnapshot() throws Exception {
+        String labelPrefix = "test_label";
+        long restoreCheckpointId = 5;
+        List<Tuple2<String, String>> dbTables = Collections.singletonList(Tuple2.of("db1", "tbl1"));
+        List<ExactlyOnceLabelGeneratorSnapshot> snapshots = Collections.singletonList(
+                new ExactlyOnceLabelGeneratorSnapshot(restoreCheckpointId, "db1", "tbl1", labelPrefix, 3, 2, 6));
+        MockStreamLoader streamLoader = new MockStreamLoader();
+        // Old subtask 1 left a transaction with label number 6, which subtask 1 is going to use
+        String ownLabel = ExactlyOnceLabelGenerator.genLabel(labelPrefix, "tbl1", 1, 6);
+        streamLoader.addLabelStatus("db1", "tbl1", ownLabel, TransactionStatus.PREPARED);
+        // Old subtask 2 left a transaction too. No subtask has index 2 now.
+        String oldSubtaskLabel = ExactlyOnceLabelGenerator.genLabel(labelPrefix, "tbl1", 2, 6);
+        streamLoader.addLabelStatus("db1", "tbl1", oldSubtaskLabel, TransactionStatus.PREPARED);
+
+        LingeringTransactionAborter aborter = new LingeringTransactionAborter(labelPrefix,
+                restoreCheckpointId, 1, 2, -1, dbTables, snapshots, streamLoader);
+        aborter.execute();
+
+        assertEquals(TransactionStatus.ABORTED, streamLoader.getLoadStatus("db1", "tbl1", ownLabel));
+        assertEquals(TransactionStatus.ABORTED, streamLoader.getLoadStatus("db1", "tbl1", oldSubtaskLabel));
+    }
+
+    @Test
+    public void testRescaleChecksOwnLabelsOfTablesInSnapshots() throws Exception {
+        String labelPrefix = "test_label";
+        long restoreCheckpointId = 5;
+        // The job also writes to tbl2, which only the snapshots record
+        List<Tuple2<String, String>> dbTables = Collections.singletonList(Tuple2.of("db1", "tbl1"));
+        List<ExactlyOnceLabelGeneratorSnapshot> snapshots = Arrays.asList(
+                new ExactlyOnceLabelGeneratorSnapshot(restoreCheckpointId, "db1", "tbl1", labelPrefix, 3, 2, 6),
+                new ExactlyOnceLabelGeneratorSnapshot(restoreCheckpointId, "db1", "tbl2", labelPrefix, 3, 2, 6));
+        MockStreamLoader streamLoader = new MockStreamLoader();
+        // Old subtask 1 left a transaction on tbl2 with label number 6, which subtask 1 is going to use
+        String ownLabel = ExactlyOnceLabelGenerator.genLabel(labelPrefix, "tbl2", 1, 6);
+        streamLoader.addLabelStatus("db1", "tbl2", ownLabel, TransactionStatus.PREPARED);
+
+        LingeringTransactionAborter aborter = new LingeringTransactionAborter(labelPrefix,
+                restoreCheckpointId, 1, 2, -1, dbTables, snapshots, streamLoader);
+        aborter.execute();
+
+        assertEquals(TransactionStatus.ABORTED, streamLoader.getLoadStatus("db1", "tbl2", ownLabel));
     }
 
     private static class MockStreamLoader implements StreamLoader {

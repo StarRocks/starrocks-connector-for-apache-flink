@@ -118,6 +118,7 @@ public class StarRocksWriter<InputT>
                         sinkOptions.getLabelPrefix(),
                         restoredCheckpointId,
                         initContext.getSubtaskId(),
+                        initContext.getNumberOfParallelSubtasks(),
                         sinkOptions.getAbortCheckNumTxns(),
                         sinkOptions.getDbTables(),
                         restoredGeneratorSnapshots,
