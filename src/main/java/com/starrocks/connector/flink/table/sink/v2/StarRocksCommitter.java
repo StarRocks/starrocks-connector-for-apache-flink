@@ -65,22 +65,25 @@ public class StarRocksCommitter implements Committer<StarRocksCommittable> {
             throws IOException, InterruptedException {
         for (CommitRequest<StarRocksCommittable> commitRequest : committables) {
             StarRocksCommittable committable = commitRequest.getCommittable();
+            boolean committed = false;
             RuntimeException firstException = null;
             for (int i = 0; i <= maxRetries; i++) {
                 try {
-                    boolean success = sinkManager.commit(committable.getLabelSnapshot());
-                    if (success) {
+                    committed = sinkManager.commit(committable.getLabelSnapshot());
+                    if (committed) {
                         break;
                     }
                     throw new RuntimeException("Please see the taskmanager log for the failure reason");
                 } catch (Exception e) {
                     LOG.error("Fail to commit after {} retries, max retries: {}", i, maxRetries, e);
-                    if (firstException != null) {
+                    if (firstException == null) {
                         firstException = new RuntimeException("Failed to commit", e);
                     }
                 }
             }
-            if (firstException != null) {
+            // Fail the job rather than let Flink take the transactions as committed. They would
+            // be aborted when they time out, and their data would be lost.
+            if (!committed) {
                 throw firstException;
             }
         }
