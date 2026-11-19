@@ -74,7 +74,8 @@ public class LingeringTransactionAborter {
     public void execute() throws Exception {
         Map<ExactlyOnceLabelGenerator.LabelDbTableSubtask, ExactlyOnceLabelGeneratorSnapshot> map = new LinkedHashMap<>();
         Set<String> oldLabelPrefixes = new HashSet<>();
-        boolean hasOwnSnapshotWithCurrentPrefix = false;
+        // The tables in the snapshots of this subtask index with the current label prefix
+        Set<Tuple2<String, String>> ownSnapshotDbTables = new HashSet<>();
         for (ExactlyOnceLabelGeneratorSnapshot snapshot : snapshots) {
             // sanity check that the checkpoint id of the snapshot should be the same with the restoredCheckpointId
             if (snapshot.getCheckpointId() != restoredCheckpointId) {
@@ -92,7 +93,7 @@ public class LingeringTransactionAborter {
             map.put(meta, snapshot);
             oldLabelPrefixes.add(snapshot.getLabelPrefix());
             if (snapshot.getLabelPrefix().equals(currentLabelPrefix) && snapshot.getSubTaskIndex() == subtaskIndex) {
-                hasOwnSnapshotWithCurrentPrefix = true;
+                ownSnapshotDbTables.add(Tuple2.of(snapshot.getDb(), snapshot.getTable()));
             }
         }
 
@@ -102,12 +103,13 @@ public class LingeringTransactionAborter {
         }
         abortSnapshotLabelPrefix(new ArrayList<>(map.values()));
 
-        // If no snapshot of this subtask index has the current label prefix, there may be lingering
-        // transactions with the prefix from restoredCheckpointId + 1, where this subtask begins its
-        // labels. The prefix may be new, the job may have failed before its first checkpoint completed,
-        // or after a rescale, another subtask may have got the snapshot of this subtask index.
-        if (currentLabelPrefix != null && !hasOwnSnapshotWithCurrentPrefix) {
-            abortCurrentLabelPrefix();
+        // For a table in the sink options without a snapshot of this subtask index with the current
+        // label prefix, this subtask begins its labels from restoredCheckpointId + 1, so check them for
+        // lingering transactions. The prefix may be new, the job may have failed before its first
+        // checkpoint completed, an earlier restore from the checkpoint may have first written to the
+        // table, or after a rescale, another subtask may have got the snapshot of this subtask index.
+        if (currentLabelPrefix != null) {
+            abortCurrentLabelPrefix(ownSnapshotDbTables);
         }
     }
 
@@ -159,8 +161,13 @@ public class LingeringTransactionAborter {
                 && dbTables.contains(Tuple2.of(snapshot.getDb(), snapshot.getTable()));
     }
 
-    private void abortCurrentLabelPrefix() throws Exception {
+    private void abortCurrentLabelPrefix(Set<Tuple2<String, String>> ownSnapshotDbTables) throws Exception {
         for (Tuple2<String, String> dbTable : dbTables) {
+            // This subtask begins the labels of the table from its snapshot, which
+            // abortSnapshotLabelPrefix checks
+            if (ownSnapshotDbTables.contains(dbTable)) {
+                continue;
+            }
             // if checkNumTxns is negative, execute until find the first txn that does not need abort
             // The start checkpoint
             long endId = checkNumTxns < 0 ? Long.MAX_VALUE : restoredCheckpointId + 1 + checkNumTxns;

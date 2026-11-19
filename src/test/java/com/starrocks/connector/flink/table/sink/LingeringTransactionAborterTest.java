@@ -130,6 +130,30 @@ public class LingeringTransactionAborterTest {
     }
 
     @Test
+    public void testRestoreChecksTablesWithoutSnapshot() throws Exception {
+        String labelPrefix = "test_label";
+        int subtaskIndex = 1;
+        long restoreCheckpointId = 5;
+        // Both tables are in the sink options, but the snapshots only have tbl1, because this
+        // subtask did not write to tbl2 before checkpoint 5
+        List<Tuple2<String, String>> dbTables = Arrays.asList(Tuple2.of("db1", "tbl1"), Tuple2.of("db1", "tbl2"));
+        List<ExactlyOnceLabelGeneratorSnapshot> snapshots = Collections.singletonList(
+                new ExactlyOnceLabelGeneratorSnapshot(
+                        restoreCheckpointId, "db1", "tbl1", labelPrefix, NUMBER_OF_SUBTASKS, subtaskIndex, 4));
+        MockStreamLoader streamLoader = new MockStreamLoader();
+        // An earlier restore from checkpoint 5 began a transaction on tbl2 with label number 6, and
+        // failed. This restore begins the labels of tbl2 from number 6 again.
+        String lingeringLabel = ExactlyOnceLabelGenerator.genLabel(labelPrefix, "tbl2", subtaskIndex, 6);
+        streamLoader.addLabelStatus("db1", "tbl2", lingeringLabel, TransactionStatus.PREPARED);
+
+        LingeringTransactionAborter aborter = new LingeringTransactionAborter(labelPrefix,
+                restoreCheckpointId, subtaskIndex, NUMBER_OF_SUBTASKS, -1, dbTables, snapshots, streamLoader);
+        aborter.execute();
+
+        assertEquals(TransactionStatus.ABORTED, streamLoader.getLoadStatus("db1", "tbl2", lingeringLabel));
+    }
+
+    @Test
     public void testRestoreAfterRescaleAndLabelChanged() throws Exception {
         String oldLabelPrefix = "test_label_old";
         String labelPrefix = "test_label";
