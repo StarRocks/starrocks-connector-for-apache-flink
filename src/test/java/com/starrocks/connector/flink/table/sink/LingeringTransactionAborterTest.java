@@ -557,24 +557,25 @@ public class LingeringTransactionAborterTest {
     }
 
     @Test
-    public void testRescaleChecksOwnLabelsOfTablesInSnapshots() throws Exception {
+    public void testRescaleChecksLabelsOfTablesNotInSinkOptions() throws Exception {
         String labelPrefix = "test_label";
         long restoreCheckpointId = 5;
-        // The job also writes to tbl2, which only the snapshots record
+        // The job also writes to tbl2, which is not in the sink options
         List<Tuple2<String, String>> dbTables = Collections.singletonList(Tuple2.of("db1", "tbl1"));
         List<ExactlyOnceLabelGeneratorSnapshot> snapshots = Arrays.asList(
-                new ExactlyOnceLabelGeneratorSnapshot(restoreCheckpointId, "db1", "tbl1", labelPrefix, 3, 2, 6),
-                new ExactlyOnceLabelGeneratorSnapshot(restoreCheckpointId, "db1", "tbl2", labelPrefix, 3, 2, 6));
+                new ExactlyOnceLabelGeneratorSnapshot(restoreCheckpointId, "db1", "tbl1", labelPrefix, 3, 0, 6),
+                new ExactlyOnceLabelGeneratorSnapshot(restoreCheckpointId, "db1", "tbl2", labelPrefix, 3, 1, 6));
         MockStreamLoader streamLoader = new MockStreamLoader();
-        // Old subtask 1 left a transaction on tbl2 with label number 6, which subtask 1 is going to use
-        String ownLabel = ExactlyOnceLabelGenerator.genLabel(labelPrefix, "tbl2", 1, 6);
-        streamLoader.addLabelStatus("db1", "tbl2", ownLabel, TransactionStatus.PREPARED);
+        // Old subtask 1 left a transaction on tbl2 with label number 6. Subtask 1 checks its labels
+        // from number 6 only for the tables in the sink options, so subtask 0 must abort it.
+        String lingeringLabel = ExactlyOnceLabelGenerator.genLabel(labelPrefix, "tbl2", 1, 6);
+        streamLoader.addLabelStatus("db1", "tbl2", lingeringLabel, TransactionStatus.PREPARED);
 
         LingeringTransactionAborter aborter = new LingeringTransactionAborter(labelPrefix,
-                restoreCheckpointId, 1, 2, -1, dbTables, snapshots, streamLoader);
+                restoreCheckpointId, 0, 2, -1, dbTables, snapshots, streamLoader);
         aborter.execute();
 
-        assertEquals(TransactionStatus.ABORTED, streamLoader.getLoadStatus("db1", "tbl2", ownLabel));
+        assertEquals(TransactionStatus.ABORTED, streamLoader.getLoadStatus("db1", "tbl2", lingeringLabel));
     }
 
     private static class MockStreamLoader implements StreamLoader {
