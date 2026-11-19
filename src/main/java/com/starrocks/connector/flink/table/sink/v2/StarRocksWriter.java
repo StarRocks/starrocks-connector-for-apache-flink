@@ -84,11 +84,15 @@ public class StarRocksWriter<InputT>
             this.labelGeneratorFactory = new LabelGeneratorFactory.DefaultLabelGeneratorFactory(
                     labelPrefix == null ? "flink" : labelPrefix);
         } else {
-            this.labelGeneratorFactory = new ExactlyOnceLabelGeneratorFactory(
+            ExactlyOnceLabelGeneratorFactory exactlyOnceLabelFactory = new ExactlyOnceLabelGeneratorFactory(
                     labelPrefix,
                     initContext.getNumberOfParallelSubtasks(),
                     initContext.getSubtaskId(),
                     restoredCheckpointId);
+            // Go on from the label numbers in the snapshots, where LingeringTransactionAborter
+            // starts to look for lingering transactions.
+            exactlyOnceLabelFactory.restore(restoredGeneratorSnapshots);
+            this.labelGeneratorFactory = exactlyOnceLabelFactory;
         }
 
         this.sinkManager = new StreamLoadManagerV2(streamLoadProperties,
@@ -114,6 +118,7 @@ public class StarRocksWriter<InputT>
                         sinkOptions.getLabelPrefix(),
                         restoredCheckpointId,
                         initContext.getSubtaskId(),
+                        initContext.getNumberOfParallelSubtasks(),
                         sinkOptions.getAbortCheckNumTxns(),
                         sinkOptions.getDbTables(),
                         restoredGeneratorSnapshots,

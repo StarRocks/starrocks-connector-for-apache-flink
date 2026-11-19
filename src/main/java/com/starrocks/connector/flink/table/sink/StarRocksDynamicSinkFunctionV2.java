@@ -250,6 +250,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
                     sinkOptions.getLabelPrefix(),
                     restoredCheckpointId,
                     getRuntimeContext().getIndexOfThisSubtask(),
+                    getRuntimeContext().getNumberOfParallelSubtasks(),
                     sinkOptions.getAbortCheckNumTxns(),
                     sinkOptions.getDbTables(),
                     restoredGeneratorSnapshots,
