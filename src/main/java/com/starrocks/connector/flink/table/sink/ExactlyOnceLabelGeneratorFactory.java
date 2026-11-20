@@ -44,6 +44,9 @@ public class ExactlyOnceLabelGeneratorFactory implements LabelGeneratorFactory {
     private final long restoreCheckpointId;
     // Label generators. The mapping is db -> table -> generator.
     private final Map<String, Map<String, ExactlyOnceLabelGenerator>> labelGenerators;
+    // Aborts the lingering transactions of a table before this factory creates its generator
+    // from restoreCheckpointId + 1. Null if the sink does not abort lingering transactions.
+    private LingeringTransactionAborter lingeringTransactionAborter;
 
     public ExactlyOnceLabelGeneratorFactory(String labelPrefix, int numberOfSubtasks, int subtaskIndex, long restoreCheckpointId) {
         this.labelPrefix = labelPrefix;
@@ -55,11 +58,23 @@ public class ExactlyOnceLabelGeneratorFactory implements LabelGeneratorFactory {
                 "restoreCheckpointId: {}", labelPrefix, numberOfSubtasks, subtaskIndex, restoreCheckpointId);
     }
 
+    synchronized void setLingeringTransactionAborter(LingeringTransactionAborter lingeringTransactionAborter) {
+        this.lingeringTransactionAborter = lingeringTransactionAborter;
+    }
+
     @Override
     public synchronized ExactlyOnceLabelGenerator create(String db, String table) {
             Map<String, ExactlyOnceLabelGenerator> tableMap = labelGenerators.computeIfAbsent(db, key -> new HashMap<>());
             ExactlyOnceLabelGenerator generator = tableMap.get(table);
             if (generator == null) {
+                if (lingeringTransactionAborter != null) {
+                    try {
+                        lingeringTransactionAborter.abortLingeringTransactions(db, table);
+                    } catch (Exception e) {
+                        throw new RuntimeException(String.format(
+                                "Failed to abort lingering transactions, db: %s, table: %s", db, table), e);
+                    }
+                }
                 // use restoreCheckpointId + 1 as the initial id rather than 0 to avoid
                 // conflicts because the same labelPrefix is switched repeatedly
                 generator = new ExactlyOnceLabelGenerator(labelPrefix, db, table,

@@ -78,13 +78,14 @@ public class StarRocksWriter<InputT>
             restoredGeneratorSnapshots.addAll(writerState.getLabelSnapshots());
         }
         String labelPrefix = sinkOptions.getLabelPrefix();
+        ExactlyOnceLabelGeneratorFactory exactlyOnceLabelFactory = null;
         if (labelPrefix == null ||
                 sinkOptions.getSemantic() == StarRocksSinkSemantic.AT_LEAST_ONCE ||
                 !sinkOptions.isEnableExactlyOnceLabelGen()) {
             this.labelGeneratorFactory = new LabelGeneratorFactory.DefaultLabelGeneratorFactory(
                     labelPrefix == null ? "flink" : labelPrefix);
         } else {
-            ExactlyOnceLabelGeneratorFactory exactlyOnceLabelFactory = new ExactlyOnceLabelGeneratorFactory(
+            exactlyOnceLabelFactory = new ExactlyOnceLabelGeneratorFactory(
                     labelPrefix,
                     initContext.getNumberOfParallelSubtasks(),
                     initContext.getSubtaskId(),
@@ -122,7 +123,8 @@ public class StarRocksWriter<InputT>
                         sinkOptions.getAbortCheckNumTxns(),
                         sinkOptions.getDbTables(),
                         restoredGeneratorSnapshots,
-                        sinkManager.getStreamLoader());
+                        sinkManager.getStreamLoader(),
+                        exactlyOnceLabelFactory);
 
                 aborter.execute();
             }

@@ -24,8 +24,11 @@ package com.starrocks.connector.flink.table.sink.v2;
 import org.apache.flink.api.connector.sink2.Sink;
 
 import com.starrocks.connector.flink.table.sink.ExactlyOnceLabelGeneratorSnapshot;
+import com.starrocks.connector.flink.table.sink.LingeringTransactionAborterTest.MockStreamLoader;
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 import com.starrocks.data.load.stream.LabelGeneratorFactory;
+import com.starrocks.data.load.stream.StreamLoader;
+import com.starrocks.data.load.stream.TransactionStatus;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import com.starrocks.data.load.stream.v2.StreamLoadListener;
 import com.starrocks.data.load.stream.v2.StreamLoadManagerV2;
@@ -51,8 +54,54 @@ public class StarRocksWriterTest {
 
     @Test
     public void testRestoredLabelsContinueFromSnapshot() throws Exception {
-        // Replace the sink manager methods that would connect to StarRocks, and record
-        // the label generator factory that the writer gives it.
+        AtomicReference<LabelGeneratorFactory> factoryGivenToManager = mockSinkManager(null);
+        // Restore from checkpoint 5. The mocked context reports subtask 0.
+        new Expectations() {{
+            initContext.getRestoredCheckpointId();
+            result = OptionalLong.of(5L);
+        }};
+        StarRocksSinkOptions sinkOptions = buildExactlyOnceSinkOptions()
+                // Skip the abort, which would ask StarRocks about the transactions.
+                .withProperty("sink.exactly-once.enable-abort-lingering-txn", "false")
+                .build();
+        // At checkpoint 5, the next label number of subtask 0 for db.table was 4,
+        // because no label was used for the table in one checkpoint interval.
+        StarRocksWriterState recoveredState = new StarRocksWriterState(Collections.singletonList(
+                new ExactlyOnceLabelGeneratorSnapshot(5L, "db", "table", "prefix", 1, 0, 4L)));
+
+        new StarRocksWriter<>(sinkOptions, initContext, null, serializationSchema, null,
+                Collections.singletonList(recoveredState));
+
+        // The writer goes on from label 4. That is where LingeringTransactionAborter starts
+        // to look for lingering transactions if the job restores from checkpoint 5 again.
+        assertEquals("prefix-table-0-4", factoryGivenToManager.get().create("db", "table").next());
+    }
+
+    @Test
+    public void testFirstWriteChecksTablesNotInSinkOptions() throws Exception {
+        MockStreamLoader streamLoader = new MockStreamLoader();
+        AtomicReference<LabelGeneratorFactory> factoryGivenToManager = mockSinkManager(streamLoader);
+        // Restore from checkpoint 5. The mocked context reports subtask 0.
+        new Expectations() {{
+            initContext.getRestoredCheckpointId();
+            result = OptionalLong.of(5L);
+        }};
+        StarRocksSinkOptions sinkOptions = buildExactlyOnceSinkOptions().build();
+        // The job also writes to db.other, which is not in the sink options. An earlier restore
+        // from checkpoint 5 began a transaction on it with label number 6, and failed.
+        String lingeringLabel = "prefix-other-0-6";
+        streamLoader.addLabelStatus("db", "other", lingeringLabel, TransactionStatus.PREPARED);
+
+        new StarRocksWriter<>(sinkOptions, initContext, null, serializationSchema, null,
+                Collections.emptyList());
+
+        factoryGivenToManager.get().create("db", "other");
+        assertEquals(TransactionStatus.ABORTED, streamLoader.getLoadStatus("db", "other", lingeringLabel));
+    }
+
+    // Replace the sink manager methods that would connect to StarRocks, and record
+    // the label generator factory that the writer gives it.
+    private static AtomicReference<LabelGeneratorFactory> mockSinkManager(StreamLoader streamLoader) {
         AtomicReference<LabelGeneratorFactory> factoryGivenToManager = new AtomicReference<>();
         new MockUp<StreamLoadManagerV2>() {
             @Mock
@@ -71,13 +120,17 @@ public class StarRocksWriterTest {
             @Mock
             public void init() {
             }
+
+            @Mock
+            public StreamLoader getStreamLoader() {
+                return streamLoader;
+            }
         };
-        // Restore from checkpoint 5. The mocked context reports subtask 0.
-        new Expectations() {{
-            initContext.getRestoredCheckpointId();
-            result = OptionalLong.of(5L);
-        }};
-        StarRocksSinkOptions sinkOptions = StarRocksSinkOptions.builder()
+        return factoryGivenToManager;
+    }
+
+    private static StarRocksSinkOptions.Builder buildExactlyOnceSinkOptions() {
+        return StarRocksSinkOptions.builder()
                 .withProperty("jdbc-url", "jdbc:mysql://127.0.0.1:9030")
                 .withProperty("load-url", "127.0.0.1:8030")
                 .withProperty("username", "root")
@@ -85,20 +138,6 @@ public class StarRocksWriterTest {
                 .withProperty("database-name", "db")
                 .withProperty("table-name", "table")
                 .withProperty("sink.semantic", "exactly-once")
-                .withProperty("sink.label-prefix", "prefix")
-                // Skip the abort, which would ask StarRocks about the transactions.
-                .withProperty("sink.exactly-once.enable-abort-lingering-txn", "false")
-                .build();
-        // At checkpoint 5, the next label number of subtask 0 for db.table was 4,
-        // because no label was used for the table in one checkpoint interval.
-        StarRocksWriterState recoveredState = new StarRocksWriterState(Collections.singletonList(
-                new ExactlyOnceLabelGeneratorSnapshot(5L, "db", "table", "prefix", 1, 0, 4L)));
-
-        new StarRocksWriter<>(sinkOptions, initContext, null, serializationSchema, null,
-                Collections.singletonList(recoveredState));
-
-        // The writer goes on from label 4. That is where LingeringTransactionAborter starts
-        // to look for lingering transactions if the job restores from checkpoint 5 again.
-        assertEquals("prefix-table-0-4", factoryGivenToManager.get().create("db", "table").next());
+                .withProperty("sink.label-prefix", "prefix");
     }
 }

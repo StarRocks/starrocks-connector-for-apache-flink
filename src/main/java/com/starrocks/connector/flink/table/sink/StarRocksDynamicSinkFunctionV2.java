@@ -254,7 +254,8 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
                     sinkOptions.getAbortCheckNumTxns(),
                     sinkOptions.getDbTables(),
                     restoredGeneratorSnapshots,
-                    sinkManager.getStreamLoader());
+                    sinkManager.getStreamLoader(),
+                    exactlyOnceLabelFactory);
             aborter.execute();
         }
 
