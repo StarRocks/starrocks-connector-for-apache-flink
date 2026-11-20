@@ -26,6 +26,14 @@ import com.starrocks.connector.flink.table.source.struct.SelectColumn;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanBatchResult;
 import com.starrocks.thrift.TScanColumnDesc;
+import org.apache.arrow.memory.RootAllocator;
+import org.apache.arrow.vector.DateDayVector;
+import org.apache.arrow.vector.TimeStampMicroTZVector;
+import org.apache.arrow.vector.VarCharVector;
+import org.apache.arrow.vector.types.pojo.ArrowType;
+import org.apache.arrow.vector.types.pojo.Field;
+import org.apache.flink.table.types.logical.DateType;
+import org.apache.flink.table.types.logical.LocalZonedTimestampType;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -336,13 +344,84 @@ public class StarRocksSourceFlinkRowsTest extends StarRocksSourceBaseTest {
         return list;
     }
 
-    public List<TScanColumnDesc> lessList() {
-        List<TScanColumnDesc> list = new ArrayList<>();
-        // date_1
-        TScanColumnDesc c0 = new TScanColumnDesc();
-        c0.name = "date_1";
-        c0.type = TPrimitiveType.DATE;
-        list.add(c0);
-        return list;
+    @Test
+    public void testTimestampConverterWithTimestampMicroTZVector() {
+        // StarRocks 3.3+ returns DATETIME as Arrow TIMESTAMPMICROTZ instead of VARCHAR
+        try (RootAllocator allocator = new RootAllocator(Long.MAX_VALUE);
+             TimeStampMicroTZVector tsVector = new TimeStampMicroTZVector("ts_1", allocator, "UTC")) {
+
+            tsVector.allocateNew(2);
+            // 2020-03-23 00:00:00.189760 UTC = 1584921600189760 micros since epoch
+            long micros = 1584921600189760L;
+            tsVector.set(0, micros);
+            tsVector.setNull(1);
+            tsVector.setValueCount(2);
+
+            Field arrowField = new Field("ts_1",
+                    org.apache.arrow.vector.types.pojo.FieldType.nullable(
+                            new ArrowType.Timestamp(org.apache.arrow.vector.types.TimeUnit.MICROSECOND, "UTC")),
+                    null);
+            LocalZonedTimestampType flinkTsType = new LocalZonedTimestampType(true, 6);
+
+            // Should not throw
+            ArrowFieldConverter.checkTypeCompatible(flinkTsType, arrowField);
+
+            ArrowFieldConverter.TimestampConverter converter = new ArrowFieldConverter.TimestampConverter(true);
+            TimestampData result = (TimestampData) converter.convert(tsVector, 0);
+            Assert.assertNotNull(result);
+            Assert.assertEquals(1584921600189L, result.getMillisecond());
+            Assert.assertEquals(760000, result.getNanoOfMillisecond());
+            Assert.assertNull(converter.convert(tsVector, 1));
+        }
+    }
+
+    @Test
+    public void testDateConverterWithDateDayVector() {
+        // StarRocks 3.3+ returns DATE as Arrow DATEDAY instead of VARCHAR
+        // Verify checkTypeCompatible passes and DateConverter reads correctly
+        try (RootAllocator allocator = new RootAllocator(Long.MAX_VALUE);
+             DateDayVector dateDayVector = new DateDayVector("date_1", allocator)) {
+
+            dateDayVector.allocateNew(3);
+            // 2020-03-23 = epoch day 18344
+            dateDayVector.set(0, 18344);
+            // 2026-05-23 = epoch day 20597
+            dateDayVector.set(1, 20597);
+            // null
+            dateDayVector.setNull(2);
+            dateDayVector.setValueCount(3);
+
+            Field arrowField = new Field("date_1",
+                    org.apache.arrow.vector.types.pojo.FieldType.nullable(new ArrowType.Date(org.apache.arrow.vector.types.DateUnit.DAY)),
+                    null);
+            DateType flinkDateType = new DateType(true);
+
+            // Should not throw IllegalStateException
+            ArrowFieldConverter.checkTypeCompatible(flinkDateType, arrowField);
+
+            ArrowFieldConverter.DateConverter converter = new ArrowFieldConverter.DateConverter(true);
+            Assert.assertEquals(18344, converter.convert(dateDayVector, 0));
+            Assert.assertEquals(20597, converter.convert(dateDayVector, 1));
+            Assert.assertNull(converter.convert(dateDayVector, 2));
+        }
+    }
+
+    @Test
+    public void testDateConverterWithVarCharVectorBackwardCompat() {
+        // Old StarRocks (<3.3) returns DATE as Arrow VARCHAR — verify backward compat
+        try (RootAllocator allocator = new RootAllocator(Long.MAX_VALUE);
+             VarCharVector varCharVector = new VarCharVector("date_1", allocator)) {
+
+            varCharVector.allocateNew(2);
+            varCharVector.setSafe(0, "2020-03-23".getBytes());
+            varCharVector.setNull(1);
+            varCharVector.setValueCount(2);
+
+            ArrowFieldConverter.DateConverter converter = new ArrowFieldConverter.DateConverter(true);
+            // 2020-03-23 epoch day = 18344
+            Assert.assertEquals(18344, converter.convert(varCharVector, 0));
+            Assert.assertNull(converter.convert(varCharVector, 1));
+        }
     }
 }
+
