@@ -154,6 +154,63 @@ public class LingeringTransactionAborterTest {
     }
 
     @Test
+    public void testFirstWriteChecksTablesNotInSinkOptions() throws Exception {
+        String labelPrefix = "test_label";
+        int subtaskIndex = 1;
+        long restoreCheckpointId = 5;
+        // The job also writes to tbl2, which is not in the sink options. This subtask did not
+        // write to tbl2 before checkpoint 5, so the snapshots only have tbl1.
+        List<Tuple2<String, String>> dbTables = Collections.singletonList(Tuple2.of("db1", "tbl1"));
+        List<ExactlyOnceLabelGeneratorSnapshot> snapshots = Collections.singletonList(
+                new ExactlyOnceLabelGeneratorSnapshot(
+                        restoreCheckpointId, "db1", "tbl1", labelPrefix, NUMBER_OF_SUBTASKS, subtaskIndex, 4));
+        MockStreamLoader streamLoader = new MockStreamLoader();
+        // An earlier restore from checkpoint 5 began a transaction on tbl2 with label number 6, and
+        // failed. This restore begins the labels of tbl2 from number 6 again.
+        String lingeringLabel = ExactlyOnceLabelGenerator.genLabel(labelPrefix, "tbl2", subtaskIndex, 6);
+        streamLoader.addLabelStatus("db1", "tbl2", lingeringLabel, TransactionStatus.PREPARED);
+
+        LingeringTransactionAborter aborter = new LingeringTransactionAborter(labelPrefix,
+                restoreCheckpointId, subtaskIndex, NUMBER_OF_SUBTASKS, -1, dbTables, snapshots, streamLoader);
+        aborter.execute();
+        ExactlyOnceLabelGeneratorFactory factory = new ExactlyOnceLabelGeneratorFactory(
+                labelPrefix, NUMBER_OF_SUBTASKS, subtaskIndex, restoreCheckpointId);
+        factory.restore(snapshots);
+        factory.setLingeringTransactionAborter(aborter);
+
+        // The first write to tbl2 aborts the transaction before it begins one with the same label
+        assertEquals(lingeringLabel, factory.create("db1", "tbl2").next());
+        assertEquals(TransactionStatus.ABORTED, streamLoader.getLoadStatus("db1", "tbl2", lingeringLabel));
+    }
+
+    @Test
+    public void testFirstWriteSkipsCheckedTables() throws Exception {
+        String labelPrefix = "test_label";
+        int subtaskIndex = 1;
+        long restoreCheckpointId = 5;
+        // The restore checks tbl1 from its snapshot, and tbl2 because it is in the sink options
+        List<Tuple2<String, String>> dbTables = Arrays.asList(Tuple2.of("db1", "tbl1"), Tuple2.of("db1", "tbl2"));
+        List<ExactlyOnceLabelGeneratorSnapshot> snapshots = Collections.singletonList(
+                new ExactlyOnceLabelGeneratorSnapshot(
+                        restoreCheckpointId, "db1", "tbl1", labelPrefix, NUMBER_OF_SUBTASKS, subtaskIndex, 4));
+        MockStreamLoader streamLoader = new MockStreamLoader();
+
+        LingeringTransactionAborter aborter = new LingeringTransactionAborter(labelPrefix,
+                restoreCheckpointId, subtaskIndex, NUMBER_OF_SUBTASKS, -1, dbTables, snapshots, streamLoader);
+        aborter.execute();
+        ExactlyOnceLabelGeneratorFactory factory = new ExactlyOnceLabelGeneratorFactory(
+                labelPrefix, NUMBER_OF_SUBTASKS, subtaskIndex, restoreCheckpointId);
+        factory.restore(snapshots);
+        factory.setLingeringTransactionAborter(aborter);
+        int numStatusRequests = streamLoader.getNumGetLoadStatusCalls();
+
+        factory.create("db1", "tbl1");
+        factory.create("db1", "tbl2");
+        // The first writes do not ask StarRocks about the labels again
+        assertEquals(numStatusRequests, streamLoader.getNumGetLoadStatusCalls());
+    }
+
+    @Test
     public void testRestoreAfterRescaleAndLabelChanged() throws Exception {
         String oldLabelPrefix = "test_label_old";
         String labelPrefix = "test_label";
@@ -581,28 +638,60 @@ public class LingeringTransactionAborterTest {
     }
 
     @Test
-    public void testRescaleChecksLabelsOfTablesNotInSinkOptions() throws Exception {
+    public void testRescaleKeepsLabelsOfTablesNotInSinkOptionsThatAnotherSubtaskUses() throws Exception {
         String labelPrefix = "test_label";
         long restoreCheckpointId = 5;
         // The job also writes to tbl2, which is not in the sink options
         List<Tuple2<String, String>> dbTables = Collections.singletonList(Tuple2.of("db1", "tbl1"));
         List<ExactlyOnceLabelGeneratorSnapshot> snapshots = Arrays.asList(
                 new ExactlyOnceLabelGeneratorSnapshot(restoreCheckpointId, "db1", "tbl1", labelPrefix, 3, 0, 6),
-                new ExactlyOnceLabelGeneratorSnapshot(restoreCheckpointId, "db1", "tbl2", labelPrefix, 3, 1, 6));
+                new ExactlyOnceLabelGeneratorSnapshot(restoreCheckpointId, "db1", "tbl2", labelPrefix, 3, 1, 4));
         MockStreamLoader streamLoader = new MockStreamLoader();
-        // Old subtask 1 left a transaction on tbl2 with label number 6. Subtask 1 checks its labels
-        // from number 6 only for the tables in the sink options, so subtask 0 must abort it.
-        String lingeringLabel = ExactlyOnceLabelGenerator.genLabel(labelPrefix, "tbl2", 1, 6);
-        streamLoader.addLabelStatus("db1", "tbl2", lingeringLabel, TransactionStatus.PREPARED);
+        // Old subtask 1 left transactions on tbl2 with label numbers 4 and 5
+        String lingeringLabel4 = ExactlyOnceLabelGenerator.genLabel(labelPrefix, "tbl2", 1, 4);
+        String lingeringLabel5 = ExactlyOnceLabelGenerator.genLabel(labelPrefix, "tbl2", 1, 5);
+        streamLoader.addLabelStatus("db1", "tbl2", lingeringLabel4, TransactionStatus.PREPARED);
+        streamLoader.addLabelStatus("db1", "tbl2", lingeringLabel5, TransactionStatus.PREPARED);
+        // Subtask 1 has begun a transaction on tbl2 with label number 6
+        String runningLabel = ExactlyOnceLabelGenerator.genLabel(labelPrefix, "tbl2", 1, 6);
+        streamLoader.addLabelStatus("db1", "tbl2", runningLabel, TransactionStatus.PREPARE);
 
         LingeringTransactionAborter aborter = new LingeringTransactionAborter(labelPrefix,
                 restoreCheckpointId, 0, 2, -1, dbTables, snapshots, streamLoader);
         aborter.execute();
 
-        assertEquals(TransactionStatus.ABORTED, streamLoader.getLoadStatus("db1", "tbl2", lingeringLabel));
+        assertEquals(TransactionStatus.ABORTED, streamLoader.getLoadStatus("db1", "tbl2", lingeringLabel4));
+        assertEquals(TransactionStatus.ABORTED, streamLoader.getLoadStatus("db1", "tbl2", lingeringLabel5));
+        assertEquals(TransactionStatus.PREPARE, streamLoader.getLoadStatus("db1", "tbl2", runningLabel));
     }
 
-    private static class MockStreamLoader implements StreamLoader {
+    @Test
+    public void testRescaleChecksOwnLabelsOfTablesNotInSinkOptionsOnFirstWrite() throws Exception {
+        String labelPrefix = "test_label";
+        long restoreCheckpointId = 5;
+        // The job also writes to tbl2, which is not in the sink options. Subtask 0 got the
+        // snapshot of tbl2 for subtask index 1, so subtask 1 has none.
+        List<Tuple2<String, String>> dbTables = Collections.singletonList(Tuple2.of("db1", "tbl1"));
+        List<ExactlyOnceLabelGeneratorSnapshot> snapshots = Collections.singletonList(
+                new ExactlyOnceLabelGeneratorSnapshot(restoreCheckpointId, "db1", "tbl1", labelPrefix, 3, 2, 6));
+        MockStreamLoader streamLoader = new MockStreamLoader();
+        // Old subtask 1 left a transaction on tbl2 with label number 6, which subtask 1 is going to use
+        String ownLabel = ExactlyOnceLabelGenerator.genLabel(labelPrefix, "tbl2", 1, 6);
+        streamLoader.addLabelStatus("db1", "tbl2", ownLabel, TransactionStatus.PREPARED);
+
+        LingeringTransactionAborter aborter = new LingeringTransactionAborter(labelPrefix,
+                restoreCheckpointId, 1, 2, -1, dbTables, snapshots, streamLoader);
+        aborter.execute();
+        ExactlyOnceLabelGeneratorFactory factory = new ExactlyOnceLabelGeneratorFactory(
+                labelPrefix, 2, 1, restoreCheckpointId);
+        factory.restore(snapshots);
+        factory.setLingeringTransactionAborter(aborter);
+
+        assertEquals(ownLabel, factory.create("db1", "tbl2").next());
+        assertEquals(TransactionStatus.ABORTED, streamLoader.getLoadStatus("db1", "tbl2", ownLabel));
+    }
+
+    public static class MockStreamLoader implements StreamLoader {
 
         // mapping from tuple<db, table, label> to transaction status
         private final Map<Tuple3<String, String, String>, TransactionStatus> labelStatus;
@@ -621,6 +710,7 @@ public class LingeringTransactionAborterTest {
 
         private int numUnknownTxnToAbort = 0;
         private int numCancelLoadCalls = 0;
+        private int numGetLoadStatusCalls = 0;
 
         public MockStreamLoader() {
             this.labelStatus = new HashMap<>();
@@ -662,8 +752,13 @@ public class LingeringTransactionAborterTest {
             return numCancelLoadCalls;
         }
 
+        public int getNumGetLoadStatusCalls() {
+            return numGetLoadStatusCalls;
+        }
+
         @Override
         public TransactionStatus getLoadStatus(String db, String table, String label) throws Exception {
+            numGetLoadStatusCalls++;
             Tuple3<String, String, String> tuple = Tuple3.of(db, table, label);
             TransactionStatus status = labelStatus.get(tuple);
             List<TransactionStatus> list = transitStatusMap.get(tuple);

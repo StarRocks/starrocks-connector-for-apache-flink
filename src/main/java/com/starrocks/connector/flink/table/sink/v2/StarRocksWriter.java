@@ -125,6 +125,10 @@ public class StarRocksWriter<InputT>
                         sinkManager.getStreamLoader());
 
                 aborter.execute();
+                if (labelGeneratorFactory instanceof ExactlyOnceLabelGeneratorFactory) {
+                    // Check the other tables before the first write to them
+                    ((ExactlyOnceLabelGeneratorFactory) labelGeneratorFactory).setLingeringTransactionAborter(aborter);
+                }
             }
         } catch (Exception e) {
             LOG.error("Failed to abort lingering transactions.", e);
