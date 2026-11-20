@@ -254,12 +254,9 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
                     sinkOptions.getAbortCheckNumTxns(),
                     sinkOptions.getDbTables(),
                     restoredGeneratorSnapshots,
-                    sinkManager.getStreamLoader());
+                    sinkManager.getStreamLoader(),
+                    exactlyOnceLabelFactory);
             aborter.execute();
-            if (exactlyOnceLabelFactory != null) {
-                // Check the other tables before the first write to them
-                exactlyOnceLabelFactory.setLingeringTransactionAborter(aborter);
-            }
         }
 
         notifyCheckpointComplete(Long.MAX_VALUE);

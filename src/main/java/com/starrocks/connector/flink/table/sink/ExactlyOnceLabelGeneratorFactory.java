@@ -58,7 +58,7 @@ public class ExactlyOnceLabelGeneratorFactory implements LabelGeneratorFactory {
                 "restoreCheckpointId: {}", labelPrefix, numberOfSubtasks, subtaskIndex, restoreCheckpointId);
     }
 
-    public synchronized void setLingeringTransactionAborter(LingeringTransactionAborter lingeringTransactionAborter) {
+    synchronized void setLingeringTransactionAborter(LingeringTransactionAborter lingeringTransactionAborter) {
         this.lingeringTransactionAborter = lingeringTransactionAborter;
     }
 

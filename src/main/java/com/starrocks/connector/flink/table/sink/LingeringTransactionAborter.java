@@ -27,6 +27,8 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
+
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -47,6 +49,11 @@ public class LingeringTransactionAborter {
     private final List<Tuple2<String, String>> dbTables;
     private final List<ExactlyOnceLabelGeneratorSnapshot> snapshots;
     private final StreamLoader streamLoader;
+    // The label generator factory of this subtask if it uses ExactlyOnceLabelGenerator, or null.
+    // After execute(), it lets this aborter check a table that execute() has not checked before
+    // the first write to it.
+    @Nullable
+    private final ExactlyOnceLabelGeneratorFactory labelGeneratorFactory;
     // The tables whose labels with the current label prefix this subtask has checked
     private final Set<Tuple2<String, String>> checkedDbTables = new HashSet<>();
 
@@ -58,7 +65,8 @@ public class LingeringTransactionAborter {
             int checkNumTxns,
             List<Tuple2<String, String>> dbTables,
             List<ExactlyOnceLabelGeneratorSnapshot> snapshots,
-            StreamLoader streamLoader) {
+            StreamLoader streamLoader,
+            @Nullable ExactlyOnceLabelGeneratorFactory labelGeneratorFactory) {
         this.currentLabelPrefix = currentLabelPrefix;
         this.restoredCheckpointId = restoredCheckpointId;
         this.subtaskIndex = subtaskIndex;
@@ -67,6 +75,7 @@ public class LingeringTransactionAborter {
         this.dbTables = dbTables;
         this.snapshots = snapshots;
         this.streamLoader = streamLoader;
+        this.labelGeneratorFactory = labelGeneratorFactory;
         LOG.info("Create lingering transaction aborter, currentLabelPrefix: {}, restoredCheckpointId: {}, " +
                 "subtaskIndex: {}, numberOfSubtasks: {}, checkNumTxns: {}, dbTables: {}, snapshots: {}",
                 currentLabelPrefix, restoredCheckpointId, subtaskIndex, numberOfSubtasks, checkNumTxns,
@@ -119,6 +128,10 @@ public class LingeringTransactionAborter {
                 abortLingeringTransactions(dbTable.f0, dbTable.f1);
             }
         }
+        // Check the other tables before the first write to them
+        if (labelGeneratorFactory != null) {
+            labelGeneratorFactory.setLingeringTransactionAborter(this);
+        }
     }
 
     private void abortSnapshotLabelPrefix(List<ExactlyOnceLabelGeneratorSnapshot> snapshots) throws Exception {
@@ -127,8 +140,7 @@ public class LingeringTransactionAborter {
             long endId = checkNumTxns < 0 ? Long.MAX_VALUE : snapshot.getNextId() + checkNumTxns;
             if (isCheckedByAnotherRunningSubtask(snapshot)) {
                 // After a rescale, another running subtask has the subtask index of this snapshot. Without
-                // the snapshot, it begins its labels from restoredCheckpointId + 1, and checks them itself,
-                // on restore for the tables in the sink options, and before the first write for the others.
+                // the snapshot, it begins its labels from restoredCheckpointId + 1, and checks them itself.
                 // Only check the labels before them, or this subtask may abort a transaction that the other
                 // subtask has begun.
                 endId = Math.min(endId, restoredCheckpointId + 1);
@@ -160,12 +172,17 @@ public class LingeringTransactionAborter {
         }
     }
 
-    // Whether a running subtask other than this one checks the labels of the snapshot
-    // from restoredCheckpointId + 1
+    // Whether a running subtask other than this one checks the labels of the snapshot from
+    // restoredCheckpointId + 1. It checks the tables in the sink options on restore. It checks the
+    // other tables before the first write to them if it uses ExactlyOnceLabelGeneratorFactory, as all
+    // subtasks do if this one does. If not, it does not begin transactions with these labels, and this
+    // subtask checks them.
     private boolean isCheckedByAnotherRunningSubtask(ExactlyOnceLabelGeneratorSnapshot snapshot) {
         return snapshot.getLabelPrefix().equals(currentLabelPrefix)
                 && snapshot.getSubTaskIndex() != subtaskIndex
-                && snapshot.getSubTaskIndex() < numberOfSubtasks;
+                && snapshot.getSubTaskIndex() < numberOfSubtasks
+                && (labelGeneratorFactory != null
+                        || dbTables.contains(Tuple2.of(snapshot.getDb(), snapshot.getTable())));
     }
 
     /**
@@ -174,7 +191,7 @@ public class LingeringTransactionAborter {
      * have begun transactions with them. {@link ExactlyOnceLabelGeneratorFactory} calls it before the
      * first write to such a table. It does nothing for a table that this subtask has checked.
      */
-    public synchronized void abortLingeringTransactions(String db, String table) throws Exception {
+    synchronized void abortLingeringTransactions(String db, String table) throws Exception {
         Tuple2<String, String> dbTable = Tuple2.of(db, table);
         if (checkedDbTables.contains(dbTable)) {
             return;
