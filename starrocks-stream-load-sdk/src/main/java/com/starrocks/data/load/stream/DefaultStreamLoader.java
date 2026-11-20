@@ -92,6 +92,9 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
 
     @Override
     public void start(StreamLoadProperties properties, StreamLoadManager manager) {
+        // Ask the provider once up front so that a broken provider fails the loader at start,
+        // not on the first flush on an I/O thread.
+        StreamLoadUtils.getBasicAuthHeader(properties.getCredentialsProvider());
         if (start.compareAndSet(false, true)) {
             this.objectMapper = new ObjectMapper();
             // StreamLoadResponseBody does not contain all fields returned by StarRocks
@@ -375,11 +378,20 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
         if (!headers.containsKey("timeout")) {
             headers.put("timeout", "600");
         }
-        headers.put(HttpHeaders.AUTHORIZATION, StreamLoadUtils.getBasicAuthHeader(properties.getUsername(), properties.getPassword()));
+        // Authorization is not a default header: it is built per request from the credentials
+        // provider, so that rotated credentials take effect on the next request.
         headers.put(HttpHeaders.EXPECT, "100-continue");
         this.defaultHeaders = headers.entrySet().stream()
                 .map(entry -> new BasicHeader(entry.getKey(), entry.getValue()))
                 .toArray(Header[]::new);
+    }
+
+    /**
+     * Builds the {@code Authorization} header value for one request. The credentials provider is
+     * asked once per call so that every request uses the latest credentials.
+     */
+    protected String getAuthorizationHeader() {
+        return StreamLoadUtils.getBasicAuthHeader(properties.getCredentialsProvider());
     }
 
     protected StreamLoadResponse sendToSR(TableRegion region) {
@@ -412,6 +424,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
             httpPut.setEntity(region.getHttpEntity());
 
             httpPut.setHeaders(defaultHeaders);
+            httpPut.setHeader(HttpHeaders.AUTHORIZATION, getAuthorizationHeader());
             for (Map.Entry<String, String> entry : region.getHeaders().entrySet()) {
                 httpPut.removeHeaders(entry.getKey());
                 httpPut.addHeader(entry.getKey(), entry.getValue());
@@ -647,7 +660,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
             try (CloseableHttpClient client = HttpClients.createDefault()) {
                 String url = host + "/api/" + database + "/get_load_state?label=" + label;
                 HttpGet httpGet = new HttpGet(url);
-                httpGet.addHeader("Authorization", StreamLoadUtils.getBasicAuthHeader(properties.getUsername(), properties.getPassword()));
+                httpGet.addHeader("Authorization", getAuthorizationHeader());
                 httpGet.setHeader("Connection", "close");
                 // Bound the read so a lost get_load_state reply cannot hang this reconciliation
                 // query (its outer 60s loop cap only guards between attempts, not a stuck read).
@@ -695,8 +708,7 @@ public class DefaultStreamLoader implements StreamLoader, Serializable {
         httpPost.setConfig(RequestConfig.custom()
                 .setConnectTimeout(properties.getConnectTimeout())
                 .build());
-        httpPost.addHeader("Authorization",
-                StreamLoadUtils.getBasicAuthHeader(properties.getUsername(), properties.getPassword()));
+        httpPost.addHeader("Authorization", getAuthorizationHeader());
         httpPost.setHeader("Connection", "close");
 
         try (CloseableHttpClient client = HttpClients.custom()

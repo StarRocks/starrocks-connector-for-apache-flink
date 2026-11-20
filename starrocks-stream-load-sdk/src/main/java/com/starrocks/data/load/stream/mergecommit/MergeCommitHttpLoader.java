@@ -70,6 +70,8 @@ public class MergeCommitHttpLoader extends MergeCommitLoader {
     public void start(StreamLoadProperties properties, StreamLoadManager manager) {
         try {
             this.properties = properties;
+            // Ask the provider once up front so that a broken provider fails the loader at start.
+            StreamLoadUtils.getBasicAuthHeader(properties.getCredentialsProvider());
             this.objectMapper = new ObjectMapper();
             // StreamLoadResponseBody does not contain all fields returned by StarRocks
             objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
@@ -77,8 +79,7 @@ public class MergeCommitHttpLoader extends MergeCommitLoader {
             objectMapper.configure(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES, true);
 
             DefaultFeHttpService.Config httpConfig = new DefaultFeHttpService.Config();
-            httpConfig.username = properties.getUsername();
-            httpConfig.password = properties.getPassword();
+            httpConfig.credentialsProvider = properties.getCredentialsProvider();
             httpConfig.candidateHosts = Arrays.asList(properties.getLoadUrls());
             httpConfig.maxConnectionsPerRoute = properties.getHttpMaxConnectionsPerRoute();
             httpConfig.totalMaxConnections = properties.getHttpTotalMaxConnections();
@@ -94,8 +95,6 @@ public class MergeCommitHttpLoader extends MergeCommitLoader {
             feMetaService = service1;
 
             BackendHttpService.Config backendConfig = new BackendHttpService.Config();
-            backendConfig.username = properties.getUsername();
-            backendConfig.password = properties.getPassword();
             backendConfig.maxConnectionsPerRoute = properties.getHttpMaxConnectionsPerRoute();
             backendConfig.totalMaxConnections = properties.getHttpTotalMaxConnections();
             backendConfig.idleConnectionTimeoutMs = properties.getHttpIdleConnectionTimeoutMs();
@@ -189,7 +188,7 @@ public class MergeCommitHttpLoader extends MergeCommitLoader {
             table.getLoadParameters().forEach(httpPut::addHeader);
             httpPut.addHeader("label", requestRun.userLabel);
             httpPut.addHeader(HttpHeaders.AUTHORIZATION,
-                    StreamLoadUtils.getBasicAuthHeader(properties.getUsername(), properties.getPassword()));
+                    StreamLoadUtils.getBasicAuthHeader(properties.getCredentialsProvider()));
             if (!backendDirectConnection) {
                 httpPut.addHeader(HttpHeaders.EXPECT, "100-continue");
             }

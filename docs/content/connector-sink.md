@@ -104,6 +104,7 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 | sink.connect.timeout-ms           | No           | 30000             | The timeout for establishing HTTP connection. Valid values: 100 to 60000. Unit: ms. Before 1.2.9, the default value is 1000.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | sink.socket.timeout-ms            | No           | -1                | Supported since 1.2.10. The time duration for which the HTTP client waits for data. Unit: ms. The default value `-1` means there is no timeout.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | sink.sanitize-error-log          | No           | false             |  Supported since 1.2.12. When true, sensitive row data and column values in Stream-Load error logs are redacted in both connector and SDK logs. Intended for production security; defaults to false for backward compatibility. |
+| sink.credentials-provider.class   | No           | NONE              | Supported since 1.2.17 and only effective when `sink.version` is `V2`. The fully qualified name of a `CredentialsProvider` class with a public no-argument constructor that supplies the user name and password for every Stream Load request. See [Credentials provider](#credentials-provider). |
 | sink.wait-for-continue.timeout-ms | No           | 10000             | Supported since 1.2.7. The timeout for waiting response of HTTP 100-continue from the FE. Valid values: `3000` to `600000`. Unit: ms                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | sink.http.keep-alive.enabled      | No           | false             | Supported since 1.2.17. Whether Stream Load requests and transaction requests (begin, prepare, commit, rollback) reuse HTTP connections (keep-alive) instead of opening a new connection for every request. Each sink subtask keeps at most `sink.io.thread-count` + 2 connections to each host. Takes effect when `sink.version` is `V2`. Off by default: every request opens a new connection, as in earlier versions, unless this is set to `true`. |
 | sink.http.keep-alive.idle-timeout-ms | No        | 60000             | Supported since 1.2.17. A kept-alive connection that has been idle for longer than this is no longer reused, and is closed within 10 seconds after the timeout. Unit: ms. It must be shorter than the idle timeout of every proxy or load balancer between Flink and StarRocks. For example, an AWS Network Load Balancer drops TCP connections that have been idle for 350 seconds by default. |
@@ -269,6 +270,26 @@ Here are some important notes when using merge commit:
   - `sink.merge-commit.chunk.size` controls the maximum data size per individual stream load request (per chunk). When data in a chunk reaches this size, it is flushed immediately.
   - `sink.buffer-flush.max-bytes` controls the total memory limit for all cached data across all tables. When the total cached data exceeds this limit, the connector will evict chunks early to free memory.
   - Therefore, `sink.buffer-flush.max-bytes` should be set larger than `sink.merge-commit.chunk.size` to allow at least one full chunk to be accumulated. In general, `sink.buffer-flush.max-bytes` should be several times larger than `sink.merge-commit.chunk.size`, especially when there are multiple tables or high concurrency.
+
+### Credentials provider
+
+Since 1.2.17, when `sink.version` is `V2`, the sink can take its credentials from a `com.starrocks.data.load.stream.auth.CredentialsProvider` instead of the fixed `username` and `password`. The sink calls `getCredentials()` for every request it sends to StarRocks, so the provider can return new credentials while the job runs. The provider is serialized with the job and called concurrently from the loading threads, so it must be serializable and thread-safe, and it should cache expensive lookups.
+
+* With the DataStream API, pass an instance with `StarRocksSinkOptions.builder().withCredentialsProvider(provider)`.
+* With Flink SQL, set `sink.credentials-provider.class` to the name of a class with a public no-argument constructor. The class must be on the classpath of the task managers.
+
+`username` and `password` are still used to read table metadata whenever the job graph is built, so keep them valid, including across a JobManager failover in application mode.
+
+With merge commit, the label state and node requests use the provider of the first merge commit sink started in the task manager JVM.
+
+[KubernetesSecretCredentialsProvider](https://github.com/StarRocks/starrocks-connector-for-apache-flink/tree/main/examples/src/main/java/com/starrocks/connector/flink/examples/datastream/KubernetesSecretCredentialsProvider.java) is an example provider that reads the credentials from a mounted Kubernetes Secret:
+
+```java
+StarRocksSinkOptions options = StarRocksSinkOptions.builder()
+        // ... other options
+        .withCredentialsProvider(new KubernetesSecretCredentialsProvider("/etc/starrocks-credentials"))
+        .build();
+```
 
 ### Monitoring load metrics
 
