@@ -17,6 +17,8 @@ package com.starrocks.connector.flink.table.sink;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.api.ValidationException;
+import org.apache.flink.table.api.config.ExecutionConfigOptions;
 import org.apache.flink.table.connector.sink.DynamicTableSink;
 import org.apache.flink.table.factories.DynamicTableSinkFactory;
 import org.apache.flink.table.factories.FactoryUtil;
@@ -40,8 +42,26 @@ public class StarRocksDynamicTableSinkFactory implements DynamicTableSinkFactory
         ReadableConfig options = helper.getOptions();
         // validate some special properties
         StarRocksSinkOptions sinkOptions = new StarRocksSinkOptions(options, context.getCatalogTable().getOptions());
+        checkNoMiniBatchWithUnavailableValue(sinkOptions, context.getConfiguration());
         TableSchema physicalSchema = TableSchemaUtils.getPhysicalSchema(context.getCatalogTable().getSchema());
         return new StarRocksDynamicTableSink(sinkOptions, physicalSchema);
+    }
+
+    /**
+     * With mini-batch, ChangelogNormalize forwards only the last row of each key in a batch. A row that
+     * changed a TOAST column can then be replaced by a later one holding the unavailable value, and the
+     * change never reaches the sink.
+     */
+    static void checkNoMiniBatchWithUnavailableValue(StarRocksSinkOptions sinkOptions, ReadableConfig sessionConfig) {
+        if (sinkOptions.isFlexiblePartialUpdate()
+                && sinkOptions.getFlexiblePartialUpdateUnavailableValue() != null
+                && sessionConfig.get(ExecutionConfigOptions.TABLE_EXEC_MINIBATCH_ENABLED)) {
+            throw new ValidationException("'" + StarRocksSinkOptions.SINK_FLEXIBLE_PARTIAL_UPDATE_UNAVAILABLE_VALUE.key()
+                    + "' cannot be used with '" + ExecutionConfigOptions.TABLE_EXEC_MINIBATCH_ENABLED.key()
+                    + "=true'. Mini-batch keeps only the last change of a key in each batch, so a change to a TOAST "
+                    + "column is lost when a later change of the same row holds the unavailable value. "
+                    + "Disable mini-batch for this job.");
+        }
     }
 
     @Override
@@ -66,6 +86,8 @@ public class StarRocksDynamicTableSinkFactory implements DynamicTableSinkFactory
         Set<ConfigOption<?>> optionalOptions = new HashSet<>();
         optionalOptions.add(StarRocksSinkOptions.SINK_VERSION);
         optionalOptions.add(StarRocksSinkOptions.SINK_JSON_COLUMNS_FROM_FLINK_SCHEMA);
+        optionalOptions.add(StarRocksSinkOptions.SINK_FLEXIBLE_PARTIAL_UPDATE_UNAVAILABLE_VALUE);
+        optionalOptions.add(StarRocksSinkOptions.SINK_FLEXIBLE_PARTIAL_UPDATE_UNAVAILABLE_VALUE_ON_INSERT);
         optionalOptions.add(StarRocksSinkOptions.SINK_BATCH_MAX_SIZE);
         optionalOptions.add(StarRocksSinkOptions.SINK_BATCH_MAX_ROWS);
         optionalOptions.add(StarRocksSinkOptions.SINK_BATCH_FLUSH_INTERVAL);

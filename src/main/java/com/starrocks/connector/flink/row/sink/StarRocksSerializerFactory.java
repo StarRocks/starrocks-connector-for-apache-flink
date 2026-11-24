@@ -31,6 +31,9 @@ public class StarRocksSerializerFactory {
                 tmp[fieldNames.length] = StarRocksSinkOP.COLUMN_KEY;
                 fieldNames = tmp;
             }
+            if (sinkOptions.isFlexiblePartialUpdate()) {
+                return new StarRocksFlexibleJsonSerializer(fieldNames);
+            }
             return new StarRocksJsonSerializer(fieldNames);
         }
         throw new RuntimeException("Failed to create row serializer, unsupported `format` from stream load properties.");

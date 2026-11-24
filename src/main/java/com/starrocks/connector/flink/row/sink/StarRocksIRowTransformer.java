@@ -17,6 +17,7 @@ package com.starrocks.connector.flink.row.sink;
 import com.starrocks.connector.flink.table.StarRocksDataType;
 import com.starrocks.connector.flink.tools.JsonWrapper;
 import org.apache.flink.api.common.functions.RuntimeContext;
+import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.table.api.TableSchema;
 
 import java.io.Serializable;
@@ -31,6 +32,17 @@ public interface StarRocksIRowTransformer<T> extends Serializable {
     void setRuntimeContext(RuntimeContext ctx);
 
     default void setFastJsonWrapper(JsonWrapper jsonWrapper) {}
+
+    /**
+     * Makes {@link #transform} produce rows for a flexible partial update. A transformer that cannot
+     * must refuse, because a row it writes unchanged would overwrite columns the row has no value for.
+     */
+    default void setFlexibleRowProjection(FlexibleRowProjection projection) {
+        throw new UnsupportedOperationException(
+                getClass().getName() + " does not support flexible partial update");
+    }
+
+    default void setMetricGroup(MetricGroup metricGroup) {}
 
     Object[] transform(T record, boolean supportUpsertDelete);
     

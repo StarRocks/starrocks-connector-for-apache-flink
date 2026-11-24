@@ -23,6 +23,7 @@ package com.starrocks.connector.flink.manager;
 import com.google.common.collect.Ordering;
 import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionOptions;
 import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
+import com.starrocks.connector.flink.row.sink.FlexibleRowProjection;
 import com.starrocks.connector.flink.table.StarRocksDataType;
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 import org.apache.flink.table.api.TableColumn;
@@ -120,6 +121,10 @@ public class StarRocksSinkTable {
             sinkOptions.enableUpsertDelete();
         }
 
+        if (sinkOptions.isFlexiblePartialUpdate()) {
+            validateForFlexiblePartialUpdate(sinkOptions, flinkSchema, rows, primaryKeys);
+        }
+
         if (sinkOptions.hasColumnMappingProperty()) {
             return;
         }
@@ -167,6 +172,32 @@ public class StarRocksSinkTable {
             // aligned if the number of columns is same, and the positions are ordered
             flinkAndStarRocksSchemaAligned = flinkSchema.getTableColumns().size() == starrocksColumnMapping.size() &&
                     Ordering.natural().isOrdered(columnPositionInStarRocksSchema);
+        }
+    }
+
+    private void validateForFlexiblePartialUpdate(StarRocksSinkOptions sinkOptions, TableSchema flinkSchema,
+                                                  List<Map<String, Object>> columns, List<String> primaryKeys) {
+        if (primaryKeys.isEmpty()) {
+            throw new IllegalArgumentException("Flexible partial update only supports primary key tables, but "
+                    + database + "." + table + " is not one.");
+        }
+        // The server matches the keys of a JSON row to column names case sensitively, and treats a key
+        // it does not recognize as absent. A differently cased Flink column would silently not be updated.
+        Map<String, String> columnNames = new HashMap<>();
+        for (Map<String, Object> column : columns) {
+            String name = column.get("COLUMN_NAME").toString();
+            columnNames.put(name.toLowerCase(), name);
+        }
+        for (String field : flinkSchema.getFieldNames()) {
+            String columnName = columnNames.get(field.toLowerCase());
+            if (columnName != null && !columnName.equals(field)) {
+                throw new IllegalArgumentException("Flexible partial update matches column names case sensitively, "
+                        + "but the Flink column '" + field + "' is '" + columnName + "' in " + database + "." + table
+                        + ". Rename the Flink column to match.");
+            }
+        }
+        if (sinkOptions.getFlexiblePartialUpdateUnavailableValue() != null) {
+            FlexibleRowProjection.checkColumnTypes(flinkSchema);
         }
     }
 
