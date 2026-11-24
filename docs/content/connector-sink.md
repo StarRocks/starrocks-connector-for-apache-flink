@@ -109,6 +109,8 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 | sink.http.keep-alive.idle-timeout-ms | No        | 60000             | Supported since 1.2.17. A kept-alive connection that has been idle for longer than this is no longer reused, and is closed within 10 seconds after the timeout. Unit: ms. It must be shorter than the idle timeout of every proxy or load balancer between Flink and StarRocks. For example, an AWS Network Load Balancer drops TCP connections that have been idle for 350 seconds by default. |
 | sink.ignore.update-before         | No           | true              | Supported since version 1.2.8. Whether to ignore `UPDATE_BEFORE` records from Flink when loading data to Primary Key tables. If this parameter is set to false, the record is treated as a delete operation to StarRocks table.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | sink.json.columns-from-flink-schema | No         | false             | Supported since 1.2.16. Whether the Stream Load `columns` header is derived from the Flink table schema when the format is `json`. By default no header is sent for `json`, so the server declares every table column and a column the payload does not carry is stored as NULL even when it has a DEFAULT. When `true`, the Flink table's columns are sent as the header, so a column the Flink schema does not declare is left off and the server applies its DEFAULT. Requires a Flink schema and `sink.properties.format=json`, and cannot be combined with `sink.properties.columns` or `sink.properties.jsonpaths`. |
+| sink.flexible-partial-update.unavailable-value | No | NONE | Supported since 1.2.18. Only valid with `sink.properties.partial_update_mode=flexible_row`. The value a CDC source emits for a column it could not read, such as `__debezium_unavailable_value` for an unchanged PostgreSQL TOAST column. A non primary key column holding exactly this value is left out of the row, so StarRocks keeps its current value. See [Flexible partial update](#flexible-partial-update). |
+| sink.flexible-partial-update.unavailable-value-on-insert | No | log | Supported since 1.2.18. What to do with an INSERT row that carries the unavailable value. `log` writes the row without the column, and reports it in a WARN log and the metric `totalUnavailableValueInsertRows`. `fail` fails the job. See [Primary key changes](#primary-key-changes). |
 | sink.parallelism                  | No           | NONE              | The parallelism of loading. Only available for Flink SQL. If this parameter is not specified, Flink planner decides the parallelism. **In the scenario of multi-parallelism, users need to guarantee data is written in the correct order.**                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | sink.properties.*                 | No           | NONE              | The parameters that control Stream Load behavior. For example, the parameter `sink.properties.format` specifies the format used for Stream Load, such as CSV or JSON. For a list of supported parameters and their descriptions, see [STREAM LOAD](https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD).                                                                                                                                                                                                                                                                                                                                 |
 | sink.properties.format            | No           | csv               | The format used for Stream Load. The Flink connector transforms each batch of data to the format before sending them to StarRocks. Valid values: `csv` and `json`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
@@ -281,6 +283,7 @@ The Flink connector provides the following metrics to monitor loading.
 | totalFlushSucceededTimes | counter | number of times that the data-batch been successfully flushed.  |
 | totalFlushFailedTimes    | counter | number of times that the flushing been failed.                  |
 | totalFilteredRows        | counter | number of rows filtered which is also included in totalFlushRows.    |
+| totalUnavailableValueInsertRows | counter | flexible partial update only: number of INSERT rows written without a column because it held the unavailable value. See [Primary key changes](#primary-key-changes). |
 | sharedTxnLatencyMs       | histogram | multi-table transaction mode only: time in ms from when the earliest row of a shared transaction entered the sink buffer until the transaction committed. |
 
 ### Flink CDC Synchronization (Schema Change Support)
@@ -607,6 +610,134 @@ This example will show how to load data only to columns `id` and `name`.
     ```
 
     You can see that only values for `name` change, and the values for `score` do not change.
+
+#### Flexible partial update
+
+Supported since 1.2.18. With `sink.properties.partial_update_mode=flexible_row`, each row updates only the columns
+it carries, so the rows of one load can update different columns.
+
+| In the JSON row      | Effect                                                                              |
+|----------------------|-------------------------------------------------------------------------------------|
+| The key has a value  | The column is updated.                                                              |
+| The key is `null`    | The column is set to NULL.                                                          |
+| The key is missing   | An existing row keeps the column's value. A new row takes the column's default.     |
+
+> **NOTICE**
+>
+> This mode needs a server that supports `partial_update_mode=flexible_row`. It is currently an experimental CelerData
+> feature that is off by default: set `enable_flexible_partial_update` on both the FE and the BE/CN. The server's own
+> restrictions on the table still apply, for example for sort keys that include non primary key columns.
+
+Set the following options on the sink:
+
+```SQL
+'sink.properties.format' = 'json',
+'sink.properties.partial_update' = 'true',
+'sink.properties.partial_update_mode' = 'flexible_row'
+```
+
+The columns of each row come from the keys of its JSON object, so the connector sends no `columns` header. It also uses
+non-transactional Stream Load, because the server does not support this mode in a transaction. The job fails at startup,
+with the reason and the fix, on a setting that cannot work with this mode:
+
+- `sink.properties.format` is not `json`, or `sink.properties.partial_update` is not `true`.
+- `sink.properties.partial_update_mode` is misspelled. The value is case sensitive, and the server would treat
+  `FLEXIBLE_ROW` as a plain partial update that writes NULL to the columns a row leaves out.
+- `sink.semantic=exactly-once`, `sink.transaction.multi-table.enabled=true`, merge commit, `sink.version=V1`, or
+  `sink.at-least-once.use-transaction-stream-load=true`.
+- `sink.properties.columns`, `jsonpaths`, `where` or `merge_condition`, or `sink.json.columns-from-flink-schema=true`.
+- `sink.ignore.update-before=false`. An `UPDATE_BEFORE` is written as a delete, and if its `UPDATE_AFTER` lands in a later
+  flush it creates a new row, whose unsent columns take their defaults.
+- The sink table is not a Primary Key table, or a Flink column differs in case from the StarRocks column. The server
+  matches JSON keys case sensitively and ignores the ones it does not recognize.
+- A Flink column maps to an HLL, BITMAP or PERCENTILE column, which this mode cannot write. Leave it out of the Flink
+  table and it keeps its value.
+
+For Flink SQL and for a DataStream job with a `StarRocksSinkRowBuilder`, the connector writes a null as an explicit
+`null`, and a delete as its primary key and `__op` only. For a DataStream job that writes JSON strings, you decide
+which keys each row has, and the connector only sets the headers and runs these checks.
+
+##### PostgreSQL TOAST columns
+
+With the default `REPLICA IDENTITY`, PostgreSQL does not send the value of a large (TOAST) column that an UPDATE did not
+change, and Debezium replaces it with the placeholder `__debezium_unavailable_value`. Without further handling that
+placeholder overwrites the real value. Set `sink.flexible-partial-update.unavailable-value` to the same placeholder, and
+the connector leaves such a column out of the row, so that StarRocks keeps its value:
+
+```SQL
+CREATE TABLE pg_orders (
+    id BIGINT,
+    created_at TIMESTAMP(3),
+    status STRING,
+    payload STRING, -- jsonb in PostgreSQL
+    PRIMARY KEY (id, created_at) NOT ENFORCED
+) WITH (
+    'connector' = 'postgres-cdc',
+    'hostname' = '127.0.0.1',
+    'port' = '5432',
+    'username' = 'postgres',
+    'password' = '',
+    'database-name' = 'test',
+    'schema-name' = 'public',
+    'table-name' = 'orders',
+    'slot.name' = 'orders_slot',
+    'decoding.plugin.name' = 'pgoutput',
+    -- needed without REPLICA IDENTITY FULL, because an UPDATE then has no "before" row
+    'changelog-mode' = 'upsert'
+);
+
+CREATE TABLE sr_orders (
+    id BIGINT,
+    created_at TIMESTAMP(3),
+    status STRING,
+    payload STRING, -- JSON in StarRocks
+    PRIMARY KEY (id, created_at) NOT ENFORCED
+) WITH (
+    'connector' = 'starrocks',
+    'jdbc-url' = 'jdbc:mysql://127.0.0.1:9030',
+    'load-url' = '127.0.0.1:8030',
+    'database-name' = 'test',
+    'table-name' = 'orders',
+    'username' = 'root',
+    'password' = '',
+    'sink.properties.format' = 'json',
+    'sink.properties.partial_update' = 'true',
+    'sink.properties.partial_update_mode' = 'flexible_row',
+    'sink.flexible-partial-update.unavailable-value' = '__debezium_unavailable_value'
+);
+
+INSERT INTO sr_orders SELECT * FROM pg_orders;
+```
+
+The following limits come from Debezium 1.9 (used by Flink CDC) and from how Flink SQL handles an upsert source:
+
+- **Arrays, maps and rows.** Debezium has no placeholder for these types and sends NULL for an unchanged TOAST value,
+  which cannot be told from a real NULL. The job therefore fails at startup if a non primary key column has one of these
+  types. Remove the column from the Flink table so that it keeps its values, or use `REPLICA IDENTITY FULL`.
+- **`numeric`.** Debezium also sends NULL when a `numeric` value is stored out of line. PostgreSQL only does this as a last
+  resort for a row that does not fit in a page, so `DECIMAL` columns are allowed and the job names them in a WARN log at
+  startup, but such a value would be overwritten with NULL.
+- **Mini-batch.** With `table.exec.mini-batch.enabled=true`, Flink keeps only the last change of a key in each batch, so a
+  change to a TOAST column is lost when a later change of that row holds the placeholder. The job fails at startup.
+- **Deletes of keys the job has not seen.** Flink SQL adds a `ChangelogNormalize` operator after an upsert source, and it
+  drops a DELETE for a key that is not in its state. Start the job from a full snapshot (`scan.startup.mode=initial`) and do
+  not set `table.exec.state.ttl`. A job that starts from `latest-offset` loses deletes of rows it has not seen change.
+
+##### Primary key changes
+
+Debezium turns an UPDATE that changes the primary key into a DELETE and an INSERT. The INSERT holds the placeholder for
+unchanged TOAST columns, and StarRocks has no row to keep their values from, so they take their defaults. The connector
+cannot recognize this case for certain, because `ChangelogNormalize` also emits the first change of a key the job has not
+seen as an INSERT, and for that row leaving the column out is correct.
+
+`sink.flexible-partial-update.unavailable-value-on-insert` controls what happens to an INSERT that holds the placeholder:
+
+- `log` (default) writes the row without the column, and reports it in a WARN log and the metric
+  `totalUnavailableValueInsertRows`.
+- `fail` fails the job. Use it only for a job that starts from a full snapshot and keeps every key in state. Otherwise the
+  first update of a key the job has not seen fails it too.
+
+If the primary key of a source table can change, use `REPLICA IDENTITY FULL` for that table.
 
 #### Conditional update
 

@@ -26,6 +26,7 @@ import com.alibaba.fastjson.serializer.JSONSerializer;
 import com.alibaba.fastjson.serializer.ObjectSerializer;
 import com.alibaba.fastjson.serializer.SerializeConfig;
 import com.alibaba.fastjson.serializer.SerializeWriter;
+import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.alibaba.fastjson.util.IOUtils;
 import org.apache.flink.table.data.DecimalData;
 import org.apache.flink.table.data.TimestampData;
@@ -62,6 +63,11 @@ public class JsonWrapper {
 
     public String toJSONString(Object object) {
         return JSON.toJSONString(object, serializeConfig);
+    }
+
+    /** Same as {@link #toJSONString(Object)}, but a null map value is written instead of being dropped. */
+    public String toJSONStringWithNulls(Object object) {
+        return JSON.toJSONString(object, serializeConfig, SerializerFeature.WriteMapNullValue);
     }
 
     public Object parse(String text) {

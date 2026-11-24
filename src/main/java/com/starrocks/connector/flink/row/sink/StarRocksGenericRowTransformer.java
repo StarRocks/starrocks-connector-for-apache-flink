@@ -17,8 +17,10 @@ package com.starrocks.connector.flink.row.sink;
 import com.starrocks.connector.flink.table.StarRocksDataType;
 
 import org.apache.flink.api.common.functions.RuntimeContext;
+import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.types.RowKind;
 
 import java.util.Map;
 
@@ -28,6 +30,8 @@ public class StarRocksGenericRowTransformer<T> implements StarRocksIRowTransform
 
     private StarRocksSinkRowBuilder<T> consumer;
     private String[] fieldNames;
+    // Only set for a flexible partial update.
+    private FlexibleRowProjection flexibleRow;
 
     public StarRocksGenericRowTransformer(StarRocksSinkRowBuilder<T> consumer) {
         this.consumer = consumer;
@@ -47,12 +51,30 @@ public class StarRocksGenericRowTransformer<T> implements StarRocksIRowTransform
     public void setRuntimeContext(RuntimeContext ctx) {}
 
     @Override
+    public void setFlexibleRowProjection(FlexibleRowProjection projection) {
+        this.flexibleRow = projection;
+    }
+
+    @Override
+    public void setMetricGroup(MetricGroup metricGroup) {
+        if (flexibleRow != null) {
+            flexibleRow.open(metricGroup);
+        }
+    }
+
+    @Override
     public Object[] transform(T record, boolean supportUpsertDelete) {
         Object[] rowData = new Object[fieldNames.length + (supportUpsertDelete ? 1 : 0)];
         consumer.accept(rowData, record);
         if (supportUpsertDelete && (record instanceof RowData)) {
             // set `__op` column
             rowData[rowData.length - 1] = StarRocksSinkOP.parse(((RowData)record).getRowKind()).ordinal();
+        }
+        if (flexibleRow != null) {
+            flexibleRow.project(rowData, supportUpsertDelete);
+            if (record instanceof RowData && ((RowData) record).getRowKind() == RowKind.INSERT) {
+                flexibleRow.checkInsert(rowData);
+            }
         }
         return rowData;
     }

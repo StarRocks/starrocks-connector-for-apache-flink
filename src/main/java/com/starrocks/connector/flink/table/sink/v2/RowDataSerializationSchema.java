@@ -64,6 +64,7 @@ public class RowDataSerializationSchema implements RecordSerializationSchema<Row
         this.serializer.open(new StarRocksISerializer.SerializerContext(jsonWrapper));
         this.rowTransformer.setRuntimeContext(null);
         this.rowTransformer.setFastJsonWrapper(jsonWrapper);
+        this.rowTransformer.setMetricGroup(context.getMetricGroup());
         this.reusableRowData = new DefaultStarRocksRowData();
         reusableRowData.setDatabase(databaseName);
         reusableRowData.setTable(tableName);

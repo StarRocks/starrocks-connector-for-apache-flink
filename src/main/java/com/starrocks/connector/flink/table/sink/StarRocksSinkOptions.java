@@ -190,6 +190,32 @@ public class StarRocksSinkOptions implements Serializable {
                     "column the Flink schema does not declare is left off and the server applies its DEFAULT. " +
                     "Requires a Flink schema and sink.properties.format=json; cannot be combined with " +
                     "sink.properties.columns or sink.properties.jsonpaths.");
+    public static final ConfigOption<String> SINK_FLEXIBLE_PARTIAL_UPDATE_UNAVAILABLE_VALUE =
+            ConfigOptions.key("sink.flexible-partial-update.unavailable-value")
+            .stringType().noDefaultValue().withDescription("Only valid with " +
+                    "sink.properties.partial_update_mode=flexible_row. The value a CDC source emits for a column " +
+                    "it could not read, such as __debezium_unavailable_value for an unchanged PostgreSQL TOAST " +
+                    "column. A non primary key column holding exactly this value is left out of the row, so " +
+                    "StarRocks keeps the column's current value instead of storing the placeholder.");
+
+    /** What to do with an INSERT row that carries the unavailable value. */
+    public enum UnavailableValueOnInsert {
+        /** Write the row without the column, and report it in the log and a metric. */
+        LOG,
+        /** Fail the job. */
+        FAIL
+    }
+
+    public static final ConfigOption<UnavailableValueOnInsert> SINK_FLEXIBLE_PARTIAL_UPDATE_UNAVAILABLE_VALUE_ON_INSERT =
+            ConfigOptions.key("sink.flexible-partial-update.unavailable-value-on-insert")
+            .enumType(UnavailableValueOnInsert.class).defaultValue(UnavailableValueOnInsert.LOG)
+            .withDescription("What to do with an INSERT row that carries the unavailable value. Such a row is " +
+                    "either the first change of a key the job has not seen, which Flink SQL emits as an INSERT and " +
+                    "where leaving the column out is correct, or the new row of an UPDATE that changed the primary " +
+                    "key, where the column has no stored value and takes its default. 'log' writes the row " +
+                    "without the column, and reports it in a WARN log and the metric " +
+                    "totalUnavailableValueInsertRows. 'fail' fails the job, and only suits a job that starts from " +
+                    "a full snapshot and keeps every key in state.");
     public static final ConfigOption<Boolean> SINK_IGNORE_UPDATE_BEFORE = ConfigOptions.key("sink.ignore.update-before")
             .booleanType().defaultValue(true).withDescription("Whether to ignore update_before records. In general, update_before " +
                     "and update_after have the same primary key, and appear in pair, so we only need to write the update_after " +
@@ -251,6 +277,16 @@ public class StarRocksSinkOptions implements Serializable {
             "sink.json.columns-from-flink-schema=true needs a Flink schema, which this sink does not have. "
             + "Use the table API or a schema aware sink, or set " + SINK_PROPERTIES_PREFIX + COLUMNS_KEY
             + " explicitly.";
+    public static final String PARTIAL_UPDATE_KEY = "partial_update";
+    public static final String PARTIAL_UPDATE_MODE_KEY = "partial_update_mode";
+    /** The server matches this value case sensitively. Any other spelling is a plain partial update. */
+    public static final String FLEXIBLE_ROW_MODE = "flexible_row";
+    private static final String FLEXIBLE_ROW_OPTION =
+            SINK_PROPERTIES_PREFIX + PARTIAL_UPDATE_MODE_KEY + "=" + FLEXIBLE_ROW_MODE;
+    // The columns of a flexible partial update come from the keys of each JSON row, so a load cannot
+    // also name, map or filter them.
+    private static final List<String> HEADERS_REFUSED_BY_FLEXIBLE_ROW =
+            Arrays.asList(COLUMNS_KEY, "jsonpaths", "where", "merge_condition");
 
     private final ReadableConfig tableOptions;
     private final Map<String, String> streamLoadProps = new HashMap<>();
@@ -297,7 +333,86 @@ public class StarRocksSinkOptions implements Serializable {
         validateParamsRange();
         validateMergeCommit();
         validateMultiTableTransaction();
+        validateFlexiblePartialUpdate();
         validateColumnsSource();
+    }
+
+    /**
+     * Refuses a flexible partial update the server could not run as one. These settings either fail
+     * every load, or worse, turn it into a plain partial update, which overwrites the columns a row
+     * leaves out with NULL.
+     */
+    private void validateFlexiblePartialUpdate() {
+        if (tableOptions.getOptional(SINK_FLEXIBLE_PARTIAL_UPDATE_UNAVAILABLE_VALUE_ON_INSERT).isPresent()
+                && !tableOptions.getOptional(SINK_FLEXIBLE_PARTIAL_UPDATE_UNAVAILABLE_VALUE).isPresent()) {
+            throw new ValidationException("'" + SINK_FLEXIBLE_PARTIAL_UPDATE_UNAVAILABLE_VALUE_ON_INSERT.key()
+                    + "' only applies with '" + SINK_FLEXIBLE_PARTIAL_UPDATE_UNAVAILABLE_VALUE.key()
+                    + "'. Set that option or remove this one.");
+        }
+        String mode = streamLoadProps.get(PARTIAL_UPDATE_MODE_KEY);
+        if (!FLEXIBLE_ROW_MODE.equals(mode)) {
+            if (mode != null && FLEXIBLE_ROW_MODE.equalsIgnoreCase(mode.trim())) {
+                throw new ValidationException("'" + SINK_PROPERTIES_PREFIX + PARTIAL_UPDATE_MODE_KEY + "' must be "
+                        + "exactly '" + FLEXIBLE_ROW_MODE + "', which is case sensitive, but it is '" + mode + "'. The "
+                        + "server would run a plain partial update and write NULL to the columns a row leaves out.");
+            }
+            if (tableOptions.getOptional(SINK_FLEXIBLE_PARTIAL_UPDATE_UNAVAILABLE_VALUE).isPresent()) {
+                throw new ValidationException("'" + SINK_FLEXIBLE_PARTIAL_UPDATE_UNAVAILABLE_VALUE.key()
+                        + "' only applies to '" + FLEXIBLE_ROW_OPTION + "'. Without it the placeholder would be "
+                        + "stored as the column value. Set that property or remove this option.");
+            }
+            return;
+        }
+        if (getStreamLoadFormat() != StreamLoadFormat.JSON) {
+            throw flexibleRowError("needs '" + SINK_PROPERTIES_PREFIX + FORMAT_KEY + "=json', because a row "
+                    + "tells which columns it updates by the keys of its JSON object.");
+        }
+        if (!"true".equalsIgnoreCase(streamLoadProps.get(PARTIAL_UPDATE_KEY))) {
+            throw flexibleRowError("needs '" + SINK_PROPERTIES_PREFIX + PARTIAL_UPDATE_KEY + "=true'.");
+        }
+        if (sinkSemantic == StarRocksSinkSemantic.EXACTLY_ONCE) {
+            throw flexibleRowError("does not support exactly-once, which needs transaction stream load. "
+                    + "Set '" + SINK_SEMANTIC.key() + "=at-least-once'.");
+        }
+        if (tableOptions.get(SINK_MULTI_TABLE_TXN_ENABLED)) {
+            throw flexibleRowError("does not support multi-table transactions, which need transaction stream "
+                    + "load. Remove '" + SINK_MULTI_TABLE_TXN_ENABLED.key() + "'.");
+        }
+        if ("true".equalsIgnoreCase(streamLoadProps.get(LoadParameters.ENABLE_MERGE_COMMIT))) {
+            throw flexibleRowError("does not support merge commit. Remove '" + SINK_PROPERTIES_PREFIX
+                    + LoadParameters.ENABLE_MERGE_COMMIT + "'.");
+        }
+        if (SinkFunctionFactory.SinkVersion.V1.name().equalsIgnoreCase(tableOptions.get(SINK_VERSION).trim())) {
+            throw flexibleRowError("is not supported by sink.version V1, whose rows always carry every column. "
+                    + "Set '" + SINK_VERSION.key() + "' to V2 or AUTO.");
+        }
+        if (tableOptions.getOptional(SINK_AT_LEAST_ONCE_USE_TRANSACTION_LOAD).orElse(false)) {
+            throw flexibleRowError("does not support transaction stream load. Remove '"
+                    + SINK_AT_LEAST_ONCE_USE_TRANSACTION_LOAD.key() + "' or set it to false.");
+        }
+        for (String header : HEADERS_REFUSED_BY_FLEXIBLE_ROW) {
+            if (streamLoadProps.containsKey(header)) {
+                throw flexibleRowError("cannot be combined with '" + SINK_PROPERTIES_PREFIX + header + "', because "
+                        + "the columns of each row come from the keys of its JSON object. Remove it.");
+            }
+        }
+        if (columnsFromFlinkSchema) {
+            throw flexibleRowError("cannot be combined with '" + SINK_JSON_COLUMNS_FROM_FLINK_SCHEMA.key() + "=true', "
+                    + "because it sends a columns header. Remove it.");
+        }
+        if (!tableOptions.get(SINK_IGNORE_UPDATE_BEFORE)) {
+            throw flexibleRowError("needs '" + SINK_IGNORE_UPDATE_BEFORE.key() + "=true'. An UPDATE_BEFORE is written "
+                    + "as a delete, and if its UPDATE_AFTER lands in a later flush it inserts a new row, whose "
+                    + "unsent columns take their defaults instead of keeping their values.");
+        }
+        if (tableOptions.getOptional(SINK_FLEXIBLE_PARTIAL_UPDATE_UNAVAILABLE_VALUE).map(String::isEmpty).orElse(false)) {
+            throw new ValidationException("'" + SINK_FLEXIBLE_PARTIAL_UPDATE_UNAVAILABLE_VALUE.key() + "' must not be "
+                    + "empty, or every empty string would be treated as an unavailable value.");
+        }
+    }
+
+    private static ValidationException flexibleRowError(String reason) {
+        return new ValidationException("'" + FLEXIBLE_ROW_OPTION + "' " + reason);
     }
 
     private void validateColumnsSource() {
@@ -446,7 +561,24 @@ public class StarRocksSinkOptions implements Serializable {
     }
 
     public boolean getSinkAtLeastOnceUseTransactionStreamLoad() {
-        return tableOptions.get(SINK_AT_LEAST_ONCE_USE_TRANSACTION_LOAD);
+        // The option defaults to true, but the server refuses flexible partial update in a transaction.
+        // Setting it to true explicitly is refused at validation.
+        return !isFlexiblePartialUpdate() && tableOptions.get(SINK_AT_LEAST_ONCE_USE_TRANSACTION_LOAD);
+    }
+
+    /** Whether each row updates only the columns it carries, leaving the others at their current value. */
+    public boolean isFlexiblePartialUpdate() {
+        return FLEXIBLE_ROW_MODE.equals(streamLoadProps.get(PARTIAL_UPDATE_MODE_KEY));
+    }
+
+    /** The value that marks a column the CDC source could not read, or null when none is configured. */
+    @Nullable
+    public String getFlexiblePartialUpdateUnavailableValue() {
+        return tableOptions.getOptional(SINK_FLEXIBLE_PARTIAL_UPDATE_UNAVAILABLE_VALUE).orElse(null);
+    }
+
+    public UnavailableValueOnInsert getFlexiblePartialUpdateUnavailableValueOnInsert() {
+        return tableOptions.get(SINK_FLEXIBLE_PARTIAL_UPDATE_UNAVAILABLE_VALUE_ON_INSERT);
     }
 
     public boolean isMultiTableTransactionEnabled() {
@@ -822,6 +954,42 @@ public class StarRocksSinkOptions implements Serializable {
         return value != null ? value : lookupIgnoreCase(tableProperties.getCommonProperties(), header);
     }
 
+    /**
+     * The global validation runs before addTableProperties, so it never saw these overrides. The sdk
+     * prefers an override over the sink's headers, so one could turn this table back into a plain
+     * partial update, or enable flexible partial update without the checks that keep it safe.
+     */
+    private void checkTableOverrideForFlexibleRow(StreamLoadTableProperties tableProperties) {
+        String table = tableProperties.getDatabase() + "." + tableProperties.getTable();
+        String mode = headerValue(tableProperties, PARTIAL_UPDATE_MODE_KEY);
+        if (!isFlexiblePartialUpdate()) {
+            if (mode != null && FLEXIBLE_ROW_MODE.equalsIgnoreCase(mode.trim())) {
+                throw new ValidationException("The properties registered for " + table + " set '"
+                        + PARTIAL_UPDATE_MODE_KEY + "=" + mode + "'. Enable it with '" + FLEXIBLE_ROW_OPTION
+                        + "' on the sink instead, so that the options it depends on are checked.");
+            }
+            return;
+        }
+        for (String header : HEADERS_REFUSED_BY_FLEXIBLE_ROW) {
+            if (headerValue(tableProperties, header) != null) {
+                throw flexibleRowError("cannot be combined with '" + header + "', but the properties registered for "
+                        + table + " set it.");
+            }
+        }
+        String partialUpdate = headerValue(tableProperties, PARTIAL_UPDATE_KEY);
+        if ((mode != null && !FLEXIBLE_ROW_MODE.equals(mode))
+                || (partialUpdate != null && !"true".equalsIgnoreCase(partialUpdate))) {
+            throw flexibleRowError("is set on the sink, but the properties registered for " + table
+                    + " turn it off, and that table would get a plain partial update.");
+        }
+        String format = headerValue(tableProperties, FORMAT_KEY);
+        if (!(tableProperties.getDataFormat() instanceof StreamLoadDataFormat.JSONFormat)
+                || (format != null && !StreamLoadFormat.JSON.name().equalsIgnoreCase(format))) {
+            throw flexibleRowError("needs the json format, but the properties registered for " + table
+                    + " set another one.");
+        }
+    }
+
     private static String lookupIgnoreCase(Map<String, String> properties, String header) {
         if (properties == null) {
             return null;
@@ -868,7 +1036,8 @@ public class StarRocksSinkOptions implements Serializable {
         }
         if (hasColumnMappingProperty()) {
             defaultTablePropertiesBuilder.columns(streamLoadProps.get(COLUMNS_KEY));
-        } else if (getTableSchemaFieldNames() != null) {
+        } else if (getTableSchemaFieldNames() != null && !isFlexiblePartialUpdate()) {
+            // A flexible partial update sends no header: the columns of each row are the keys of its JSON.
             // Today no header is sent for csv when the schemas are aligned, and none for json except
             // a primary key table on StarRocks 1.x. sink.json.columns-from-flink-schema overrides that so the
             // Flink schema decides which columns the load supplies.
@@ -942,6 +1111,7 @@ public class StarRocksSinkOptions implements Serializable {
         builder.addHeaders(streamLoadProperties)
                 .defaultTableProperties(defaultTablePropertiesBuilder.build());
         for (StreamLoadTableProperties tableProperties : tablePropertiesList) {
+            checkTableOverrideForFlexibleRow(tableProperties);
             builder.addTableProperties(withDerivedColumns(tableProperties, derivedColumns));
         }
 

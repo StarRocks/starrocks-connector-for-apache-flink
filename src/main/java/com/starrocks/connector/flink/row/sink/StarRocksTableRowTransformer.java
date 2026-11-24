@@ -20,6 +20,7 @@ import com.starrocks.connector.flink.table.StarRocksDataType;
 import com.starrocks.connector.flink.tools.JsonWrapper;
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.data.ArrayData;
 import org.apache.flink.table.data.GenericArrayData;
@@ -37,6 +38,7 @@ import org.apache.flink.table.types.logical.LogicalTypeRoot;
 import org.apache.flink.table.types.logical.MapType;
 import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.table.types.logical.TimestampType;
+import org.apache.flink.types.RowKind;
 
 import java.sql.Date;
 import java.text.SimpleDateFormat;
@@ -57,6 +59,9 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
     private DataType[] columnDataTypes;
     private Map<String, StarRocksDataType> columns;
     private final SimpleDateFormat dateFormatter = new SimpleDateFormat("yyyy-MM-dd");
+
+    // Only set for a flexible partial update.
+    private FlexibleRowProjection flexibleRow;
 
     private transient JsonWrapper jsonWrapper;
 
@@ -88,17 +93,38 @@ public class StarRocksTableRowTransformer implements StarRocksIRowTransformer<Ro
     }
 
     @Override
+    public void setFlexibleRowProjection(FlexibleRowProjection projection) {
+        this.flexibleRow = projection;
+    }
+
+    @Override
+    public void setMetricGroup(MetricGroup metricGroup) {
+        if (flexibleRow != null) {
+            flexibleRow.open(metricGroup);
+        }
+    }
+
+    @Override
     public Object[] transform(RowData record, boolean supportUpsertDelete) {
         RowData transformRecord = valueTransform.apply(record);
         Object[] values = new Object[columnDataTypes.length + (supportUpsertDelete ? 1 : 0)];
+        boolean deleteRow = flexibleRow != null && supportUpsertDelete
+                && StarRocksSinkOP.parse(record.getRowKind()) == StarRocksSinkOP.DELETE;
         int idx = 0;
         for (DataType dataType : columnDataTypes) {
-            values[idx] = typeConvertion(dataType.getLogicalType(), transformRecord, idx);
+            LogicalType type = dataType.getLogicalType();
+            // Decided on the raw value: below, a string that looks like json is parsed into an object.
+            values[idx] = flexibleRow != null && flexibleRow.leavesOut(type, transformRecord, idx, deleteRow)
+                    ? FlexibleRowProjection.ABSENT
+                    : typeConvertion(type, transformRecord, idx);
             idx++;
         }
         if (supportUpsertDelete) {
             // set `__op` column
             values[idx] = StarRocksSinkOP.parse(record.getRowKind()).ordinal();
+        }
+        if (flexibleRow != null && record.getRowKind() == RowKind.INSERT) {
+            flexibleRow.checkInsert(values);
         }
         return values;
     }

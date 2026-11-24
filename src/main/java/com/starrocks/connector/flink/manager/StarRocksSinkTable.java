@@ -23,6 +23,7 @@ package com.starrocks.connector.flink.manager;
 import com.google.common.collect.Ordering;
 import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionOptions;
 import com.starrocks.connector.flink.connection.StarRocksJdbcConnectionProvider;
+import com.starrocks.connector.flink.row.sink.FlexibleRowProjection;
 import com.starrocks.connector.flink.table.StarRocksDataType;
 import com.starrocks.connector.flink.table.sink.StarRocksSinkOptions;
 import org.apache.flink.table.api.TableColumn;
@@ -33,9 +34,11 @@ import org.apache.flink.table.types.logical.LogicalTypeRoot;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 public class StarRocksSinkTable {
 
     private final String database;
@@ -120,6 +123,10 @@ public class StarRocksSinkTable {
             sinkOptions.enableUpsertDelete();
         }
 
+        if (sinkOptions.isFlexiblePartialUpdate()) {
+            validateForFlexiblePartialUpdate(sinkOptions, flinkSchema, rows, primaryKeys);
+        }
+
         if (sinkOptions.hasColumnMappingProperty()) {
             return;
         }
@@ -170,6 +177,41 @@ public class StarRocksSinkTable {
         }
     }
 
+    private void validateForFlexiblePartialUpdate(StarRocksSinkOptions sinkOptions, TableSchema flinkSchema,
+                                                  List<Map<String, Object>> columns, List<String> primaryKeys) {
+        if (primaryKeys.isEmpty()) {
+            throw new IllegalArgumentException("Flexible partial update only supports primary key tables, but "
+                    + database + "." + table + " is not one.");
+        }
+        // The server matches the keys of a JSON row to column names case sensitively, and treats a key
+        // it does not recognize as absent. A differently cased Flink column would silently not be updated.
+        Map<String, String> columnNames = new HashMap<>();
+        Map<String, String> columnTypes = new HashMap<>();
+        for (Map<String, Object> column : columns) {
+            String name = column.get("COLUMN_NAME").toString();
+            columnNames.put(name.toLowerCase(), name);
+            columnTypes.put(name.toLowerCase(), column.get("DATA_TYPE").toString().toLowerCase());
+        }
+        for (String field : flinkSchema.getFieldNames()) {
+            String columnName = columnNames.get(field.toLowerCase());
+            if (columnName != null && !columnName.equals(field)) {
+                throw new IllegalArgumentException("Flexible partial update matches column names case sensitively, "
+                        + "but the Flink column '" + field + "' is '" + columnName + "' in " + database + "." + table
+                        + ". Rename the Flink column to match.");
+            }
+            // These types only take a value through a function in a columns mapping, which this mode cannot
+            // have, so the server refuses every row that carries one.
+            if (TYPES_FLEXIBLE_ROW_CANNOT_WRITE.contains(columnTypes.get(field.toLowerCase()))) {
+                throw new IllegalArgumentException("Flexible partial update cannot write the "
+                        + columnTypes.get(field.toLowerCase()) + " column '" + field + "' of " + database + "." + table
+                        + ". Remove it from the Flink table, and it keeps its current value.");
+            }
+        }
+        if (sinkOptions.getFlexiblePartialUpdateUnavailableValue() != null) {
+            FlexibleRowProjection.checkColumnTypes(flinkSchema);
+        }
+    }
+
     public static class Builder {
         private String database;
         private String table;
@@ -215,6 +257,9 @@ public class StarRocksSinkTable {
             return new StarRocksSinkTable(this);
         }
     }
+
+    private static final Set<String> TYPES_FLEXIBLE_ROW_CANNOT_WRITE =
+            new HashSet<>(Arrays.asList("hll", "bitmap", "percentile"));
 
     private static final Map<String, List<LogicalTypeRoot>> typesMap = new HashMap<>();
 

@@ -22,6 +22,7 @@ import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.data.RowData;
 
 import com.starrocks.connector.flink.manager.StarRocksSinkTable;
+import com.starrocks.connector.flink.row.sink.FlexibleRowProjection;
 import com.starrocks.connector.flink.row.sink.StarRocksIRowTransformer;
 import com.starrocks.connector.flink.row.sink.StarRocksISerializer;
 import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
@@ -138,6 +139,9 @@ public class SinkFunctionFactory {
             StarRocksISerializer serializer = StarRocksSerializerFactory.createSerializer(sinkOptions, schema.getFieldNames());
             rowTransformer.setStarRocksColumns(sinkTable.getFieldMapping());
             rowTransformer.setTableSchema(schema);
+            if (sinkOptions.isFlexiblePartialUpdate()) {
+                rowTransformer.setFlexibleRowProjection(FlexibleRowProjection.create(sinkOptions, schema));
+            }
             RowDataSerializationSchema serializationSchema = new RowDataSerializationSchema(
                     sinkOptions.getDatabaseName(),
                     sinkOptions.getTableName(),

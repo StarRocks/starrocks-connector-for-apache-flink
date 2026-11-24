@@ -37,6 +37,7 @@ import com.google.common.base.Strings;
 import com.starrocks.connector.flink.manager.StarRocksSinkBufferEntity;
 import com.starrocks.connector.flink.manager.StarRocksSinkTable;
 import com.starrocks.connector.flink.manager.StarRocksStreamLoadListener;
+import com.starrocks.connector.flink.row.sink.FlexibleRowProjection;
 import com.starrocks.connector.flink.row.sink.StarRocksIRowTransformer;
 import com.starrocks.connector.flink.row.sink.StarRocksISerializer;
 import com.starrocks.connector.flink.row.sink.StarRocksSerializerFactory;
@@ -108,6 +109,9 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
         this.serializer = StarRocksSerializerFactory.createSerializer(sinkOptions, schema.getFieldNames());
         rowTransformer.setStarRocksColumns(sinkTable.getFieldMapping());
         rowTransformer.setTableSchema(schema);
+        if (sinkOptions.isFlexiblePartialUpdate()) {
+            rowTransformer.setFlexibleRowProjection(FlexibleRowProjection.create(sinkOptions, schema));
+        }
         this.sinkManager = new StreamLoadManagerV2(sinkOptions.getProperties(sinkTable),
                 sinkOptions.getSemantic() == StarRocksSinkSemantic.AT_LEAST_ONCE);
     }
@@ -235,6 +239,7 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
         if (rowTransformer != null) {
             rowTransformer.setRuntimeContext(getRuntimeContext());
             rowTransformer.setFastJsonWrapper(getOrCreateJsonWrapper());
+            rowTransformer.setMetricGroup(getRuntimeContext().getMetricGroup());
         }
 
         if (sinkOptions.getSemantic() == StarRocksSinkSemantic.EXACTLY_ONCE) {
