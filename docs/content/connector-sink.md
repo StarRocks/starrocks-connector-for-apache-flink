@@ -650,6 +650,8 @@ with the reason and the fix, on a setting that cannot work with this mode:
   flush it creates a new row, whose unsent columns take their defaults.
 - The sink table is not a Primary Key table, or a Flink column differs in case from the StarRocks column. The server
   matches JSON keys case sensitively and ignores the ones it does not recognize.
+- A Flink column maps to an HLL, BITMAP or PERCENTILE column, which this mode cannot write. Leave it out of the Flink
+  table and it keeps its value.
 
 For Flink SQL and for a DataStream job with a `StarRocksSinkRowBuilder`, the connector writes a null as an explicit
 `null`, and a delete as its primary key and `__op` only. For a DataStream job that writes JSON strings, you decide

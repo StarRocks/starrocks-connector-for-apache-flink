@@ -417,6 +417,26 @@ public class StarRocksSinkOptionsFlexibleRowTest {
     }
 
     @Test
+    public void testColumnsTheModeCannotWriteAreRefused() {
+        for (String type : new String[] {"hll", "bitmap", "percentile", "BITMAP"}) {
+            mockColumns(Arrays.asList(column("id", "PRI", "bigint", 1), column("uv", "", type, 2)));
+            TableSchema schema = TableSchema.builder()
+                    .field("id", DataTypes.BIGINT().notNull()).field("uv", DataTypes.STRING())
+                    .primaryKey("id").build();
+            try {
+                validate(flexible().build(), schema);
+                fail("expected IllegalArgumentException for " + type);
+            } catch (IllegalArgumentException expected) {
+                assertTrue(expected.getMessage(), expected.getMessage().contains("'uv'"));
+            }
+
+            // A column the Flink table does not declare keeps its value, so the table is accepted.
+            validate(flexible().build(), TableSchema.builder()
+                    .field("id", DataTypes.BIGINT().notNull()).primaryKey("id").build());
+        }
+    }
+
+    @Test
     public void testColumnTypesThatCannotCarryThePlaceholderAreRefused() {
         mockColumns(Arrays.asList(column("id", "PRI", "bigint", 1), column("tags", "", "string", 2),
                 column("m", "", "string", 3), column("r", "", "string", 4)));
