@@ -24,6 +24,7 @@ import org.apache.flink.api.common.serialization.SerializationSchema;
 import org.apache.flink.api.connector.sink2.Sink;
 import org.apache.flink.api.connector.sink2.StatefulSink;
 import org.apache.flink.api.connector.sink2.TwoPhaseCommittingSink;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.runtime.checkpoint.CheckpointIDCounter;
 
 import com.starrocks.connector.flink.manager.StarRocksStreamLoadListener;
@@ -136,6 +137,17 @@ public class StarRocksWriter<InputT>
                 LOG.error("Failed to close sink manager after aborting lingering transaction failure.", ie);
             }
             throw new RuntimeException("Failed to abort lingering transactions", e);
+        }
+
+        // Create the label generators of the tables in the sink options now rather than at the first write
+        // to them, so that every checkpoint has their snapshots. A table first written after checkpoint N
+        // has no snapshot in it, so a restore from N checks its labels only from N + 1. But this run
+        // begins the labels of such a table from restoredCheckpointId + 1, which may be at or below N, and
+        // a transaction begun with such a label after checkpoint N would linger until it times out.
+        if (exactlyOnceLabelFactory != null) {
+            for (Tuple2<String, String> dbTable : sinkOptions.getDbTables()) {
+                exactlyOnceLabelFactory.create(dbTable.f0, dbTable.f1);
+            }
         }
 
         LOG.info("Create StarRocksWriter. {}", EnvUtils.getGitInformation());
