@@ -128,6 +128,20 @@ public class StarRocksWriter<InputT>
                         exactlyOnceLabelFactory);
 
                 aborter.execute();
+
+                // Create the label generators of the tables in the sink options now rather than at the first write
+                // to them, so that every checkpoint has their snapshots. A table first written after checkpoint N
+                // has no snapshot in it, so a restore from N checks its labels only from N + 1. But this run
+                // begins the labels of such a table from restoredCheckpointId + 1, which may be at or below N, and
+                // a transaction begun with such a label after checkpoint N would linger until it times out. Only
+                // when lingering transactions are aborted: without that, a restore that resumed at such a label
+                // would fail to begin it until the transaction times out, so these tables keep starting from
+                // restoredCheckpointId + 1 on restore.
+                if (exactlyOnceLabelFactory != null) {
+                    for (Tuple2<String, String> dbTable : sinkOptions.getDbTables()) {
+                        exactlyOnceLabelFactory.create(dbTable.f0, dbTable.f1);
+                    }
+                }
             }
         } catch (Exception e) {
             LOG.error("Failed to abort lingering transactions.", e);
@@ -137,17 +151,6 @@ public class StarRocksWriter<InputT>
                 LOG.error("Failed to close sink manager after aborting lingering transaction failure.", ie);
             }
             throw new RuntimeException("Failed to abort lingering transactions", e);
-        }
-
-        // Create the label generators of the tables in the sink options now rather than at the first write
-        // to them, so that every checkpoint has their snapshots. A table first written after checkpoint N
-        // has no snapshot in it, so a restore from N checks its labels only from N + 1. But this run
-        // begins the labels of such a table from restoredCheckpointId + 1, which may be at or below N, and
-        // a transaction begun with such a label after checkpoint N would linger until it times out.
-        if (exactlyOnceLabelFactory != null) {
-            for (Tuple2<String, String> dbTable : sinkOptions.getDbTables()) {
-                exactlyOnceLabelFactory.create(dbTable.f0, dbTable.f1);
-            }
         }
 
         LOG.info("Create StarRocksWriter. {}", EnvUtils.getGitInformation());

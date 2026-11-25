@@ -104,6 +104,33 @@ public class StarRocksDynamicSinkFunctionV2Test {
         }
     }
 
+    @Test
+    public void testCheckpointHasNoLabelNumbersOfUnwrittenTablesWithoutCleanup() throws Exception {
+        AtomicReference<LabelGeneratorFactory> factoryGivenToManager = mockStarRocks(new MockStreamLoader());
+        StarRocksSinkOptions sinkOptions = StarRocksSinkOptions.builder()
+                .withProperty("jdbc-url", "jdbc:mysql://127.0.0.1:9030")
+                .withProperty("load-url", "127.0.0.1:8030")
+                .withProperty("username", "root")
+                .withProperty("password", "")
+                .withProperty("database-name", "db")
+                .withProperty("table-name", "table")
+                .withProperty("sink.semantic", "exactly-once")
+                .withProperty("sink.label-prefix", "prefix")
+                .withProperty("sink.exactly-once.enable-abort-lingering-txn", "false")
+                .build();
+
+        StarRocksDynamicSinkFunctionV2<Object> sink = new StarRocksDynamicSinkFunctionV2<>(sinkOptions);
+        try (OneInputStreamOperatorTestHarness<Object, Object> harness =
+                     new OneInputStreamOperatorTestHarness<>(new StreamSink<>(sink))) {
+            harness.open();
+
+            // Nothing aborts lingering transactions, so a restore must not resume at a label number that a
+            // failed run may have left PREPARED: before the first write to db.table, a checkpoint has no
+            // label number of it, and a restore begins it from the checkpoint ID + 1.
+            assertEquals(0, ((ExactlyOnceLabelGeneratorFactory) factoryGivenToManager.get()).snapshot(1L).size());
+        }
+    }
+
     // Replace the methods that would connect to StarRocks, and record the label
     // generator factory that the sink gives to the sink manager.
     private static AtomicReference<LabelGeneratorFactory> mockStarRocks(StreamLoader streamLoader) {

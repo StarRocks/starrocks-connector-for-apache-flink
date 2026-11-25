@@ -129,6 +129,38 @@ public class StarRocksWriterTest {
         assertEquals(TransactionStatus.ABORTED, streamLoader.getLoadStatus("db", "table", lingeringLabel));
     }
 
+    @Test
+    public void testRestoreWithoutCleanupBeginsAfterTheCheckpoint() throws Exception {
+        MockStreamLoader streamLoader = new MockStreamLoader();
+        AtomicReference<LabelGeneratorFactory> factoryGivenToManager = mockSinkManager(streamLoader);
+        // The first run starts without a checkpoint, the second restores from checkpoint 1.
+        // The mocked context reports subtask 0.
+        new Expectations() {{
+            initContext.getRestoredCheckpointId();
+            result = OptionalLong.empty();
+            result = OptionalLong.of(1L);
+        }};
+        StarRocksSinkOptions sinkOptions = buildExactlyOnceSinkOptions()
+                .withProperty("sink.exactly-once.enable-abort-lingering-txn", "false")
+                .build();
+
+        // As in testRestoreAbortsTransactionOfFirstWriteAfterTheCheckpoint, but nothing aborts
+        // lingering transactions.
+        StarRocksWriter<Object> firstRun = new StarRocksWriter<>(sinkOptions, initContext, null,
+                serializationSchema, null, Collections.emptyList());
+        List<StarRocksWriterState> checkpoint1 = firstRun.snapshotState(1L);
+        String lingeringLabel = factoryGivenToManager.get().create("db", "table").next();
+        assertEquals("prefix-table-0-1", lingeringLabel);
+        streamLoader.addLabelStatus("db", "table", lingeringLabel, TransactionStatus.PREPARED);
+
+        // The restore from checkpoint 1 must not begin label number 1 again, which would fail
+        // until the transaction times out. It begins from the checkpoint ID + 1.
+        new StarRocksWriter<>(sinkOptions, initContext, null, serializationSchema, null, checkpoint1);
+
+        assertEquals("prefix-table-0-2", factoryGivenToManager.get().create("db", "table").next());
+        assertEquals(TransactionStatus.PREPARED, streamLoader.getLoadStatus("db", "table", lingeringLabel));
+    }
+
     // Replace the sink manager methods that would connect to StarRocks, and record
     // the label generator factory that the writer gives it.
     private static AtomicReference<LabelGeneratorFactory> mockSinkManager(StreamLoader streamLoader) {
