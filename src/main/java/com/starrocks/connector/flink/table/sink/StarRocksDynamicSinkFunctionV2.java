@@ -24,6 +24,7 @@ import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.api.common.typeinfo.TypeHint;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.checkpoint.CheckpointIDCounter;
 import org.apache.flink.runtime.state.FunctionInitializationContext;
@@ -257,6 +258,20 @@ public class StarRocksDynamicSinkFunctionV2<T> extends StarRocksDynamicSinkFunct
                     sinkManager.getStreamLoader(),
                     exactlyOnceLabelFactory);
             aborter.execute();
+
+            // Create the label generators of the tables in the sink options now rather than at the first write
+            // to them, so that every checkpoint has their snapshots. A table first written after checkpoint N
+            // has no snapshot in it, so a restore from N checks its labels only from N + 1. But this run
+            // begins the labels of such a table from restoredCheckpointId + 1, which may be at or below N, and
+            // a transaction begun with such a label after checkpoint N would linger until it times out. Only
+            // when lingering transactions are aborted, and sink.exactly-once.check-num-lingering-txn is not 0,
+            // which checks no label: otherwise a restore that resumed at such a label would fail to begin it
+            // until the transaction times out, so these tables keep starting from restoredCheckpointId + 1.
+            if (exactlyOnceLabelFactory != null && sinkOptions.getAbortCheckNumTxns() != 0) {
+                for (Tuple2<String, String> dbTable : sinkOptions.getDbTables()) {
+                    exactlyOnceLabelFactory.create(dbTable.f0, dbTable.f1);
+                }
+            }
         }
 
         notifyCheckpointComplete(Long.MAX_VALUE);

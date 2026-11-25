@@ -39,6 +39,7 @@ import mockit.Mocked;
 import org.junit.Test;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.OptionalLong;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -97,6 +98,82 @@ public class StarRocksWriterTest {
 
         factoryGivenToManager.get().create("db", "other");
         assertEquals(TransactionStatus.ABORTED, streamLoader.getLoadStatus("db", "other", lingeringLabel));
+    }
+
+    @Test
+    public void testRestoreAbortsTransactionOfFirstWriteAfterTheCheckpoint() throws Exception {
+        MockStreamLoader streamLoader = new MockStreamLoader();
+        AtomicReference<LabelGeneratorFactory> factoryGivenToManager = mockSinkManager(streamLoader);
+        // The first run starts without a checkpoint, the second restores from checkpoint 1.
+        // The mocked context reports subtask 0.
+        new Expectations() {{
+            initContext.getRestoredCheckpointId();
+            result = OptionalLong.empty();
+            result = OptionalLong.of(1L);
+        }};
+        StarRocksSinkOptions sinkOptions = buildExactlyOnceSinkOptions().build();
+
+        // The first run takes checkpoint 1 before its first write to db.table. Then it begins a
+        // transaction on db.table with label number 1, where a run that does not restore from a
+        // checkpoint begins the labels of a table, and fails before checkpoint 2 completes.
+        StarRocksWriter<Object> firstRun = new StarRocksWriter<>(sinkOptions, initContext, null,
+                serializationSchema, null, Collections.emptyList());
+        List<StarRocksWriterState> checkpoint1 = firstRun.snapshotState(1L);
+        String lingeringLabel = factoryGivenToManager.get().create("db", "table").next();
+        assertEquals("prefix-table-0-1", lingeringLabel);
+        streamLoader.addLabelStatus("db", "table", lingeringLabel, TransactionStatus.PREPARED);
+
+        // The restore from checkpoint 1 must abort it.
+        new StarRocksWriter<>(sinkOptions, initContext, null, serializationSchema, null, checkpoint1);
+
+        assertEquals(TransactionStatus.ABORTED, streamLoader.getLoadStatus("db", "table", lingeringLabel));
+    }
+
+    @Test
+    public void testRestoreWithoutCleanupBeginsAfterTheCheckpoint() throws Exception {
+        // The first run starts without a checkpoint, the second restores from checkpoint 1.
+        // The mocked context reports subtask 0.
+        new Expectations() {{
+            initContext.getRestoredCheckpointId();
+            result = OptionalLong.empty();
+            result = OptionalLong.of(1L);
+        }};
+        checkRestoreWithoutAbortBeginsAfterTheCheckpoint(buildExactlyOnceSinkOptions()
+                .withProperty("sink.exactly-once.enable-abort-lingering-txn", "false")
+                .build());
+    }
+
+    @Test
+    public void testRestoreCheckingNoLabelBeginsAfterTheCheckpoint() throws Exception {
+        new Expectations() {{
+            initContext.getRestoredCheckpointId();
+            result = OptionalLong.empty();
+            result = OptionalLong.of(1L);
+        }};
+        // The abort runs, but checks no label
+        checkRestoreWithoutAbortBeginsAfterTheCheckpoint(buildExactlyOnceSinkOptions()
+                .withProperty("sink.exactly-once.check-num-lingering-txn", "0")
+                .build());
+    }
+
+    // As in testRestoreAbortsTransactionOfFirstWriteAfterTheCheckpoint, with options under which
+    // nothing aborts the lingering transaction.
+    private void checkRestoreWithoutAbortBeginsAfterTheCheckpoint(StarRocksSinkOptions sinkOptions) throws Exception {
+        MockStreamLoader streamLoader = new MockStreamLoader();
+        AtomicReference<LabelGeneratorFactory> factoryGivenToManager = mockSinkManager(streamLoader);
+        StarRocksWriter<Object> firstRun = new StarRocksWriter<>(sinkOptions, initContext, null,
+                serializationSchema, null, Collections.emptyList());
+        List<StarRocksWriterState> checkpoint1 = firstRun.snapshotState(1L);
+        String lingeringLabel = factoryGivenToManager.get().create("db", "table").next();
+        assertEquals("prefix-table-0-1", lingeringLabel);
+        streamLoader.addLabelStatus("db", "table", lingeringLabel, TransactionStatus.PREPARED);
+
+        // The restore from checkpoint 1 must not begin label number 1 again, which would fail
+        // until the transaction times out. It begins from the checkpoint ID + 1.
+        new StarRocksWriter<>(sinkOptions, initContext, null, serializationSchema, null, checkpoint1);
+
+        assertEquals("prefix-table-0-2", factoryGivenToManager.get().create("db", "table").next());
+        assertEquals(TransactionStatus.PREPARED, streamLoader.getLoadStatus("db", "table", lingeringLabel));
     }
 
     // Replace the sink manager methods that would connect to StarRocks, and record
