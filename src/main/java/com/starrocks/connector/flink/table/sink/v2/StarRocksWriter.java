@@ -134,10 +134,10 @@ public class StarRocksWriter<InputT>
                 // has no snapshot in it, so a restore from N checks its labels only from N + 1. But this run
                 // begins the labels of such a table from restoredCheckpointId + 1, which may be at or below N, and
                 // a transaction begun with such a label after checkpoint N would linger until it times out. Only
-                // when lingering transactions are aborted: without that, a restore that resumed at such a label
-                // would fail to begin it until the transaction times out, so these tables keep starting from
-                // restoredCheckpointId + 1 on restore.
-                if (exactlyOnceLabelFactory != null) {
+                // when lingering transactions are aborted, and sink.exactly-once.check-num-lingering-txn is not 0,
+                // which checks no label: otherwise a restore that resumed at such a label would fail to begin it
+                // until the transaction times out, so these tables keep starting from restoredCheckpointId + 1.
+                if (exactlyOnceLabelFactory != null && sinkOptions.getAbortCheckNumTxns() != 0) {
                     for (Tuple2<String, String> dbTable : sinkOptions.getDbTables()) {
                         exactlyOnceLabelFactory.create(dbTable.f0, dbTable.f1);
                     }

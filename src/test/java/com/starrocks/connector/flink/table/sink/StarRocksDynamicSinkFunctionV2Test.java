@@ -106,6 +106,19 @@ public class StarRocksDynamicSinkFunctionV2Test {
 
     @Test
     public void testCheckpointHasNoLabelNumbersOfUnwrittenTablesWithoutCleanup() throws Exception {
+        checkNoLabelNumbersBeforeFirstWrite("sink.exactly-once.enable-abort-lingering-txn", "false");
+    }
+
+    @Test
+    public void testCheckpointHasNoLabelNumbersOfUnwrittenTablesWhenCheckingNoLabel() throws Exception {
+        // The abort runs, but checks no label
+        checkNoLabelNumbersBeforeFirstWrite("sink.exactly-once.check-num-lingering-txn", "0");
+    }
+
+    // With an option under which nothing aborts lingering transactions, a restore must not resume at a label
+    // number that a failed run may have left PREPARED: before the first write to db.table, a checkpoint has no
+    // label number of it, and a restore begins it from the checkpoint ID + 1.
+    private static void checkNoLabelNumbersBeforeFirstWrite(String option, String value) throws Exception {
         AtomicReference<LabelGeneratorFactory> factoryGivenToManager = mockStarRocks(new MockStreamLoader());
         StarRocksSinkOptions sinkOptions = StarRocksSinkOptions.builder()
                 .withProperty("jdbc-url", "jdbc:mysql://127.0.0.1:9030")
@@ -116,17 +129,13 @@ public class StarRocksDynamicSinkFunctionV2Test {
                 .withProperty("table-name", "table")
                 .withProperty("sink.semantic", "exactly-once")
                 .withProperty("sink.label-prefix", "prefix")
-                .withProperty("sink.exactly-once.enable-abort-lingering-txn", "false")
+                .withProperty(option, value)
                 .build();
 
         StarRocksDynamicSinkFunctionV2<Object> sink = new StarRocksDynamicSinkFunctionV2<>(sinkOptions);
         try (OneInputStreamOperatorTestHarness<Object, Object> harness =
                      new OneInputStreamOperatorTestHarness<>(new StreamSink<>(sink))) {
             harness.open();
-
-            // Nothing aborts lingering transactions, so a restore must not resume at a label number that a
-            // failed run may have left PREPARED: before the first write to db.table, a checkpoint has no
-            // label number of it, and a restore begins it from the checkpoint ID + 1.
             assertEquals(0, ((ExactlyOnceLabelGeneratorFactory) factoryGivenToManager.get()).snapshot(1L).size());
         }
     }

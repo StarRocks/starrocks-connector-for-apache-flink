@@ -131,8 +131,6 @@ public class StarRocksWriterTest {
 
     @Test
     public void testRestoreWithoutCleanupBeginsAfterTheCheckpoint() throws Exception {
-        MockStreamLoader streamLoader = new MockStreamLoader();
-        AtomicReference<LabelGeneratorFactory> factoryGivenToManager = mockSinkManager(streamLoader);
         // The first run starts without a checkpoint, the second restores from checkpoint 1.
         // The mocked context reports subtask 0.
         new Expectations() {{
@@ -140,12 +138,29 @@ public class StarRocksWriterTest {
             result = OptionalLong.empty();
             result = OptionalLong.of(1L);
         }};
-        StarRocksSinkOptions sinkOptions = buildExactlyOnceSinkOptions()
+        checkRestoreWithoutAbortBeginsAfterTheCheckpoint(buildExactlyOnceSinkOptions()
                 .withProperty("sink.exactly-once.enable-abort-lingering-txn", "false")
-                .build();
+                .build());
+    }
 
-        // As in testRestoreAbortsTransactionOfFirstWriteAfterTheCheckpoint, but nothing aborts
-        // lingering transactions.
+    @Test
+    public void testRestoreCheckingNoLabelBeginsAfterTheCheckpoint() throws Exception {
+        new Expectations() {{
+            initContext.getRestoredCheckpointId();
+            result = OptionalLong.empty();
+            result = OptionalLong.of(1L);
+        }};
+        // The abort runs, but checks no label
+        checkRestoreWithoutAbortBeginsAfterTheCheckpoint(buildExactlyOnceSinkOptions()
+                .withProperty("sink.exactly-once.check-num-lingering-txn", "0")
+                .build());
+    }
+
+    // As in testRestoreAbortsTransactionOfFirstWriteAfterTheCheckpoint, with options under which
+    // nothing aborts the lingering transaction.
+    private void checkRestoreWithoutAbortBeginsAfterTheCheckpoint(StarRocksSinkOptions sinkOptions) throws Exception {
+        MockStreamLoader streamLoader = new MockStreamLoader();
+        AtomicReference<LabelGeneratorFactory> factoryGivenToManager = mockSinkManager(streamLoader);
         StarRocksWriter<Object> firstRun = new StarRocksWriter<>(sinkOptions, initContext, null,
                 serializationSchema, null, Collections.emptyList());
         List<StarRocksWriterState> checkpoint1 = firstRun.snapshotState(1L);
